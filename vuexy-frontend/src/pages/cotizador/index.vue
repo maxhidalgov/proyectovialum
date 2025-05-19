@@ -301,7 +301,7 @@ const productosVidrioFiltradosGeneral = computed(() => {
     .filter(p => p.tipo_producto_id === tipo)
     .flatMap(p =>
       p.colores_por_proveedor.map(cpp => ({
-        id: `${p.id}-${cpp.proveedor_id}`,
+        id: cpp.id,  // ✅ ID real de la tabla producto_color_proveedor
         producto_id: p.id,
         proveedor_id: cpp.proveedor_id,
         nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Proveedor desconocido'})`
@@ -330,6 +330,17 @@ onMounted(async () => {
   clientes.value = clientesRes.data
 })
 
+const buscarRelacionVidrioProveedor = (id) => {
+  id = parseInt(id)
+  return productosVidrio.value.flatMap(p =>
+    p.colores_por_proveedor.map(cpp => ({
+      id: cpp.id,
+      producto_id: p.id,
+      proveedor_id: cpp.proveedor_id
+    }))
+  ).find(p => p.id === id)
+}
+
 // Computed para mostrar productos de vidrio con proveedor
 const productosVidrioFiltradosConProveedor = (ventana) => {
   const tipo = ventana.tipoVidrio ?? cotizacion.value.tipoVidrio
@@ -337,7 +348,7 @@ const productosVidrioFiltradosConProveedor = (ventana) => {
     .filter(p => p.tipo_producto_id === tipo)
     .flatMap(p =>
       p.colores_por_proveedor.map(cpp => ({
-        id: `${p.id}-${cpp.proveedor_id}`,
+        id: cpp.id, // ✅ ID real de la tabla producto_color_proveedor
         producto_id: p.id,
         proveedor_id: cpp.proveedor_id,
         nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Proveedor desconocido'})`
@@ -394,14 +405,15 @@ const agregarVentana = () => {
     nuevaVentana.alto &&
     nuevaVentana.productoVidrioProveedor
   ) {
-    const [productoId, proveedorId] = nuevaVentana.productoVidrioProveedor.split('-')
-    const payload = {
-      ...nuevaVentana,
-      productoVidrio: parseInt(productoId),
-      proveedorVidrio: parseInt(proveedorId),
-      hojas_moviles: ventana.tipo === 3 ? ventana.hojas_moviles : undefined,
-    }
+    const relacion = buscarRelacionVidrioProveedor(nuevaVentana.productoVidrioProveedor)
+  const payload = {
+    ...nuevaVentana,
+    productoVidrio: relacion?.producto_id,
+    proveedorVidrio: relacion?.proveedor_id,
+    hojas_moviles: nuevaVentana.tipo === 3 ? nuevaVentana.hojas_moviles : undefined,
+  }
     console.log('Datos de la ventana antes de enviar al backend:', payload);
+    console.log('🧪 Payload enviado a calcularMateriales:', payload) // <-- Agrega esto
     recalcularCosto(payload, nuevaVentana)
   }
 }
@@ -417,13 +429,19 @@ const tiposVentanaFiltrados = (ventana) => {
 }
 
 const recalcularCosto = debounce(async (payload, ventanaRef) => {
+  // Validación de campos requeridos
+  if (!payload.productoVidrio || !payload.proveedorVidrio) {
+    console.warn('⚠️ Faltan datos en el payload para calcular materiales:', payload)
+    return
+  }
+
   try {
     const res = await api.post('/api/cotizador/calcular-materiales', payload)
     ventanaRef.costo_total = res.data.costo_total
     ventanaRef.materiales = res.data.materiales
     ventanaRef.precio = Math.ceil(res.data.costo_total / (1 - margenVenta))
   } catch (err) {
-    console.error('Error al calcular materiales', err)
+    console.error('❌ Error al calcular materiales', err)
     ventanaRef.costo_total = 0
     ventanaRef.materiales = []
   }
@@ -449,11 +467,13 @@ watch(() => cotizacion.value.ventanas, (ventanas) => {
         ventana.alto &&
         ventana.productoVidrioProveedor
       ) {
-        const [productoId, proveedorId] = ventana.productoVidrioProveedor.split('-')
+        const relacion = buscarRelacionVidrioProveedor(ventana.productoVidrioProveedor)
+        console.log('🧪 Relación en watch:', relacion)
         const payload = {
           ...ventana,
-          productoVidrio: parseInt(productoId),
-          proveedorVidrio: parseInt(proveedorId)
+          productoVidrio: relacion?.producto_id,
+          proveedorVidrio: relacion?.proveedor_id,
+          hojas_moviles: ventana.tipo === 3 ? ventana.hojas_moviles : undefined,
         }
         recalcularCosto(payload, ventana)
       }
@@ -491,22 +511,26 @@ const guardarCotizacion = async () => {
       alert('Debes seleccionar un cliente y agregar al menos una ventana')
       return
     }
-
     const payload = {
       cliente_id: clienteSeleccionado.id,
       vendedor_id: 1,
       fecha: new Date().toISOString().split('T')[0],
       estado: 'Evaluación',
       observaciones: cotizacion.value.observaciones,
-      ventanas: cotizacion.value.ventanas.map(v => ({
-        tipo_ventana_id: v.tipo,
-        ancho: v.ancho,
-        alto: v.alto,
-        color_id: v.color,
-        producto_vidrio_proveedor_id: v.productoVidrioProveedor,
-        costo: v.costo_total || 0,
-        precio: v.precio || 0
-      })),
+      ventanas: cotizacion.value.ventanas.map(v => {
+        const relacion = buscarRelacionVidrioProveedor(v.productoVidrioProveedor)
+        return {
+          tipo_ventana_id: v.tipo,
+          ancho: v.ancho,
+          alto: v.alto,
+          color_id: v.color,
+          producto_vidrio_proveedor_id: v.productoVidrioProveedor,
+          producto_id: relacion?.producto_id,
+          proveedor_id: relacion?.proveedor_id,
+          costo: v.costo_total || 0,
+          precio: v.precio || 0
+        }
+      }),
     }
 
     await api.post('api/cotizaciones', payload)

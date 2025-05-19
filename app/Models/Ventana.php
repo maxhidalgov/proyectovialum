@@ -26,4 +26,14 @@ class Ventana extends Model
     {
     return $this->belongsTo(TipoVentana::class);
     }
+
+    public function color()
+{
+    return $this->belongsTo(Color::class);
+}
+
+public function productoVidrioProveedor()
+{
+    return $this->belongsTo(ProductoColorProveedor::class, 'producto_vidrio_proveedor_id');
+}
 }

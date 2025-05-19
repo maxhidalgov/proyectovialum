@@ -83,7 +83,10 @@ class CotizacionController extends Controller
         'cliente',
         'vendedor',
         'ventanas.tipoVentana',
-        'ventanas'
+        'ventanas',
+        'ventanas.color',
+        'ventanas.productoVidrioProveedor.producto',
+        'ventanas.productoVidrioProveedor.proveedor'
     ])->findOrFail($id);
 
     return response()->json($cotizacion);
@@ -134,14 +137,14 @@ class CotizacionController extends Controller
     $original = Cotizacion::with('ventanas')->findOrFail($id);
 
     $nueva = Cotizacion::create([
-        'cliente_id' => $original->cliente_id,
-        'vendedor_id' => $original->vendedor_id,
-        'fecha' => now()->toDateString(),
-        'estado' => 'Evaluación',
-        'observaciones' => $original->observaciones,
-        'total' => $original->total,
-    ]);
-
+    'cliente_id' => $original->cliente_id,
+    'vendedor_id' => $original->vendedor_id,
+    'fecha' => now()->toDateString(),
+    'estado' => 'Evaluación',
+    'observaciones' => $original->observaciones,
+    'total' => $original->total,
+    'origen_id' => $original->id, // 👈 aquí
+    ]); 
     foreach ($original->ventanas as $ventana) {
         $nueva->ventanas()->create([
             'tipo_ventana_id' => $ventana->tipo_ventana_id,

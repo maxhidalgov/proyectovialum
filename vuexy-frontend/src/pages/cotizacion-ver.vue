@@ -66,7 +66,7 @@ import api from '@/axiosInstance'
 
 const route = useRoute()
 const router = useRouter()
-const cotizacionId = route.params.id
+const cotizacionId = route.query.id
 const apiBase = import.meta.env.VITE_API_BASE_URL
 const cotizacion = ref(null)
 
