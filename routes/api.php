@@ -11,6 +11,7 @@ use App\Http\Controllers\BsaleClientController;
 use App\Http\Controllers\TipoVentanaController;
 use App\Http\Controllers\TipoProductoController;
 use App\Http\Controllers\Api\CotizadorController;
+use App\Http\Controllers\EstadoCotizacionController;
 
 Route::middleware('api')->group(function () {
     Route::get('/productos', [ProductoController::class, 'index']);
@@ -41,27 +42,11 @@ Route::middleware('api')->group(function () {
     route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
     Route::get('/cotizaciones/{id}', [CotizacionController::class, 'show']);
     Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
+    Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
+    Route::put('/cotizaciones/{id}', [CotizacionController::class, 'update']);
 
 
 
-
-
-
-    
-    
-    
-    
-    
-
-
-
-
-
-
-
-    
-    
-    
     
 
 });

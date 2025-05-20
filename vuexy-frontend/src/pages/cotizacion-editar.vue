@@ -19,8 +19,10 @@
 
               <v-col cols="12" sm="6">
                 <v-select
-                  v-model="cotizacion.estado"
-                  :items="estados"
+                  v-model="cotizacion.estado_cotizacion_id"
+                  :items="estadosCotizacion"
+                  item-value="id"
+                  item-title="nombre"
                   label="Estado"
                 />
               </v-col>
@@ -38,45 +40,67 @@
       <v-card>
         <v-card-title>Ventanas</v-card-title>
 
-        <div v-if="cotizacion.estado === 'Evaluación'">
-          <VentanaForm
+        <div v-if="cotizacion.estado_cotizacion_id === 1">
+          <div
             v-for="(ventana, index) in cotizacion.ventanas"
             :key="index"
-            :ventana="ventana"
-            :tiposVentana="tiposVentanaTodos"
-            :colores="colores"
-            :tiposVidrio="tiposVidrio"
-            :productosVidrio="productosVidrioFiltrados"
-          />
-        </div>
+            class="mb-6"
+          >
+            <VentanaForm
+              :ventana="ventana"
+              :tiposVentana="tiposVentanaTodos"
+              :colores="colores"
+              :tiposVidrio="tiposVidrio"
+              :productosVidrio="productosVidrioFiltrados"
+            />
 
-        <v-data-table
-          v-else
-          :headers="headers"
-          :items="cotizacion.ventanas"
-          :items-per-page="5"
-          class="elevation-1"
-        >
-          <template #item.tipo_ventana_id="{ item }">
-            {{ item.tipo_ventana?.nombre || '—' }}
-          </template>
-          <template #item.color_id="{ item }">
-            <v-chip color="primary" variant="tonal" size="small">
-              {{ item.color?.nombre || '—' }}
-            </v-chip>
-          </template>
-          <template #item.producto_vidrio_proveedor_id="{ item }">
-            <v-chip color="green" variant="tonal" size="small">
-              {{ item.producto_vidrio_proveedor?.producto?.nombre || '—' }}
-              <span v-if="item.producto_vidrio_proveedor?.proveedor">
-                ({{ item.producto_vidrio_proveedor.proveedor.nombre }})
-              </span>
-            </v-chip>
-          </template>
-        </v-data-table>
+            <v-row class="mt-2 px-4">
+              <v-col cols="6">
+                <v-alert type="info" variant="tonal" color="blue">
+                  <strong>Costo:</strong> ${{ ventana.costo?.toLocaleString?.() || 0 }}
+                </v-alert>
+              </v-col>
+              <v-col cols="6">
+                <v-alert type="success" variant="tonal" color="green">
+                  <strong>Precio:</strong> ${{ ventana.precio?.toLocaleString?.() || 0 }}
+                </v-alert>
+              </v-col>
+            </v-row>
+          </div>
+</div>
+
+        <div v-else>
+          <!-- Modo lectura -->
+          <v-data-table
+            :headers="headers"
+            :items="cotizacion.ventanas"
+            :items-per-page="5"
+            class="elevation-1"
+          >
+            <template #item.tipo_ventana_id="{ item }">
+              {{ item.tipo_ventana?.nombre || '—' }}
+            </template>
+
+            <template #item.color_id="{ item }">
+              <v-chip color="primary" variant="tonal" size="small">
+                {{ item.color?.nombre || '—' }}
+              </v-chip>
+            </template>
+
+            <template #item.producto_vidrio_proveedor_id="{ item }">
+              <v-chip color="green" variant="tonal" size="small">
+                {{ item.producto_vidrio_proveedor?.producto?.nombre || '—' }}
+                <span v-if="item.producto_vidrio_proveedor?.proveedor">
+                  ({{ item.producto_vidrio_proveedor.proveedor.nombre }})
+                </span>
+              </v-chip>
+            </template>
+          </v-data-table>
+        </div>
       </v-card>
     </template>
 
+    <!-- ESTO ESTABA MAL UBICADO -->
     <template v-else>
       <v-alert type="info" variant="outlined" class="mt-4">
         Cargando cotización...
@@ -94,17 +118,23 @@ import VentanaForm from './VentanaForm.vue'
 const route = useRoute()
 const router = useRouter()
 const cotizacionId = route.query.id
+const estados = ref([])
+const estadosCotizacion = ref([])
+
+
+onMounted(async () => {
+  const estadosRes = await api.get('/api/estados-cotizacion')
+  estados.value = estadosRes.data
+})
 
 const cotizacion = ref({
   fecha: '',
-  estado: '',
+  estado_cotizacion_id: null, // <- nuevo
   observaciones: '',
   ventanas: [],
 })
 
 const form = ref(null)
-
-const estados = ['Evaluación', 'Aprobada', 'Rechazada']
 
 const headers = [
   { title: 'Tipo de ventana', value: 'tipo_ventana_id' },
@@ -139,7 +169,7 @@ const volver = () => {
 const guardarCambios = async () => {
   try {
     await api.put(`/api/cotizaciones/${cotizacion.value.id}`, {
-      estado: cotizacion.value.estado,
+      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id,
       fecha: cotizacion.value.fecha,
       observaciones: cotizacion.value.observaciones,
     })
@@ -151,14 +181,16 @@ const guardarCambios = async () => {
   }
 }
 
+
 onMounted(async () => {
   try {
-    const [cotizacionRes, tiposVentanaRes, coloresRes, tiposVidrioRes, productosRes] = await Promise.all([
+    const [cotizacionRes, tiposVentanaRes, coloresRes, tiposVidrioRes, productosRes, estadosRes] = await Promise.all([
       api.get(`/api/cotizaciones/${cotizacionId}`),
       api.get('/api/tipos_ventana'),
       api.get('/api/colores'),
       api.get('/api/tipos_producto'),
       api.get('/api/productos'),
+      api.get('/api/estados-cotizacion'), // ✅ Aquí,
     ])
 
     cotizacion.value = cotizacionRes.data
@@ -171,6 +203,7 @@ onMounted(async () => {
     colores.value = coloresRes.data
     tiposVidrio.value = tiposVidrioRes.data.filter(t => [1, 2].includes(t.id))
     productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
+    estadosCotizacion.value = estadosRes.data // ✅ Guardamos los estados
   } catch (error) {
     console.error('Error al cargar cotización:', error)
   }

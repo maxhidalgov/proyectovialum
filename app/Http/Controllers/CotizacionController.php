@@ -8,6 +8,7 @@ use App\Models\Ventana;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
+use App\Models\EstadoCotizacion;
 
 class CotizacionController extends Controller
 {
@@ -16,7 +17,7 @@ class CotizacionController extends Controller
      */
     public function index()
 {
-    $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'ventanas.tipoVentana'])
+    $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'ventanas.tipoVentana', 'estado'])
         ->latest()
         ->get();
 
@@ -45,7 +46,7 @@ class CotizacionController extends Controller
             'cliente_id' => $request->cliente_id,
             'vendedor_id' => $request->vendedor_id,
             'fecha' => $request->fecha,
-            'estado' => $request->estado ?? 'Evaluación',
+            'estado_cotizacion_id' => $request->estado_cotizacion_id,
             'observaciones' => $request->observaciones,
             'total' => collect($request->ventanas)->sum('precio'),
         ]);
@@ -86,7 +87,9 @@ class CotizacionController extends Controller
         'ventanas',
         'ventanas.color',
         'ventanas.productoVidrioProveedor.producto',
-        'ventanas.productoVidrioProveedor.proveedor'
+        'ventanas.productoVidrioProveedor.proveedor',
+        'estado',
+      
     ])->findOrFail($id);
 
     return response()->json($cotizacion);
@@ -108,7 +111,7 @@ class CotizacionController extends Controller
     $cotizacion = Cotizacion::findOrFail($id);
     $cotizacion->update([
         'fecha' => $request->fecha,
-        'estado' => $request->estado,
+        'estado_cotizacion_id' => $request->estado_cotizacion_id,
         'observaciones' => $request->observaciones,
     ]);
 
@@ -133,31 +136,42 @@ class CotizacionController extends Controller
     }
 
     public function duplicar($id)
-{
-    $original = Cotizacion::with('ventanas')->findOrFail($id);
+    {
+        $original = Cotizacion::with('ventanas', 'estado')->findOrFail($id);
 
-    $nueva = Cotizacion::create([
-    'cliente_id' => $original->cliente_id,
-    'vendedor_id' => $original->vendedor_id,
-    'fecha' => now()->toDateString(),
-    'estado' => 'Evaluación',
-    'observaciones' => $original->observaciones,
-    'total' => $original->total,
-    'origen_id' => $original->id, // 👈 aquí
-    ]); 
-    foreach ($original->ventanas as $ventana) {
-        $nueva->ventanas()->create([
-            'tipo_ventana_id' => $ventana->tipo_ventana_id,
-            'ancho' => $ventana->ancho,
-            'alto' => $ventana->alto,
-            'color_id' => $ventana->color_id,
-            'producto_vidrio_proveedor_id' => $ventana->producto_vidrio_proveedor_id,
-            'costo' => $ventana->costo,
-            'precio' => $ventana->precio,
+        // Validar que solo se pueda duplicar si está en estado "Evaluación"
+        if ($original->estado->nombre !== 'Evaluación') {
+            return response()->json([
+                'message' => 'Solo se pueden duplicar cotizaciones en estado Evaluación.'
+            ], 403);
+        }
+
+        $nuevoEstadoId = EstadoCotizacion::where('nombre', 'Evaluación')->firstOrFail()->id;
+
+        $nueva = Cotizacion::create([
+            'cliente_id' => $original->cliente_id,
+            'vendedor_id' => $original->vendedor_id,
+            'fecha' => now()->toDateString(),
+            'estado_cotizacion_id' => $nuevoEstadoId,
+            'observaciones' => $original->observaciones,
+            'total' => $original->total,
+            'origen_id' => $original->id,
         ]);
+
+        foreach ($original->ventanas as $ventana) {
+            $nueva->ventanas()->create([
+                'tipo_ventana_id' => $ventana->tipo_ventana_id,
+                'ancho' => $ventana->ancho,
+                'alto' => $ventana->alto,
+                'color_id' => $ventana->color_id,
+                'producto_vidrio_proveedor_id' => $ventana->producto_vidrio_proveedor_id,
+                'costo' => $ventana->costo,
+                'precio' => $ventana->precio,
+            ]);
+        }
+
+        return response()->json(['id' => $nueva->id, 'message' => 'Cotización duplicada']);
     }
 
-    return response()->json(['id' => $nueva->id, 'message' => 'Cotización duplicada']);
-}
 
 }

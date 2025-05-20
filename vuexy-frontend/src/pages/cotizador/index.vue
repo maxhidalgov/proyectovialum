@@ -515,7 +515,7 @@ const guardarCotizacion = async () => {
       cliente_id: clienteSeleccionado.id,
       vendedor_id: 1,
       fecha: new Date().toISOString().split('T')[0],
-      estado: 'Evaluación',
+      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id ?? 1, // default: Evaluación
       observaciones: cotizacion.value.observaciones,
       ventanas: cotizacion.value.ventanas.map(v => {
         const relacion = buscarRelacionVidrioProveedor(v.productoVidrioProveedor)
@@ -524,7 +524,7 @@ const guardarCotizacion = async () => {
           ancho: v.ancho,
           alto: v.alto,
           color_id: v.color,
-          producto_vidrio_proveedor_id: v.productoVidrioProveedor,
+          producto_vidrio_proveedor_id: v.productoVidrioProveedor,  
           producto_id: relacion?.producto_id,
           proveedor_id: relacion?.proveedor_id,
           costo: v.costo_total || 0,

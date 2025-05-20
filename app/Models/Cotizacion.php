@@ -8,8 +8,14 @@ class Cotizacion extends Model
 {
     protected $table = 'cotizaciones';
     protected $fillable = [
-        'cliente_id', 'vendedor_id', 'fecha', 'estado', 'observaciones', 'total'
-    ];
+    'cliente_id',
+    'vendedor_id',
+    'fecha',
+    'estado_cotizacion_id',
+    'observaciones',
+    'total',
+    'origen_id',
+];
 
     public function cliente()
     {
@@ -25,4 +31,8 @@ class Cotizacion extends Model
     {
         return $this->hasMany(Ventana::class);
     }
+    public function estado()
+{
+    return $this->belongsTo(EstadoCotizacion::class, 'estado_cotizacion_id');
+}
 }

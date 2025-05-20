@@ -21,8 +21,8 @@
         </template>
   
         <template #item.estado="{ item }">
-          <v-chip :color="getEstadoColor(item.estado)">
-            {{ item.estado }}
+          <v-chip :color="getEstadoColor(item.estado?.nombre)">
+            {{ item.estado?.nombre || '—' }}
           </v-chip>
         </template>
   
@@ -63,8 +63,8 @@
     { title: 'Acciones', value: 'acciones', sortable: false },
   ]
   
-  const getEstadoColor = (estado) => {
-    switch (estado) {
+  const getEstadoColor = (estadoNombre) => {
+    switch (estadoNombre) {
       case 'Evaluación': return 'grey'
       case 'Aprobada': return 'green'
       case 'Rechazada': return 'red'

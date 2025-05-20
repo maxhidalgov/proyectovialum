@@ -29,8 +29,8 @@
           </v-col>
           <v-col cols="12" sm="6">
             <strong>Estado:</strong>
-            <v-chip :color="getEstadoColor(cotizacion?.estado)">
-              {{ cotizacion?.estado }}
+            <v-chip :color="getEstadoColor(cotizacion?.estado?.nombre)">
+              {{ cotizacion?.estado?.nombre || '—' }}
             </v-chip>
           </v-col>
           <v-col cols="12">
