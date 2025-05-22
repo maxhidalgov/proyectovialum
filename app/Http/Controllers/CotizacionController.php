@@ -108,14 +108,36 @@ class CotizacionController extends Controller
      */
     public function update(Request $request, $id)
     {
-    $cotizacion = Cotizacion::findOrFail($id);
-    $cotizacion->update([
-        'fecha' => $request->fecha,
-        'estado_cotizacion_id' => $request->estado_cotizacion_id,
-        'observaciones' => $request->observaciones,
-    ]);
+        $cotizacion = Cotizacion::findOrFail($id);
 
-    return response()->json(['message' => 'Cotización actualizada']);
+        DB::transaction(function () use ($request, $cotizacion) {
+            $cotizacion->update([
+                'fecha' => $request->fecha,
+                'estado_cotizacion_id' => $request->estado_cotizacion_id,
+                'observaciones' => $request->observaciones,
+            ]);
+
+            // Actualizar ventanas
+            foreach ($request->ventanas as $ventanaData) {
+                $ventana = $cotizacion->ventanas()->where('id', $ventanaData['id'])->first();
+
+                if ($ventana) {
+                    $ventana->update([
+                        'tipo_ventana_id' => $ventanaData['tipo_ventana_id'],
+                        'ancho' => $ventanaData['ancho'],
+                        'alto' => $ventanaData['alto'],
+                        'color_id' => $ventanaData['color_id'],
+                        'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
+                        'costo' => $ventanaData['costo'],
+                        'precio' => $ventanaData['precio']
+                    ]);
+                }
+            }
+        });
+    
+
+        return response()->json(['message' => 'Cotización actualizada']);
+        
     }
 
     /**

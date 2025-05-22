@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ColorController;
 use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\VentanaController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\CotizacionController;
@@ -44,6 +45,7 @@ Route::middleware('api')->group(function () {
     Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
     Route::put('/cotizaciones/{id}', [CotizacionController::class, 'update']);
+    Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
 
 
 

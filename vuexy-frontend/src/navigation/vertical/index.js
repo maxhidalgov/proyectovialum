@@ -4,11 +4,11 @@ export default [
     to: { name: 'root' },
     icon: { icon: 'tabler-smart-home' },
   },
-  {
-    title: 'Second pages',
-    to: { name: 'second-page' },
-    icon: { icon: 'tabler-file' },
-  },
+  // {
+  //   title: 'Second pages',
+  //   to: { name: 'second-page' },
+  //   icon: { icon: 'tabler-file' },
+  // },
   {
     title: 'Productos',
     icon: { icon: 'mdi-cube' },
@@ -28,18 +28,18 @@ export default [
   {
     title: 'Cotizador',
     to: { name: 'cotizador' },
-    icon: { icon: 'tabler-file' },
+    icon: { icon: 'mdi-calculator' },
   },
-  {
-    title: 'Ventana',
-    to: { name: 'ventanapreview' },
-    icon: { icon: 'tabler-file' },
-  },
-  {
-    title: 'Cotizador2',
-    to: { name: 'cotizador2' },
-    icon: { icon: 'tabler-file' },
-  },
+  // {
+  //   title: 'Ventana',
+  //   to: { name: 'ventanapreview' },
+  //   icon: { icon: 'tabler-file' },
+  // },
+  // {
+  //   title: 'Cotizador2',
+  //   to: { name: 'cotizador2' },
+  //   icon: { icon: 'tabler-file' },
+  // },
   {
     title: 'Clientes',
     to: { name: 'clientes' },

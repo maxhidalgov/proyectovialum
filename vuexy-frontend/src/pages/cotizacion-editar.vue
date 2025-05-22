@@ -65,7 +65,7 @@
                   <strong>Precio:</strong> ${{ ventana.precio?.toLocaleString?.() || 0 }}
                 </v-alert>
               </v-col>
-            </v-row>
+            </v-row>  
           </div>
 </div>
 
@@ -168,11 +168,23 @@ const volver = () => {
 
 const guardarCambios = async () => {
   try {
-    await api.put(`/api/cotizaciones/${cotizacion.value.id}`, {
-      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id,
+    const payload = {
       fecha: cotizacion.value.fecha,
+      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id,
       observaciones: cotizacion.value.observaciones,
-    })
+      ventanas: cotizacion.value.ventanas.map(v => ({
+        id: v.id,
+        tipo_ventana_id: v.tipo_ventana_id,
+        ancho: v.ancho,
+        alto: v.alto,
+        color_id: v.color_id,
+        producto_vidrio_proveedor_id: v.producto_vidrio_proveedor_id,
+        costo: v.costo || 0,
+        precio: v.precio || 0,
+      })),
+    }
+
+    await api.put(`/api/cotizaciones/${cotizacion.value.id}`, payload)
     alert('Cotización actualizada correctamente')
     volver()
   } catch (error) {

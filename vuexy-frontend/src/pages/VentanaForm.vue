@@ -84,8 +84,8 @@
 
       <v-col cols="12" v-if="ventana.costo_total">
         <v-alert type="info" variant="outlined">
-          <strong>Costo:</strong> ${{ ventana.costo_total }} —
-          <strong>Precio:</strong> ${{ ventana.precio }}
+          <strong>Costo:</strong> {{ ventana.costo_total?.toLocaleString('es-CL') }} —
+          <strong>Precio:</strong> {{ ventana.precio?.toLocaleString('es-CL') }}
         </v-alert>
       </v-col>
     </v-row>
@@ -93,11 +93,79 @@
 </template>
 
 <script setup>
-defineProps({
+import { watch } from 'vue'
+import debounce from 'lodash/debounce'
+import api from '@/axiosInstance'
+
+const props = defineProps({
   ventana: Object,
   tiposVentana: Array,
   colores: Array,
   tiposVidrio: Array,
   productosVidrio: Array
 })
+
+const margenVenta = 0.45
+
+const recalcularCosto = debounce(async () => {
+  const productoSeleccionado = props.productosVidrio.find(
+    p => p.id === props.ventana.producto_vidrio_proveedor_id
+  )
+
+  if (!productoSeleccionado) return
+
+  const payload = {
+    tipo: props.ventana.tipo_ventana_id,
+    ancho: props.ventana.ancho,
+    alto: props.ventana.alto,
+    material: 2, // o el material correspondiente
+    color: props.ventana.color_id,
+    tipoVidrio: props.ventana.tipo_vidrio_id,
+    productoVidrioProveedor: props.ventana.producto_vidrio_proveedor_id,
+    productoVidrio: productoSeleccionado.producto_id,
+    proveedorVidrio: productoSeleccionado.proveedor_id,
+    hojas_totales: props.ventana.hojas_totales || 2,
+    hojas_moviles: props.ventana.tipo_ventana_id === 3 ? props.ventana.hojas_moviles : undefined,
+  }
+
+  try {
+    const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
+    props.ventana.costo_total = data.costo_total
+    props.ventana.precio = Math.ceil(data.costo_total / (1 - margenVenta))
+    props.ventana.materiales = data.materiales
+
+    // ✅ También puedes actualizar en BD si lo deseas:
+    if (props.ventana.id) {
+      await api.put(`/api/ventanas/${props.ventana.id}`, {
+        ...props.ventana,
+        costo: props.ventana.costo_total,
+        precio: props.ventana.precio,
+      })
+    }
+  } catch (error) {
+    console.error('❌ Error al calcular materiales', error)
+  }
+}, 800)
+
+watch(
+  () => [
+    props.ventana.tipo_ventana_id,
+    props.ventana.ancho,
+    props.ventana.alto,
+    props.ventana.color_id,
+    props.ventana.tipo_vidrio_id,
+    props.ventana.producto_vidrio_proveedor_id
+  ],
+  () => {
+    if (
+      props.ventana.tipo_ventana_id &&
+      props.ventana.ancho &&
+      props.ventana.alto &&
+      props.ventana.producto_vidrio_proveedor_id
+    ) {
+      recalcularCosto()
+    }
+  },
+  { deep: true }
+)
 </script>

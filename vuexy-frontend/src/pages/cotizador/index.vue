@@ -1,37 +1,58 @@
 <template>
-    <v-container fluid>
+  <v-container fluid>
     <v-card class="pa-6" elevation="2">
       <v-card-title class="text-h5 mb-4">Nueva Cotización</v-card-title>
 
       <!-- Datos Generales -->
-      <v-row dense class="mb-4">
-        <v-col cols="12" md="6">
-          <v-combobox
-            v-model="form.cliente"
-            :rules="[v => !!v || 'Selecciona un cliente']"
-            v-model:search="clienteSearch"
-            :items="clientesFiltrados"
-            item-title="razon_social"
-            item-value="uid"
-            label="Cliente"
-            return-object
-            clearable
-            :menu-props="{ virtualScroll: false }"
-            :key="comboboxKey"
+      <v-card-subtitle class="text-h6">Datos generales</v-card-subtitle>
+      <v-divider class="mb-4" />
+
+      <!-- Cliente + botón en fila -->
+      <v-row dense>
+        <v-col cols="6">
+          <v-row no-gutters align="center">
+            <v-col>
+              <v-combobox
+                v-model="form.cliente"
+                :rules="[v => !!v || 'Selecciona un cliente']"
+                v-model:search="clienteSearch"
+                :items="clientesFiltrados"
+                item-title="razon_social"
+                item-value="uid"
+                label="Cliente"
+                return-object
+                clearable
+                :menu-props="{ virtualScroll: false }"
+                :key="comboboxKey"
+                outlined
+                color="primary"
+              />
+            </v-col>
+            <v-col cols="auto">
+              <v-btn icon color="primary" @click="abrirModalCliente" class="ml-2">
+                <v-icon>mdi-plus</v-icon>
+              </v-btn>
+            </v-col>
+          </v-row>
+        </v-col>
+      </v-row>
+
+      <!-- Observaciones -->
+      <v-row dense>
+        <v-col cols="6">
+          <v-textarea
+            v-model="cotizacion.observaciones"
+            label="Observaciones"
+            outlined
+            color="primary"
+            auto-grow
           />
         </v-col>
+      </v-row>
 
-        <v-col cols="12" md="6" class="d-flex align-center">
-          <v-btn icon color="primary" @click="abrirModalCliente">
-            <v-icon>mdi-plus</v-icon>
-          </v-btn>
-        </v-col>
-
-        <v-col cols="12" sm="6">
-          <v-textarea v-model="cotizacion.observaciones" label="Observaciones" outlined color="primary" auto-grow />
-        </v-col>
-
-        <v-col cols="12" sm="3">
+      <!-- Material y Color en una nueva fila -->
+      <v-row dense class="mb-4">
+        <v-col cols="12" md="6">
           <v-select
             v-model="cotizacion.material"
             :items="materiales"
@@ -42,8 +63,7 @@
             color="primary"
           />
         </v-col>
-
-        <v-col cols="12" sm="3">
+        <v-col cols="12" md="6">
           <v-select
             v-model="cotizacion.color"
             :items="colores"
@@ -54,73 +74,38 @@
             color="primary"
           />
         </v-col>
+      </v-row>
 
-        <v-col cols="12" sm="3">
-          <v-select
-            v-model="cotizacion.tipoVidrio"
-            :items="tiposVidrio"
-            item-title="nombre"
-            item-value="id"
-            label="Tipo de vidrio"
-            outlined
-            color="primary"
-          />
+      <!-- Vidrio por defecto -->
+      <v-card-subtitle class="text-h6">Vidrio por defecto</v-card-subtitle>
+      <v-divider class="mb-4" />
+      <v-row dense class="mb-4">
+        <v-col cols="12" sm="6">
+          <v-select v-model="cotizacion.tipoVidrio" :items="tiposVidrio" item-title="nombre" item-value="id" label="Tipo de vidrio" outlined color="primary" />
         </v-col>
 
-        <v-col cols="12" sm="3">
-          <v-select
-            v-model="cotizacion.productoVidrioProveedor"
-            :items="productosVidrioFiltradosGeneral"
-            item-title="nombre"
-            item-value="id"
-            label="Producto de vidrio"
-            outlined
-            color="primary"
-          />
+        <v-col cols="12" sm="6">
+          <v-select v-model="cotizacion.productoVidrioProveedor" :items="productosVidrioFiltradosGeneral" item-title="nombre" item-value="id" label="Producto de vidrio" outlined color="primary" />
         </v-col>
       </v-row>
 
       <!-- Lista de Ventanas -->
-      <v-divider class="my-4" />
-      <v-card-subtitle class="text-h6 mb-2">Ventanas</v-card-subtitle>
+      <v-card-subtitle class="text-h6">Ventanas</v-card-subtitle>
+      <v-divider class="mb-4" />
 
       <div v-for="(ventana, index) in cotizacion.ventanas" :key="index" class="mb-4">
         <v-card class="pa-4" outlined>
           <v-row dense>
             <v-col cols="12" sm="6">
-              <v-select
-                v-model="ventana.tipo"
-                :items="tiposVentanaFiltrados(ventana)"
-                item-title="nombre"
-                item-value="id"
-                label="Tipo de ventana"
-                outlined
-                color="primary"
-              />
+              <v-select v-model="ventana.tipo" :items="tiposVentanaFiltrados(ventana)" item-title="nombre" item-value="id" label="Tipo de ventana" outlined color="primary" />
             </v-col>
 
-            <!-- Mostrar campos adicionales solo si tipo es corredera sliding (ID 3) -->
             <template v-if="ventana.tipo === 3">
               <v-col cols="6" sm="3">
-                <v-select
-                  v-model="ventana.hojas_totales"
-                  :items="[2, 3, 4, 6]"
-                  label="Hojas totales"
-                  outlined
-                  color="primary"
-                />
+                <v-select v-model="ventana.hojas_totales" :items="[2, 3, 4, 6]" label="Hojas totales" outlined color="primary" />
               </v-col>
-
               <v-col cols="6" sm="3">
-                <v-select
-                  v-model="ventana.hojas_moviles"
-                  :items="[1, 2, 3, 4]"
-                  label="Hojas móviles"
-                  :disabled="!ventana.hojas_totales"
-                  :rules="[v => !v || v <= ventana.hojas_totales || 'No puede exceder total']"
-                  outlined
-                  color="primary"
-                />
+                <v-select v-model="ventana.hojas_moviles" :items="[1, 2, 3, 4]" label="Hojas móviles" :disabled="!ventana.hojas_totales" :rules="[v => !v || v <= ventana.hojas_totales || 'No puede exceder total']" outlined color="primary" />
               </v-col>
             </template>
 
@@ -141,36 +126,23 @@
               <v-select v-model="ventana.tipoVidrio" :items="tiposVidrio" item-title="nombre" item-value="id" label="Tipo de vidrio (opcional)" outlined color="primary" />
             </v-col>
             <v-col cols="12" sm="3">
-              <v-select
-                v-model="ventana.productoVidrioProveedor"
-                :items="productosVidrioFiltradosConProveedor(ventana)"
-                item-title="nombre"
-                item-value="id"
-                label="Producto de vidrio (opcional)"
-                outlined
-                color="primary"
-              />
+              <v-select v-model="ventana.productoVidrioProveedor" :items="productosVidrioFiltradosConProveedor(ventana)" item-title="nombre" item-value="id" label="Producto de vidrio (opcional)" outlined color="primary" />
             </v-col>
 
             <v-col cols="12">
-              <v-alert v-if="ventana.costo_total" type="info" variant="outlined" class="mb-2">
-                <strong>Costo total de materiales:</strong> ${{ ventana.costo_total }}
+              <v-alert v-if="ventana.costo_total" type="info" variant="tonal" dense class="mb-2">
+                <strong>Costo total de materiales:</strong> ${{ ventana.costo_total.toLocaleString() }}
               </v-alert>
-              <v-alert
-                v-if="ventana.precio"
-                type="success"
-                variant="outlined"
-                class="mt-2"
-              >
-                <strong>Precio sugerido:</strong> ${{ ventana.precio }}
+              <v-alert v-if="ventana.precio" type="success" variant="tonal" dense class="mt-2">
+                <strong>Precio sugerido:</strong> ${{ ventana.precio.toLocaleString() }}
               </v-alert>
 
-              <v-btn @click="mostrarDetalles = !mostrarDetalles" color="primary">
+              <v-btn @click="mostrarDetalles = !mostrarDetalles" color="primary" variant="outlined">
+                <v-icon left>mdi-eye</v-icon>
                 {{ mostrarDetalles ? 'Ocultar' : 'Ver' }} Costos
               </v-btn>
 
-              <v-data-table
-                v-if="mostrarDetalles && ventana.materiales && ventana.materiales.length"
+              <v-data-table v-if="mostrarDetalles && ventana.materiales && ventana.materiales.length"
                 :headers="[
                   { title: 'Producto', key: 'nombre' },
                   { title: 'Proveedor', key: 'proveedor' },
@@ -181,35 +153,36 @@
                 ]"
                 :items="ventana.materiales"
                 :items-per-page="-1"
-                class="elevation-1"
+                class="elevation-1 mt-4"
                 hide-default-footer
               >
                 <template #item.costo_unitario="{ item }">
-                  ${{ item.costo_unitario }}
+                  ${{ item.costo_unitario.toLocaleString() }}
                 </template>
                 <template #item.costo_total="{ item }">
-                  ${{ item.costo_total }}
+                  ${{ item.costo_total.toLocaleString() }}
                 </template>
               </v-data-table>
             </v-col>
 
             <v-col cols="12" class="text-right">
-              <v-btn color="error" variant="text" @click="eliminarVentana(index)">
-                <v-icon>mdi-delete</v-icon> Quitar ventana
+              <v-btn color="error" variant="outlined" @click="eliminarVentana(index)">
+                <v-icon left>mdi-delete</v-icon> Quitar ventana
               </v-btn>
             </v-col>
           </v-row>
         </v-card>
       </div>
 
-      <v-btn @click="agregarVentana" color="primary" variant="text" class="mb-4">
+      <v-btn @click="agregarVentana" color="primary" variant="outlined" class="mb-4">
         <v-icon left>mdi-plus</v-icon> Agregar ventana
       </v-btn>
 
       <v-divider class="my-4" />
-      <v-btn color="primary" @click="guardarCotizacion" block>Guardar Cotización</v-btn>
+      <v-btn color="primary" @click="guardarCotizacion" block prepend-icon="mdi-content-save" elevation="2" class="py-4">
+        Guardar Cotización
+      </v-btn>
     </v-card>
-
 
     <!-- MODAL NUEVO CLIENTE -->
     <v-dialog v-model="modalCliente" max-width="600px">
@@ -217,14 +190,38 @@
         <v-card-title>Nuevo Cliente</v-card-title>
         <v-card-text>
           <v-form ref="formNuevoCliente" @submit.prevent="guardarCliente">
-            <v-text-field v-model="nuevoCliente.firstName" label="Nombre" />
-            <v-text-field v-model="nuevoCliente.lastName" label="Apellido" />
-            <v-text-field v-model="nuevoCliente.company" label="Razón Social" />
-            <v-text-field v-model="nuevoCliente.code" label="RUT" />
-            <v-text-field v-model="nuevoCliente.email" label="Email" />
-            <v-text-field v-model="nuevoCliente.phone" label="Teléfono" />
-            <v-text-field v-model="nuevoCliente.city" label="Ciudad" />
-            <v-text-field v-model="nuevoCliente.municipality" label="Comuna" />
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.firstName" label="Nombre" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.lastName" label="Apellido" />
+              </v-col>
+            </v-row>
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.company" label="Razón Social" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.code" label="RUT" />
+              </v-col>
+            </v-row>
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.email" label="Email" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.phone" label="Teléfono" />
+              </v-col>
+            </v-row>
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.city" label="Ciudad" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="nuevoCliente.municipality" label="Comuna" />
+              </v-col>
+            </v-row>
             <v-text-field v-model="nuevoCliente.address" label="Dirección" />
             <v-text-field v-model="nuevoCliente.activity" label="Giro" />
           </v-form>
@@ -238,7 +235,6 @@
     </v-dialog>
   </v-container>
 </template>
-
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'

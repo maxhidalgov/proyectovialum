@@ -50,9 +50,20 @@ class VentanaController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Ventana $ventana)
+    public function update(Request $request, $id)
     {
-        //
+        $ventana = Ventana::findOrFail($id);
+        $ventana->update([
+            'ancho' => $request->ancho,
+            'alto' => $request->alto,
+            'color_id' => $request->color_id,
+            'producto_vidrio_proveedor_id' => $request->producto_vidrio_proveedor_id,
+            'costo' => $request->costo,
+            'precio' => $request->precio,
+            // otros campos si es necesario
+        ]);
+
+        return response()->json(['message' => 'Ventana actualizada']);
     }
 
     /**
