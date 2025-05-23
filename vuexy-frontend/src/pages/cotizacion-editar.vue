@@ -14,6 +14,16 @@
           <v-form @submit.prevent="guardarCambios" ref="form">
             <v-row>
               <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="cotizacion.cliente_id"
+                  :items="clientes"
+                  item-title="razon_social"
+                  item-value="id"
+                  label="Cliente"
+                  clearable
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
                 <v-text-field v-model="cotizacion.fecha" label="Fecha" type="date" />
               </v-col>
 
@@ -38,7 +48,13 @@
       </v-card>
 
       <v-card>
-        <v-card-title>Ventanas</v-card-title>
+        <v-card-title>
+          Ventanas
+          <v-spacer />
+          <v-btn icon @click="modalAgregarVentana = true" v-if="cotizacion.estado_cotizacion_id === 1">
+            <v-icon>mdi-plus</v-icon>
+          </v-btn>
+        </v-card-title>
 
         <div v-if="cotizacion.estado_cotizacion_id === 1">
           <div
@@ -65,12 +81,11 @@
                   <strong>Precio:</strong> ${{ ventana.precio?.toLocaleString?.() || 0 }}
                 </v-alert>
               </v-col>
-            </v-row>  
+            </v-row>
           </div>
-</div>
+        </div>
 
         <div v-else>
-          <!-- Modo lectura -->
           <v-data-table
             :headers="headers"
             :items="cotizacion.ventanas"
@@ -98,9 +113,18 @@
           </v-data-table>
         </div>
       </v-card>
+
+      <AgregarVentanaModal
+        v-model="modalAgregarVentana"
+        :tiposVentana="tiposVentanaTodos"
+        :colores="colores"
+        :materiales="materiales"
+        :tiposVidrio="tiposVidrio"
+        :productosVidrio="productosVidrio"
+        @agregar="agregarVentana"
+      />
     </template>
 
-    <!-- ESTO ESTABA MAL UBICADO -->
     <template v-else>
       <v-alert type="info" variant="outlined" class="mt-4">
         Cargando cotización...
@@ -114,25 +138,87 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/axiosInstance'
 import VentanaForm from './VentanaForm.vue'
+import AgregarVentanaModal from './AgregarVentanaModal.vue'
 
+const modalAgregarVentana = ref(false)
+const agregarVentana = (ventana) => {
+  cotizacion.value.ventanas.push(ventana)
+}
 const route = useRoute()
 const router = useRouter()
 const cotizacionId = route.query.id
 const estados = ref([])
 const estadosCotizacion = ref([])
+const cotizacionOriginal = ref(null)
+const clientes = ref([])
+const materiales = ref([])
 
+const mostrarModalVentana = ref(false)
+const nuevaVentana = ref(crearVentanaVacia())
 
-onMounted(async () => {
-  const estadosRes = await api.get('/api/estados-cotizacion')
-  estados.value = estadosRes.data
-})
+function crearVentanaVacia() {
+  return {
+    tipo_ventana_id: null,
+    ancho: null,
+    alto: null,
+    color_id: null,
+    tipo_vidrio_id: null,
+    producto_vidrio_proveedor_id: null,
+    hojas_totales: 2,
+    hojas_moviles: 2,
+    costo: 0,
+    precio: 0,
+    materiales: [],
+  }
+}
+
+function abrirModalVentana() {
+  nuevaVentana.value = crearVentanaVacia()
+  mostrarModalVentana.value = true
+}
+
+function cerrarModalVentana() {
+  mostrarModalVentana.value = false
+}
+
+function confirmarAgregarVentana() {
+  cotizacion.value.ventanas.push({ ...nuevaVentana.value })
+  mostrarModalVentana.value = false
+}
 
 const cotizacion = ref({
   fecha: '',
-  estado_cotizacion_id: null, // <- nuevo
+  estado_cotizacion_id: null,
   observaciones: '',
   ventanas: [],
 })
+
+
+
+
+const ventanaPorAgregar = ref(null)
+
+const abrirModalAgregarVentana = () => {
+  ventanaPorAgregar.value = {
+    tipo: null,
+    ancho: null,
+    alto: null,
+    color: null,
+    tipoVidrio: cotizacion.value.tipoVidrio ?? null,
+    productoVidrioProveedor: cotizacion.value.productoVidrioProveedor ?? null,
+    hojas_totales: 2,
+    hojas_moviles: 2,
+    materiales: [],
+    costo_total: 0,
+    precio: 0,
+  }
+  modalAgregarVentana.value = true
+}
+
+const agregarVentanaDesdeModal = (ventana) => {
+  cotizacion.value.ventanas.push(ventana)
+  modalAgregarVentana.value = false
+}
 
 const form = ref(null)
 
@@ -167,8 +253,17 @@ const volver = () => {
 }
 
 const guardarCambios = async () => {
+  const original = JSON.stringify(cotizacionOriginal.value)
+  const actual = JSON.stringify(cotizacion.value)
+
+  if (original === actual) {
+    alert('No hay cambios para guardar')
+    return
+  }
+
   try {
     const payload = {
+      cliente_id: cotizacion.value.cliente_id,
       fecha: cotizacion.value.fecha,
       estado_cotizacion_id: cotizacion.value.estado_cotizacion_id,
       observaciones: cotizacion.value.observaciones,
@@ -188,34 +283,37 @@ const guardarCambios = async () => {
     alert('Cotización actualizada correctamente')
     volver()
   } catch (error) {
-    console.error(error)
+    console.error('❌ Error al guardar cambios:', error)
     alert('Error al guardar cambios')
   }
 }
 
-
 onMounted(async () => {
   try {
-    const [cotizacionRes, tiposVentanaRes, coloresRes, tiposVidrioRes, productosRes, estadosRes] = await Promise.all([
+    const [cotizacionRes, tiposVentanaRes, coloresRes, tiposVidrioRes, productosRes, estadosRes, clientesRes, materialesRes] = await Promise.all([
       api.get(`/api/cotizaciones/${cotizacionId}`),
       api.get('/api/tipos_ventana'),
       api.get('/api/colores'),
       api.get('/api/tipos_producto'),
       api.get('/api/productos'),
-      api.get('/api/estados-cotizacion'), // ✅ Aquí,
+      api.get('/api/estados-cotizacion'),
+      api.get('/api/clientes'),
+      api.get('/api/tipos_material')
     ])
 
     cotizacion.value = cotizacionRes.data
-    // Asegura que cada ventana tenga el campo `tipo_vidrio_id` para el select
+    clientes.value = clientesRes.data
+    materiales.value = materialesRes.data
     cotizacion.value.ventanas = cotizacion.value.ventanas.map(v => ({
       ...v,
       tipo_vidrio_id: v.producto_vidrio_proveedor?.producto?.tipo_producto_id ?? null,
     }))
+    cotizacionOriginal.value = JSON.parse(JSON.stringify(cotizacion.value))
     tiposVentanaTodos.value = tiposVentanaRes.data
     colores.value = coloresRes.data
     tiposVidrio.value = tiposVidrioRes.data.filter(t => [1, 2].includes(t.id))
     productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
-    estadosCotizacion.value = estadosRes.data // ✅ Guardamos los estados
+    estadosCotizacion.value = estadosRes.data
   } catch (error) {
     console.error('Error al cargar cotización:', error)
   }

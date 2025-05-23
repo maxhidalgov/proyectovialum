@@ -108,36 +108,54 @@ class CotizacionController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $cotizacion = Cotizacion::findOrFail($id);
+        $cotizacion = Cotizacion::with('ventanas')->findOrFail($id);
 
         DB::transaction(function () use ($request, $cotizacion) {
             $cotizacion->update([
+                'cliente_id' => $request->cliente_id,
                 'fecha' => $request->fecha,
                 'estado_cotizacion_id' => $request->estado_cotizacion_id,
                 'observaciones' => $request->observaciones,
             ]);
 
-            // Actualizar ventanas
-            foreach ($request->ventanas as $ventanaData) {
-                $ventana = $cotizacion->ventanas()->where('id', $ventanaData['id'])->first();
+            $idsRecibidos = collect($request->ventanas)->pluck('id')->filter()->all();
 
-                if ($ventana) {
-                    $ventana->update([
+            // Eliminar ventanas que ya no existen en el request
+            $cotizacion->ventanas()
+                ->whereNotIn('id', $idsRecibidos)
+                ->delete();
+
+            foreach ($request->ventanas as $ventanaData) {
+                if (isset($ventanaData['id'])) {
+                    // Actualizar ventana existente
+                    $ventana = $cotizacion->ventanas()->where('id', $ventanaData['id'])->first();
+                    if ($ventana) {
+                        $ventana->update([
+                            'tipo_ventana_id' => $ventanaData['tipo_ventana_id'],
+                            'ancho' => $ventanaData['ancho'],
+                            'alto' => $ventanaData['alto'],
+                            'color_id' => $ventanaData['color_id'],
+                            'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
+                            'costo' => $ventanaData['costo'],
+                            'precio' => $ventanaData['precio'],
+                        ]);
+                    }
+                } else {
+                    // Crear nueva ventana
+                    $cotizacion->ventanas()->create([
                         'tipo_ventana_id' => $ventanaData['tipo_ventana_id'],
                         'ancho' => $ventanaData['ancho'],
                         'alto' => $ventanaData['alto'],
                         'color_id' => $ventanaData['color_id'],
                         'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
                         'costo' => $ventanaData['costo'],
-                        'precio' => $ventanaData['precio']
+                        'precio' => $ventanaData['precio'],
                     ]);
                 }
             }
         });
-    
 
-        return response()->json(['message' => 'Cotización actualizada']);
-        
+        return response()->json(['message' => 'Cotización actualizada correctamente']);
     }
 
     /**
