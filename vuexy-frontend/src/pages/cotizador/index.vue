@@ -371,49 +371,43 @@ const clientesFiltrados = computed(() => {
 })
 
 // Ventanas
-const agregarVentana = () => {
-  const productoGlobal = cotizacion.value.productoVidrioProveedor
-  const tipoVidrio = cotizacion.value.tipoVidrio
+const agregarVentana = (ventanaModal = null) => {
+  const base = {
+    tipo: null,
+    ancho: null,
+    alto: null,
+    material: cotizacion.value.material,
+    color: cotizacion.value.color,
+    tipoVidrio: cotizacion.value.tipoVidrio,
+    productoVidrioProveedor: cotizacion.value.productoVidrioProveedor ?? null,
+    hojas_totales: 2,
+    hojas_moviles: 2,
+    materiales: [],
+    costo_total: 0,
+    precio: 0,
+  }
 
-  const nuevaVentana = {
-  tipo: null,
-  ancho: null,
-  alto: null,
-  material: cotizacion.value.material,
-  color: cotizacion.value.color,
-  tipoVidrio: cotizacion.value.tipoVidrio,
-  productoVidrioProveedor: cotizacion.value.productoVidrioProveedor ?? null,
-  hojas_totales: 2, // Por defecto
-  hojas_moviles: 2, // Por defecto
-  materiales: [],
-  costo_total: 0,
-}
+  const nuevaVentana = { ...base, ...(ventanaModal || {}) }
 
   cotizacion.value.ventanas.push(nuevaVentana)
-  const tipoId = nuevaVentana.tipo
-  const tipoData = tiposVentanaTodos.value.find(t => t.id === tipoId)
-  
 
-  // Verifica si tiene todo para calcular y dispara
+  const relacion = buscarRelacionVidrioProveedor(nuevaVentana.productoVidrioProveedor)
+
   if (
     nuevaVentana.tipo &&
     nuevaVentana.ancho &&
     nuevaVentana.alto &&
-    nuevaVentana.productoVidrioProveedor
+    relacion
   ) {
-    const relacion = buscarRelacionVidrioProveedor(nuevaVentana.productoVidrioProveedor)
-  const payload = {
-    ...nuevaVentana,
-    productoVidrio: relacion?.producto_id,
-    proveedorVidrio: relacion?.proveedor_id,
-    hojas_moviles: nuevaVentana.tipo === 3 ? nuevaVentana.hojas_moviles : undefined,
-  }
-    console.log('Datos de la ventana antes de enviar al backend:', payload);
-    console.log('🧪 Payload enviado a calcularMateriales:', payload) // <-- Agrega esto
+    const payload = {
+      ...nuevaVentana,
+      productoVidrio: relacion.producto_id,
+      proveedorVidrio: relacion.proveedor_id,
+      hojas_moviles: nuevaVentana.tipo === 3 ? nuevaVentana.hojas_moviles : undefined,
+    }
     recalcularCosto(payload, nuevaVentana)
   }
 }
-
 
 const eliminarVentana = (index) => {
   cotizacion.value.ventanas.splice(index, 1)

@@ -98,7 +98,7 @@
 
             <template #item.color_id="{ item }">
               <v-chip color="primary" variant="tonal" size="small">
-                {{ item.color?.nombre || '—' }}
+                {{ item.color_obj?.nombre || '—' }}
               </v-chip>
             </template>
 
@@ -121,7 +121,7 @@
         :materiales="materiales"
         :tiposVidrio="tiposVidrio"
         :productosVidrio="productosVidrio"
-        @agregar="agregarVentana"
+        @agregar="agregarVentanaDesdeModal"
       />
     </template>
 
@@ -139,10 +139,31 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/axiosInstance'
 import VentanaForm from './VentanaForm.vue'
 import AgregarVentanaModal from './AgregarVentanaModal.vue'
+import debounce from 'lodash/debounce'
 
 const modalAgregarVentana = ref(false)
 const agregarVentana = (ventana) => {
   cotizacion.value.ventanas.push(ventana)
+
+const relacion = buscarRelacionVidrioProveedor(ventana.producto_vidrio_proveedor_id)
+
+const payload = {
+  tipo: ventana.tipo_ventana_id,
+  ancho: ventana.ancho,
+  alto: ventana.alto,
+  material: ventana.material,
+  color: ventana.color_id ?? ventana.color, // por si acaso
+  tipoVidrio: ventana.tipo_vidrio_id,
+  productoVidrioProveedor: ventana.producto_vidrio_proveedor_id,
+  productoVidrio: relacion?.producto_id,
+  proveedorVidrio: relacion?.proveedor_id,
+  hojas_totales: ventana.hojas_totales,
+  hojas_moviles: ventana.tipo_ventana_id === 3 ? ventana.hojas_moviles : undefined,
+}
+
+  console.log('➡️ Payload para cálculo:', payload)
+  recalcularCosto(payload, ventana)
+
 }
 const route = useRoute()
 const router = useRouter()
@@ -171,6 +192,51 @@ function crearVentanaVacia() {
     materiales: [],
   }
 }
+
+const buscarRelacionVidrioProveedor = (id) => {
+  return productosVidrio.value.flatMap(p =>
+    p.colores_por_proveedor.map(cpp => ({
+      id: cpp.id,
+      producto_id: p.id,
+      proveedor_id: cpp.proveedor_id
+    }))
+  ).find(p => p.id === id)
+}
+
+const recalcularCosto = debounce(async (payload, ventanaRef) => {
+  if (
+    !payload.productoVidrio ||
+    !payload.proveedorVidrio ||
+    !payload.tipo ||
+    !payload.ancho ||
+    !payload.alto
+  ) {
+    console.warn('⚠️ Payload incompleto para cálculo:', payload)
+    return
+  }
+
+  try {
+    console.log('➡️ Enviando a /api/cotizador/calcular-materiales:', payload)
+
+    const res = await api.post('/api/cotizador/calcular-materiales', payload)
+
+    console.log('✅ Respuesta del backend:', res.data)
+
+    ventanaRef.costo = res.data.costo_total ?? 0
+    ventanaRef.costo_total = res.data.costo_total // opcional, si usas ese nombre en la UI
+    ventanaRef.precio = Math.ceil((res.data.costo_total ?? 0) / (1 - 0.45))
+    ventanaRef.materiales = res.data.materiales ?? []
+
+    console.log('🧮 Costo asignado:', ventanaRef.costo)
+    console.log('🧮 Precio asignado:', ventanaRef.precio)
+
+  } catch (error) {
+    console.error('❌ Error al calcular materiales:', error)
+    ventanaRef.costo = 0
+    ventanaRef.precio = 0
+    ventanaRef.materiales = []
+  }
+}, 800)
 
 function abrirModalVentana() {
   nuevaVentana.value = crearVentanaVacia()
@@ -216,7 +282,33 @@ const abrirModalAgregarVentana = () => {
 }
 
 const agregarVentanaDesdeModal = (ventana) => {
-  cotizacion.value.ventanas.push(ventana)
+  const relacion = buscarRelacionVidrioProveedor(ventana.producto_vidrio_proveedor_id)
+
+  const ventanaFinal = {
+    ...ventana,
+    costo: 0,
+    precio: 0,
+    materiales: [],
+  }
+
+cotizacion.value.ventanas.push(ventanaFinal)
+
+setTimeout(() => {
+  recalcularCosto(payload, ventanaFinal)
+}, 0)
+
+  const payload = {
+    ...ventanaFinal,
+    tipo: ventanaFinal.tipo_ventana_id,
+    tipoVidrio: ventanaFinal.tipo_vidrio_id,
+    productoVidrio: relacion?.producto_id,
+    proveedorVidrio: relacion?.proveedor_id,
+    hojas_moviles: ventanaFinal.tipo_ventana_id === 3 ? ventanaFinal.hojas_moviles : undefined,
+  }
+
+  console.log('✅ Ejecutando recalcularCosto para ventana agregada...')
+  recalcularCosto(payload, ventanaFinal)
+
   modalAgregarVentana.value = false
 }
 

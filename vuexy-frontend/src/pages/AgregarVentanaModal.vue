@@ -17,7 +17,7 @@
           </v-col>
           <v-col cols="12" sm="6">
             <v-select
-              v-model="nuevaVentana.tipo"
+              v-model="nuevaVentana.tipo_ventana_id"
               :items="tiposVentanaFiltrados"
               item-title="nombre"
               item-value="id"
@@ -33,7 +33,7 @@
             <v-text-field v-model="nuevaVentana.alto" label="Alto (mm)" type="number" outlined color="primary" />
           </v-col>
 
-          <template v-if="nuevaVentana.tipo === 3">
+          <template v-if="nuevaVentana.tipo_ventana_id === 3">
             <v-col cols="6" sm="3">
               <v-select v-model="nuevaVentana.hojas_totales" :items="[2, 3, 4, 6]" label="Hojas totales" outlined color="primary" />
             </v-col>
@@ -52,7 +52,7 @@
 
           <v-col cols="12" sm="6">
             <v-select
-              v-model="nuevaVentana.color"
+              v-model="nuevaVentana.color_id"
               :items="colores"
               item-title="nombre"
               item-value="id"
@@ -64,7 +64,7 @@
 
           <v-col cols="12" sm="6">
             <v-select
-              v-model="nuevaVentana.tipoVidrio"
+              v-model="nuevaVentana.tipo_vidrio_id"
               :items="tiposVidrio"
               item-title="nombre"
               item-value="id"
@@ -76,7 +76,7 @@
 
           <v-col cols="12">
             <v-select
-              v-model="nuevaVentana.productoVidrioProveedor"
+              v-model="nuevaVentana.producto_vidrio_proveedor_id"
               :items="productosVidrioFiltrados"
               item-title="nombre"
               item-value="id"
@@ -122,13 +122,13 @@ const modalAgregarVentana = computed({
 
 
 const nuevaVentana = ref({
-  tipo: null,
+  tipo_ventana_id: null,  // antes: tipo
   ancho: null,
   alto: null,
   material: null,
   color: null,
-  tipoVidrio: null,
-  productoVidrioProveedor: null,
+  tipo_vidrio_id: null,  // antes: tipoVidrio
+  producto_vidrio_proveedor_id: null,  // antes: productoVidrioProveedor
   hojas_totales: 2,
   hojas_moviles: 2,
 })
@@ -138,7 +138,7 @@ const tiposVentanaFiltrados = computed(() => {
 })
 
 const productosVidrioFiltrados = computed(() => {
-  const tipo = nuevaVentana.value.tipoVidrio
+  const tipo = nuevaVentana.value.tipo_vidrio_id
   return props.productosVidrio
     .filter(p => p.tipo_producto_id === tipo)
     .flatMap(p =>
@@ -152,20 +152,37 @@ const productosVidrioFiltrados = computed(() => {
 })
 
 const emitirVentana = () => {
-  emit('agregar', { ...nuevaVentana.value })
+  const productoVidrio = props.productosVidrio
+    .flatMap(p =>
+      p.colores_por_proveedor.map(cpp => ({
+        id: cpp.id,
+        producto: p,
+        proveedor: cpp.proveedor,
+        ...cpp
+      }))
+    )
+    .find(p => p.id === nuevaVentana.value.producto_vidrio_proveedor_id)
+
+ emit('agregar', {
+  ...nuevaVentana.value,
+  producto_vidrio_proveedor: productoVidrio,
+  tipo_ventana: props.tiposVentana.find(t => t.id === nuevaVentana.value.tipo_ventana_id),
+  color_obj: props.colores.find(c => c.id === nuevaVentana.value.color),
+})
+
   modalAgregarVentana.value = false
 }
 
 watch(() => props.modelValue, val => {
   if (!val) {
     Object.assign(nuevaVentana.value, {
-      tipo: null,
+      tipo_ventana_id: null,
       ancho: null,
       alto: null,
       material: null,
       color: null,
-      tipoVidrio: null,
-      productoVidrioProveedor: null,
+      tipo_vidrio_id: null,
+      producto_vidrio_proveedor_id: null,
       hojas_totales: 2,
       hojas_moviles: 2
     })
