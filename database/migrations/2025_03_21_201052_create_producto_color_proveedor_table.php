@@ -10,15 +10,17 @@ class CreateProductoColorProveedorTable extends Migration
     {
         Schema::create('producto_color_proveedor', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('producto_id');
-            $table->unsignedBigInteger('proveedor_id');
-            $table->string('color');
-            $table->decimal('costo', 10, 2);
-            $table->integer('stock')->default(0)->nullable();
+            $table->unsignedBigInteger('producto_id')->nullable();
+            $table->unsignedBigInteger('proveedor_id')->nullable();
+            $table->unsignedBigInteger('color_id')->nullable(); // AGREGADO
+            $table->integer('costo')->nullable();
+            $table->integer('stock')->nullable();
             $table->timestamps();
 
+            // Claves foráneas
             $table->foreign('producto_id')->references('id')->on('productos')->onDelete('cascade');
             $table->foreign('proveedor_id')->references('id')->on('proveedors')->onDelete('cascade');
+            $table->foreign('color_id')->references('id')->on('colores')->onDelete('cascade'); // AGREGADO
         });
     }
 
