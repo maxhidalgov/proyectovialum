@@ -8,6 +8,4 @@ Route::get('/debug-index', function () {
     return response()->file(public_path('index.html'));
 });
 
-Route::get('/{any}', function () {
-    return File::get(public_path('index.html'));
-})->where('any', '.*');
+Route::view('/{any}', 'index')->where('any', '.*');
