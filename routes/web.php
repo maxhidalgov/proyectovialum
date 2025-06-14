@@ -11,6 +11,6 @@ Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']
 Route::get('/importar-productos', [ImportacionController::class, 'importarProductos']);
 Route::get('/importar-producto-color-proveedor', [ImportacionController::class, 'importarProductoColorProveedor']);
 
-Route::get('/{any}', function () {
-    return File::get(public_path('index.html'));
-})->where('any', '.*');
+Route::get('/debug-index', function () {
+    return response()->file(public_path('index.html'));
+});
