@@ -1,4 +1,14 @@
 export default [
+    {
+    title: 'Dashboard',
+    to: { name: 'dashboardventas' },
+    icon: { icon: 'mdi mdi-view-dashboard' },
+  },
+  {
+    title: 'Compras',
+    to: { name: 'comprasmensuales' },
+    icon: { icon: 'mdi mdi-view-dashboard' },
+  },
   {
     title: 'Home',
     to: { name: 'root' },
@@ -50,5 +60,15 @@ export default [
     to: { name: 'cotizaciones' },
     icon: { icon: 'tabler-file' },
   },
-  
+  {
+    title: 'Visor',
+    to: { name: 'visor' },
+    icon: { icon: 'tabler-file' },
+  },
+    {
+    title: 'Visorfabrik',
+    to: { name: 'visor3d' },
+    icon: { icon: 'tabler-file' },
+  },
+
 ]

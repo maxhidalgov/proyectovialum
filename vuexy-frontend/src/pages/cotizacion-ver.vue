@@ -52,7 +52,35 @@
         <template #item.tipo_ventana_id="{ item }">
           {{ item.tipo_ventana?.nombre || '—' }}
         </template>
+
+          <!-- Template para mostrar producto + proveedor en la columna de vidrio -->
+        <template #item.producto_vidrio_proveedor_id="{ item }">
+          {{ item.producto_vidrio_proveedor?.producto?.nombre || '—' }}
+          <span v-if="item.producto_vidrio_proveedor?.proveedor">
+            ({{ item.producto_vidrio_proveedor.proveedor.nombre }})
+          </span>
+        </template>
+
+          <template #item.costo="{ item }">
+            ${{ Number(item.costo)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          </template>
+
+          <template #item.precio="{ item }">
+            ${{ Number(item.precio)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          </template>
+
+        <template #item.precio_total="{ item }">
+          ${{ Number(item.precio_total)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}  
+        </template>
       </v-data-table>
+      <v-row justify="end" class="px-6 pb-4">
+        <v-col cols="12" sm="4" class="text-right">
+          <v-alert type="success" variant="tonal" border="start" border-color="green">
+            <strong>Total general:</strong>
+            ${{ cotizacion?.total_general?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          </v-alert>
+        </v-col>
+      </v-row>
     </v-card>
   </v-container>
 </template>
@@ -74,10 +102,15 @@ const headers = [
   { title: 'Tipo de ventana', value: 'tipo_ventana_id' },
   { title: 'Ancho (mm)', value: 'ancho' },
   { title: 'Alto (mm)', value: 'alto' },
-  { title: 'Color ID', value: 'color_id' },
+  { title: 'Cantidad', value: 'cantidad' },
+  { title: 'Color', value: 'color.nombre' },
   { title: 'Vidrio', value: 'producto_vidrio_proveedor_id' },
+  // { title: 'Vidrio', value: 'producto_vidrio_proveedor.producto.nombre' },
+  // { title: 'Vidrio Proveedor', value: 'producto_vidrio_proveedor.proveedor.nombre' },
   { title: 'Costo', value: 'costo' },
-  { title: 'Precio', value: 'precio' },
+  { title: 'Precio Unitario', value: 'precio' },
+  { title: 'Precio Total', value: 'precio_total' },
+
 ]
 
 const getEstadoColor = (estado) => {

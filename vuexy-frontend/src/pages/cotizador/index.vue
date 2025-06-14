@@ -100,7 +100,7 @@
               <v-select v-model="ventana.tipo" :items="tiposVentanaFiltrados(ventana)" item-title="nombre" item-value="id" label="Tipo de ventana" outlined color="primary" />
             </v-col>
 
-            <template v-if="ventana.tipo === 3">
+            <template v-if="ventana.tipo === 3 || ventana.tipo === 46">
               <v-col cols="6" sm="3">
                 <v-select v-model="ventana.hojas_totales" :items="[2, 3, 4, 6]" label="Hojas totales" outlined color="primary" />
               </v-col>
@@ -115,6 +115,23 @@
             <v-col cols="6" sm="3">
               <v-text-field v-model="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
             </v-col>
+            <v-col cols="12">
+              <Visor3D
+                :ancho="ventana.ancho"
+                :alto="ventana.alto"
+                :modelo="'/modelos/ventana.glb'" 
+              />
+            </v-col>
+
+          <v-col cols="12" sm="3">
+            <v-text-field
+              v-model="ventana.cantidad"
+              label="Cantidad"
+              type="number"
+              min="1"
+              :rules="[v => v > 0 || 'Debe ser mayor a 0']"
+            />
+          </v-col>
 
             <v-col cols="12" sm="3">
               <v-select v-model="ventana.material" :items="materiales" item-title="nombre" item-value="id" label="Material (opcional)" outlined color="primary" />
@@ -130,6 +147,9 @@
             </v-col>
 
             <v-col cols="12">
+              <v-alert v-if="ventana.costo_total_unitario" type="info" variant="outlined" dense class="mb-2">
+                <strong>Costo unitario:</strong> ${{ ventana.costo_total_unitario.toLocaleString() }}
+              </v-alert> 
               <v-alert v-if="ventana.costo_total" type="info" variant="tonal" dense class="mb-2">
                 <strong>Costo total de materiales:</strong> ${{ ventana.costo_total.toLocaleString() }}
               </v-alert>
@@ -137,12 +157,12 @@
                 <strong>Precio sugerido:</strong> ${{ ventana.precio.toLocaleString() }}
               </v-alert>
 
-              <v-btn @click="mostrarDetalles = !mostrarDetalles" color="primary" variant="outlined">
-                <v-icon left>mdi-eye</v-icon>
-                {{ mostrarDetalles ? 'Ocultar' : 'Ver' }} Costos
-              </v-btn>
+              <v-btn @click="mostrarDetalles[index] = !mostrarDetalles[index]" color="primary" variant="outlined">
+                  <v-icon left>mdi-eye</v-icon>
+                    {{ mostrarDetalles[index] ? 'Ocultar' : 'Ver' }} Costos
+                  </v-btn>
 
-              <v-data-table v-if="mostrarDetalles && ventana.materiales && ventana.materiales.length"
+              <v-data-table v-if="mostrarDetalles[index] && ventana.materiales && ventana.materiales.length"
                 :headers="[
                   { title: 'Producto', key: 'nombre' },
                   { title: 'Proveedor', key: 'proveedor' },
@@ -241,6 +261,8 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import debounce from 'lodash/debounce'
 import api from '@/axiosInstance'
 import { useRouter } from 'vue-router'
+import Visor3D from '@/layouts/components/visor3d.vue'
+
 
 const margenVenta = 0.45 // Margen del 45%
 const router = useRouter()
@@ -256,7 +278,7 @@ const cotizacion = ref({
   ventanas: [],
 })
 
-const mostrarDetalles = ref(false);
+const mostrarDetalles = ref({})
 
 // Formulario de cliente
 const form = reactive({
@@ -376,6 +398,7 @@ const agregarVentana = (ventanaModal = null) => {
     tipo: null,
     ancho: null,
     alto: null,
+    cantidad: 1,
     material: cotizacion.value.material,
     color: cotizacion.value.color,
     tipoVidrio: cotizacion.value.tipoVidrio,
@@ -384,6 +407,9 @@ const agregarVentana = (ventanaModal = null) => {
     hojas_moviles: 2,
     materiales: [],
     costo_total: 0,
+    costo_total_unitario: 0,
+    costo: 0,
+    precio_unitario: 0,
     precio: 0,
   }
 
@@ -403,7 +429,7 @@ const agregarVentana = (ventanaModal = null) => {
       ...nuevaVentana,
       productoVidrio: relacion.producto_id,
       proveedorVidrio: relacion.proveedor_id,
-      hojas_moviles: nuevaVentana.tipo === 3 ? nuevaVentana.hojas_moviles : undefined,
+      hojas_moviles: nuevaVentana.tipo === 3 || nuevaVentana.tipo === 46 ? nuevaVentana.hojas_moviles : undefined,
     }
     recalcularCosto(payload, nuevaVentana)
   }
@@ -427,9 +453,21 @@ const recalcularCosto = debounce(async (payload, ventanaRef) => {
 
   try {
     const res = await api.post('/api/cotizador/calcular-materiales', payload)
-    ventanaRef.costo_total = res.data.costo_total
+
+    // Asignar costo unitario (para mostrar si se desea)
+    ventanaRef.costo_total_unitario = res.data.costo_unitario
+
+
+    // Multiplicar por cantidad para obtener el costo total real
+    const cantidad = ventanaRef.cantidad > 0 ? ventanaRef.cantidad : 1
+    //ventanaRef.costo_total = res.data.costo_total * cantidad
+    ventanaRef.costo_total = res.data.costo_unitario * ventanaRef.cantidad
+
+    // Recalcular precio con margen de utilidad
+    ventanaRef.precio = Math.ceil(ventanaRef.costo_total / (1 - margenVenta))
+
+    // Asignar materiales
     ventanaRef.materiales = res.data.materiales
-    ventanaRef.precio = Math.ceil(res.data.costo_total / (1 - margenVenta))
   } catch (err) {
     console.error('❌ Error al calcular materiales', err)
     ventanaRef.costo_total = 0
@@ -443,6 +481,7 @@ watch(() => cotizacion.value.ventanas, (ventanas) => {
       ventana.tipo,
       ventana.ancho,
       ventana.alto,
+      ventana.cantidad,
       ventana.material,
       ventana.color,
       ventana.tipoVidrio,
@@ -451,22 +490,32 @@ watch(() => cotizacion.value.ventanas, (ventanas) => {
       ventana.hojas_moviles
     ],
     () => {
-      if (
-        ventana.tipo &&
-        ventana.ancho &&
-        ventana.alto &&
-        ventana.productoVidrioProveedor
-      ) {
-        const relacion = buscarRelacionVidrioProveedor(ventana.productoVidrioProveedor)
-        console.log('🧪 Relación en watch:', relacion)
-        const payload = {
-          ...ventana,
-          productoVidrio: relacion?.producto_id,
-          proveedorVidrio: relacion?.proveedor_id,
-          hojas_moviles: ventana.tipo === 3 ? ventana.hojas_moviles : undefined,
-        }
-        recalcularCosto(payload, ventana)
+      const errores = []
+
+      if (!ventana.tipo) errores.push('tipo_ventana_id faltante')
+      if (!ventana.ancho) errores.push('ancho faltante')
+      if (!ventana.alto) errores.push('alto faltante')
+      if (!ventana.cantidad || ventana.cantidad <= 0) errores.push('cantidad inválida')
+      if (!ventana.productoVidrioProveedor) errores.push('productoVidrioProveedor faltante')
+
+      const relacion = buscarRelacionVidrioProveedor(ventana.productoVidrioProveedor)
+
+      if (!relacion) errores.push(`relación producto-proveedor no encontrada (ID: ${ventana.productoVidrioProveedor})`)
+
+      if (errores.length > 0) {
+        console.warn(`❌ No se puede recalcular la ventana (tipo ${ventana.tipo}):`, errores.join(', '))
+        return
       }
+
+      const payload = {
+        ...ventana,
+        productoVidrio: relacion.producto_id,
+        proveedorVidrio: relacion.proveedor_id,
+        hojas_moviles: ventana.tipo === 3 || ventana.tipo === 46 ? ventana.hojas_moviles : undefined,
+      }
+
+      console.log('✅ Recalculando ventana:', payload)
+      recalcularCosto(payload, ventana)
     },
     { deep: true, immediate: false })
   })
@@ -513,12 +562,16 @@ const guardarCotizacion = async () => {
           tipo_ventana_id: v.tipo,
           ancho: v.ancho,
           alto: v.alto,
+          cantidad: v.cantidad,
           color_id: v.color,
           producto_vidrio_proveedor_id: v.productoVidrioProveedor,  
           producto_id: relacion?.producto_id,
           proveedor_id: relacion?.proveedor_id,
-          costo: v.costo_total || 0,
-          precio: v.precio || 0
+          costo: v.costo_total || v.costo || 0,
+          costo_unitario: v.costo_unitario || 0,
+          precio: v.precio || 0,
+          precio_unitario: v.precio_unitario || 0,
+
         }
       }),
     }

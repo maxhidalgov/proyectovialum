@@ -63,12 +63,13 @@
             class="mb-6"
           >
             <VentanaForm
-              :ventana="ventana"
-              :tiposVentana="tiposVentanaTodos"
-              :colores="colores"
-              :tiposVidrio="tiposVidrio"
-              :productosVidrio="productosVidrioFiltrados"
-            />
+            :ventana="ventana"
+            :tiposVentana="tiposVentanaTodos"
+            :colores="colores"
+            :tiposVidrio="tiposVidrio"
+            :productosVidrio="productosVidrioFiltrados" 
+          />
+
 
             <v-row class="mt-2 px-4">
               <v-col cols="6">
@@ -140,6 +141,7 @@ import api from '@/axiosInstance'
 import VentanaForm from './VentanaForm.vue'
 import AgregarVentanaModal from './AgregarVentanaModal.vue'
 import debounce from 'lodash/debounce'
+import { can } from '@/@layouts/plugins/casl'
 
 const modalAgregarVentana = ref(false)
 const agregarVentana = (ventana) => {
@@ -151,14 +153,15 @@ const payload = {
   tipo: ventana.tipo_ventana_id,
   ancho: ventana.ancho,
   alto: ventana.alto,
+  cantidad: ventana.cantidad || 1,
   material: ventana.material,
   color: ventana.color_id ?? ventana.color, // por si acaso
   tipoVidrio: ventana.tipo_vidrio_id,
   productoVidrioProveedor: ventana.producto_vidrio_proveedor_id,
   productoVidrio: relacion?.producto_id,
   proveedorVidrio: relacion?.proveedor_id,
-  hojas_totales: ventana.hojas_totales,
-  hojas_moviles: ventana.tipo_ventana_id === 3 ? ventana.hojas_moviles : undefined,
+    hojas_totales: v.tipo_ventana_id === 3 ? v.hojas_totales : null,
+    hojas_moviles: v.tipo_ventana_id === 3 ? v.hojas_moviles : null
 }
 
   console.log('➡️ Payload para cálculo:', payload)
@@ -182,6 +185,7 @@ function crearVentanaVacia() {
     tipo_ventana_id: null,
     ancho: null,
     alto: null,
+    cantidad: 1,
     color_id: null,
     tipo_vidrio_id: null,
     producto_vidrio_proveedor_id: null,
@@ -222,21 +226,43 @@ const recalcularCosto = debounce(async (payload, ventanaRef) => {
 
     console.log('✅ Respuesta del backend:', res.data)
 
-    ventanaRef.costo = res.data.costo_total ?? 0
-    ventanaRef.costo_total = res.data.costo_total // opcional, si usas ese nombre en la UI
-    ventanaRef.precio = Math.ceil((res.data.costo_total ?? 0) / (1 - 0.45))
+    // Asignar los valores
+    const cantidad = ventanaRef.cantidad || 1
+
+    ventanaRef.costo_total_unitario = res.data.costo_unitario
+    ventanaRef.costo_total = res.data.costo_unitario * cantidad
+
+    ventanaRef.precio_unitario = Math.ceil(res.data.costo_unitario / (1 - 0.45))
+    ventanaRef.precio = ventanaRef.precio_unitario * cantidad
+
     ventanaRef.materiales = res.data.materiales ?? []
+
+    cotizacion.value.ventanas = [...cotizacion.value.ventanas] // 🔥 fuerza la actualización visual
 
     console.log('🧮 Costo asignado:', ventanaRef.costo)
     console.log('🧮 Precio asignado:', ventanaRef.precio)
+
+    // 🔁 Forzar reactividad reemplazando el objeto en el array
+    const index = cotizacion.value.ventanas.findIndex(v => v === ventanaRef)
+    if (index !== -1) {
+      cotizacion.value.ventanas[index] = { ...ventanaRef }
+    }
 
   } catch (error) {
     console.error('❌ Error al calcular materiales:', error)
     ventanaRef.costo = 0
     ventanaRef.precio = 0
     ventanaRef.materiales = []
+
+    // También forzar reactividad si ocurre error
+    const index = cotizacion.value.ventanas.findIndex(v => v === ventanaRef)
+    if (index !== -1) {
+      cotizacion.value.ventanas[index] = { ...ventanaRef }
+    }
   }
 }, 800)
+
+
 
 function abrirModalVentana() {
   nuevaVentana.value = crearVentanaVacia()
@@ -269,6 +295,7 @@ const abrirModalAgregarVentana = () => {
     tipo: null,
     ancho: null,
     alto: null,
+    cantidad: 1,
     color: null,
     tipoVidrio: cotizacion.value.tipoVidrio ?? null,
     productoVidrioProveedor: cotizacion.value.productoVidrioProveedor ?? null,
@@ -291,11 +318,9 @@ const agregarVentanaDesdeModal = (ventana) => {
     materiales: [],
   }
 
-cotizacion.value.ventanas.push(ventanaFinal)
+  cotizacion.value.ventanas.push(ventanaFinal)
 
-setTimeout(() => {
-  recalcularCosto(payload, ventanaFinal)
-}, 0)
+  console.log('🧾 Lista actual de ventanas:', cotizacion.value.ventanas) // ← AQUÍ
 
   const payload = {
     ...ventanaFinal,
@@ -309,8 +334,12 @@ setTimeout(() => {
   console.log('✅ Ejecutando recalcularCosto para ventana agregada...')
   recalcularCosto(payload, ventanaFinal)
 
+  cotizacion.value.ventanas = [...cotizacion.value.ventanas] // Forzar reactividad (opcional)
+  
+
   modalAgregarVentana.value = false
 }
+
 
 const form = ref(null)
 
@@ -318,8 +347,11 @@ const headers = [
   { title: 'Tipo de ventana', value: 'tipo_ventana_id' },
   { title: 'Ancho (mm)', value: 'ancho' },
   { title: 'Alto (mm)', value: 'alto' },
+  { title: 'Cantidad', value: 'cantidad' },
   { title: 'Color', value: 'color_id' },
   { title: 'Vidrio', value: 'producto_vidrio_proveedor_id' },
+  { title: 'Hojas Totales', value: 'hojas_totales' },
+  { title: 'Hojas Móviles', value: 'hojas_moviles' },
   { title: 'Costo', value: 'costo' },
   { title: 'Precio', value: 'precio' },
 ]
@@ -333,9 +365,11 @@ const productosVidrioFiltrados = computed(() => {
   return productosVidrio.value.flatMap(p =>
     p.colores_por_proveedor.map(cpp => ({
       id: cpp.id,
+      nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Desconocido'})`,
       producto_id: p.id,
       proveedor_id: cpp.proveedor_id,
-      nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Desconocido'})`
+      producto: p,
+      proveedor: cpp.proveedor
     }))
   )
 })
@@ -354,21 +388,33 @@ const guardarCambios = async () => {
   }
 
   try {
+    console.log('🧾 Payload a guardar:', cotizacion.value.ventanas.map(v => ({
+  id: v.id,
+  hojas_totales: v.hojas_totales,
+  hojas_moviles: v.hojas_moviles,
+  tipo_ventana_id: v.tipo_ventana_id
+})))
     const payload = {
       cliente_id: cotizacion.value.cliente_id,
       fecha: cotizacion.value.fecha,
       estado_cotizacion_id: cotizacion.value.estado_cotizacion_id,
       observaciones: cotizacion.value.observaciones,
       ventanas: cotizacion.value.ventanas.map(v => ({
-        id: v.id,
-        tipo_ventana_id: v.tipo_ventana_id,
-        ancho: v.ancho,
-        alto: v.alto,
-        color_id: v.color_id,
-        producto_vidrio_proveedor_id: v.producto_vidrio_proveedor_id,
-        costo: v.costo || 0,
-        precio: v.precio || 0,
-      })),
+      id: v.id,
+      tipo_ventana_id: v.tipo_ventana_id,
+      ancho: v.ancho,
+      alto: v.alto,
+      cantidad: v.cantidad || 1,
+      color_id: v.color_id,
+      tipo_vidrio_id: v.tipo_vidrio_id,
+      producto_vidrio_proveedor_id: Number(v.producto_vidrio_proveedor_id),
+      costo: v.costo_total || v.costo || 0,
+      costo_unitario: v.costo_unitario || 0,
+      precio: v.precio || 0,
+      precio_unitario: v.precio_unitario || 0,
+      hojas_totales: v.tipo_ventana_id === 3 ? v.hojas_totales : null,
+      hojas_moviles: v.tipo_ventana_id === 3 ? v.hojas_moviles : null
+    }))
     }
 
     await api.put(`/api/cotizaciones/${cotizacion.value.id}`, payload)
@@ -382,7 +428,16 @@ const guardarCambios = async () => {
 
 onMounted(async () => {
   try {
-    const [cotizacionRes, tiposVentanaRes, coloresRes, tiposVidrioRes, productosRes, estadosRes, clientesRes, materialesRes] = await Promise.all([
+    const [
+      cotizacionRes,
+      tiposVentanaRes,
+      coloresRes,
+      tiposVidrioRes,
+      productosRes,
+      estadosRes,
+      clientesRes,
+      materialesRes
+    ] = await Promise.all([
       api.get(`/api/cotizaciones/${cotizacionId}`),
       api.get('/api/tipos_ventana'),
       api.get('/api/colores'),
@@ -393,21 +448,72 @@ onMounted(async () => {
       api.get('/api/tipos_material')
     ])
 
-    cotizacion.value = cotizacionRes.data
+    // 1. Cargar productos base
+    productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
+
+    // 2. Construir mapeo local sin depender del computed (por timing)
+    const productosVidrioMapeados = productosVidrio.value.flatMap(p =>
+  p.colores_por_proveedor.map(cpp => ({
+    id: cpp.id,
+    nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Desconocido'})`,
+    producto_id: p.id,
+    proveedor_id: cpp.proveedor_id,
+    producto: p,
+    proveedor: cpp.proveedor
+  }))
+)
+
+// 1. Captura respuesta del backend
+const cotizacionBase = cotizacionRes.data
+
+// 2. Preprocesa las ventanas antes de asignarlas
+cotizacionBase.ventanas = (cotizacionBase.ventanas || []).map(v => {
+  const id = Number(v.producto_vidrio_proveedor_id)
+  const relacion = productosVidrioMapeados.find(p => p.id === id)
+
+  return {
+    ...v,
+    hojas_totales: v.hojas_totales ?? 2,
+    hojas_moviles: v.hojas_moviles ?? 2,
+    producto_vidrio_proveedor_id: id,
+    cantidad: v.cantidad || 1,
+    tipo_vidrio_id: relacion?.producto?.tipo_producto_id ?? null,
+    producto_vidrio_proveedor: relacion || null,
+    producto_vidrio_nombre: relacion?.nombre || '—',
+  }
+})
+
+cotizacionBase.ventanas = cotizacionBase.ventanas.map(v => ({
+  ...v,
+  original: {
+    tipo_ventana_id: v.tipo_ventana_id,
+    ancho: v.ancho,
+    alto: v.alto,
+    cantidad: v.cantidad || 1,
+    color_id: v.color_id,
+    tipo_vidrio_id: v.tipo_vidrio_id,
+    producto_vidrio_proveedor_id: v.producto_vidrio_proveedor_id,
+  }
+}))
+// 3. Ahora sí asignas la cotización completa
+cotizacion.value = cotizacionBase
+
+
+    // 5. Asignar datos auxiliares
     clientes.value = clientesRes.data
     materiales.value = materialesRes.data
-    cotizacion.value.ventanas = cotizacion.value.ventanas.map(v => ({
-      ...v,
-      tipo_vidrio_id: v.producto_vidrio_proveedor?.producto?.tipo_producto_id ?? null,
-    }))
     cotizacionOriginal.value = JSON.parse(JSON.stringify(cotizacion.value))
     tiposVentanaTodos.value = tiposVentanaRes.data
     colores.value = coloresRes.data
     tiposVidrio.value = tiposVidrioRes.data.filter(t => [1, 2].includes(t.id))
-    productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
     estadosCotizacion.value = estadosRes.data
+
+     console.log('🧪 productosVidrioFiltrados:', productosVidrioFiltrados.value)
+    console.log('🧾 ventanas:', cotizacion.value.ventanas.map(v => v.producto_vidrio_proveedor_id))
   } catch (error) {
     console.error('Error al cargar cotización:', error)
   }
 })
+
+
 </script>

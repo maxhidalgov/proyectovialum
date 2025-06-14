@@ -56,10 +56,11 @@ class CotizacionController extends Controller
                 'tipo_ventana_id' => $ventana['tipo_ventana_id'],
                 'ancho' => $ventana['ancho'],
                 'alto' => $ventana['alto'],
+                'cantidad' => $ventana['cantidad'] ?? 1,
                 'color_id' => $ventana['color_id'],
                 'producto_vidrio_proveedor_id' => $ventana['producto_vidrio_proveedor_id'],
-                'costo' => $ventana['costo'],
-                'precio' => $ventana['precio'],
+                'costo' => $ventana['costo'] ?? 0,
+                'precio' => $ventana['precio'] ?? 0,
             ]);
         }
 
@@ -92,6 +93,15 @@ class CotizacionController extends Controller
       
     ])->findOrFail($id);
 
+
+    // Calcular precio_total por ventana
+    $cotizacion->ventanas->transform(function ($ventana) {
+        $ventana->precio_total = ($ventana->precio ?? 0) * ($ventana->cantidad ?? 1);
+        return $ventana;
+    });
+
+    // Calcular total de la cotización
+    $cotizacion->total_general = $cotizacion->ventanas->sum('precio_total');
     return response()->json($cotizacion);
     }
 
@@ -138,6 +148,11 @@ class CotizacionController extends Controller
                             'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
                             'costo' => $ventanaData['costo'],
                             'precio' => $ventanaData['precio'],
+                            'costo_unitario' => $ventanaData['costo_unitario'] ?? null,
+                            'precio_unitario' => $ventanaData['precio_unitario'] ?? null,
+                            'hojas_totales' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_totales'] : null,
+                            'hojas_moviles' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_moviles'] : null,
+                            'cantidad' => $ventanaData['cantidad'] ?? 1,
                         ]);
                     }
                 } else {
@@ -148,8 +163,11 @@ class CotizacionController extends Controller
                         'alto' => $ventanaData['alto'],
                         'color_id' => $ventanaData['color_id'],
                         'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
-                        'costo' => $ventanaData['costo'],
-                        'precio' => $ventanaData['precio'],
+                        'costo' => $ventanaData['costo'] ?? 0,
+                        'precio' => $ventanaData['precio'] ?? 0,
+                        'hojas_totales' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_totales'] : null,
+                        'hojas_moviles' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_moviles'] : null,
+                        'cantidad' => $ventanaData['cantidad'] ?? 1,
                     ]);
                 }
             }
@@ -168,7 +186,16 @@ class CotizacionController extends Controller
 
     public function generarPDF($id)
     {
-    $cotizacion = Cotizacion::with(['cliente', 'vendedor', 'ventanas.tipoVentana'])->findOrFail($id);
+        $cotizacion = Cotizacion::with([
+            'cliente',
+            'vendedor',
+            'estado',
+            'ventanas.tipoVentana',
+            'ventanas.color',
+            'ventanas.productoVidrioProveedor.producto',
+            'ventanas.productoVidrioProveedor.proveedor',
+        ])->findOrFail($id);
+
 
     $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion'));
 
@@ -203,10 +230,11 @@ class CotizacionController extends Controller
                 'tipo_ventana_id' => $ventana->tipo_ventana_id,
                 'ancho' => $ventana->ancho,
                 'alto' => $ventana->alto,
+                'cantidad' => $ventana->cantidad ?? 1,
                 'color_id' => $ventana->color_id,
                 'producto_vidrio_proveedor_id' => $ventana->producto_vidrio_proveedor_id,
-                'costo' => $ventana->costo,
-                'precio' => $ventana->precio,
+                'costo' => $ventana->costo ?? 0,
+                'precio' => $ventana->precio ?? 0,
             ]);
         }
 

@@ -7,6 +7,8 @@ import '@core/scss/template/index.scss'
 import '@styles/styles.scss'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
+import InlineSvg from 'vue-inline-svg'
+
 
 // Plugins
 import { registerPlugins } from '@core/utils/plugins'

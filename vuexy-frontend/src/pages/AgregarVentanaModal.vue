@@ -32,6 +32,16 @@
           <v-col cols="12" sm="6">
             <v-text-field v-model="nuevaVentana.alto" label="Alto (mm)" type="number" outlined color="primary" />
           </v-col>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="nuevaVentana.cantidad"
+              label="Cantidad"
+              type="number"
+              min="1"
+              outlined
+              color="primary"
+            />
+          </v-col>
 
           <template v-if="nuevaVentana.tipo_ventana_id === 3">
             <v-col cols="6" sm="3">
@@ -98,6 +108,7 @@
 
 
 <script setup>
+import { can } from '@/@layouts/plugins/casl'
 import { computed, reactive, watch } from 'vue'
 import { defineEmits, defineProps } from 'vue'
 
@@ -125,6 +136,7 @@ const nuevaVentana = ref({
   tipo_ventana_id: null,  // antes: tipo
   ancho: null,
   alto: null,
+  cantidad: 1,
   material: null,
   color: null,
   tipo_vidrio_id: null,  // antes: tipoVidrio
@@ -179,6 +191,7 @@ watch(() => props.modelValue, val => {
       tipo_ventana_id: null,
       ancho: null,
       alto: null,
+      cantidad: 1,
       material: null,
       color: null,
       tipo_vidrio_id: null,

@@ -30,7 +30,11 @@
           <v-btn icon @click="verCotizacion(item)">
             <v-icon>mdi-eye</v-icon>
           </v-btn>
-          <v-btn icon @click="editarCotizacion(item)">
+          <v-btn
+            icon
+            @click="editarCotizacion(item)"
+            :disabled="item.estado?.nombre === 'Aprobada'"
+          >
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
           <v-btn icon :href="`${apiBase}/api/cotizaciones/${item.id}/pdf`" target="_blank">

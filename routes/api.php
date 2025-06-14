@@ -6,6 +6,7 @@ use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\VentanaController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\BsaleClientController;
@@ -46,6 +47,12 @@ Route::middleware('api')->group(function () {
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
     Route::put('/cotizaciones/{id}', [CotizacionController::class, 'update']);
     Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
+    // routes/api.php
+    Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);
+    Route::get('/compras-terceros-mensuales', [DashboardController::class, 'comprasTercerosMensuales']);
+
+
+
 
 
 
