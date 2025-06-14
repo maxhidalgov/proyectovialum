@@ -20,7 +20,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import Visor3D from '@/layouts/components/visor3d.vue'
+//import Visor3D from '@/layouts/components/visor3d.vue'
 
 const ancho = ref(1000)
 const alto = ref(1200)
