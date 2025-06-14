@@ -17,7 +17,7 @@ return new class extends Migration
         $table->string('giro')->nullable();          // activity
         $table->string('ciudad')->nullable();        // city
         $table->string('comuna')->nullable();        // municipality
-        $table->string('direccion')->nullable();     // address
+     //  $table->string('direccion')->nullable();     // address
     });
 }
 
