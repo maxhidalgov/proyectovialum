@@ -1,3 +1,7 @@
+INSERT INTO `users` (`id`, `name`, `email`, `password`, `created_at`, `updated_at`) VALUES
+(5, 'Max Hidalgo', 'max.hidalgo@vialum.cl', '$2y$10$9UOpTiw8nmQszzPyUP9NuubRn4gEjHOgCR2O/WSUROXDf/qz4reG2', NOW(), NOW());
+
+
 INSERT INTO `cotizaciones` (`id`, `origen_id`, `cliente_id`, `vendedor_id`, `fecha`, `estado_cotizacion_id`, `observaciones`, `total`, `created_at`, `updated_at`) VALUES
 (1, NULL, 15, 1, '2025-05-15', 1, NULL, 18130.00, '2025-05-15 22:54:36', '2025-05-15 22:54:36'),
 (2, NULL, 15, 1, '2025-05-15', 1, NULL, 47039.00, '2025-05-15 22:56:00', '2025-05-15 22:56:00'),
