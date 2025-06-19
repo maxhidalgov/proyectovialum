@@ -1,3 +1,50 @@
+DROP TABLE IF EXISTS `accesorio_dependientes`;
+DROP TABLE IF EXISTS `cache`;
+DROP TABLE IF EXISTS `cache_locks`;
+DROP TABLE IF EXISTS `clientes`;
+DROP TABLE IF EXISTS `colores`;
+DROP TABLE IF EXISTS `colors`;
+DROP TABLE IF EXISTS `cotizaciones`;
+DROP TABLE IF EXISTS `cotizacions`;
+DROP TABLE IF EXISTS `cotizacion_detalles`;
+DROP TABLE IF EXISTS `estados_cotizacion`;
+DROP TABLE IF EXISTS `estado_cotizacions`;
+DROP TABLE IF EXISTS `failed_jobs`;
+DROP TABLE IF EXISTS `jobs`;
+DROP TABLE IF EXISTS `job_batches`;
+DROP TABLE IF EXISTS `materials`;
+DROP TABLE IF EXISTS `migrations`;
+DROP TABLE IF EXISTS `password_reset_tokens`;
+DROP TABLE IF EXISTS `productos`;
+DROP TABLE IF EXISTS `producto_color_proveedor`;
+DROP TABLE IF EXISTS `proveedors`;
+DROP TABLE IF EXISTS `sessions`;
+DROP TABLE IF EXISTS `tipos_material`;
+DROP TABLE IF EXISTS `tipos_producto`;
+DROP TABLE IF EXISTS `tipos_ventana`;
+DROP TABLE IF EXISTS `unidades`;
+DROP TABLE IF EXISTS `unidads`;
+DROP TABLE IF EXISTS `users`;
+DROP TABLE IF EXISTS `ventanas`;
+DROP TABLE IF EXISTS `ventana_accesorios`;
+DROP TABLE IF EXISTS `ventana_materials`;
+DROP TABLE IF EXISTS `ventana_tipo_aperturas`;
+DELETE FROM `clientes`;
+DELETE FROM `estados_cotizacion`;
+DELETE FROM `productos`;
+DELETE FROM `tipos_material`;
+DELETE FROM `colores`;
+DELETE FROM `sessions`;
+DELETE FROM `users`;
+DELETE FROM `migrations`;
+DELETE FROM `tipos_ventana`;
+DELETE FROM `producto_color_proveedor`;
+DELETE FROM `proveedors`;
+DELETE FROM `cotizaciones`;
+DELETE FROM `ventanas`;
+DELETE FROM `unidades`;
+DELETE FROM `tipos_producto`;
+
 -- phpMyAdmin SQL Dump
 -- version 5.2.1
 -- https://www.phpmyadmin.net/
@@ -26,7 +73,7 @@ SET time_zone = "+00:00";
 --
 -- Estructura de tabla para la tabla `accesorio_dependientes`
 --
-DROP TABLE IF EXISTS `accesorio_dependientes`;
+
 CREATE TABLE `accesorio_dependientes` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -38,7 +85,7 @@ CREATE TABLE `accesorio_dependientes` (
 --
 -- Estructura de tabla para la tabla `cache`
 --
-DROP TABLE IF EXISTS `cache`;
+
 CREATE TABLE `cache` (
   `key` varchar(255) NOT NULL,
   `value` mediumtext NOT NULL,
@@ -50,7 +97,7 @@ CREATE TABLE `cache` (
 --
 -- Estructura de tabla para la tabla `cache_locks`
 --
-DROP TABLE IF EXISTS `cache_locks`;
+
 CREATE TABLE `cache_locks` (
   `key` varchar(255) NOT NULL,
   `owner` varchar(255) NOT NULL,
@@ -62,7 +109,7 @@ CREATE TABLE `cache_locks` (
 --
 -- Estructura de tabla para la tabla `clientes`
 --
-DROP TABLE IF EXISTS `clientes`;
+
 CREATE TABLE `clientes` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `first_name` varchar(255) DEFAULT NULL,
@@ -795,7 +842,7 @@ INSERT INTO `clientes` (`id`, `first_name`, `last_name`, `email`, `identificatio
 --
 -- Estructura de tabla para la tabla `colores`
 --
-DROP TABLE IF EXISTS `colores`;
+
 CREATE TABLE `colores` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -834,7 +881,7 @@ CREATE TABLE `colors` (
 --
 -- Estructura de tabla para la tabla `cotizaciones`
 --
-DROP TABLE IF EXISTS `cotizaciones`;
+
 CREATE TABLE `cotizaciones` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `origen_id` bigint(20) UNSIGNED DEFAULT NULL,
@@ -883,7 +930,7 @@ INSERT INTO `cotizaciones` (`id`, `origen_id`, `cliente_id`, `vendedor_id`, `fec
 --
 -- Estructura de tabla para la tabla `cotizacions`
 --
-DROP TABLE IF EXISTS `cotizacions`;
+
 CREATE TABLE `cotizacions` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -895,7 +942,7 @@ CREATE TABLE `cotizacions` (
 --
 -- Estructura de tabla para la tabla `cotizacion_detalles`
 --
-DROP TABLE IF EXISTS `cotizacion_detalles`;
+
 CREATE TABLE `cotizacion_detalles` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -907,7 +954,7 @@ CREATE TABLE `cotizacion_detalles` (
 --
 -- Estructura de tabla para la tabla `estados_cotizacion`
 --
-DROP TABLE IF EXISTS `estados_cotizacion`;
+
 CREATE TABLE `estados_cotizacion` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -931,7 +978,7 @@ INSERT INTO `estados_cotizacion` (`id`, `nombre`, `created_at`, `updated_at`) VA
 --
 -- Estructura de tabla para la tabla `estado_cotizacions`
 --
-DROP TABLE IF EXISTS `estado_cotizacions`;
+
 CREATE TABLE `estado_cotizacions` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -943,7 +990,7 @@ CREATE TABLE `estado_cotizacions` (
 --
 -- Estructura de tabla para la tabla `failed_jobs`
 --
-DROP TABLE IF EXISTS `failed_jobs`;
+
 CREATE TABLE `failed_jobs` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `uuid` varchar(255) NOT NULL,
@@ -959,7 +1006,7 @@ CREATE TABLE `failed_jobs` (
 --
 -- Estructura de tabla para la tabla `jobs`
 --
-DROP TABLE IF EXISTS `jobs`;
+
 CREATE TABLE `jobs` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `queue` varchar(255) NOT NULL,
@@ -975,7 +1022,7 @@ CREATE TABLE `jobs` (
 --
 -- Estructura de tabla para la tabla `job_batches`
 --
-DROP TABLE IF EXISTS `job_batches`;
+
 CREATE TABLE `job_batches` (
   `id` varchar(255) NOT NULL,
   `name` varchar(255) NOT NULL,
@@ -994,7 +1041,7 @@ CREATE TABLE `job_batches` (
 --
 -- Estructura de tabla para la tabla `materials`
 --
-DROP TABLE IF EXISTS `materials`;
+
 CREATE TABLE `materials` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -1006,7 +1053,7 @@ CREATE TABLE `materials` (
 --
 -- Estructura de tabla para la tabla `migrations`
 --
-DROP TABLE IF EXISTS `migrations`;
+
 CREATE TABLE `migrations` (
   `id` int(10) UNSIGNED NOT NULL,
   `migration` varchar(255) NOT NULL,
@@ -1072,7 +1119,7 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES
 --
 -- Estructura de tabla para la tabla `password_reset_tokens`
 --
-DROP TABLE IF EXISTS `password_reset_tokens`;
+
 CREATE TABLE `password_reset_tokens` (
   `email` varchar(255) NOT NULL,
   `token` varchar(255) NOT NULL,
@@ -1084,7 +1131,7 @@ CREATE TABLE `password_reset_tokens` (
 --
 -- Estructura de tabla para la tabla `productos`
 --
-DROP TABLE IF EXISTS `productos`;
+
 CREATE TABLE `productos` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -1218,7 +1265,7 @@ INSERT INTO `productos` (`id`, `nombre`, `tipo_producto_id`, `created_at`, `upda
 --
 -- Estructura de tabla para la tabla `producto_color_proveedor`
 --
-DROP TABLE IF EXISTS `producto_color_proveedor`;
+
 CREATE TABLE `producto_color_proveedor` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `producto_id` bigint(20) UNSIGNED NOT NULL,
@@ -1366,7 +1413,7 @@ INSERT INTO `producto_color_proveedor` (`id`, `producto_id`, `proveedor_id`, `co
 --
 -- Estructura de tabla para la tabla `proveedors`
 --
-DROP TABLE IF EXISTS `proveedors`;
+
 CREATE TABLE `proveedors` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -1389,7 +1436,7 @@ INSERT INTO `proveedors` (`id`, `nombre`, `contacto`, `created_at`, `updated_at`
 --
 -- Estructura de tabla para la tabla `sessions`
 --
-DROP TABLE IF EXISTS `sessions`;
+
 CREATE TABLE `sessions` (
   `id` varchar(255) NOT NULL,
   `user_id` bigint(20) UNSIGNED DEFAULT NULL,
@@ -1417,7 +1464,7 @@ INSERT INTO `sessions` (`id`, `user_id`, `ip_address`, `user_agent`, `payload`, 
 --
 -- Estructura de tabla para la tabla `tipos_material`
 --
-DROP TABLE IF EXISTS `tipos_material`;
+
 CREATE TABLE `tipos_material` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -1438,7 +1485,7 @@ INSERT INTO `tipos_material` (`id`, `nombre`, `created_at`, `updated_at`) VALUES
 --
 -- Estructura de tabla para la tabla `tipos_producto`
 --
-DROP TABLE IF EXISTS `tipos_producto`;
+
 CREATE TABLE `tipos_producto` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -1463,7 +1510,7 @@ INSERT INTO `tipos_producto` (`id`, `nombre`, `created_at`, `updated_at`) VALUES
 --
 -- Estructura de tabla para la tabla `tipos_ventana`
 --
-DROP TABLE IF EXISTS `tipos_ventana`;
+
 CREATE TABLE `tipos_ventana` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -1488,7 +1535,7 @@ INSERT INTO `tipos_ventana` (`id`, `nombre`, `material_id`, `created_at`, `updat
 --
 -- Estructura de tabla para la tabla `unidades`
 --
-DROP TABLE IF EXISTS `unidades`;
+
 CREATE TABLE `unidades` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `nombre` varchar(255) NOT NULL,
@@ -1513,7 +1560,7 @@ INSERT INTO `unidades` (`id`, `nombre`, `requiere_division`, `descripcion`, `cre
 --
 -- Estructura de tabla para la tabla `unidads`
 --
-DROP TABLE IF EXISTS `unidads`;
+
 CREATE TABLE `unidads` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -1525,7 +1572,7 @@ CREATE TABLE `unidads` (
 --
 -- Estructura de tabla para la tabla `users`
 --
-DROP TABLE IF EXISTS `users`;
+
 CREATE TABLE `users` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
@@ -1549,7 +1596,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `email_verified_at`, `password`, `re
 --
 -- Estructura de tabla para la tabla `ventanas`
 --
-DROP TABLE IF EXISTS `ventanas`;
+
 CREATE TABLE `ventanas` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `cotizacion_id` bigint(20) UNSIGNED NOT NULL,
@@ -1619,7 +1666,7 @@ INSERT INTO `ventanas` (`id`, `cotizacion_id`, `tipo_ventana_id`, `ancho`, `alto
 --
 -- Estructura de tabla para la tabla `ventana_accesorios`
 --
-DROP TABLE IF EXISTS `ventana_accesorios`;
+
 CREATE TABLE `ventana_accesorios` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -1631,7 +1678,7 @@ CREATE TABLE `ventana_accesorios` (
 --
 -- Estructura de tabla para la tabla `ventana_materials`
 --
-DROP TABLE IF EXISTS `ventana_materials`;
+
 CREATE TABLE `ventana_materials` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
@@ -1643,7 +1690,7 @@ CREATE TABLE `ventana_materials` (
 --
 -- Estructura de tabla para la tabla `ventana_tipo_aperturas`
 --
-DROP TABLE IF EXISTS `ventana_tipo_aperturas`;
+
 CREATE TABLE `ventana_tipo_aperturas` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,

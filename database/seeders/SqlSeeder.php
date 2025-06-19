@@ -10,7 +10,7 @@ class SqlSeeder extends Seeder
 {
     public function run()
     {
-        $sql = File::get(database_path('seeders/data/proyectovialum.sql'));
+        $sql = File::get(database_path('seeders/data/proyectovialum_limpio.sql'));
         DB::unprepared($sql);
     }
 }
