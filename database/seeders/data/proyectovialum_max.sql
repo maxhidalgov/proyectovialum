@@ -1,8 +1,3 @@
-
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-START TRANSACTION;
-SET time_zone = "+00:00";
-
 INSERT INTO `colores` (`id`, `nombre`, `created_at`, `updated_at`) VALUES
 (1, 'Blanco', '2025-03-22 01:12:46', '2025-03-22 01:12:46'),
 (2, 'Negro', '2025-03-25 18:51:28', '2025-03-25 18:51:28'),
