@@ -92,7 +92,7 @@
   import { ref, reactive, onMounted } from 'vue'
   import axios from 'axios'
 
-  axios.defaults.baseURL = 'http://localhost:8000'
+  axios.defaults.baseURL = 'https://proyectovialum-production.up.railway.app/'
   
   const productoActual = reactive({
     nombre: '',
