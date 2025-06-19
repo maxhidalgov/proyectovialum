@@ -21,5 +21,6 @@ class DatabaseSeeder extends Seeder
         // ]);
 
         $this->call(UnidadSeeder::class);
+        $this->call(SqlSeeder::class);
     }
 }
