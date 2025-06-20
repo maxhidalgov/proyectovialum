@@ -1,7 +1,3 @@
-INSERT INTO `tipos_material` (`id`, `nombre`, `created_at`, `updated_at`) VALUES
-(1, 'Aluminio', '2025-03-25 21:59:53', '2025-03-25 21:59:53'),
-(2, 'PVC', '2025-03-25 21:59:53', '2025-03-25 21:59:53');
-
 INSERT INTO `tipos_producto` (`id`, `nombre`, `created_at`, `updated_at`) VALUES
 (1, 'Vidrio Monolitico', '2025-03-25 22:08:14', '2025-03-25 22:08:14'),
 (2, 'Termopanel', '2025-03-25 22:08:40', '2025-03-25 22:08:40'),
