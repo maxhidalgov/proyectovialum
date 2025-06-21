@@ -1,3 +1,10 @@
+
+INSERT INTO `proveedors` (`id`, `nombre`, `contacto`, `created_at`, `updated_at`) VALUES
+(1, 'Digosa', NULL, '2025-03-20 23:05:39', '2025-03-20 23:05:39'),
+(2, 'Winhouse', NULL, '2025-03-20 23:05:47', '2025-03-20 23:05:47'),
+(3, 'Vialum', NULL, '2025-04-01 12:51:20', '2025-04-01 12:51:27');
+
+
 INSERT INTO `productos` (`id`, `nombre`, `tipo_producto_id`, `created_at`, `updated_at`, `largo_total`, `peso_por_metro`, `unidad_id`) VALUES
 (1, 'prueba', NULL, '2025-03-20 23:13:19', '2025-03-25 17:34:17', 6.00, 4.000, 1),
 (5, 'Max', NULL, '2025-03-21 18:23:54', '2025-03-25 22:15:14', 6.00, 1.000, 2),
@@ -236,11 +243,6 @@ INSERT INTO `producto_color_proveedor` (`id`, `producto_id`, `proveedor_id`, `co
 (171, 111, 2, 3, 'HI-CC-E75-400', 3385.00, 0, '2025-06-09 19:16:18', '2025-06-09 19:16:18'),
 (172, 112, 2, 3, 'HI-CC-E75-600', 3961.00, 0, '2025-06-09 19:16:18', '2025-06-09 19:16:18'),
 (173, 113, 2, 3, 'HI-CC-E75-800', 3172.00, 0, '2025-06-09 19:16:18', '2025-06-09 19:16:18');
-
-INSERT INTO `proveedors` (`id`, `nombre`, `contacto`, `created_at`, `updated_at`) VALUES
-(1, 'Digosa', NULL, '2025-03-20 23:05:39', '2025-03-20 23:05:39'),
-(2, 'Winhouse', NULL, '2025-03-20 23:05:47', '2025-03-20 23:05:47'),
-(3, 'Vialum', NULL, '2025-04-01 12:51:20', '2025-04-01 12:51:27');
 
 
 INSERT INTO `sessions` (`id`, `user_id`, `ip_address`, `user_agent`, `payload`, `last_activity`) VALUES
