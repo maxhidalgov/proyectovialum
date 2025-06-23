@@ -2,6 +2,7 @@
 import { useConfigStore } from '@core/stores/config'
 import { AppContentLayoutNav } from '@layouts/enums'
 import { switchToVerticalNavOnLtOverlayNavBreakpoint } from '@layouts/utils'
+import { onMounted } from 'vue'
 
 const DefaultLayoutWithHorizontalNav = defineAsyncComponent(() => import('./components/DefaultLayoutWithHorizontalNav.vue'))
 const DefaultLayoutWithVerticalNav = defineAsyncComponent(() => import('./components/DefaultLayoutWithVerticalNav.vue'))
@@ -30,6 +31,22 @@ watch([
     refLoadingIndicator.value.resolveHandle()
 }, { immediate: true })
 // !SECTION
+onMounted(() => {
+  const token = localStorage.getItem('token')
+  const path = window.location.pathname
+
+  // Redirigir al login si no hay token
+  if (!token && path !== '/login') {
+    window.location.href = '/login'
+  }
+
+  // Si ya está autenticado y visita /login, redirigir al dashboard
+  if (token && path === '/login') {
+    window.location.href = '/dashboard'
+  }
+})
+
+
 </script>
 
 <template>

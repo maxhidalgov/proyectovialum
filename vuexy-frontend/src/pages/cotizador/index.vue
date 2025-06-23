@@ -9,7 +9,7 @@
 
       <!-- Cliente + botón en fila -->
       <v-row dense>
-        <v-col cols="6">
+        <v-col cols="6" md="4">
           <v-row no-gutters align="center">
             <v-col>
               <v-combobox
@@ -115,13 +115,13 @@
             <v-col cols="6" sm="3">
               <v-text-field v-model="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
             </v-col>
-            <v-col cols="12">
+            <!-- <v-col cols="12">
               <Visor3D
                 :ancho="ventana.ancho"
                 :alto="ventana.alto"
                 :modelo="'/modelos/ventana.glb'" 
               />
-            </v-col>
+            </v-col> -->
 
           <v-col cols="12" sm="3">
             <v-text-field
@@ -261,7 +261,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import debounce from 'lodash/debounce'
 import api from '@/axiosInstance'
 import { useRouter } from 'vue-router'
-import Visor3D from '@/layouts/components/visor3d.vue'
+import Visor3D from '@/layouts/components/Visor3D.vue'
 
 
 const margenVenta = 0.45 // Margen del 45%
