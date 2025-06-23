@@ -18,6 +18,7 @@ use App\Http\Controllers\EstadoCotizacionController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
 
 Route::middleware('api')->group(function () {
