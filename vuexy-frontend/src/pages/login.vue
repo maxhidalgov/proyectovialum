@@ -37,7 +37,7 @@ const login = async () => {
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
 
-    router.push({ name: 'dashboard' }) // asegúrate que esta ruta existe
+    router.push({ name: 'dashboardventas' }) // asegúrate que esta ruta existe
   } catch (err) {
     error.value = 'Correo o contraseña incorrectos.'
   } finally {
