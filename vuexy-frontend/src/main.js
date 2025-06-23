@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from '@/App.vue'
 import api from '@/axiosInstance'
+import axios from 'axios'
 
 // Estilos
 import '@core/scss/template/index.scss'
@@ -20,5 +21,6 @@ registerPlugins(app)
 
 // Global API
 app.config.globalProperties.$api = api
+app.config.globalProperties.$axios = axios
 
 app.mount('#app')
