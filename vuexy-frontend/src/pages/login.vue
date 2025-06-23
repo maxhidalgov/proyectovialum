@@ -12,6 +12,7 @@ import { themeConfig } from '@themeConfig'
 import { ref } from 'vue'
 import axios from '@/axiosInstance'
 import { useRouter } from 'vue-router'
+import api from '@/axiosInstance'
 
 definePage({
   meta: {
@@ -29,7 +30,7 @@ const login = async () => {
   error.value = null
 
   try {
-    const { data } = await axios.post('/login', {
+    const { data } = await api.post('api/login', {
       email: form.value.email,
       password: form.value.password,
     })
