@@ -10,7 +10,7 @@ import authV2MaskLight from '@images/pages/misc-mask-light.png'
 import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 import { themeConfig } from '@themeConfig'
 import { ref } from 'vue'
-import axios from '@/plugins/axios' // Asegúrate que esté creado y configurado
+import axios from '@/axiosInstance'
 import { useRouter } from 'vue-router'
 
 definePage({
