@@ -9,6 +9,9 @@ import authV2MaskDark from '@images/pages/misc-mask-dark.png'
 import authV2MaskLight from '@images/pages/misc-mask-light.png'
 import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 import { themeConfig } from '@themeConfig'
+import { ref } from 'vue'
+import axios from '@/plugins/axios' // Asegúrate que esté creado y configurado
+import { useRouter } from 'vue-router'
 
 definePage({
   meta: {
@@ -16,6 +19,31 @@ definePage({
     public: true,
   },
 })
+
+const router = useRouter()
+const error = ref(null)
+const loading = ref(false)
+
+const login = async () => {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { data } = await axios.post('/login', {
+      email: form.value.email,
+      password: form.value.password,
+    })
+
+    localStorage.setItem('token', data.token)
+    localStorage.setItem('user', JSON.stringify(data.user))
+
+    router.push({ name: 'dashboard' }) // asegúrate que esta ruta existe
+  } catch (err) {
+    error.value = 'Correo o contraseña incorrectos.'
+  } finally {
+    loading.value = false
+  }
+}
 
 const form = ref({
   email: '',
@@ -87,7 +115,7 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
           </p>
         </VCardText>
         <VCardText>
-          <VForm @submit.prevent="() => {}">
+          <VForm @submit.prevent="login">
             <VRow>
               <!-- email -->
               <VCol cols="12">
