@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ColorController;
 use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\ClienteController;
@@ -14,6 +15,10 @@ use App\Http\Controllers\TipoVentanaController;
 use App\Http\Controllers\TipoProductoController;
 use App\Http\Controllers\Api\CotizadorController;
 use App\Http\Controllers\EstadoCotizacionController;
+
+
+Route::post('/login', [AuthController::class, 'login']);
+Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
 
 Route::middleware('api')->group(function () {
     Route::get('/productos', [ProductoController::class, 'index']);
