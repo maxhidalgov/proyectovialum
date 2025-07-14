@@ -58,6 +58,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+import api from '@/axiosInstance'
 import {
   Chart,
   BarController,
@@ -96,9 +97,10 @@ const anios = [2023, 2024, 2025]
 const mesSeleccionado = ref(new Date().getMonth() + 1)
 const anioSeleccionado = ref(new Date().getFullYear())
 
+
 const cargarDatos = async () => {
   try {
-    const res = await axios.get('http://localhost:8000/api/dashboard/ventas-mensuales', {
+    const res = await api.get('/api/dashboard/ventas-mensuales', {
       params: {
         mes: mesSeleccionado.value,
         anio: anioSeleccionado.value,

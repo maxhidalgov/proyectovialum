@@ -71,6 +71,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import api from '@/axiosInstance'
 
 const mes = ref(new Date().getMonth() + 1)
 const anio = ref(new Date().getFullYear())
@@ -109,24 +110,30 @@ const diarias = ref([])
 const cargarCompras = async () => {
   loading.value = true
   error.value = ''
+
   try {
-    const res = await fetch(`http://localhost:8000/api/compras-terceros-mensuales?mes=${mes.value}&anio=${anio.value}`)
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(text)
-    }
-    const data = await res.json()
+    const res = await api.get('/api/dashboard/compras-terceros-mensuales', {
+      params: {
+        mes: mes.value,
+        anio: anio.value,
+        proveedor_id: proveedorSeleccionado.value,
+      }
+    })
+
+    const data = res.data
     totalMes.value = data.total_mes
     cantidad.value = data.cantidad
     labels.value = data.labels
     diarias.value = data.diarias
-    respuesta.value = data // 👈 aquí guardas todo
+    respuesta.value = data
+
   } catch (err) {
     error.value = 'Error al cargar las compras: ' + err.message
   } finally {
     loading.value = false
   }
 }
+
 
 
 const proveedoresTabla = computed(() => {
