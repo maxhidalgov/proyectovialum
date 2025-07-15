@@ -109,7 +109,7 @@ const headers = [
   { title: 'Total Comprado', key: 'total' },
 ]
 
-// Lógica de carga
+// Lógica de carga actual
 const cargarCompras = async () => {
   loading.value = true
   error.value = ''
