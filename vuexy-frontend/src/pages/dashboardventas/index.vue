@@ -1,5 +1,6 @@
 <template>
   <v-container fluid>
+    <!-- Filtros de mes y año -->
     <v-row class="mb-4">
       <v-col cols="6" md="3">
         <v-select
@@ -23,6 +24,7 @@
       </v-col>
     </v-row>
 
+    <!-- Totales -->
     <v-row>
       <v-col cols="12" md="6">
         <v-card class="pa-4" elevation="2">
@@ -42,6 +44,27 @@
       </v-col>
     </v-row>
 
+    <!-- Tabla de clientes -->
+    <v-card class="mt-4">
+      <v-card-title>Ventas por Cliente del Mes</v-card-title>
+
+      <v-data-table
+        v-if="ventasClientes.length"
+        :headers="headersClientes"
+        :items="ventasClientes"
+        :items-per-page="10"
+      >
+        <template #item.total="{ item }">
+          {{ formatoPesos(item.total ?? 0) }}
+        </template>
+      </v-data-table>
+
+      <v-alert v-else type="info" class="ma-4">
+        No hay ventas registradas para el mes seleccionado.
+      </v-alert>
+    </v-card>
+
+    <!-- Gráfico -->
     <v-row>
       <v-col cols="12">
         <v-card class="pa-4 mt-4" elevation="2">
@@ -57,7 +80,6 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import axios from 'axios'
 import api from '@/axiosInstance'
 import {
   Chart,
@@ -73,8 +95,15 @@ Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, T
 
 const totalMes = ref(0)
 const cantidadDocs = ref(0)
+const ventasClientes = ref([])
 const chartCanvas = ref(null)
 let chartInstance = null
+
+const headersClientes = [
+  { title: 'Cliente', key: 'cliente' },
+  { title: 'Documentos', key: 'cantidad' },
+  { title: 'Total', key: 'total' },
+]
 
 const formatoPesos = valor => typeof valor === 'number' ? '$' + valor.toLocaleString('es-CL') : '$0'
 
@@ -97,7 +126,6 @@ const anios = [2023, 2024, 2025]
 const mesSeleccionado = ref(new Date().getMonth() + 1)
 const anioSeleccionado = ref(new Date().getFullYear())
 
-
 const cargarDatos = async () => {
   try {
     const res = await api.get('/api/dashboard/ventas-mensuales', {
@@ -107,10 +135,16 @@ const cargarDatos = async () => {
       },
     })
 
-    console.log('Respuesta API:', res.data)
+    console.log('DATA COMPLETA:', res.data)
 
     totalMes.value = res.data.total_mes ?? 0
     cantidadDocs.value = res.data.cantidad ?? 0
+
+    if (res.data && Array.isArray(res.data.clientes)) {
+      ventasClientes.value = res.data.clientes
+    } else {
+      ventasClientes.value = []
+    }
 
     const labels = res.data.labels || []
     const diarias = res.data.diarias || []

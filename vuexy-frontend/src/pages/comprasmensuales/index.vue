@@ -49,23 +49,23 @@
 
   <v-card class="mt-6" elevation="2">
     <v-card-title>Resumen por Proveedor</v-card-title>
-<v-data-table
-  :items="proveedoresTabla"
-  :headers="headers"
-  class="elevation-1"
->
-  <template #headers="{ columns }">
-    <tr>
-      <th v-for="column in columns" :key="column.key" class="text-white text-left">
-        {{ column.title }}
-      </th>
-    </tr>
-  </template>
+    <v-data-table
+      :items="proveedoresTabla"
+      :headers="headers"
+      class="elevation-1"
+    >
+      <template #headers="{ columns }">
+        <tr>
+          <th v-for="column in columns" :key="column.key" class="text-white text-left">
+            {{ column.title }}
+          </th>
+        </tr>
+      </template>
 
-  <template #item.total="{ item }">
-    ${{ item.total.toLocaleString() }}
-  </template>
-</v-data-table>
+      <template #item.total="{ item }">
+        ${{ Number(item.total ?? 0).toLocaleString() }}
+      </template>
+    </v-data-table>
   </v-card>
 </template>
 
@@ -73,14 +73,19 @@
 import { ref, onMounted, computed } from 'vue'
 import api from '@/axiosInstance'
 
+// Estado
 const mes = ref(new Date().getMonth() + 1)
 const anio = ref(new Date().getFullYear())
-const headers = [
-  { title: 'Proveedor', key: 'proveedor' },
-  { title: 'Documentos', key: 'cantidad' },
-  { title: 'Total Comprado', key: 'total' },
-]
 
+const totalMes = ref(0)
+const cantidad = ref(0)
+const loading = ref(false)
+const error = ref('')
+const respuesta = ref({})
+const labels = ref([])
+const diarias = ref([])
+
+// Opciones para selects
 const meses = [
   { title: 'Enero', value: 1 },
   { title: 'Febrero', value: 2 },
@@ -98,33 +103,30 @@ const meses = [
 
 const anios = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i)
 
-const totalMes = ref(0)
-const cantidad = ref(0)
-const loading = ref(false)
-const error = ref('')
-const resultado = ref({})
-const respuesta = ref({})
-const labels = ref([])
-const diarias = ref([])
+const headers = [
+  { title: 'Proveedor', key: 'proveedor' },
+  { title: 'Documentos', key: 'cantidad' },
+  { title: 'Total Comprado', key: 'total' },
+]
 
+// Lógica de carga
 const cargarCompras = async () => {
   loading.value = true
   error.value = ''
 
   try {
-    const res = await api.get('/api/dashboard/compras-terceros-mensuales', {
+    const res = await api.get('/api/compras-terceros-mensuales', {
       params: {
         mes: mes.value,
         anio: anio.value,
-        proveedor_id: proveedorSeleccionado.value,
-      }
+      },
     })
 
     const data = res.data
-    totalMes.value = data.total_mes
-    cantidad.value = data.cantidad
-    labels.value = data.labels
-    diarias.value = data.diarias
+    totalMes.value = data.total_mes ?? 0
+    cantidad.value = data.cantidad ?? 0
+    labels.value = data.labels ?? []
+    diarias.value = data.diarias ?? []
     respuesta.value = data
 
   } catch (err) {
@@ -134,18 +136,16 @@ const cargarCompras = async () => {
   }
 }
 
-
-
+// Proveedores
 const proveedoresTabla = computed(() => {
-  if (!respuesta.value?.proveedores) return [];
+  if (!respuesta.value?.proveedores) return []
   return Object.entries(respuesta.value.proveedores).map(([proveedor, data]) => ({
-    proveedor, // ahora es el nombre como "VIDRIERÍA CHILE LTDA."
+    proveedor,
     ...data,
-  }));
-});
+  }))
+})
 
-
-
+// Inicial
 onMounted(() => {
   cargarCompras()
 })

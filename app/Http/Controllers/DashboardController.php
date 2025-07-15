@@ -24,58 +24,86 @@ public function ventasMensuales(Request $request)
 
     $limit = 50;
     $offset = 0;
-    $todosLosDocs = [];
+    $ventasPorCliente = [];
+    $clientesCache = [];
+    $porDia = collect();
 
     do {
-        $response = Http::withHeaders([
-            'access_token' => $token,
-        ])->get($baseUrl . 'documents.json', [
-            'emissiondaterange' => "[$inicio,$fin]",
-            'limit' => $limit,
-            'offset' => $offset,
-        ]);
+        $response = Http::withHeaders(['access_token' => $token])
+            ->get($baseUrl . 'documents.json', [
+                'emissiondaterange' => "[$inicio,$fin]",
+                'limit' => $limit,
+                'offset' => $offset,
+            ]);
+
+        if ($response->failed()) {
+            Log::error('Error al obtener documentos', ['body' => $response->body()]);
+            break;
+        }
 
         $items = $response->json()['items'] ?? [];
-        $todosLosDocs = array_merge($todosLosDocs, $items);
+
+        foreach ($items as $doc) {
+            $tipo = (int) ($doc['document_type']['id'] ?? 0);
+            if (!in_array($tipo, [1, 2, 3, 4, 5])) continue;
+
+            $clienteId = $doc['client']['id'] ?? 'sin_cliente_' . ($doc['id'] ?? uniqid());
+
+            // Verifica si ya tenemos este cliente en caché
+            if (!isset($clientesCache[$clienteId])) {
+                $nombre = 'Consumidor Final';
+
+                if (isset($doc['client']['href'])) {
+                    $clienteResponse = Http::withHeaders(['access_token' => $token])
+                        ->get($doc['client']['href']);
+
+                    if ($clienteResponse->ok()) {
+                        $clienteData = $clienteResponse->json();
+                        $nombre = $clienteData['company']
+                            ?? trim(($clienteData['firstName'] ?? '') . ' ' . ($clienteData['lastName'] ?? ''))
+                            ?: 'Consumidor Final';
+                    } else {
+                        Log::warning("No se pudo obtener cliente $clienteId");
+                    }
+                }
+
+                $clientesCache[$clienteId] = $nombre;
+            }
+
+            $nombre = $clientesCache[$clienteId];
+            $monto = (float) $doc['totalAmount'];
+            if ($tipo === 2) $monto *= -1;
+
+            if (!isset($ventasPorCliente[$clienteId])) {
+                $ventasPorCliente[$clienteId] = [
+                    'cliente_id' => $clienteId,
+                    'cliente' => $nombre,
+                    'cantidad' => 0,
+                    'total' => 0,
+                ];
+            }
+
+            $ventasPorCliente[$clienteId]['cantidad'] += 1;
+            $ventasPorCliente[$clienteId]['total'] += $monto;
+
+            // Agrupación diaria
+            $fecha = Carbon::createFromTimestamp($doc['emissionDate'])->toDateString();
+            $porDia[$fecha] = ($porDia[$fecha] ?? 0) + $monto;
+        }
+
         $offset += $limit;
-
-    } while (count($items) === $limit); // sigue mientras lleguen 50
-
-    // (Opcional) filtra documentos válidos por tipo
-        $ventas = collect($todosLosDocs)->filter(function ($doc) {
-        return in_array((int) $doc['document_type']['id'], [1, 2, 3, 4, 5]); // adapta a tus tipos reales
-    });
-
-
-    // Agrupa por fecha
-    $porDia = $ventas->groupBy(function ($doc) {
-    return Carbon::createFromTimestamp($doc['emissionDate'])->toDateString();
-    })->map(function ($docs) {
-        return collect($docs)->sum(function ($d) {
-            $tipo = (int) $d['document_type']['id'];
-            $monto = $d['totalAmount'];
-            return $tipo === 2 ? -1 * $monto : $monto; // notas de crédito descuentan
-        });
-    });
-
-    $tipos = collect($todosLosDocs)->pluck('document_type')->unique('id')->values();
-
-    // Para debug:
-    foreach ($tipos as $tipo) {
-        Log::info('Tipo:', [
-            'id' => $tipo['id'],
-            'href' => $tipo['href'],
-        ]);
-    }
-
+    } while (count($items) === $limit);
 
     return response()->json([
-        'total_mes' => $porDia->sum(),
-        'cantidad' => $ventas->count(),
-        'diarias' => $porDia->values(),
+        'clientes' => array_values($ventasPorCliente),
+        'total_mes' => round(array_sum(array_column($ventasPorCliente, 'total'))),
+        'cantidad' => array_sum(array_column($ventasPorCliente, 'cantidad')),
         'labels' => $porDia->keys(),
+        'diarias' => $porDia->values(),
     ]);
 }
+
+
 
 public function comprasTercerosMensuales(Request $request)
 {

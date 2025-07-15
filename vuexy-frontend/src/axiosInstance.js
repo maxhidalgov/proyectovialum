@@ -2,8 +2,10 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'https://proyectovialum-production.up.railway.app', // Ajusta si usas otra URL
-})
+  baseURL: window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://proyectovialum-production.up.railway.app'
+});
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
