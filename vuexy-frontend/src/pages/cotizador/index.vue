@@ -107,13 +107,20 @@
               <v-col cols="6" sm="3">
                 <v-select v-model="ventana.hojas_moviles" :items="[1, 2, 3, 4]" label="Hojas móviles" :disabled="!ventana.hojas_totales" :rules="[v => !v || v <= ventana.hojas_totales || 'No puede exceder total']" outlined color="primary" />
               </v-col>
+              <v-col cols="12" sm="3" v-if="ventana.tipo === 3">
+                <v-switch
+                  v-model="ventana.hoja1AlFrente"
+                  label="Hoja 1 delante"
+                  color="primary"
+                />
+              </v-col>
             </template>
 
             <v-col cols="6" sm="3">
-              <v-text-field v-model="ventana.ancho" label="Ancho (mm)" type="number" outlined color="primary" />
+              <v-text-field  v-model.number="ventana.ancho" label="Ancho (mm)" type="number" outlined color="primary" />
             </v-col>
             <v-col cols="6" sm="3">
-              <v-text-field v-model="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
+              <v-text-field  v-model.number="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
             </v-col>
             <!-- <v-col cols="12">
               <Visor3D
@@ -122,6 +129,22 @@
                 :modelo="'/modelos/ventana.glb'" 
               />
             </v-col> -->
+            <VentanaEditor
+              v-if="ventana.tipo === 2"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+            />
+            <VentanaCorredera
+              v-else-if="ventana.tipo === 3"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+              :hojas-moviles="ventana.hojas_moviles"
+              :hojas-totales="ventana.hojas_totales"
+              :orden-hoja1-al-frente="ventana.hoja1AlFrente"
+              
+            />
 
           <v-col cols="12" sm="3">
             <v-text-field
@@ -262,6 +285,9 @@ import debounce from 'lodash/debounce'
 import api from '@/axiosInstance'
 import { useRouter } from 'vue-router'
 import Visor3D from '@/layouts/components/Visor3D.vue'
+import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
+import { color } from 'three/src/nodes/TSL.js'
+import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 
 
 const margenVenta = 0.45 // Margen del 45%
@@ -411,6 +437,7 @@ const agregarVentana = (ventanaModal = null) => {
     costo: 0,
     precio_unitario: 0,
     precio: 0,
+    hoja1AlFrente: true,
   }
 
   const nuevaVentana = { ...base, ...(ventanaModal || {}) }

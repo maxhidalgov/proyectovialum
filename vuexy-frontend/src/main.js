@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from '@/App.vue'
 import api from '@/axiosInstance'
 import axios from 'axios'
+import VueKonva from 'vue-konva'
 
 // Estilos
 import '@core/scss/template/index.scss'
@@ -16,7 +17,9 @@ import { registerPlugins } from '@core/utils/plugins'
 
 const app = createApp(App)
 
+// ✅ REGISTRA TODOS LOS PLUGINS EN ESA APP
 // ✅ Solo usa registerPlugins si ahí están vuetify y pinia
+app.use(VueKonva)
 registerPlugins(app)
 
 // Global API
