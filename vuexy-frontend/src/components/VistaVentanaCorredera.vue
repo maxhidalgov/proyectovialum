@@ -4,7 +4,7 @@
     label="Hoja 1 adelante"
   />
 
-  <v-stage :config="stageConfig">
+ <v-stage ref="stageRef" :config="stageConfig">
     <v-layer>
       <!-- Marco con mitras -->
       <v-line v-bind="topMitra" />
@@ -116,6 +116,20 @@ import { ref, watch } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 import robleUrl from '@/assets/images/roble.png'
 import nogalUrl from '@/assets/images/nogal.png'
+
+
+const stageRef = ref(null)
+
+const exportarImagen = () => {
+  if (stageRef.value) {
+    const dataURL = stageRef.value.getStage().toDataURL({ pixelRatio: 2 })
+    return dataURL
+  }
+  return null
+}
+
+defineExpose({ exportarImagen }) // esto permite usar el método desde el padre
+
 
 const texturas = {
   roble: null,

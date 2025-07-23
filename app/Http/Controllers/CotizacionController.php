@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
 use App\Models\EstadoCotizacion;
+use Illuminate\Support\Facades\Storage;
 
 class CotizacionController extends Controller
 {
@@ -35,13 +36,15 @@ class CotizacionController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+
+public function store(Request $request)
 {
     Log::info('📩 COTIZACION RECIBIDA', $request->all());
 
     try {
         DB::beginTransaction();
 
+        // Crear cotización
         $cotizacion = Cotizacion::create([
             'cliente_id' => $request->cliente_id,
             'vendedor_id' => $request->vendedor_id,
@@ -51,8 +54,11 @@ class CotizacionController extends Controller
             'total' => collect($request->ventanas)->sum('precio'),
         ]);
 
+        // Guardar ventanas y mantener referencia
+        $ventanasGuardadas = [];
+
         foreach ($request->ventanas as $ventana) {
-            $cotizacion->ventanas()->create([
+            $ventanasGuardadas[] = $cotizacion->ventanas()->create([
                 'tipo_ventana_id' => $ventana['tipo_ventana_id'],
                 'ancho' => $ventana['ancho'],
                 'alto' => $ventana['alto'],
@@ -64,8 +70,29 @@ class CotizacionController extends Controller
             ]);
         }
 
-        DB::commit();
+        // Guardar imágenes si vienen en el request
+        if ($request->has('imagenes_ventanas')) {
+            foreach ($request->imagenes_ventanas as $index => $base64) {
+                if (!$base64 || !str_starts_with($base64, 'data:image/png;base64,')) continue;
 
+                $image = str_replace('data:image/png;base64,', '', $base64);
+                $image = str_replace(' ', '+', $image);
+
+                $imageName = 'cotizacion_' . $cotizacion->id . '_ventana_' . $index . '_' . time() . '.png';
+                Storage::disk('public')->put("imagenes_cotizaciones/$imageName", base64_decode($image));
+
+                if (isset($ventanasGuardadas[$index])) {
+                    $ventanasGuardadas[$index]->update([
+                        'imagen' => $imageName
+                    ]);
+                    Log::info("✅ Imagen asociada a ventana ID {$ventanasGuardadas[$index]->id}");
+                } else {
+                    Log::warning("⚠️ No se encontró ventana para imagen en índice $index");
+                }
+            }
+        }
+
+        DB::commit();
         return response()->json(['message' => 'Cotización guardada correctamente'], 201);
 
     } catch (\Exception $e) {
@@ -74,6 +101,7 @@ class CotizacionController extends Controller
         return response()->json(['error' => 'Error al guardar cotización', 'detalle' => $e->getMessage()], 500);
     }
 }
+
 
 
     /**

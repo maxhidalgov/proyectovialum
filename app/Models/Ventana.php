@@ -21,6 +21,9 @@ class Ventana extends Model
     'precio_unitario',
     'hojas_totales',
     'hojas_moviles',
+    'imagen',
+
+    
     ];
     public function cotizacion()
     {

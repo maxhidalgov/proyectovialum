@@ -134,6 +134,7 @@
               />
               <VentanaCorredera
                 v-else-if="ventana.tipo === 3"
+                :ref="el => ventanaRefs[index] = el"
                 :ancho="ventana.ancho"
                 :alto="ventana.alto"
                 :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
@@ -230,6 +231,7 @@ import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import { color } from 'three/src/nodes/TSL.js'
 import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 
+const ventanaRefs = ref([]) // mantener referencias
 
 const margenVenta = 0.45 // Margen del 45%
 const router = useRouter()
@@ -511,8 +513,24 @@ const guardarCliente = async () => {
   }
 }
 
+const exportarImagenesVentanas = async () => {
+  const imagenes = []
+
+  for (let i = 0; i < ventanaRefs.value.length; i++) {
+    const componente = ventanaRefs.value[i]
+    if (componente?.exportarImagen) {
+      const base64 = componente.exportarImagen()
+      imagenes.push(base64)
+    } else {
+      imagenes.push(null) // o ''
+    }
+  }
+
+  return imagenes
+}
 const guardarCotizacion = async () => {
   try {
+    const imagenes = await exportarImagenesVentanas()
     const clienteSeleccionado = form.cliente?.raw
     if (!clienteSeleccionado || cotizacion.value.ventanas.length === 0) {
       alert('Debes seleccionar un cliente y agregar al menos una ventana')
@@ -524,6 +542,7 @@ const guardarCotizacion = async () => {
       fecha: new Date().toISOString().split('T')[0],
       estado_cotizacion_id: cotizacion.value.estado_cotizacion_id ?? 1, // default: Evaluación
       observaciones: cotizacion.value.observaciones,
+      imagenes_ventanas: imagenes, // base64 strings
       ventanas: cotizacion.value.ventanas.map(v => {
         const relacion = buscarRelacionVidrioProveedor(v.productoVidrioProveedor)
         return {
