@@ -1,6 +1,6 @@
 <template>
   <div>
-    <v-sheet height="400" class="pa-4" color="#f9f8fa">
+    <v-sheet height="400" class="pa-4" color="surface">
       <v-stage :config="stageConfig">
         <v-layer>
           <!-- Marco exterior con biseles -->
@@ -26,12 +26,44 @@ import { computed } from 'vue'
 
 const colorHexMap = {
   blanco: '#ffffff',
-  negro: '#000000',
+  negro: '#0a0a0a',
   gris: '#808080',
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   // agrega más colores según los que uses en tu sistema
 }
+
+const texturas = {
+  roble: new Image(),
+  nogal: new Image(),
+}
+
+texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
+texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href
+
+function getMitraMarco(points) {
+  const nombre = typeof props.colorMarco === 'object' ? props.colorMarco?.nombre?.toLowerCase() : props.colorMarco.toLowerCase()
+
+  if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
+    return {
+      points,
+      closed: true,
+      fillPatternImage: texturas[nombre],
+      fillPatternRepeat: 'repeat',
+      fillPatternScale: { x: 0.2, y: 0.2 },
+      stroke: 'black',
+    }
+  }
+
+  return {
+    points,
+    closed: true,
+    fill: colorMarcoHex.value,
+    stroke: 'black',
+  }
+}
+
+
 
 const colorMarcoHex = computed(() => {
   if (typeof props.colorMarco === 'string') {
@@ -77,53 +109,40 @@ const stageConfig = {
 }
 
 // Cálculo de vértices para el marco con mitras
-const topMitra = computed(() => ({
-  points: [
+const topMitra = computed(() =>
+  getMitraMarco([
     offset, offset,
     offset + screenWidth.value, offset,
     offset + screenWidth.value - marcoAncho.value, offset + marcoAncho.value,
     offset + marcoAncho.value, offset + marcoAncho.value,
-  ],
-  closed: true,
-  fill: colorMarcoHex.value,
-  stroke: 'black',
-}))
+  ])
+)
 
-const rightMitra = computed(() => ({
-  points: [
+const rightMitra = computed(() =>
+  getMitraMarco([
     offset + screenWidth.value, offset,
     offset + screenWidth.value, offset + screenHeight.value,
     offset + screenWidth.value - marcoAncho.value, offset + screenHeight.value - marcoAncho.value,
     offset + screenWidth.value - marcoAncho.value, offset + marcoAncho.value,
-  ],
-  closed: true,
-  fill: colorMarcoHex.value,
-  stroke: 'black',
-}))
-
-const bottomMitra = computed(() => ({
-  points: [
+  ])
+)
+const bottomMitra = computed(() => 
+  getMitraMarco([
     offset + screenWidth.value, offset + screenHeight.value,
     offset, offset + screenHeight.value,
     offset + marcoAncho.value, offset + screenHeight.value - marcoAncho.value,
     offset + screenWidth.value - marcoAncho.value, offset + screenHeight.value - marcoAncho.value,
-  ],
-  closed: true,
-  fill: colorMarcoHex.value,
-  stroke: 'black',
-}))
+  ])
+)
 
-const leftMitra = computed(() => ({
-  points: [
+const leftMitra = computed(() => 
+  getMitraMarco([
     offset, offset + screenHeight.value,
     offset, offset,
     offset + marcoAncho.value, offset + marcoAncho.value,
     offset + marcoAncho.value, offset + screenHeight.value - marcoAncho.value,
-  ],
-  closed: true,
-  fill: colorMarcoHex.value,
-  stroke: 'black',
-}))
+  ])
+)
 
 const glassConfig = computed(() => ({
   x: offset + marcoAncho.value,

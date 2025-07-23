@@ -50,7 +50,7 @@
         </v-col>
       </v-row>
 
-      <!-- Material y Color en una nueva fila -->
+      <!-- Material y Color -->
       <v-row dense class="mb-4">
         <v-col cols="12" md="6">
           <v-select
@@ -83,7 +83,6 @@
         <v-col cols="12" sm="6">
           <v-select v-model="cotizacion.tipoVidrio" :items="tiposVidrio" item-title="nombre" item-value="id" label="Tipo de vidrio" outlined color="primary" />
         </v-col>
-
         <v-col cols="12" sm="6">
           <v-select v-model="cotizacion.productoVidrioProveedor" :items="productosVidrioFiltradosGeneral" item-title="nombre" item-value="id" label="Producto de vidrio" outlined color="primary" />
         </v-col>
@@ -100,6 +99,13 @@
               <v-select v-model="ventana.tipo" :items="tiposVentanaFiltrados(ventana)" item-title="nombre" item-value="id" label="Tipo de ventana" outlined color="primary" />
             </v-col>
 
+            <v-col cols="6" sm="3">
+              <v-text-field  v-model.number="ventana.ancho" label="Ancho (mm)" type="number" outlined color="primary" />
+            </v-col>
+            <v-col cols="6" sm="3">
+              <v-text-field  v-model.number="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
+            </v-col>
+
             <template v-if="ventana.tipo === 3 || ventana.tipo === 46">
               <v-col cols="6" sm="3">
                 <v-select v-model="ventana.hojas_totales" :items="[2, 3, 4, 6]" label="Hojas totales" outlined color="primary" />
@@ -107,65 +113,51 @@
               <v-col cols="6" sm="3">
                 <v-select v-model="ventana.hojas_moviles" :items="[1, 2, 3, 4]" label="Hojas móviles" :disabled="!ventana.hojas_totales" :rules="[v => !v || v <= ventana.hojas_totales || 'No puede exceder total']" outlined color="primary" />
               </v-col>
-              <v-col cols="12" sm="3" v-if="ventana.tipo === 3">
-                <v-switch
-                  v-model="ventana.hoja1AlFrente"
-                  label="Hoja 1 delante"
-                  color="primary"
-                />
+              <v-col cols="12" sm="6" v-if="ventana.hojas_moviles === 1">
+                <v-radio-group
+                  v-model="ventana.hojaMovilSeleccionada"
+                  row
+                  label="Selecciona la hoja que se mueve"
+                >
+                  <v-radio label="Mover hoja izquierda (1)" :value="1" />
+                  <v-radio label="Mover hoja derecha (2)" :value="2" />
+                </v-radio-group>
               </v-col>
             </template>
 
-            <v-col cols="6" sm="3">
-              <v-text-field  v-model.number="ventana.ancho" label="Ancho (mm)" type="number" outlined color="primary" />
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-text-field  v-model.number="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
-            </v-col>
-            <!-- <v-col cols="12">
-              <Visor3D
+            <v-col cols="6">
+              <VentanaEditor
+                v-if="ventana.tipo === 2"
                 :ancho="ventana.ancho"
                 :alto="ventana.alto"
-                :modelo="'/modelos/ventana.glb'" 
+                :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
               />
-            </v-col> -->
-            <VentanaEditor
-              v-if="ventana.tipo === 2"
-              :ancho="ventana.ancho"
-              :alto="ventana.alto"
-              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
-            />
-            <VentanaCorredera
-              v-else-if="ventana.tipo === 3"
-              :ancho="ventana.ancho"
-              :alto="ventana.alto"
-              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
-              :hojas-moviles="ventana.hojas_moviles"
-              :hojas-totales="ventana.hojas_totales"
-              :orden-hoja1-al-frente="ventana.hoja1AlFrente"
-              
-            />
+              <VentanaCorredera
+                v-else-if="ventana.tipo === 3"
+                :ancho="ventana.ancho"
+                :alto="ventana.alto"
+                :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                :hojas-moviles="ventana.hojas_moviles"
+                :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada"
+                :hojas-totales="ventana.hojas_totales"
+                :orden-hoja1-al-frente="ventana.hoja1AlFrente"
+              />
+            </v-col>
 
-          <v-col cols="12" sm="3">
-            <v-text-field
-              v-model="ventana.cantidad"
-              label="Cantidad"
-              type="number"
-              min="1"
-              :rules="[v => v > 0 || 'Debe ser mayor a 0']"
-            />
-          </v-col>
+            <v-col cols="6" sm="3">
+              <v-text-field v-model="ventana.cantidad" label="Cantidad" type="number" min="1" :rules="[v => v > 0 || 'Debe ser mayor a 0']" outlined color="primary" />
+            </v-col>
 
-            <v-col cols="12" sm="3">
+            <v-col cols="6" sm="3">
               <v-select v-model="ventana.material" :items="materiales" item-title="nombre" item-value="id" label="Material (opcional)" outlined color="primary" />
             </v-col>
-            <v-col cols="12" sm="3">
+            <v-col cols="6" sm="3">
               <v-select v-model="ventana.color" :items="colores" item-title="nombre" item-value="id" label="Color (opcional)" outlined color="primary" />
             </v-col>
-            <v-col cols="12" sm="3">
+            <v-col cols="6" sm="3">
               <v-select v-model="ventana.tipoVidrio" :items="tiposVidrio" item-title="nombre" item-value="id" label="Tipo de vidrio (opcional)" outlined color="primary" />
             </v-col>
-            <v-col cols="12" sm="3">
+            <v-col cols="12" sm="6">
               <v-select v-model="ventana.productoVidrioProveedor" :items="productosVidrioFiltradosConProveedor(ventana)" item-title="nombre" item-value="id" label="Producto de vidrio (opcional)" outlined color="primary" />
             </v-col>
 
@@ -179,11 +171,10 @@
               <v-alert v-if="ventana.precio" type="success" variant="tonal" dense class="mt-2">
                 <strong>Precio sugerido:</strong> ${{ ventana.precio.toLocaleString() }}
               </v-alert>
-
               <v-btn @click="mostrarDetalles[index] = !mostrarDetalles[index]" color="primary" variant="outlined">
-                  <v-icon left>mdi-eye</v-icon>
-                    {{ mostrarDetalles[index] ? 'Ocultar' : 'Ver' }} Costos
-                  </v-btn>
+                <v-icon left>mdi-eye</v-icon>
+                {{ mostrarDetalles[index] ? 'Ocultar' : 'Ver' }} Costos
+              </v-btn>
 
               <v-data-table v-if="mostrarDetalles[index] && ventana.materiales && ventana.materiales.length"
                 :headers="[
@@ -226,56 +217,6 @@
         Guardar Cotización
       </v-btn>
     </v-card>
-
-    <!-- MODAL NUEVO CLIENTE -->
-    <v-dialog v-model="modalCliente" max-width="600px">
-      <v-card>
-        <v-card-title>Nuevo Cliente</v-card-title>
-        <v-card-text>
-          <v-form ref="formNuevoCliente" @submit.prevent="guardarCliente">
-            <v-row dense>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.firstName" label="Nombre" />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.lastName" label="Apellido" />
-              </v-col>
-            </v-row>
-            <v-row dense>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.company" label="Razón Social" />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.code" label="RUT" />
-              </v-col>
-            </v-row>
-            <v-row dense>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.email" label="Email" />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.phone" label="Teléfono" />
-              </v-col>
-            </v-row>
-            <v-row dense>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.city" label="Ciudad" />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="nuevoCliente.municipality" label="Comuna" />
-              </v-col>
-            </v-row>
-            <v-text-field v-model="nuevoCliente.address" label="Dirección" />
-            <v-text-field v-model="nuevoCliente.activity" label="Giro" />
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="modalCliente = false">Cancelar</v-btn>
-          <v-btn color="primary" @click="guardarCliente">Guardar</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </v-container>
 </template>
 

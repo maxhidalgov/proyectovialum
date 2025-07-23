@@ -47,6 +47,7 @@ declare module 'vue' {
     ErrorHeader: typeof import('./src/components/ErrorHeader.vue')['default']
     FlechaNumero: typeof import('./src/components/svg/FlechaNumero.vue')['default']
     I18n: typeof import('./src/@core/components/I18n.vue')['default']
+    Manilla: typeof import('./src/components/Manilla.vue')['default']
     ManillaBlanca: typeof import('./src/components/svg/ManillaBlanca.vue')['default']
     ManillaImagen: typeof import('./src/components/svg/ManillaImagen.vue')['default']
     MoreBtn: typeof import('./src/@core/components/MoreBtn.vue')['default']
@@ -68,7 +69,6 @@ declare module 'vue' {
     TwoFactorAuthDialog: typeof import('./src/components/dialogs/TwoFactorAuthDialog.vue')['default']
     UserInfoEditDialog: typeof import('./src/components/dialogs/UserInfoEditDialog.vue')['default']
     UserUpgradePlanDialog: typeof import('./src/components/dialogs/UserUpgradePlanDialog.vue')['default']
-    VentanaEditor: typeof import('./src/components/VentanaEditor.vue')['default']
     VistaVentanaCorredera: typeof import('./src/components/VistaVentanaCorredera.vue')['default']
     VistaVentanaFijaS60: typeof import('./src/components/VistaVentanaFijaS60.vue')['default']
   }
