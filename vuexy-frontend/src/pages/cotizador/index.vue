@@ -214,7 +214,15 @@
       </v-btn>
 
       <v-divider class="my-4" />
-      <v-btn color="primary" @click="guardarCotizacion" block prepend-icon="mdi-content-save" elevation="2" class="py-4">
+      <v-btn
+        color="primary"
+        :loading="loading"
+        :disabled="loading"
+        @click="guardarCotizacion"
+      >
+        <template #loader>
+          <v-progress-circular indeterminate color="white" size="20" />
+        </template>
         Guardar Cotización
       </v-btn>
     </v-card>
@@ -248,6 +256,7 @@ const cotizacion = ref({
 })
 
 const mostrarDetalles = ref({})
+const loading = ref(false)
 
 // Formulario de cliente
 const form = reactive({
@@ -529,6 +538,7 @@ const exportarImagenesVentanas = async () => {
   return imagenes
 }
 const guardarCotizacion = async () => {
+  loading.value = true
   try {
     const imagenes = await exportarImagenesVentanas()
     const clienteSeleccionado = form.cliente?.raw
@@ -571,6 +581,8 @@ const guardarCotizacion = async () => {
   } catch (error) {
     console.error('Error al guardar cotización:', error)
     alert('Error al guardar la cotización')
+  } finally {
+    loading.value = false
   }
 }
 

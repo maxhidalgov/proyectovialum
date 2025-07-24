@@ -122,7 +122,7 @@ const stageRef = ref(null)
 
 const exportarImagen = () => {
   if (stageRef.value) {
-    const dataURL = stageRef.value.getStage().toDataURL({ pixelRatio: 2 })
+    const dataURL = stageRef.value.getStage().toDataURL({ pixelRatio: 1,quality: 0.7, })
     return dataURL
   }
   return null
