@@ -57,7 +57,7 @@
         <td width="50%" align="center" style="vertical-align: top;">
           @if ($ventana->imagen)
             <img
-              src="{{ public_path('storage/imagenes_cotizaciones/' . $ventana->imagen) }}"
+              src="https://vialum.cl/laravelupload/imagenes_cotizaciones/{{ $ventana->imagen }}"
               style="max-width: 100%; height: auto; border: none;"
               alt="Vista ventana"
             />

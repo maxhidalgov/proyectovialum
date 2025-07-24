@@ -79,11 +79,13 @@ public function store(Request $request)
                 $image = str_replace(' ', '+', $image);
 
                 $imageName = 'cotizacion_' . $cotizacion->id . '_ventana_' . $index . '_' . time() . '.png';
-                Storage::disk('public')->put("imagenes_cotizaciones/$imageName", base64_decode($image));
+
+                // Subir al servidor por FTP (configurado en config/filesystems.php)
+                Storage::disk('ftp_cpanel')->put($imageName, base64_decode($image));
 
                 if (isset($ventanasGuardadas[$index])) {
                     $ventanasGuardadas[$index]->update([
-                        'imagen' => $imageName
+                        'imagen' => $imageName // O puedes guardar la URL completa si prefieres
                     ]);
                     Log::info("✅ Imagen asociada a ventana ID {$ventanasGuardadas[$index]->id}");
                 } else {
@@ -91,7 +93,6 @@ public function store(Request $request)
                 }
             }
         }
-
         DB::commit();
         return response()->json(['message' => 'Cotización guardada correctamente'], 201);
 
