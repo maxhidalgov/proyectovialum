@@ -550,7 +550,7 @@ const guardarCotizacion = async () => {
       cliente_id: clienteSeleccionado.id,
       vendedor_id: 1,
       fecha: new Date().toISOString().split('T')[0],
-      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id ?? 1, // default: Evaluación
+      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id ?? 1, // default: Evaluacióna
       observaciones: cotizacion.value.observaciones,
       imagenes_ventanas: imagenes, // base64 strings
       ventanas: cotizacion.value.ventanas.map(v => {

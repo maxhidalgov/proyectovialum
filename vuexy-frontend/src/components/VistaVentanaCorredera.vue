@@ -128,7 +128,7 @@ const exportarImagen = () => {
   return null
 }
 
-defineExpose({ exportarImagen }) // esto permite usar el método desde el padre
+defineExpose({ exportarImagen }) // esto permite usar el método desde el padree
 
 
 const texturas = {
