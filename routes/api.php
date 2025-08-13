@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\BsaleClientController;
+use App\Http\Controllers\ImportacionController;
 use App\Http\Controllers\TipoVentanaController;
 use App\Http\Controllers\TipoProductoController;
 use App\Http\Controllers\Api\CotizadorController;
@@ -53,6 +54,9 @@ Route::middleware('api')->group(function () {
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
     Route::put('/cotizaciones/{id}', [CotizacionController::class, 'update']);
     Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
+    Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
+    Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
+
     // routes/api.php
     Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);
     Route::get('/compras-terceros-mensuales', [DashboardController::class, 'comprasTercerosMensuales']);
