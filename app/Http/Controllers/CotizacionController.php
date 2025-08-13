@@ -40,7 +40,10 @@ class CotizacionController extends Controller
 public function store(Request $request)
 {
     Log::info('📩 COTIZACION RECIBIDA', $request->all());
-
+    
+    // ✅ AGREGAR ESTE LOG ESPECÍFICO PARA VER LAS VENTANAS
+    Log::info('🔍 VENTANAS RECIBIDAS:', $request->ventanas ?? 'NO HAY VENTANAS');
+    
     try {
         DB::beginTransaction();
 
@@ -57,48 +60,122 @@ public function store(Request $request)
         // Guardar ventanas y mantener referencia
         $ventanasGuardadas = [];
 
-        foreach ($request->ventanas as $ventana) {
+        foreach ($request->ventanas as $index => $ventana) {
+            Log::info("🔍 VENTANA $index:", $ventana);
+            
             $ventanasGuardadas[] = $cotizacion->ventanas()->create([
-                'tipo_ventana_id' => $ventana['tipo_ventana_id'],
-                'ancho' => $ventana['ancho'],
-                'alto' => $ventana['alto'],
+                'tipo_ventana_id' => $ventana['tipo_ventana_id'] ?? null,           // ✅ CORREGIDO
+                'ancho' => $ventana['ancho'] ?? null,
+                'alto' => $ventana['alto'] ?? null,
                 'cantidad' => $ventana['cantidad'] ?? 1,
-                'color_id' => $ventana['color_id'],
-                'producto_vidrio_proveedor_id' => $ventana['producto_vidrio_proveedor_id'],
+                'color_id' => $ventana['color_id'] ?? null,                        // ✅ CORREGIDO
+                'producto_vidrio_proveedor_id' => $ventana['producto_vidrio_proveedor_id'] ?? null, // ✅ CORREGIDO
                 'costo' => $ventana['costo'] ?? 0,
                 'precio' => $ventana['precio'] ?? 0,
+                // Agregar campos para Bay Window y correderas
+                'hojas_totales' => $ventana['hojas_totales'] ?? null,
+                'hojas_moviles' => $ventana['hojas_moviles'] ?? null,
+                'hoja_movil_seleccionada' => $ventana['hojaMovilSeleccionada'] ?? null,
+                'hoja1_al_frente' => $ventana['hoja1AlFrente'] ?? null,
+                'ancho_izquierda' => $ventana['ancho_izquierda'] ?? null,
+                'ancho_centro' => $ventana['ancho_centro'] ?? null,
+                'ancho_derecha' => $ventana['ancho_derecha'] ?? null,
+                'tipo_ventana_izquierda' => isset($ventana['tipo_ventana_izquierda']) ? json_encode($ventana['tipo_ventana_izquierda']) : null,
+                'tipo_ventana_centro' => isset($ventana['tipo_ventana_centro']) ? json_encode($ventana['tipo_ventana_centro']) : null,
+                'tipo_ventana_derecha' => isset($ventana['tipo_ventana_derecha']) ? json_encode($ventana['tipo_ventana_derecha']) : null,
             ]);
         }
 
-        // Guardar imágenes si vienen en el request
-        if ($request->has('imagenes_ventanas')) {
-            foreach ($request->imagenes_ventanas as $index => $base64) {
-                if (!$base64 || !str_starts_with($base64, 'data:image/png;base64,')) continue;
+        // Guardar imágenes con mejor manejo de errores
+            if ($request->has('imagenes_ventanas') && is_array($request->imagenes_ventanas)) {
+                Log::info("🖼️ PROCESANDO " . count($request->imagenes_ventanas) . " IMÁGENES");
+                
+                foreach ($request->imagenes_ventanas as $index => $base64) {
+                    try {
+                        if (!$base64 || $base64 === null) {
+                            Log::info("⚠️ Imagen vacía en índice $index, saltando...");
+                            continue;
+                        }
 
-                $image = str_replace('data:image/png;base64,', '', $base64);
-                $image = str_replace(' ', '+', $image);
+                        Log::info("🖼️ PROCESANDO IMAGEN $index - Tamaño: " . strlen($base64) . " caracteres");
 
-                $imageName = 'cotizacion_' . $cotizacion->id . '_ventana_' . $index . '_' . time() . '.png';
+                        // Verificar si tiene el prefijo correcto
+                        if (!str_starts_with($base64, 'data:image/png;base64,')) {
+                            Log::warning("⚠️ Imagen en índice $index no tiene formato correcto, prefijo: " . substr($base64, 0, 30));
+                            continue;
+                        }
 
-                // Subir al servidor por FTP (configurado en config/filesystems.php)
-                Storage::disk('ftp_cpanel')->put($imageName, base64_decode($image));
+                        $image = str_replace('data:image/png;base64,', '', $base64);
+                        $image = str_replace(' ', '+', $image);
+                        $imageData = base64_decode($image);
 
-                if (isset($ventanasGuardadas[$index])) {
-                    $ventanasGuardadas[$index]->update([
-                        'imagen' => $imageName // O puedes guardar la URL completa si prefieres
-                    ]);
-                    Log::info("✅ Imagen asociada a ventana ID {$ventanasGuardadas[$index]->id}");
-                } else {
-                    Log::warning("⚠️ No se encontró ventana para imagen en índice $index");
+                        if ($imageData === false) {
+                            Log::error("❌ Error al decodificar imagen en índice $index");
+                            continue;
+                        }
+
+                        Log::info("✅ Imagen decodificada correctamente - Tamaño: " . strlen($imageData) . " bytes");
+
+                        $imageName = 'cotizacion_' . $cotizacion->id . '_ventana_' . $index . '_' . time() . '.png';
+
+                        // Intentar guardar localmente primero como backup
+                        $localPath = 'imagenes_ventanas/' . $imageName;
+                        Storage::disk('public')->put($localPath, $imageData);
+                        Log::info("✅ Imagen guardada localmente: " . storage_path('app/public/' . $localPath));
+
+                        // Intentar subir por FTP si está configurado
+                        try {
+                            // Verificar si la configuración FTP existe
+                            $ftpConfig = config('filesystems.disks.ftp_cpanel');
+                            if ($ftpConfig) {
+                                Log::info("🌐 Intentando subir por FTP con config: " . json_encode(array_keys($ftpConfig)));
+                                
+                                Storage::disk('ftp_cpanel')->put($imageName, $imageData);
+                                Log::info("✅ Imagen subida por FTP: $imageName");
+                                
+                                // Verificar que se subió correctamente
+                                if (Storage::disk('ftp_cpanel')->exists($imageName)) {
+                                    Log::info("✅ Confirmado: Imagen existe en FTP");
+                                } else {
+                                    Log::warning("⚠️ La imagen no se encuentra en FTP después de subirla");
+                                }
+                            } else {
+                                Log::warning("⚠️ Configuración FTP no encontrada");
+                            }
+                        } catch (\Exception $ftpError) {
+                            Log::error("❌ Error FTP: " . $ftpError->getMessage());
+                            Log::error("❌ FTP Stack trace: " . $ftpError->getTraceAsString());
+                            // Continuar con almacenamiento local
+                        }
+
+                        // Asociar imagen a ventana
+                        if (isset($ventanasGuardadas[$index])) {
+                            $ventanasGuardadas[$index]->update([
+                                'imagen' => $imageName
+                            ]);
+                            Log::info("✅ Imagen asociada a ventana ID {$ventanasGuardadas[$index]->id}");
+                        } else {
+                            Log::warning("⚠️ No se encontró ventana para imagen en índice $index");
+                        }
+
+                    } catch (\Exception $imageError) {
+                        Log::error("❌ Error procesando imagen $index: " . $imageError->getMessage());
+                        Log::error("❌ Stack trace: " . $imageError->getTraceAsString());
+                        continue;
+                    }
                 }
+            } else {
+                Log::info("ℹ️ No se recibieron imágenes o no es un array válido");
+                Log::info("ℹ️ Datos recibidos: " . json_encode($request->get('imagenes_ventanas')));
             }
-        }
+
         DB::commit();
         return response()->json(['message' => 'Cotización guardada correctamente'], 201);
 
     } catch (\Exception $e) {
         DB::rollBack();
         Log::error('❌ Error al guardar cotización: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
         return response()->json(['error' => 'Error al guardar cotización', 'detalle' => $e->getMessage()], 500);
     }
 }

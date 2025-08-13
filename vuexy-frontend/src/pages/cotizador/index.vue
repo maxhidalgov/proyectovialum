@@ -2,9 +2,10 @@
   <v-container fluid>
     <v-card class="pa-6" elevation="2">
       <v-card-title class="text-h5 mb-4">Nueva Cotización</v-card-title>
+      
 
       <!-- Datos Generales -->
-      <v-card-subtitle class="text-h6">Datos generales</v-card-subtitle>
+      <v-card-subtitle class="text-h5">Datos generales</v-card-subtitle>
       <v-divider class="mb-4" />
 
       <!-- Cliente + botón en fila -->
@@ -77,7 +78,7 @@
       </v-row>
 
       <!-- Vidrio por defecto -->
-      <v-card-subtitle class="text-h6">Vidrio por defecto</v-card-subtitle>
+      <v-card-subtitle class="text-h5">Vidrio por defecto</v-card-subtitle>
       <v-divider class="mb-4" />
       <v-row dense class="mb-4">
         <v-col cols="12" sm="6">
@@ -89,130 +90,53 @@
       </v-row>
 
       <!-- Lista de Ventanas -->
-      <v-card-subtitle class="text-h6">Ventanas</v-card-subtitle>
+      <v-card-subtitle class="text-h5">Ventanas</v-card-subtitle>
       <v-divider class="mb-4" />
 
-      <div v-for="(ventana, index) in cotizacion.ventanas" :key="index" class="mb-4">
-        <v-card class="pa-4" outlined>
-          <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-select v-model="ventana.tipo" :items="tiposVentanaFiltrados(ventana)" item-title="nombre" item-value="id" label="Tipo de ventana" outlined color="primary" />
-            </v-col>
+<v-btn color="primary" @click="abrirModalVentana" :disabled="!tiposVentanaTodos.length">
+  <v-icon left>mdi-plus</v-icon> Agregar ventana
+</v-btn>
 
-            <v-col cols="6" sm="3">
-              <v-text-field  v-model.number="ventana.ancho" label="Ancho (mm)" type="number" outlined color="primary" />
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-text-field  v-model.number="ventana.alto" label="Alto (mm)" type="number" outlined color="primary" />
-            </v-col>
+        <v-data-table 
+          :headers="headersVentanas"
+          :items="cotizacion.ventanas"
+          class="mt-4"
+          :items-per-page="5"
+        >
 
-            <template v-if="ventana.tipo === 3 || ventana.tipo === 46">
-              <v-col cols="6" sm="3">
-                <v-select v-model="ventana.hojas_totales" :items="[2, 3, 4, 6]" label="Hojas totales" outlined color="primary" />
-              </v-col>
-              <v-col cols="6" sm="3">
-                <v-select v-model="ventana.hojas_moviles" :items="[1, 2, 3, 4]" label="Hojas móviles" :disabled="!ventana.hojas_totales" :rules="[v => !v || v <= ventana.hojas_totales || 'No puede exceder total']" outlined color="primary" />
-              </v-col>
-              <v-col cols="12" sm="6" v-if="ventana.hojas_moviles === 1">
-                <v-radio-group
-                  v-model="ventana.hojaMovilSeleccionada"
-                  row
-                  label="Selecciona la hoja que se mueve"
-                >
-                  <v-radio label="Mover hoja izquierda (1)" :value="1" />
-                  <v-radio label="Mover hoja derecha (2)" :value="2" />
-                </v-radio-group>
-              </v-col>
-            </template>
 
-            <v-col cols="6">
-              <VentanaEditor
-                v-if="ventana.tipo === 2"
-                :ancho="ventana.ancho"
-                :alto="ventana.alto"
-                :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
-              />
-              <VentanaCorredera
-                v-else-if="ventana.tipo === 3"
-                :ref="el => ventanaRefs[index] = el"
-                :ancho="ventana.ancho"
-                :alto="ventana.alto"
-                :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
-                :hojas-moviles="ventana.hojas_moviles"
-                :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada"
-                :hojas-totales="ventana.hojas_totales"
-                :orden-hoja1-al-frente="ventana.hoja1AlFrente"
-              />
-            </v-col>
+<template #item.tipo="{ item }">
+  {{ mapaTiposVentana[Number(item.tipo)] || item.tipo }}
+</template>
 
-            <v-col cols="6" sm="3">
-              <v-text-field v-model="ventana.cantidad" label="Cantidad" type="number" min="1" :rules="[v => v > 0 || 'Debe ser mayor a 0']" outlined color="primary" />
-            </v-col>
 
-            <v-col cols="6" sm="3">
-              <v-select v-model="ventana.material" :items="materiales" item-title="nombre" item-value="id" label="Material (opcional)" outlined color="primary" />
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-select v-model="ventana.color" :items="colores" item-title="nombre" item-value="id" label="Color (opcional)" outlined color="primary" />
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-select v-model="ventana.tipoVidrio" :items="tiposVidrio" item-title="nombre" item-value="id" label="Tipo de vidrio (opcional)" outlined color="primary" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-select v-model="ventana.productoVidrioProveedor" :items="productosVidrioFiltradosConProveedor(ventana)" item-title="nombre" item-value="id" label="Producto de vidrio (opcional)" outlined color="primary" />
-            </v-col>
+        <template #item.acciones="{ item, index }">
+          <v-btn icon @click="editarVentana(index)">
+            <v-icon>mdi-pencil</v-icon>
+          </v-btn>
+          <v-btn icon color="error" @click="eliminarVentana(index)">
+            <v-icon>mdi-delete</v-icon>
+          </v-btn>
+        </template>
+      </v-data-table>
 
-            <v-col cols="12">
-              <v-alert v-if="ventana.costo_total_unitario" type="info" variant="outlined" dense class="mb-2">
-                <strong>Costo unitario:</strong> ${{ ventana.costo_total_unitario.toLocaleString() }}
-              </v-alert> 
-              <v-alert v-if="ventana.costo_total" type="info" variant="tonal" dense class="mb-2">
-                <strong>Costo total de materiales:</strong> ${{ ventana.costo_total.toLocaleString() }}
-              </v-alert>
-              <v-alert v-if="ventana.precio" type="success" variant="tonal" dense class="mt-2">
-                <strong>Precio sugerido:</strong> ${{ ventana.precio.toLocaleString() }}
-              </v-alert>
-              <v-btn @click="mostrarDetalles[index] = !mostrarDetalles[index]" color="primary" variant="outlined">
-                <v-icon left>mdi-eye</v-icon>
-                {{ mostrarDetalles[index] ? 'Ocultar' : 'Ver' }} Costos
-              </v-btn>
+      <!-- Modal para agregar/editar ventana -->
+      <AgregarVentanaModal
+        v-model:mostrar="mostrarModalVentana"
+        :materiales="materiales"
+        :colores="colores"
+        :tiposVidrio="tiposVidrio"
+        :productosVidrio="productosVidrio"
+        :tiposVentana="tiposVentanaTodos"
+        :ventana="ventanaEnEdicion"
+        :material-default="cotizacion.material"
+        :color-default="cotizacion.color"
+        :tipo-vidrio-default="cotizacion.tipoVidrio"
+        :producto-vidrio-default="cotizacion.productoVidrioProveedor"
+        @guardar="guardarVentana"
+      />
 
-              <v-data-table v-if="mostrarDetalles[index] && ventana.materiales && ventana.materiales.length"
-                :headers="[
-                  { title: 'Producto', key: 'nombre' },
-                  { title: 'Proveedor', key: 'proveedor' },
-                  { title: 'Cantidad', key: 'cantidad' },
-                  { title: 'Unidad', key: 'unidad' },
-                  { title: 'Costo Unitario', key: 'costo_unitario' },
-                  { title: 'Costo Total', key: 'costo_total' },
-                ]"
-                :items="ventana.materiales"
-                :items-per-page="-1"
-                class="elevation-1 mt-4"
-                hide-default-footer
-              >
-                <template #item.costo_unitario="{ item }">
-                  ${{ item.costo_unitario.toLocaleString() }}
-                </template>
-                <template #item.costo_total="{ item }">
-                  ${{ item.costo_total.toLocaleString() }}
-                </template>
-              </v-data-table>
-            </v-col>
-
-            <v-col cols="12" class="text-right">
-              <v-btn color="error" variant="outlined" @click="eliminarVentana(index)">
-                <v-icon left>mdi-delete</v-icon> Quitar ventana
-              </v-btn>
-            </v-col>
-          </v-row>
-        </v-card>
-      </div>
-
-      <v-btn @click="agregarVentana" color="primary" variant="outlined" class="mb-4">
-        <v-icon left>mdi-plus</v-icon> Agregar ventana
-      </v-btn>
-
+      <!-- Botón para agregar ventana -->
       <v-divider class="my-4" />
       <v-btn
         color="primary"
@@ -225,8 +149,163 @@
         </template>
         Guardar Cotización
       </v-btn>
+       <!-- Renderización de ventanas para captura de imágenes -->
+      <div v-if="cotizacion.ventanas.length > 0" class="mt-6">
+        <v-card-subtitle class="text-h5">Vista previa de ventanas</v-card-subtitle>
+        <v-divider class="mb-4" />
+        <div v-for="(ventana, index) in cotizacion.ventanas" :key="index" class="mb-4">
+          <v-card class="pa-4" outlined>
+            <v-card-title>{{ mapaTiposVentana[ventana.tipo] || `Ventana ${index + 1}` }}</v-card-title>
+            <v-row>
+              <v-col cols="6">
+                <VentanaEditor
+                  v-if="ventana.tipo === 2"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                />
+                <VentanaProyectante
+                  v-else-if="ventana.tipo === 45"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                />
+                <VentanaCorredera
+                  v-else-if="ventana.tipo === 3"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                  :hojas-totales="ventana.hojas_totales"
+                  :hojas-moviles="ventana.hojas_moviles"
+                  :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada"
+                  :orden-hoja1-al-frente="ventana.hoja1AlFrente"
+                />
+                <VentanaCorredera98
+                  v-else-if="ventana.tipo === 52"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                  :hojas-totales="ventana.hojas_totales"
+                  :hojas-moviles="ventana.hojas_moviles"
+                  :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada"
+                  :orden-hoja1-al-frente="ventana.hoja1AlFrente"
+              />
+                <BayWindow
+                  v-else-if="ventana.tipo === 47"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                  :ancho-izquierda="ventana.ancho_izquierda"
+                  :ancho-centro="ventana.ancho_centro"
+                  :ancho-derecha="ventana.ancho_derecha"
+                  :tipo-ventana-izquierda="ventana.tipoVentanaIzquierda"
+                  :tipo-ventana-centro="ventana.tipoVentanaCentro"
+                  :tipo-ventana-derecha="ventana.tipoVentanaDerecha"
+                />
+                <VistaVentanaCorrederaAndes
+                  v-else-if="ventana.tipo === 46"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                  :hojas-totales="ventana.hojas_totales"
+                  :hojas-moviles="ventana.hojas_moviles"
+                  :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada"
+                  :orden-hoja1-al-frente="ventana.hoja1AlFrente"
+                />
+                <VistaVentanaMonorriel
+                  v-else-if="ventana.tipo === 53"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :lado-apertura="ventana.ladoApertura"
+                />
+                <VentanaAbatir
+                  v-else-if="ventana.tipo === 49"  
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                  :lado-inicial="ventana.ladoApertura || 'izquierda'"
+                />
+                <PuertaS60
+                  v-else-if="ventana.tipo === 50"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                  :lado-apertura="ventana.ladoApertura"
+                  :direccion-apertura="ventana.direccionApertura"
+                  :paso-libre="ventana.pasoLibre"
+                />
+                <VistaMamparaS60
+                  v-else-if="ventana.tipo === 51"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :hoja-activa="ventana.hojaActiva"
+                  :direccion-apertura="ventana.direccionApertura"
+                  :paso-libre="ventana.pasoLibre"
+                />
+                <VistaVentanaCompuestaDinamica
+                  v-else-if="ventana.tipo === 58"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :orientacion="ventana.orientacionComp"
+                  :items="ventana.itemsComp"
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-card variant="outlined">
+                  <v-card-title>Detalles</v-card-title>
+                  <v-card-text>
+                    <p><strong>Ancho:</strong> {{ ventana.ancho }}mm</p>
+                    <p><strong>Alto:</strong> {{ ventana.alto }}mm</p>
+                    <p><strong>Cantidad:</strong> {{ ventana.cantidad }}</p>
+                    <p><strong>Precio:</strong> ${{ ventana.precio }}</p>
+                  </v-card-text>
+                </v-card>
+              </v-col>
+            </v-row>
+          </v-card>
+        </div>
+      </div>
     </v-card>
   </v-container>
+
+ 
 </template>
 
 <script setup>
@@ -235,17 +314,38 @@ import debounce from 'lodash/debounce'
 import api from '@/axiosInstance'
 import { useRouter } from 'vue-router'
 import Visor3D from '@/layouts/components/Visor3D.vue'
-import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import { color } from 'three/src/nodes/TSL.js'
+import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
+import AgregarVentanaModal from '@/pages/AgregarVentanaModal2.vue'
+import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
+import VentanaProyectante from '@/components/VistaVentanaProyectanteS60.vue'
+import BayWindow from '@/components/VistaBayWindow.vue'
+import VentanaAbatir from '@/components/VistaVentanaAbatirS60.vue'
+import PuertaS60 from '@/components/VistaPuertaS60.vue'
+import VistaMamparaS60 from '@/components/VistaMamparaS60.vue'
+import VentanaCorredera98 from '@/components/VistaVentanaCorredera98.vue'
+import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
+import VistaVentanaCompuestaDinamica from '@/components/VistaVentanaCompuestaDinamica.vue'
+
+
 
 const ventanaRefs = ref([]) // mantener referencias
+const tiposVentanaTodos = ref([])
 
 const margenVenta = 0.45 // Margen del 45%
 const router = useRouter()
 
+const mapaTiposVentana = computed(() => {
+  const map = {}
+  for (const t of tiposVentanaTodos.value) {
+    map[Number(t.id)] = t.nombre
+  }
+  return map
+})
+
 // Cotización general
-const cotizacion = ref({
+const cotizacion = reactive({
   cliente_id: null,
   observaciones: '',
   material: '',
@@ -253,7 +353,21 @@ const cotizacion = ref({
   tipoVidrio: '',
   productoVidrioProveedor: '',
   ventanas: [],
+       
 })
+
+const tiposVentanaBayKonva = [
+  { id: 1, nombre: 'Fija' },
+  { id: 2, nombre: 'Proyectante' },
+  { id: 3, nombre: 'Corredera' },
+
+]
+const tiposVentanaCentro = [
+  { id: 2, nombre: 'Fija' },
+  { id: 3, nombre: 'Corredera Sliding' },
+  { id: 45, nombre: 'Proyectante S60' },
+  //{ id: 46, nombre: 'Corredera Andes' },
+]
 
 const mostrarDetalles = ref({})
 const loading = ref(false)
@@ -268,7 +382,7 @@ const materiales = ref([])
 const colores = ref([])
 const tiposVidrio = ref([])
 const productosVidrio = ref([])
-const tiposVentanaTodos = ref([])
+
 const clientes = ref([])
 
 const clienteSearch = ref('')
@@ -292,7 +406,7 @@ const productosVidrioCombinados = computed(() => {
 })
 
 const productosVidrioFiltradosGeneral = computed(() => {
-  const tipo = cotizacion.value.tipoVidrio
+  const tipo = cotizacion.tipoVidrio
   return productosVidrio.value
     .filter(p => p.tipo_producto_id === tipo)
     .flatMap(p =>
@@ -323,6 +437,7 @@ onMounted(async () => {
   tiposVidrio.value = tiposProductoRes.data.filter(tp => [1, 2].includes(tp.id))
   productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
   tiposVentanaTodos.value = tiposVentanaRes.data
+   console.log('TIPOS VENTANA CARGADOS:', tiposVentanaTodos.value)
   clientes.value = clientesRes.data
 })
 
@@ -339,7 +454,7 @@ const buscarRelacionVidrioProveedor = (id) => {
 
 // Computed para mostrar productos de vidrio con proveedor
 const productosVidrioFiltradosConProveedor = (ventana) => {
-  const tipo = ventana.tipoVidrio ?? cotizacion.value.tipoVidrio
+  const tipo = ventana.tipoVidrio ?? cotizacion.tipoVidrio
   return productosVidrio.value
     .filter(p => p.tipo_producto_id === tipo)
     .flatMap(p =>
@@ -371,16 +486,52 @@ const clientesFiltrados = computed(() => {
 })
 
 // Ventanas
+const mostrarModalVentana = ref(false)
+const ventanaEnEdicion = ref(null)
+
+const headersVentanas = [
+  { title: 'Tipo', key: 'tipo' },
+  { title: 'Ancho', key: 'ancho' },
+  { title: 'Alto', key: 'alto' },
+  { title: 'Cantidad', key: 'cantidad' },
+  { title: 'Precio', key: 'precio', align: 'end' },
+  { title: 'Acciones', key: 'acciones', sortable: false },
+]
+
+const abrirModalVentana = () => {
+  ventanaEnEdicion.value = null // Para agregar nueva
+  mostrarModalVentana.value = true
+}
+
+const editarVentana = (index) => {
+  ventanaEnEdicion.value = { ...cotizacion.ventanas[index], index }
+  mostrarModalVentana.value = true
+}
+
+const guardarVentana = (ventana) => {
+    console.log('VENTANA RECIBIDA:', ventana)
+  if (ventana.index !== undefined) {
+    cotizacion.ventanas[ventana.index] = { ...ventana }
+  } else {
+    cotizacion.ventanas.push({ ...ventana })
+  }
+  mostrarModalVentana.value = false
+}
+
+const eliminarVentana = (index) => {
+  cotizacion.ventanas.splice(index, 1)
+}
+
 const agregarVentana = (ventanaModal = null) => {
   const base = {
     tipo: null,
     ancho: null,
     alto: null,
     cantidad: 1,
-    material: cotizacion.value.material,
-    color: cotizacion.value.color,
-    tipoVidrio: cotizacion.value.tipoVidrio,
-    productoVidrioProveedor: cotizacion.value.productoVidrioProveedor ?? null,
+    material: cotizacion.material,
+    color: cotizacion.color,
+    tipoVidrio: cotizacion.tipoVidrio,
+    productoVidrioProveedor: cotizacion.productoVidrioProveedor ?? null,
     hojas_totales: 2,
     hojas_moviles: 2,
     materiales: [],
@@ -390,11 +541,42 @@ const agregarVentana = (ventanaModal = null) => {
     precio_unitario: 0,
     precio: 0,
     hoja1AlFrente: true,
+    tipoVentanaIzquierda: {
+      compuesta: false,
+      partes: [
+        { tipo: null, alto: null }, // Parte superior
+        { tipo: null, alto: null }, // Parte inferior (solo si compuesta = true)
+      ]
+    },
+    tipoVentanaDerecha: {
+      compuesta: false,
+      partes: [
+        { tipo: null, alto: null },
+        { tipo: null, alto: null },
+      ]
+    },
+     tipoVentanaCentro: {
+    tipo: null,
+    hojas_totales: null,
+    hojas_moviles: null,
+    hojaMovilSeleccionada: null,
+    hoja1AlFrente: true
+  },
+    ancho_izquierda: null,
+    ancho_centro: null,
+    ancho_derecha: null,
+
   }
 
   const nuevaVentana = { ...base, ...(ventanaModal || {}) }
 
-  cotizacion.value.ventanas.push(nuevaVentana)
+    if (nuevaVentana.tipo === 47) {
+    nuevaVentana.ancho_izquierda = null
+    nuevaVentana.ancho_centro = null
+    nuevaVentana.ancho_derecha = null
+  }
+
+  cotizacion.ventanas.push(nuevaVentana)
 
   const relacion = buscarRelacionVidrioProveedor(nuevaVentana.productoVidrioProveedor)
 
@@ -414,12 +596,10 @@ const agregarVentana = (ventanaModal = null) => {
   }
 }
 
-const eliminarVentana = (index) => {
-  cotizacion.value.ventanas.splice(index, 1)
-}
+
 
 const tiposVentanaFiltrados = (ventana) => {
-  const materialId = ventana.material ?? cotizacion.value.material
+  const materialId = ventana.material ?? cotizacion.material
   return tiposVentanaTodos.value.filter(t => t.material_id === materialId)
 }
 
@@ -454,7 +634,7 @@ const recalcularCosto = debounce(async (payload, ventanaRef) => {
   }
 }, 1000)
 
-watch(() => cotizacion.value.ventanas, (ventanas) => {
+watch(() => cotizacion.ventanas, (ventanas) => {
   ventanas.forEach((ventana) => {
     watch(() => [
       ventana.tipo,
@@ -523,26 +703,148 @@ const guardarCliente = async () => {
 }
 
 const exportarImagenesVentanas = async () => {
+  await new Promise(resolve => setTimeout(resolve, 2000))
   const imagenes = []
-
-  for (let i = 0; i < ventanaRefs.value.length; i++) {
-    const componente = ventanaRefs.value[i]
-    if (componente?.exportarImagen) {
-      const base64 = componente.exportarImagen()
-      imagenes.push(base64)
-    } else {
-      imagenes.push(null) // o ''
+  
+  console.log('🔍 INICIANDO CAPTURA DE IMÁGENES')
+  console.log('🔍 VENTANA REFS:', ventanaRefs.value)
+  console.log('🔍 TOTAL VENTANAS:', cotizacion.ventanas.length)
+  
+  for (let i = 0; i < cotizacion.ventanas.length; i++) {
+    const ventana = cotizacion.ventanas[i]
+    console.log(`🔍 VENTANA ${i} - TIPO:`, ventana.tipo)
+    
+    try {
+      const componente = ventanaRefs.value[i]
+      console.log(`🔍 COMPONENTE ${i}:`, componente)
+      console.log(`🔍 TIPO DE COMPONENTE ${i}:`, typeof componente)
+      console.log(`🔍 $el DE COMPONENTE ${i}:`, componente?.$el)
+      console.log(`🔍 TIPO DE $el ${i}:`, typeof componente?.$el)
+      
+      // ✅ VERIFICAR SI EL COMPONENTE TIENE MÉTODO exportarImagen
+      if (componente?.exportarImagen && typeof componente.exportarImagen === 'function') {
+        console.log(`🔧 Usando exportarImagen() del componente ${i}`)
+        try {
+          const base64 = await componente.exportarImagen()
+          if (base64 && base64 !== null) {
+            console.log(`✅ IMAGEN ${i} CAPTURADA VIA exportarImagen:`, base64.substring(0, 50))
+            imagenes.push(base64)
+            continue
+          } else {
+            console.warn(`⚠️ exportarImagen() devolvió null para componente ${i}`)
+          }
+        } catch (exportError) {
+          console.error(`❌ Error en exportarImagen del componente ${i}:`, exportError)
+        }
+      }
+      
+      // ✅ VERIFICAR QUE $el EXISTE Y ES UN ELEMENTO DOM
+      if (componente?.$el && 
+          componente.$el.nodeType === Node.ELEMENT_NODE && 
+          typeof componente.$el.querySelectorAll === 'function') {
+        
+        console.log(`🔍 ELEMENTO DOM ${i} VÁLIDO:`, componente.$el.tagName)
+        
+        const todosLosCanvas = componente.$el.querySelectorAll('canvas')
+        console.log(`🔍 CANVAS ENCONTRADOS EN COMPONENTE ${i}:`, todosLosCanvas.length)
+        
+        let canvas = null
+        
+        // Buscar canvas con contenido
+        for (let j = 0; j < todosLosCanvas.length; j++) {
+          const testCanvas = todosLosCanvas[j]
+          console.log(`🔍 CANVAS ${i}.${j} - DIMENSIONES:`, testCanvas.width, 'x', testCanvas.height)
+          
+          try {
+            const ctx = testCanvas.getContext('2d')
+            const imageData = ctx.getImageData(0, 0, testCanvas.width, testCanvas.height)
+            const hasContent = imageData.data.some(pixel => pixel !== 0)
+            
+            console.log(`🔍 CANVAS ${i}.${j} - TIENE CONTENIDO:`, hasContent)
+            
+            if (hasContent) {
+              canvas = testCanvas
+              break
+            }
+          } catch (canvasError) {
+            console.error(`❌ Error verificando canvas ${i}.${j}:`, canvasError)
+          }
+        }
+        
+        if (canvas) {
+          // ✅ FORZAR REDIBUJADO PARA KONVA
+          try {
+            const stage = canvas.getStage?.()
+            if (stage) {
+              console.log(`🔄 Forzando redibujado de Konva en ventana ${i}`)
+              stage.draw()
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
+          } catch (e) {
+            console.log(`ℹ️ Ventana ${i} no es Konva`)
+          }
+          
+          const base64 = canvas.toDataURL('image/png')
+          console.log(`✅ IMAGEN ${i} CAPTURADA VIA CANVAS:`, base64.substring(0, 50))
+          imagenes.push(base64)
+        } else if (todosLosCanvas.length > 0) {
+          // ✅ USAR PRIMER CANVAS AUNQUE ESTÉ VACÍO
+          console.log(`🔧 Usando primer canvas aunque esté vacío...`)
+          try {
+            const base64 = todosLosCanvas[0].toDataURL('image/png')
+            imagenes.push(base64)
+          } catch (toDataError) {
+            console.error(`❌ Error en toDataURL:`, toDataError)
+            imagenes.push(null)
+          }
+        } else {
+          console.warn(`⚠️ No se encontraron canvas en componente ${i}`)
+          imagenes.push(null)
+        }
+      } else {
+        console.warn(`⚠️ Componente ${i} no tiene $el válido o querySelectorAll`)
+        console.log(`🔍 ¿$el existe?:`, !!componente?.$el)
+        console.log(`🔍 ¿Es Element?:`, componente?.$el instanceof Element)
+        console.log(`🔍 ¿Tiene querySelectorAll?:`, typeof componente?.$el?.querySelectorAll)
+        
+        // ✅ ÚLTIMO RECURSO: BUSCAR EN DOCUMENT
+        console.log(`🔧 Último recurso: buscando canvas globalmente...`)
+        const canvasGlobales = document.querySelectorAll('canvas')
+        console.log(`🔍 Canvas globales encontrados:`, canvasGlobales.length)
+        
+        if (canvasGlobales.length > i) {
+          try {
+            const base64 = canvasGlobales[i].toDataURL('image/png')
+            console.log(`✅ IMAGEN ${i} CAPTURADA VIA BÚSQUEDA GLOBAL`)
+            imagenes.push(base64)
+          } catch (globalError) {
+            console.error(`❌ Error en canvas global:`, globalError)
+            imagenes.push(null)
+          }
+        } else {
+          imagenes.push(null)
+        }
+      }
+    } catch (error) {
+      console.error(`❌ ERROR GENERAL capturando imagen ${i}:`, error)
+      imagenes.push(null)
     }
   }
 
+  console.log('🖼️ RESULTADO FINAL:', imagenes.map((img, i) => `${i}: ${img ? 'OK' : 'NULL'}`))
   return imagenes
 }
+
 const guardarCotizacion = async () => {
   loading.value = true
   try {
     const imagenes = await exportarImagenesVentanas()
+        // ✅ AGREGAR ESTOS LOGS
+    console.log('🖼️ IMÁGENES CAPTURADAS:', imagenes)
+    console.log('🖼️ NÚMERO DE IMÁGENES:', imagenes.length)
+    console.log('🖼️ PRIMERA IMAGEN (primeros 100 chars):', imagenes[0]?.substring(0, 100))
     const clienteSeleccionado = form.cliente?.raw
-    if (!clienteSeleccionado || cotizacion.value.ventanas.length === 0) {
+    if (!clienteSeleccionado || cotizacion.ventanas.length === 0) {
       alert('Debes seleccionar un cliente y agregar al menos una ventana')
       return
     }
@@ -550,10 +852,10 @@ const guardarCotizacion = async () => {
       cliente_id: clienteSeleccionado.id,
       vendedor_id: 1,
       fecha: new Date().toISOString().split('T')[0],
-      estado_cotizacion_id: cotizacion.value.estado_cotizacion_id ?? 1, // default: Evaluacióna
-      observaciones: cotizacion.value.observaciones,
+      estado_cotizacion_id: cotizacion.estado_cotizacion_id ?? 1, // default: Evaluacióna
+      observaciones: cotizacion.observaciones,
       imagenes_ventanas: imagenes, // base64 strings
-      ventanas: cotizacion.value.ventanas.map(v => {
+      ventanas: cotizacion.ventanas.map(v => {
         const relacion = buscarRelacionVidrioProveedor(v.productoVidrioProveedor)
         return {
           tipo_ventana_id: v.tipo,
@@ -568,10 +870,19 @@ const guardarCotizacion = async () => {
           costo_unitario: v.costo_unitario || 0,
           precio: v.precio || 0,
           precio_unitario: v.precio_unitario || 0,
+          tipo_ventana_izquierda: v.tipoVentanaIzquierda ?? null,
+          tipo_ventana_centro: v.tipoVentanaCentro ?? null,
+          tipo_ventana_derecha: v.tipoVentanaDerecha ?? null,
+          ancho_izquierda: v.ancho_izquierda ?? null,
+          ancho_centro: v.ancho_centro ?? null,
+          ancho_derecha: v.ancho_derecha ?? null,
 
         }
       }),
     }
+        // ✅ AGREGAR ESTE LOG
+    console.log('📤 PAYLOAD A ENVIAR:', payload)
+    console.log('📤 VENTANAS ESPECÍFICAS:', payload.ventanas)
 
     await api.post('api/cotizaciones', payload)
 

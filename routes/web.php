@@ -10,6 +10,8 @@ Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']
 
 Route::get('/importar-productos', [ImportacionController::class, 'importarProductos']);
 Route::get('/importar-producto-color-proveedor', [ImportacionController::class, 'importarProductoColorProveedor']);
+Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
+Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
 
 Route::get('/{any}', function () {
     return File::get(public_path('index.html'));

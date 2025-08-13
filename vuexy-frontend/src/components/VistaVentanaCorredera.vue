@@ -1,112 +1,118 @@
 <template>
-  <v-switch
-    v-model="hoja1Adelante"
-    label="Hoja 1 adelante"
-  />
+  <!-- ✅ MOVER EL SWITCH FUERA DEL ÁREA DE CAPTURA -->
+  <div>
+    <div style="margin-bottom: 10px;">
+      <v-switch
+        v-model="hoja1Adelante"
+        label="Hoja 1 adelante"
+        density="compact"
+      />
+    </div>
+    
+    <!-- ✅ STAGE CON LA MISMA ESTRUCTURA QUE LOS OTROS -->
 
- <v-stage ref="stageRef" :config="stageConfig">
-    <v-layer>
-      <!-- Marco con mitras -->
-      <v-line v-bind="topMitra" />
-      <v-line v-bind="rightMitra" />
-      <v-line v-bind="bottomMitra" />
-      <v-line v-bind="leftMitra" />
+    <v-stage ref="stageRef" :config="{ width: 400, height: 400 }">
+      <v-layer>
+        <!-- Marco con mitras -->
+        <v-line v-bind="topMitra" />
+        <v-line v-bind="rightMitra" />
+        <v-line v-bind="bottomMitra" />
+        <v-line v-bind="leftMitra" />
 
-      <!-- Hojas, mitras y números según orden -->
-      <template v-if="hoja1Adelante">
-        <!-- Hoja 2 detrás -->
-        <v-rect v-bind="vidrio2" />
+        <!-- Hojas, mitras y números según orden -->
+        <template v-if="hoja1Adelante">
+          <!-- Hoja 2 detrás -->
+          <v-rect v-bind="vidrio2" />
+          
+          <v-line
+            v-for="(mitra, i) in hoja2Mitras"
+            :key="'mitra-h2-' + i"
+            v-bind="getMitraProps(mitra.points)"
+          />
+          <v-text
+            :x="hoja2X + hojaAncho / 2 - 10"
+            :y="hoja2Y + hojaAlto / 2 - 20"
+            text="2"
+            fontSize="30"
+            fontStyle="bold"
+            fill="black"
+          />
+
+          <!-- Hoja 1 adelante -->
+          <v-rect v-bind="vidrio1" />
+          <v-line
+            v-for="(mitra, i) in hoja1Mitras"
+            :key="'mitra-h1-' + i"
+            v-bind="getMitraProps(mitra.points)"
+          />
+          <v-text
+            :x="hoja1X + hojaAncho / 2 - 10"
+            :y="hoja1Y + hojaAlto / 2 - 20"
+            text="1"
+            fontSize="30"
+            fontStyle="bold"
+            fill="black"
+          />
+        </template>
+
+        <template v-else>
+          <!-- Hoja 1 detrás -->
+          <v-rect v-bind="vidrio1" />
+          <v-line
+            v-for="(mitra, i) in hoja1Mitras"
+            :key="'mitra-h1-' + i"
+            v-bind="getMitraProps(mitra.points)"
+          />
+          <v-text
+            :x="hoja1X + hojaAncho / 2 - 10"
+            :y="hoja1Y + hojaAlto / 2 - 20"
+            text="2"
+            fontSize="30"
+            fontStyle="bold"
+            fill="black"
+          />
+
+          <!-- Hoja 2 adelante -->
+          <v-rect v-bind="vidrio2" />
+          <v-line
+            v-for="(mitra, i) in hoja2Mitras"
+            :key="'mitra-h2-' + i"
+            v-bind="getMitraProps(mitra.points)"
+          />
+          <v-text
+            :x="hoja2X + hojaAncho / 2 - 10"
+            :y="hoja2Y + hojaAlto / 2 - 20"
+            text="1"
+            fontSize="30"
+            fontStyle="bold"
+            fill="black"
+          />
+        </template>
+
+        <!-- Etiquetas -->
+        <v-text v-bind="widthLabel" />
+        <v-text v-bind="heightLabel" />
+        <v-text v-bind="indicador1" />
+        <v-text v-bind="indicador2" />
         
-        <v-line
-          v-for="(mitra, i) in hoja2Mitras"
-          :key="'mitra-h2-' + i"
-          v-bind="getMitraProps(mitra.points)"
-        />
-        <v-text
-          :x="hoja2X + hojaAncho / 2 - 10"
-          :y="hoja2Y + hojaAlto / 2 - 20"
-          text="2"
-          fontSize="30"
-          fontStyle="bold"
-          fill="black"
+        <!-- Manillas -->
+        <Manilla
+          v-if="mostrarManilla1"
+          :x="hoja1X + hojaMarcoAncho - escala*35"  
+          :y="hoja1Y + hojaAlto / 2"
+          :escalaManilla="escala*4"
         />
 
-        <!-- Hoja 1 adelante -->
-        <v-rect v-bind="vidrio1" />
-        <v-line
-          v-for="(mitra, i) in hoja1Mitras"
-          :key="'mitra-h1-' + i"
-          v-bind="getMitraProps(mitra.points)"
+        <Manilla
+          v-if="mostrarManilla2"
+          :x="hoja2X + hojaAncho - hojaMarcoAncho + escala*35"
+          :y="hoja2Y + hojaAlto / 2"
+          :escalaManilla="escala*4"
         />
-        <v-text
-          :x="hoja1X + hojaAncho / 2 - 10"
-          :y="hoja1Y + hojaAlto / 2 - 20"
-          text="1"
-          fontSize="30"
-          fontStyle="bold"
-          fill="black"
-        />
-      </template>
-
-      <template v-else>
-        <!-- Hoja 1 detrás -->
-        <v-rect v-bind="vidrio1" />
-        <v-line
-          v-for="(mitra, i) in hoja1Mitras"
-          :key="'mitra-h1-' + i"
-          v-bind="getMitraProps(mitra.points)"
-        />
-        <v-text
-          :x="hoja1X + hojaAncho / 2 - 10"
-          :y="hoja1Y + hojaAlto / 2 - 20"
-          text="2"
-          fontSize="30"
-          fontStyle="bold"
-          fill="black"
-        />
-
-        <!-- Hoja 2 adelante -->
-        <v-rect v-bind="vidrio2" />
-        <v-line
-          v-for="(mitra, i) in hoja2Mitras"
-          :key="'mitra-h2-' + i"
-          v-bind="getMitraProps(mitra.points)"
-        />
-        <v-text
-          :x="hoja2X + hojaAncho / 2 - 10"
-          :y="hoja2Y + hojaAlto / 2 - 20"
-          text="1"
-          fontSize="30"
-          fontStyle="bold"
-          fill="black"
-        />
-       
-      </template>
-
-      <!-- Etiquetas -->
-      <v-text v-bind="widthLabel" />
-      <v-text v-bind="heightLabel" />
-      <v-text v-bind="indicador1" />
-      <v-text v-bind="indicador2" />
-      <Manilla
-        v-if="mostrarManilla1"
-        :x="hoja1X + hojaMarcoAncho - escala*35"  
-        :y="hoja1Y + hojaAlto / 2"
-        :escalaManilla="escala*4"
-      />
-
-      <Manilla
-        v-if="mostrarManilla2"
-        :x="hoja2X + hojaAncho - hojaMarcoAncho + escala*35"
-        :y="hoja2Y + hojaAlto / 2"
-        :escalaManilla="escala*4"
-      />
-      
-    </v-layer>
-  </v-stage>
+      </v-layer>
+    </v-stage>
+  </div>
 </template>
-
-
 
 
 <script setup>
@@ -121,14 +127,30 @@ import nogalUrl from '@/assets/images/nogal.png'
 const stageRef = ref(null)
 
 const exportarImagen = () => {
+  console.log('🖼️ exportarImagen llamado en VentanaCorredera')
+  console.log('🖼️ stageRef.value:', stageRef.value)
+  
   if (stageRef.value) {
-    const dataURL = stageRef.value.getStage().toDataURL({ pixelRatio: 1,quality: 0.7, })
-    return dataURL
+    try {
+      const stage = stageRef.value.getStage()
+      console.log('🖼️ stage obtenido:', stage)
+      
+      // Forzar redibujado
+      stage.draw()
+      
+      const dataURL = stage.toDataURL({ pixelRatio: 1, quality: 0.9 })
+      console.log('🖼️ dataURL generado:', dataURL.substring(0, 50))
+      return dataURL
+    } catch (error) {
+      console.error('❌ Error en exportarImagen:', error)
+      return null
+    }
   }
+  console.warn('⚠️ stageRef no disponible')
   return null
 }
 
-defineExpose({ exportarImagen }) // esto permite usar el método desde el padree
+defineExpose({ exportarImagen })
 
 
 const texturas = {

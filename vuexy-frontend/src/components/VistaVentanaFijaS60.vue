@@ -1,24 +1,23 @@
 <template>
-  <div>
-    <v-sheet height="400" class="pa-4" color="surface">
-      <v-stage :config="stageConfig">
-        <v-layer>
-          <!-- Marco exterior con biseles -->
-          <v-line :config="topMitra" />
-          <v-line :config="rightMitra" />
-          <v-line :config="bottomMitra" />
-          <v-line :config="leftMitra" />
+  <v-stage :config="{ width: 400, height: 400 }">
+    <v-layer>
+      
+        <!-- Marco exterior con biseles -->
+        <v-line :config="topMitra" />
+        <v-line :config="rightMitra" />
+        <v-line :config="bottomMitra" />
+        <v-line :config="leftMitra" />
 
-          <!-- Vidrio -->
-          <v-rect :config="glassConfig" />
+        <!-- Vidrio -->
+        <v-rect :config="glassConfig" />
 
-          <!-- Etiquetas -->
-          <v-text :config="widthLabel" />
-          <v-text :config="heightLabel" />
-        </v-layer>
-      </v-stage>
-    </v-sheet>
-  </div>
+        <!-- Etiquetas -->
+        <v-text :config="widthLabel" />
+        <v-text :config="heightLabel" />
+      
+    </v-layer>
+  </v-stage>
+
 </template>
 
 <script setup>
@@ -41,8 +40,23 @@ const texturas = {
 texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
 texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href
 
-function getMitraMarco(points) {
-  const nombre = typeof props.colorMarco === 'object' ? props.colorMarco?.nombre?.toLowerCase() : props.colorMarco.toLowerCase()
+const colorMarcoHex = computed(() => {
+  let nombre = ''
+  if (typeof props.colorMarco === 'object' && props.colorMarco?.nombre) {
+    nombre = String(props.colorMarco.nombre).toLowerCase()
+  } else if (typeof props.colorMarco === 'string') {
+    nombre = props.colorMarco.toLowerCase()
+  }
+  return colorHexMap[nombre] || '#ffffff'
+})
+
+function getMitraMarco(points, usoHoja = false) {
+  let nombre = ''
+  if (typeof props.colorMarco === 'object' && props.colorMarco?.nombre) {
+    nombre = String(props.colorMarco.nombre).toLowerCase()
+  } else if (typeof props.colorMarco === 'string') {
+    nombre = props.colorMarco.toLowerCase()
+  }
 
   if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
     return {
@@ -50,7 +64,7 @@ function getMitraMarco(points) {
       closed: true,
       fillPatternImage: texturas[nombre],
       fillPatternRepeat: 'repeat',
-      fillPatternScale: { x: 0.2, y: 0.2 },
+      fillPatternScale: { x: usoHoja ? 0.15 : 0.2, y: usoHoja ? 0.15 : 0.2 },
       stroke: 'black',
     }
   }
@@ -62,18 +76,6 @@ function getMitraMarco(points) {
     stroke: 'black',
   }
 }
-
-
-
-const colorMarcoHex = computed(() => {
-  if (typeof props.colorMarco === 'string') {
-    return colorHexMap[props.colorMarco.toLowerCase()] || '#ffffff'
-  }
-  if (typeof props.colorMarco === 'object' && props.colorMarco?.nombre) {
-    return colorHexMap[props.colorMarco.nombre.toLowerCase()] || '#ffffff'
-  }
-  return '#ffffff'
-})
 
 const props = defineProps({
   ancho: {

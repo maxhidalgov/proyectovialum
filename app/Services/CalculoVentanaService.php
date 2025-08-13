@@ -28,6 +28,10 @@ class CalculoVentanaService
             return self::calcularCorrederaAndes($ventana);
         }
 
+        if ($tipoVentanaId == 53) {
+            return self::calcularCorrederaMonorriel($ventana);
+        }
+
         return [
             'materiales' => [],
             'costo_total' => 0,
@@ -447,7 +451,7 @@ class CalculoVentanaService
     'costo_unitario' => round($costoUnitario),
 ];
 }
-        protected static function calcularCorrederaAndes(array $ventana): array
+        protected static function calcularCorrederaAndes(array $ventana): array //revisar manillas si estan o no..
     {
         $alto = $ventana['alto'];
         $ancho = $ventana['ancho'];
@@ -496,18 +500,18 @@ class CalculoVentanaService
 
         $addLinea(98, 2 * $cantidad, $ancho + 5);
         $addLinea(98, 2 * $cantidad, $alto + 5);
-        $addLinea(94, 4 * $cantidad, (($ancho - 88 + 16) / 2 + 33 + 5));
+        $addLinea(94, 4 * $cantidad, (($ancho/2) - 88 + 16 + 33 + 5));
         $addLinea(94, 4 * $cantidad, $alto - 44 - 44 + 20 + 5);
-        $addLinea($idJunquillo, 4 * $cantidad, (($ancho - 88 + 16) / 2 + 33 + 5) - 109);
+        $addLinea($idJunquillo, 4 * $cantidad, (($ancho/2) - 88 + 16 + 33 + 5) - 109);
         $addLinea($idJunquillo, 4 * $cantidad, ($alto - 44 - 44 + 20 + 5) - 109);
         $addLinea(101, 2 * $cantidad, ($alto - 44 - 44 + 20 + 5 - 6));
-        $addLinea(103, 4 * $cantidad, (($ancho - 88 + 16) / 2 + 33 + 5) - 117);
+        $addLinea(103, 4 * $cantidad, (($ancho/2) - 88 + 16 + 33 + 5) - 117);
         $addLinea(103, 4 * $cantidad, ($alto - 44 - 44 + 20 + 5) - 117);
         $addLinea(104, 2 * $cantidad, $ancho + 5 - 84);
         $addLinea(104, 2 * $cantidad, $alto + 5 - 84);
         $addLinea(51, 2 * $cantidad, $ancho - 44 - 44 - 1);
 
-        $anchoVidrio = (($ancho - 88 + 16) / 2 + 33 + 5) - 109 - 6;
+        $anchoVidrio = ($ancho/2) - 88 + 16 + 33 + 5 - 109 - 6;
         $altoVidrio = ($alto - 44 - 44 + 20 + 5) - 109 - 6;
         $areaVidrio = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
 
@@ -577,6 +581,142 @@ class CalculoVentanaService
         ];
     }
 
+    protected static function calcularCorrederaMonorriel (array $ventana): array //revisar manillas si estan o no..
+    {
+        $alto = $ventana['alto'];
+        $ancho = $ventana['ancho'];
+        $colorId = $ventana['color'];
+        $productoVidrioId = $ventana['productoVidrio'];
+        $proveedorVidrioId = $ventana['proveedorVidrio'];
+        $tipoVidrioId = $ventana['tipoVidrio'] ?? 2;
+        $hojasTotales = $ventana['hojas_totales'] ?? 2;
+        $hojasMoviles = $ventana['hojas_moviles'] ?? 2;
+        $cantidad = $ventana['cantidad'] ?? 1;
+
+        $idJunquillo = match ($tipoVidrioId) {
+            1 => 95, // Monolítico
+            2 => 96, // Termopanel
+            default => 96,
+        };
+
+        $ids = [
+            99, 94, 100, 101, 103, 104, 51,
+            105,106,107,108,109,110,111,112,113,
+            114,115, $idJunquillo, $productoVidrioId
+        ];
+
+        $productos = Producto::with('coloresPorProveedor.proveedor')
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        $materiales = [];
+
+        $addLinea = function ($id, $cant, $largo) use (&$materiales, $productos, $colorId) {
+            $producto = $productos[$id];
+            $largoMt = $largo / 1000;
+            $costoBarra = self::buscarCostoPorColor($producto, $colorId);
+            $costoPorMetro = $producto->largo_total > 0 ? $costoBarra / $producto->largo_total : 0;
+            $materiales[] = [
+                'producto_id' => $producto->id,
+                'nombre' => $producto->nombre,
+                'unidad' => 'm',
+                'cantidad' => round($cant * $largoMt, 3),
+                'costo_unitario' => round($costoPorMetro),
+                'costo_total' => round($cant * $largoMt * $costoPorMetro),
+                'proveedor' => self::buscarNombreProveedor($producto, $colorId),
+            ];
+        };
+
+        $addLinea(99, 2 * $cantidad, $ancho + 5);
+        $addLinea(99, 2 * $cantidad, $alto + 5);
+        $addLinea(94, 2 * $cantidad, (($ancho/2) - 44 + 8 + 33 + 5));
+        $addLinea(94, 2 * $cantidad, $alto - 44 - 44 + 20 + 5);
+        $addLinea(94, 1 * $cantidad, $alto -36-36+4);
+        $addLinea($idJunquillo, 2 * $cantidad, ((($ancho/2) - 44 + 8 + 33 + 5)) - 109);
+        $addLinea($idJunquillo, 2 * $cantidad, ( $alto - 44 - 44 + 20 + 5 - 109));
+        $addLinea($idJunquillo, 2 * $cantidad, (($ancho/2) -36-19) );
+        $addLinea($idJunquillo, 2 * $cantidad, $alto - 37 - 37);
+        $addLinea(101, 2 * $cantidad, (($ancho/2) - 44 + 8 + 33 + 5) - 117); //traslapo
+        $addLinea(103, 2 * $cantidad, (($ancho - 88 + 16) / 2 + 33 + 5) - 117); //refuerzo hoja andes
+        $addLinea(103, 2 * $cantidad, ($alto - 44 - 44 + 20 + 5) - 117); //refuerzo hoja andes
+        $addLinea(103, 1 * $cantidad, $alto -36 - 36 + 4 - 80); //refuerzo hoja andes
+        $addLinea(104, 2 * $cantidad, $ancho + 5 - 84); //refuerzo marco
+        $addLinea(104, 2 * $cantidad, $alto + 5 - 84); //Refuerzo marco
+        $addLinea(51, 2 * $cantidad, $ancho - 44 - 44 - 1); //riel aluminio
+        $addLinea(100, 2 * $cantidad, ($ancho/2) - 36 - 36); //tapa
+        $addLinea(100, 1 * $cantidad, $alto - 36 - 36);// tapa
+    
+
+        $anchoVidrio = (($ancho - 88 + 16) / 2 + 33 + 5) - 109 - 6;
+        $altoVidrio = ($alto - 44 - 44 + 20 + 5) - 109 - 6;
+        $areaVidrio = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+
+        $productoVidrio = $productos[$productoVidrioId];
+        $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
+
+        $materiales[] = [
+            'producto_id' => $productoVidrio->id,
+            'nombre' => $productoVidrio->nombre,
+            'unidad' => 'm2',
+            'cantidad' => round($areaVidrio * $cantidad * 2, 3),
+            'costo_unitario' => round($costoVidrio),
+            'costo_total' => round($costoVidrio * $areaVidrio * 2 * $cantidad),
+            'proveedor' => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
+        ];
+
+        $pesoHoja = $productos[94]->peso_por_metro * ($altoVidrio / 1000)
+                    + $productos[$idJunquillo]->peso_por_metro * ($altoVidrio / 1000)
+                    + $productoVidrio->peso_por_metro * $areaVidrio
+                    + $productos[103]->peso_por_metro * ($altoVidrio / 1000);
+
+        $carroId = $pesoHoja <= 45 ? 114 : 115;
+        $carro = $productos[$carroId];
+        $costoCarro = self::buscarCostoPorColor($carro, $colorId);
+        $materiales[] = [
+            'producto_id' => $carro->id,
+            'nombre' => $carro->nombre,
+            'unidad' => 'unidad',
+            'cantidad' => 2 * $cantidad,
+            'costo_unitario' => round($costoCarro),
+            'costo_total' => round($costoCarro * 2 * $cantidad),
+            'proveedor' => self::buscarNombreProveedor($carro, $colorId),
+        ];
+
+        $cremonaId = null;
+        $ranges = [
+            [400, 716, 111], [717, 916, 112], [917, 1116, 113],
+            [1117, 1316, 105], [1317, 1516, 106], [1517, 1716, 107],
+            [1717, 1916, 108], [1917, 2116, 109], [2117, 2316, 110]
+        ];
+        foreach ($ranges as [$min, $max, $id]) {
+            if ($alto >= $min && $alto <= $max) {
+                $cremonaId = $id;
+                break;
+            }
+        }
+
+        if ($cremonaId) {
+            $cremona = $productos[$cremonaId];
+            $costoCremona = self::buscarCostoPorColor($cremona, $colorId);
+            $materiales[] = [
+                'producto_id' => $cremona->id,
+                'nombre' => $cremona->nombre,
+                'unidad' => 'unidad',
+                'cantidad' => $hojasMoviles * $cantidad,
+                'costo_unitario' => round($costoCremona),
+                'costo_total' => round($costoCremona * ($hojasMoviles == 1 ? 1 : 2) * $cantidad),
+                'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
+            ];
+        }
+
+        $costoTotal = array_sum(array_column($materiales, 'costo_total'));
+        return [
+            'materiales' => $materiales,
+            'costo_total' => round($costoTotal),
+            'costo_unitario' => round($costoTotal / max($cantidad, 1)),
+        ];
+    }
 
   
     public static function obtenerManillaEstrechaIdPorColor($colorId)

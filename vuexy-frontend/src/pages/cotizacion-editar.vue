@@ -160,8 +160,8 @@ const payload = {
   productoVidrioProveedor: ventana.producto_vidrio_proveedor_id,
   productoVidrio: relacion?.producto_id,
   proveedorVidrio: relacion?.proveedor_id,
-    hojas_totales: v.tipo_ventana_id === 3 ? v.hojas_totales : null,
-    hojas_moviles: v.tipo_ventana_id === 3 ? v.hojas_moviles : null
+    hojas_totales: v.tipo_ventana_id === 3 || v.tipo_ventana_id === 46 ? v.hojas_totales : null,
+    hojas_moviles: v.tipo_ventana_id === 3 || v.tipo_ventana_id === 46  ? v.hojas_moviles : null
 }
 
   console.log('➡️ Payload para cálculo:', payload)
@@ -328,7 +328,7 @@ const agregarVentanaDesdeModal = (ventana) => {
     tipoVidrio: ventanaFinal.tipo_vidrio_id,
     productoVidrio: relacion?.producto_id,
     proveedorVidrio: relacion?.proveedor_id,
-    hojas_moviles: ventanaFinal.tipo_ventana_id === 3 ? ventanaFinal.hojas_moviles : undefined,
+    hojas_moviles: ventanaFinal.tipo_ventana_id === 3 || ventanaFinal.tipo_ventana_id === 46  ? ventanaFinal.hojas_moviles : undefined,
   }
 
   console.log('✅ Ejecutando recalcularCosto para ventana agregada...')
@@ -412,8 +412,8 @@ const guardarCambios = async () => {
       costo_unitario: v.costo_unitario || 0,
       precio: v.precio || 0,
       precio_unitario: v.precio_unitario || 0,
-      hojas_totales: v.tipo_ventana_id === 3 ? v.hojas_totales : null,
-      hojas_moviles: v.tipo_ventana_id === 3 ? v.hojas_moviles : null
+      hojas_totales: v.tipo_ventana_id === 3 || v.tipo_ventana_id === 46 ? v.hojas_totales : null,
+      hojas_moviles: v.tipo_ventana_id === 3 || v.tipo_ventana_id === 46? v.hojas_moviles : null
     }))
     }
 
