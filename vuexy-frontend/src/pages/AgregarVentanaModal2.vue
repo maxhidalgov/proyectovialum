@@ -658,6 +658,7 @@
               :tipoVidrio="ventana.tipoVidrio"
               :productoVidrioProveedor="ventana.productoVidrioProveedor"
               :lado-inicial="ventana.ladoApertura || 'izquierda'"
+              v-model:direccionApertura="ventana.direccionApertura"
             />
             <PuertaS60
               v-else-if="ventana.tipo === 50"
@@ -1140,6 +1141,11 @@ async function recalcularCostos() {
         hojas_moviles: [3, 46].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
         hojaMovilSeleccionada: [3, 46].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
         hoja1AlFrente: [3, 46].includes(ventana.value.tipo) ? ventana.value.hoja1AlFrente : undefined,
+        direccionApertura: ventana.value.direccionApertura, 
+        ladoApertura: ventana.value.ladoApertura,
+        pasoLibre: [50, 51].includes(ventana.value.tipo) ? ventana.value.pasoLibre : undefined,
+        hojaActiva: ventana.value.tipo === 51 ? ventana.value.hojaActiva : undefined,
+        tipoVidrio: ventana.value.tipoVidrio,
       }
 
       console.log('Payload a calcular-materiales:', payload)
@@ -1185,7 +1191,10 @@ watch(
     ventana.value.material,
     ventana.value.color,
     ventana.value.tipoVidrio,
-    ventana.value.productoVidrioProveedor
+    ventana.value.productoVidrioProveedor,
+    ventana.value.direccionApertura, // ✅ AGREGAR ESTA LÍNEA
+    ventana.value.ladoApertura,      // ✅ OPCIONAL: También lado apertura
+    ventana.value.pasoLibre,
   ],
   recalcularCostos,
   { immediate: true }

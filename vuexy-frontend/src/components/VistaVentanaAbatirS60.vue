@@ -68,7 +68,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 
 // Props
@@ -92,10 +92,24 @@ const props = defineProps({
   }
 })
 
+// ✅ AGREGAR: Definir emisiones (estaba faltando esta línea)
+const emit = defineEmits(['update:ladoApertura', 'update:direccionApertura'])
 // Estado reactivo
 const ladoApertura = ref(props.ladoInicial)
 // ✅ NUEVO estado
 const direccionApertura = ref(props.direccionApertura)
+
+// ✅ AGREGAR: Watchers para emitir cambios al padre
+watch(ladoApertura, (newValue) => {
+  console.log('🔄 Lado apertura cambió a:', newValue)
+  emit('update:ladoApertura', newValue)
+})
+
+watch(direccionApertura, (newValue) => {
+  console.log('🔄 Dirección apertura cambió a:', newValue)
+  emit('update:direccionApertura', newValue)
+})
+
 
 // Colores y texturas
 const colorHexMap = {

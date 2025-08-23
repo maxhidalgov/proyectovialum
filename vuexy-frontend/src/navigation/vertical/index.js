@@ -1,5 +1,10 @@
 export default [
     {
+    title: 'Home',
+    to: { name: 'root' },
+    icon: { icon: 'tabler-smart-home' },
+  },
+    {
     title: 'Dashboard',
     to: { name: 'dashboardventas' },
     icon: { icon: 'mdi mdi-view-dashboard' },
@@ -9,11 +14,7 @@ export default [
     to: { name: 'comprasmensuales' },
     icon: { icon: 'mdi mdi-view-dashboard' },
   },
-  {
-    title: 'Home',
-    to: { name: 'root' },
-    icon: { icon: 'tabler-smart-home' },
-  },
+
   // {
   //   title: 'Second pages',
   //   to: { name: 'second-page' },
