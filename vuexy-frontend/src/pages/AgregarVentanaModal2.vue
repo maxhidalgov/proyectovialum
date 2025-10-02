@@ -1137,15 +1137,27 @@ async function recalcularCostos() {
         proveedor_id: relacion?.proveedor_id,
         productoVidrio: relacion?.producto_id, // <--- ESTE CAMPO ES OBLIGATORIO
         proveedorVidrio: relacion?.proveedor_id, // (si tu backend lo usa)
-        hojas_totales: [3, 46].includes(ventana.value.tipo) ? ventana.value.hojas_totales : undefined,
-        hojas_moviles: [3, 46].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
-        hojaMovilSeleccionada: [3, 46].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
-        hoja1AlFrente: [3, 46].includes(ventana.value.tipo) ? ventana.value.hoja1AlFrente : undefined,
-        direccionApertura: ventana.value.direccionApertura, 
+        tipoVidrio: ventana.value.tipoVidrio,
+        
+        // ✅ Propiedades específicas por tipo
+        hojas_totales: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hojas_totales : undefined,
+        hojas_moviles: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
+        hojaMovilSeleccionada: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
+        hoja1AlFrente: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hoja1AlFrente : undefined,
+        direccionApertura: ventana.value.direccionApertura,
         ladoApertura: ventana.value.ladoApertura,
         pasoLibre: [50, 51].includes(ventana.value.tipo) ? ventana.value.pasoLibre : undefined,
         hojaActiva: ventana.value.tipo === 51 ? ventana.value.hojaActiva : undefined,
-        tipoVidrio: ventana.value.tipoVidrio,
+
+        ...(ventana.value.tipo === 47 && {
+          ancho_izquierda: ventana.value.ancho_izquierda,
+          ancho_centro: ventana.value.ancho_centro,
+          ancho_derecha: ventana.value.ancho_derecha,
+          tipoVentanaIzquierda: ventana.value.tipoVentanaIzquierda,
+          tipoVentanaCentro: ventana.value.tipoVentanaCentro,
+          tipoVentanaDerecha: ventana.value.tipoVentanaDerecha,
+        })
+
       }
 
       console.log('Payload a calcular-materiales:', payload)
@@ -1195,6 +1207,41 @@ watch(
     ventana.value.direccionApertura, // ✅ AGREGAR ESTA LÍNEA
     ventana.value.ladoApertura,      // ✅ OPCIONAL: También lado apertura
     ventana.value.pasoLibre,
+    ventana.value.ancho_izquierda,
+    ventana.value.ancho_centro,
+    ventana.value.ancho_derecha,
+    // ✅ AGREGAR configuraciones profundas de Bay Window
+    ventana.value.tipoVentanaIzquierda?.compuesta,
+    ventana.value.tipoVentanaIzquierda?.ladoApertura,
+    ventana.value.tipoVentanaIzquierda?.direccionApertura,
+    ventana.value.tipoVentanaIzquierda?.partes?.[0]?.tipo,
+    ventana.value.tipoVentanaIzquierda?.partes?.[0]?.alto,
+    ventana.value.tipoVentanaIzquierda?.partes?.[0]?.ladoApertura,
+    ventana.value.tipoVentanaIzquierda?.partes?.[0]?.direccionApertura,
+    ventana.value.tipoVentanaIzquierda?.partes?.[1]?.tipo,
+    ventana.value.tipoVentanaIzquierda?.partes?.[1]?.alto,
+    ventana.value.tipoVentanaIzquierda?.partes?.[1]?.ladoApertura,
+    ventana.value.tipoVentanaIzquierda?.partes?.[1]?.direccionApertura,
+    
+    // Centro
+    ventana.value.tipoVentanaCentro?.tipo,
+    ventana.value.tipoVentanaCentro?.hojas_totales,
+    ventana.value.tipoVentanaCentro?.hojas_moviles,
+    ventana.value.tipoVentanaCentro?.hojaMovilSeleccionada,
+    ventana.value.tipoVentanaCentro?.hoja1AlFrente,
+    
+    // Derecha
+    ventana.value.tipoVentanaDerecha?.compuesta,
+    ventana.value.tipoVentanaDerecha?.ladoApertura,
+    ventana.value.tipoVentanaDerecha?.direccionApertura,
+    ventana.value.tipoVentanaDerecha?.partes?.[0]?.tipo,
+    ventana.value.tipoVentanaDerecha?.partes?.[0]?.alto,
+    ventana.value.tipoVentanaDerecha?.partes?.[0]?.ladoApertura,
+    ventana.value.tipoVentanaDerecha?.partes?.[0]?.direccionApertura,
+    ventana.value.tipoVentanaDerecha?.partes?.[1]?.tipo,
+    ventana.value.tipoVentanaDerecha?.partes?.[1]?.alto,
+    ventana.value.tipoVentanaDerecha?.partes?.[1]?.ladoApertura,
+    ventana.value.tipoVentanaDerecha?.partes?.[1]?.direccionApertura,
   ],
   recalcularCostos,
   { immediate: true }
