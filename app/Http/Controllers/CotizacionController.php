@@ -347,5 +347,94 @@ public function store(Request $request)
         return response()->json(['id' => $nueva->id, 'message' => 'Cotización duplicada']);
     }
 
+public function getAprobadas()
+{
+    try {
+        Log::info("📄 Obteniendo cotizaciones aprobadas");
+
+        $cotizaciones = Cotizacion::with([
+            'cliente', 
+            'vendedor',
+            'ventanas' => function($query) {
+                $query->with([
+                    'tipoVentana', // ✅ Usar camelCase
+                    'color',
+                    'productoVidrioProveedor' => function($q) {
+                        $q->with(['producto', 'proveedor']);
+                    }
+                ]);
+            },
+            'estado'
+        ])
+        ->whereHas('estado', function($query) {
+            $query->whereIn('nombre', ['Aprobada', 'Facturada', 'Pagada']);
+        })
+        ->orderBy('created_at', 'desc')
+        ->get()
+        ->map(function($cotizacion) {
+            // Mapear estado para el frontend
+            $estadoNombre = $cotizacion->estado->nombre ?? '';
+            
+            $cotizacion->estado_facturacion = match($estadoNombre) {
+                'Aprobada' => 'aprobada',
+                'Facturada' => 'facturada', 
+                'Pagada' => 'pagada',
+                default => 'aprobada'
+            };
+            
+            // Mapear cliente para compatibilidad
+            if ($cotizacion->cliente) {
+                $cotizacion->cliente->nombre = trim($cotizacion->cliente->first_name . ' ' . $cotizacion->cliente->last_name);
+                $cotizacion->cliente->email = $cotizacion->cliente->email;
+                $cotizacion->cliente->telefono = $cotizacion->cliente->phone;
+                $cotizacion->cliente->direccion = $cotizacion->cliente->address;
+            }
+            
+            // Agregar número de cotización
+            $cotizacion->numero = $cotizacion->id;
+            
+            // Fecha de aprobación
+            $cotizacion->fecha_aprobacion = $cotizacion->updated_at;
+            
+            // ✅ Procesar ventanas y mapear tipo_ventana para compatibilidad
+            $cotizacion->ventanas = $cotizacion->ventanas->map(function($ventana) {
+                $ventana->precio_unitario = $ventana->precio;
+                
+                // ✅ Mapear tipoVentana a tipo_ventana para compatibilidad con el frontend
+                if ($ventana->tipoVentana) {
+                    $ventana->tipo_ventana = $ventana->tipoVentana;
+                }
+                
+                return $ventana;
+            });
+            
+            return $cotizacion;
+        });
+
+        Log::info("✅ Cotizaciones obtenidas", [
+            'count' => $cotizaciones->count(),
+            'estados' => $cotizaciones->groupBy('estado_facturacion')->map->count()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'cotizaciones' => $cotizaciones
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error("❌ Error obteniendo cotizaciones aprobadas:", [
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'error' => 'Error interno del servidor',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
 
 }

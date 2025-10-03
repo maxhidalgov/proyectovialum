@@ -23,6 +23,10 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
 
 Route::middleware('api')->group(function () {
+        // Ruta específica para facturación
+    Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
+    // Rutas resource (deben ir DESPUÉS de las rutas específicas)
+    Route::apiResource('cotizaciones', CotizacionController::class);
     Route::get('/productos', [ProductoController::class, 'index']);
     Route::post('/productos', [ProductoController::class, 'store']);
     Route::get('/productos/{id}', [ProductoController::class, 'show']);
@@ -45,7 +49,7 @@ Route::middleware('api')->group(function () {
     Route::post('/bsale-clientes', [BsaleClientController::class, 'store']);
     Route::get('/clientes/buscar', [ClienteController::class, 'buscar']);
     Route::get('/clientes', [ClienteController::class, 'index']);
-    Route::get('proveedores/{productoId}/{colorId}', 'ProductoController@getProveedoresPorProductoYColor');
+    Route::get('proveedores/{productoId}/{colorId}', [ProductoController::class, 'getProveedoresPorProductoYColor']);
     Route::get('/cotizaciones', [CotizacionController::class, 'index']);
     Route::post('/cotizaciones', [CotizacionController::class, 'store']);
     route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
@@ -56,6 +60,20 @@ Route::middleware('api')->group(function () {
     Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
     Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
     Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
+
+
+    // Rutas BSALE
+    Route::prefix('bsale')->group(function () {
+        Route::get('/test-conexion', [\App\Http\Controllers\BsaleController::class, 'testConexion']);
+        Route::get('/tipos-documento', [\App\Http\Controllers\BsaleController::class, 'getTiposDocumento']);
+        Route::get('/oficinas', [\App\Http\Controllers\BsaleController::class, 'getOficinas']);
+        Route::get('/clientes', [\App\Http\Controllers\BsaleController::class, 'getClientes']);
+        Route::post('/clientes', [\App\Http\Controllers\BsaleController::class, 'crearCliente']);
+        Route::post('/documento', [\App\Http\Controllers\BsaleController::class, 'crearDocumentoDesdeCotzacion']);
+        Route::get('/documento/{id}', [\App\Http\Controllers\BsaleController::class, 'getDocumento']);
+        Route::get('/documento/{id}/pdf', [\App\Http\Controllers\BsaleController::class, 'descargarPdf']);
+        Route::post('/documento/{id}/enviar-email', [\App\Http\Controllers\BsaleController::class, 'enviarEmail']);
+    });
 
     // routes/api.php
     Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);

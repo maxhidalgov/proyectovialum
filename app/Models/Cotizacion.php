@@ -8,14 +8,18 @@ class Cotizacion extends Model
 {
     protected $table = 'cotizaciones';
     protected $fillable = [
-    'cliente_id',
-    'vendedor_id',
-    'fecha',
-    'estado_cotizacion_id',
-    'observaciones',
-    'total',
-    'origen_id',
-];
+        'cliente_id',
+        'vendedor_id',
+        'fecha',
+        'estado_cotizacion_id',
+        'observaciones',
+        'total',
+        'origen_id',
+        'numero_documento_bsale',
+        'id_documento_bsale',
+        'fecha_documento_bsale',
+        'estado_facturacion',
+    ];
 
     public function cliente()
     {
@@ -35,4 +39,9 @@ class Cotizacion extends Model
 {
     return $this->belongsTo(EstadoCotizacion::class, 'estado_cotizacion_id');
 }
+
+    public function cotizacionDetalles()
+    {
+        return $this->hasMany(CotizacionDetalle::class);
+    }
 }
