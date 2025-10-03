@@ -61,6 +61,11 @@ export default [
     to: { name: 'cotizaciones' },
     icon: { icon: 'tabler-file' },
   },
+    {
+    title: 'Facturacion',
+    to: { name: 'facturacion' },
+    icon: { icon: 'mdi-file-document-multiple' },
+  },
   {
     title: 'Visor',
     to: { name: 'visor' },

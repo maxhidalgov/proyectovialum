@@ -34,6 +34,7 @@ declare module 'vue-router/auto-routes' {
     'cotizador-index-posiblenuevo': RouteRecordInfo<'cotizador-index-posiblenuevo', '/cotizador/indexPOSIBLENUEVO', Record<never, never>, Record<never, never>>,
     'cotizador2': RouteRecordInfo<'cotizador2', '/cotizador2', Record<never, never>, Record<never, never>>,
     'dashboardventas': RouteRecordInfo<'dashboardventas', '/dashboardventas', Record<never, never>, Record<never, never>>,
+    'facturacion': RouteRecordInfo<'facturacion', '/facturacion', Record<never, never>, Record<never, never>>,
     'listado-productos': RouteRecordInfo<'listado-productos', '/listado-productos', Record<never, never>, Record<never, never>>,
     'login': RouteRecordInfo<'login', '/login', Record<never, never>, Record<never, never>>,
     'productos': RouteRecordInfo<'productos', '/productos', Record<never, never>, Record<never, never>>,
