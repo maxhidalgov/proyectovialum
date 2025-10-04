@@ -43,8 +43,12 @@ Route::middleware('api')->group(function () {
     Route::get('/tipos_ventana', [TipoVentanaController::class, 'index']);
     Route::post('/cotizador/calcular-materiales', [App\Http\Controllers\CotizadorController::class, 'calcularMateriales']);
     Route::get('/bsale-clientes', [BsaleClientController::class, 'index']);
+    Route::get('/bsale-clientes/buscar', [BsaleClientController::class, 'search']);
+    Route::get('/bsale-oficinas', [BsaleClientController::class, 'getOffices']);
+    Route::get('/bsale-tipos-documento', [BsaleClientController::class, 'getDocumentTypes']);
     Route::post('/clientes', [ClienteController::class, 'store']);
     Route::post('/clientes/importar-todos', [\App\Http\Controllers\ClienteController::class, 'importarTodos']);
+    Route::post('/clientes/sincronizar-bsale', [ClienteController::class, 'sincronizarBsale']);
     Route::post('/bsale-clientes/crear', [ClienteController::class, 'crearClienteBsale']);
     Route::post('/bsale-clientes', [BsaleClientController::class, 'store']);
     Route::get('/clientes/buscar', [ClienteController::class, 'buscar']);

@@ -19,6 +19,8 @@ class Cotizacion extends Model
         'id_documento_bsale',
         'fecha_documento_bsale',
         'estado_facturacion',
+        'url_pdf_bsale',
+        'token_bsale',
     ];
 
     public function cliente()

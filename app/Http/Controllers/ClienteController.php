@@ -14,7 +14,10 @@ class ClienteController extends Controller
      */
     public function index()
     {
-        return Cliente::all();
+        // Solo mostrar clientes sincronizados de Bsale
+        return Cliente::whereNotNull('bsale_id')
+            ->orderBy('razon_social', 'asc')
+            ->get();
     }
 
     /**
@@ -205,5 +208,26 @@ public function buscar(Request $request)
     return response()->json($clientes);
 }
 
+public function sincronizarBsale()
+{
+    try {
+        // Ejecutar el comando de sincronización
+        \Illuminate\Support\Facades\Artisan::call('bsale:sincronizar-clientes');
+        
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Sincronización completada exitosamente',
+            'output' => $output
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error al sincronizar clientes',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 
 }

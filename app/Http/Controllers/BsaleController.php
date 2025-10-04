@@ -105,12 +105,16 @@ class BsaleController extends Controller
                     'id_documento_bsale' => $response['data']['id'] ?? null,
                     'fecha_documento_bsale' => now(),
                     'estado_facturacion' => 'facturada',
-                    'estado_cotizacion_id' => 3 // Cambiar a "Facturada"
+                    'estado_cotizacion_id' => 6, // Cambiar a "Facturada" (ID 6)
+                    'url_pdf_bsale' => $response['data']['urlPdf'] ?? null,
+                    'token_bsale' => $response['data']['token'] ?? null
                 ]);
 
                 Log::info("✅ Documento BSALE creado", [
                     'bsale_id' => $response['data']['id'],
-                    'numero' => $response['data']['number']
+                    'numero' => $response['data']['number'],
+                    'pdf_url' => $response['data']['urlPdf'] ?? 'No disponible',
+                    'token' => $response['data']['token'] ?? 'No disponible'
                 ]);
 
                 return response()->json([

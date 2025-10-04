@@ -10,6 +10,8 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
 use App\Models\EstadoCotizacion;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Cliente;
+use App\Services\BsaleClientService;
 
 class CotizacionController extends Controller
 {
@@ -47,9 +49,26 @@ public function store(Request $request)
     try {
         DB::beginTransaction();
 
-        // Crear cotización
+        // Validar que el cliente existe
+        $cliente = \App\Models\Cliente::find($request->cliente_id);
+        if (!$cliente) {
+            Log::error("❌ CLIENTE NO ENCONTRADO", [
+                'cliente_id' => $request->cliente_id,
+                'clientes_disponibles' => \App\Models\Cliente::count()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'El cliente seleccionado no existe. Por favor, recarga la página y selecciona el cliente nuevamente.',
+                'error' => 'Cliente no encontrado en la base de datos',
+                'cliente_id' => $request->cliente_id
+            ], 400);
+        }
+
+        // Crear cotización directamente con ID de Bsale
+        // TODO: Implementar sincronización completa con base local
         $cotizacion = Cotizacion::create([
-            'cliente_id' => $request->cliente_id,
+            'cliente_id' => $request->cliente_id, // Por ahora usar ID de Bsale directamente
             'vendedor_id' => $request->vendedor_id,
             'fecha' => $request->fecha,
             'estado_cotizacion_id' => $request->estado_cotizacion_id,

@@ -16,10 +16,13 @@ class BsaleClientController extends Controller
         $this->bsaleService = $bsaleService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $clients = $this->bsaleService->getClients();
+            $limit = $request->get('limit', 50);
+            $offset = $request->get('offset', 0);
+            
+            $clients = $this->bsaleService->getClients($limit, $offset);
             return response()->json($clients);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error al obtener clientes', 'message' => $e->getMessage()], 500);
@@ -69,6 +72,54 @@ class BsaleClientController extends Controller
             return response()->json([
                 'error' => 'Error al crear cliente',
                 'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getOffices()
+    {
+        try {
+            $offices = $this->bsaleService->getOffices();
+            return response()->json($offices);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error al obtener oficinas',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getDocumentTypes()
+    {
+        try {
+            $documentTypes = $this->bsaleService->getDocumentTypes();
+            return response()->json($documentTypes);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error al obtener tipos de documento',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function search(Request $request)
+    {
+        $query = $request->get('q', '');
+        
+        if (strlen($query) < 2) {
+            return response()->json([
+                'items' => [],
+                'message' => 'Ingresa al menos 2 caracteres para buscar'
+            ]);
+        }
+
+        try {
+            $results = $this->bsaleService->searchClients($query);
+            return response()->json($results);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error al buscar clientes',
+                'message' => $e->getMessage()
             ], 500);
         }
     }
