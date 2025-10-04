@@ -266,7 +266,7 @@ const buscarClientes = async (search = '') => {
     if (data.success) {
       clientesBsale.value = (data.clientes.items || []).map(cliente => ({
         ...cliente,
-        nombre_completo: `${cliente.firstName} ${cliente.lastName}`.trim(),
+        nombre_completo: cliente.company || `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim() || 'Sin nombre',
         rut: cliente.code || 'Sin RUT',
         empresa: cliente.company || 'Particular'
       }))
@@ -316,7 +316,7 @@ const generarDocumento = async () => {
 const onClienteCreado = (cliente) => {
   clientesBsale.value.push({
     ...cliente,
-    nombre_completo: `${cliente.firstName} ${cliente.lastName}`.trim()
+    nombre_completo: cliente.company || `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim() || 'Sin nombre'
   })
   form.value.cliente_bsale_id = cliente.id
 }

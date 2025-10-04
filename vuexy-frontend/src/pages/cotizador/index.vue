@@ -13,21 +13,49 @@
         <v-col cols="6" md="4">
           <v-row no-gutters align="center">
             <v-col>
-              <v-combobox
-                v-model="form.cliente"
-                :rules="[v => !!v || 'Selecciona un cliente']"
-                v-model:search="clienteSearch"
-                :items="clientesFiltrados"
-                item-title="razon_social"
-                item-value="uid"
-                label="Cliente"
-                return-object
-                clearable
-                :menu-props="{ virtualScroll: false }"
-                :key="comboboxKey"
-                outlined
-                color="primary"
-              />
+              <!-- BUSCADOR TÍPICO CON DROPDOWN -->
+              <div style="position: relative;">
+                <v-text-field
+                  v-model="terminoBusquedaCliente"
+                  @input="buscarClientesSimple"
+                  @focus="onFocusBuscador"
+                  label="Cliente"
+                  placeholder="Buscar por RUT o nombre..."
+                  outlined
+                  clearable
+                  :loading="buscandoClientes"
+                  color="primary"
+                  @clear="limpiarBusqueda"
+                  :append-inner-icon="form.cliente ? 'mdi-check-circle' : 'mdi-magnify'"
+                  :hint="form.cliente ? `Seleccionado: ${form.cliente.razon_social}` : ''"
+                  persistent-hint
+                  readonly-when-selected
+                />
+                
+                <!-- DROPDOWN DE RESULTADOS -->
+                <v-card
+                  v-if="mostrarDropdown && clientesBuscados.length > 0 && !form.cliente"
+                  style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 300px; overflow-y: auto;"
+                  class="mt-1"
+                  elevation="8"
+                >
+                  <v-list density="compact">
+                    <v-list-item
+                      v-for="cliente in clientesBuscados"
+                      :key="cliente.id"
+                      @click="seleccionarCliente(cliente)"
+                      class="cursor-pointer"
+                      hover
+                    >
+                      <template v-slot:prepend>
+                        <v-icon>mdi-account</v-icon>
+                      </template>
+                      <v-list-item-title>{{ cliente.razon_social }}</v-list-item-title>
+                      <v-list-item-subtitle>{{ cliente.identification }}</v-list-item-subtitle>
+                    </v-list-item>
+                  </v-list>
+                </v-card>
+              </div>
             </v-col>
             <v-col cols="auto">
               <v-btn icon color="primary" @click="abrirModalCliente" class="ml-2">
@@ -384,6 +412,11 @@ const tiposVidrio = ref([])
 const productosVidrio = ref([])
 
 const clientes = ref([])
+const clientesBuscados = ref([])
+const buscandoClientes = ref(false)
+const clienteAutocomplete = ref(null)
+const terminoBusquedaCliente = ref('')
+const mostrarDropdown = ref(false)
 
 const clienteSearch = ref('')
 const modalCliente = ref(false)
@@ -420,25 +453,46 @@ const productosVidrioFiltradosGeneral = computed(() => {
 })
 
 onMounted(async () => {
-  const [
-    materialesRes, coloresRes, tiposProductoRes,
-    productosRes, tiposVentanaRes, clientesRes
-  ] = await Promise.all([
-    api.get('/api/tipos_material'),
-    api.get('/api/colores'),
-    api.get('/api/tipos_producto'),
-    api.get('/api/productos'),
-    api.get('/api/tipos_ventana'),
-    api.get('/api/clientes'),
-  ])
+  console.log('🔄 Iniciando carga de datos...')
+  
+  try {
+    // Cargar datos básicos (rápido)
+    const [
+      materialesRes, coloresRes, tiposProductoRes,
+      productosRes, tiposVentanaRes
+    ] = await Promise.all([
+      api.get('/api/tipos_material'),
+      api.get('/api/colores'),
+      api.get('/api/tipos_producto'),
+      api.get('/api/productos'),
+      api.get('/api/tipos_ventana')
+    ])
+    
+    console.log('✅ Datos básicos cargados')
 
   materiales.value = materialesRes.data
   colores.value = coloresRes.data
   tiposVidrio.value = tiposProductoRes.data.filter(tp => [1, 2].includes(tp.id))
   productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
   tiposVentanaTodos.value = tiposVentanaRes.data
-   console.log('TIPOS VENTANA CARGADOS:', tiposVentanaTodos.value)
-  clientes.value = clientesRes.data
+  console.log('TIPOS VENTANA CARGADOS:', tiposVentanaTodos.value)
+  
+  // Cargar solo los primeros clientes (rápido)
+  console.log('🔄 Cargando primeros clientes...')
+  cargarClientesIniciales()
+  
+  // Cerrar dropdown al hacer clic fuera
+  document.addEventListener('click', (e) => {
+    const target = e.target
+    if (!target.closest('.v-text-field') && !target.closest('.v-card')) {
+      mostrarDropdown.value = false
+    }
+  })
+  
+  } catch (error) {
+    console.error('❌ Error cargando datos:', error)
+    alert('Error cargando datos: ' + error.message)
+  }
 })
 
 const buscarRelacionVidrioProveedor = (id) => {
@@ -467,23 +521,7 @@ const productosVidrioFiltradosConProveedor = (ventana) => {
     )
 }
 
-const clientesFiltrados = computed(() => {
-  const filtro = clienteSearch.value.toLowerCase()
-  const vistos = new Set()
-  return clientes.value
-    .filter(c => c.razon_social?.toLowerCase().includes(filtro))
-    .filter(c => {
-      if (vistos.has(c.id)) return false
-      vistos.add(c.id)
-      return true
-    })
-    .map((c, index) => ({
-      uid: `${c.id}-${index}`,
-      id: c.id,
-      razon_social: c.razon_social?.trim(),
-      raw: c,
-    }))
-})
+// Función de clientes filtrados eliminada - ahora usamos búsqueda async
 
 // Ventanas
 const mostrarModalVentana = ref(false)
@@ -681,13 +719,85 @@ watch(() => cotizacion.ventanas, (ventanas) => {
 }, { deep: true })
 
 watch(() => form.cliente, cliente => {
-  if (cliente?.raw) {
-    console.log('✅ Cliente seleccionado:', cliente.raw)
+  console.log('✅ Cliente seleccionado:', cliente)
+  if (cliente) {
+    console.log('✅ Nombre:', cliente.razon_social)
+    console.log('✅ RUT:', cliente.identification)
   }
 })
 
 const abrirModalCliente = () => {
   modalCliente.value = true
+}
+
+// FUNCIONES SIMPLES QUE SÍ FUNCIONAN
+const buscarClientesSimple = async () => {
+  // Si ya hay un cliente seleccionado, no buscar
+  if (form.cliente) {
+    return
+  }
+  
+  const query = terminoBusquedaCliente.value?.trim()
+  console.log('🔍 BÚSQUEDA LOCAL:', query)
+  
+  if (!query || query.length < 2) {
+    clientesBuscados.value = []
+    mostrarDropdown.value = false
+    return
+  }
+  
+  buscandoClientes.value = true
+  mostrarDropdown.value = true
+  
+  try {
+    // Ahora busca en la base de datos local en lugar de Bsale
+    const response = await api.get(`/api/clientes/buscar?q=${encodeURIComponent(query)}`)
+    console.log('✅ RESPUESTA LOCAL:', response.data)
+    
+    if (response.data?.length > 0) {
+      clientesBuscados.value = response.data.map(cliente => ({
+        id: cliente.id,
+        razon_social: cliente.razon_social || `${cliente.first_name || ''} ${cliente.last_name || ''}`.trim() || 'Sin nombre',
+        identification: cliente.identification || '',
+        email: cliente.email || '',
+        phone: cliente.phone || ''
+      }))
+      console.log('✅ CLIENTES PROCESADOS:', clientesBuscados.value)
+      mostrarDropdown.value = true
+    } else {
+      clientesBuscados.value = []
+      mostrarDropdown.value = false
+      console.log('❌ NO HAY CLIENTES')
+    }
+  } catch (error) {
+    console.error('❌ ERROR:', error)
+    clientesBuscados.value = []
+    mostrarDropdown.value = false
+  } finally {
+    buscandoClientes.value = false
+  }
+}
+
+const seleccionarCliente = (cliente) => {
+  console.log('✅ CLIENTE SELECCIONADO:', cliente)
+  form.cliente = cliente
+  terminoBusquedaCliente.value = cliente.razon_social // Mostrar el nombre en el input
+  mostrarDropdown.value = false // Ocultar dropdown
+  clientesBuscados.value = [] // Limpiar resultados
+}
+
+const onFocusBuscador = () => {
+  // Solo mostrar dropdown si hay resultados y NO hay cliente seleccionado
+  if (clientesBuscados.value.length > 0 && !form.cliente) {
+    mostrarDropdown.value = true
+  }
+}
+
+const limpiarBusqueda = () => {
+  terminoBusquedaCliente.value = ''
+  clientesBuscados.value = []
+  mostrarDropdown.value = false
+  form.cliente = null
 }
 
 const guardarCliente = async () => {
@@ -699,6 +809,150 @@ const guardarCliente = async () => {
   } catch (error) {
     alert('❌ Error al crear cliente')
     console.error(error)
+  }
+}
+
+// Función de búsqueda de clientes con debounce
+const buscarClientes = async (query) => {
+  // Si no hay query, usar el término de búsqueda del input
+  if (!query) {
+    query = terminoBusquedaCliente.value
+  }
+  console.log('🔍 Buscando clientes con query:', query)
+  
+  if (!query || query.length < 2) {
+    // Si no hay búsqueda, mostrar los clientes iniciales
+    clientesBuscados.value = clientes.value.slice(0, 20)
+    console.log('📋 Mostrando clientes iniciales:', clientesBuscados.value.length)
+    return
+  }
+
+  buscandoClientes.value = true
+  
+  try {
+    console.log('🌐 Buscando en API de Bsale...')
+    const response = await api.get(`/api/bsale-clientes/buscar?q=${encodeURIComponent(query)}`)
+    
+    console.log('✅ Respuesta de API:', response.data)
+    
+    if (response.data && response.data.items && response.data.items.length > 0) {
+      clientesBuscados.value = response.data.items.map(cliente => {
+        console.log('🔍 Procesando cliente:', cliente)
+        
+        // Construir razon_social de manera más robusta
+        let razonSocial = ''
+        if (cliente.company && cliente.company.trim()) {
+          razonSocial = cliente.company.trim()
+        } else if (cliente.firstName || cliente.lastName) {
+          razonSocial = `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim()
+        } else if (cliente.razon_social) {
+          razonSocial = cliente.razon_social
+        } else if (cliente.displayName) {
+          razonSocial = cliente.displayName
+        } else {
+          razonSocial = 'Cliente sin nombre'
+        }
+        
+        // Asegurarse de que no esté vacío
+        if (!razonSocial || razonSocial.trim() === '') {
+          razonSocial = `Cliente ID: ${cliente.id}`
+        }
+        
+        const clienteProcesado = {
+          id: cliente.id,
+          razon_social: razonSocial,
+          identification: cliente.identification || '',
+          email: cliente.email || '',
+          phone: cliente.phone || '',
+          address: cliente.address || '',
+          city: cliente.city || '',
+          municipality: cliente.municipality || '',
+          first_name: cliente.firstName || '',
+          last_name: cliente.lastName || '',
+          company: cliente.company || '',
+          tipo_cliente: cliente.companyOrPerson == 1 ? 'empresa' : 'persona'
+        }
+        
+        console.log('✅ Cliente procesado:', clienteProcesado)
+        return clienteProcesado
+      })
+      
+      console.log('✅ Total clientes procesados:', clientesBuscados.value.length)
+      console.log('✅ Lista final:', clientesBuscados.value)
+      
+      // Verificar estructura para autocomplete
+      if (clientesBuscados.value.length > 0) {
+        console.log('🔍 Primer cliente para autocomplete:', {
+          id: clientesBuscados.value[0].id,
+          razon_social: clientesBuscados.value[0].razon_social,
+          hasId: !!clientesBuscados.value[0].id,
+          hasTitle: !!clientesBuscados.value[0].razon_social
+        })
+        
+        // Forzar que se abra el menú después de un pequeño delay
+        setTimeout(() => {
+          if (clienteAutocomplete.value && clienteAutocomplete.value.menu) {
+            console.log('🎯 Forzando apertura del menú...')
+            clienteAutocomplete.value.menu = true
+          }
+        }, 100)
+      }
+    } else {
+      console.log('❌ No se encontraron clientes en la respuesta')
+      clientesBuscados.value = []
+    }
+    
+  } catch (error) {
+    console.error('❌ Error en búsqueda:', error)
+    console.error('❌ Detalles del error:', error.response?.data)
+    clientesBuscados.value = []
+  } finally {
+    buscandoClientes.value = false
+  }
+}
+
+const buscarClientesDebounced = debounce(buscarClientes, 300)
+
+// Texto dinámico para cuando no hay resultados
+const getNoDataText = () => {
+  if (buscandoClientes.value) {
+    return 'Buscando clientes...'
+  }
+  if (!clienteSearch.value || clienteSearch.value.length < 2) {
+    return 'Escribe al menos 2 caracteres para buscar'
+  }
+  return 'No se encontraron clientes con ese criterio'
+}
+
+// Función para cargar solo los primeros clientes (rápido)
+const cargarClientesIniciales = async () => {
+  try {
+    // Cargar solo los primeros 50 clientes (límite de Bsale por página)
+    const response = await api.get('/api/bsale-clientes?limit=50&offset=0')
+    console.log('✅ Primeros clientes cargados:', response.data)
+    
+    const clientesProcesados = response.data.items?.map(cliente => ({
+      id: cliente.id,
+      razon_social: cliente.razon_social || cliente.displayName || 'Sin nombre',
+      identification: cliente.identification,
+      email: cliente.email,
+      phone: cliente.phone,
+      address: cliente.address,
+      city: cliente.city,
+      municipality: cliente.municipality,
+      first_name: cliente.firstName,
+      last_name: cliente.lastName,
+      company: cliente.company,
+      tipo_cliente: cliente.companyOrPerson == 1 ? 'empresa' : 'persona'
+    })) || []
+    
+    clientes.value = clientesProcesados
+    clientesBuscados.value = clientesProcesados.slice(0, 20)
+    
+    console.log('✅ Clientes iniciales listos:', clientes.value.length)
+  } catch (error) {
+    console.error('❌ Error cargando clientes iniciales:', error)
+    clientesBuscados.value = []
   }
 }
 
@@ -843,7 +1097,7 @@ const guardarCotizacion = async () => {
     console.log('🖼️ IMÁGENES CAPTURADAS:', imagenes)
     console.log('🖼️ NÚMERO DE IMÁGENES:', imagenes.length)
     console.log('🖼️ PRIMERA IMAGEN (primeros 100 chars):', imagenes[0]?.substring(0, 100))
-    const clienteSeleccionado = form.cliente?.raw
+    const clienteSeleccionado = form.cliente
     if (!clienteSeleccionado || cotizacion.ventanas.length === 0) {
       alert('Debes seleccionar un cliente y agregar al menos una ventana')
       return

@@ -88,9 +88,14 @@
 
         <!-- Cliente -->
         <template #item.cliente="{ item }">
-          <div>
-            <div class="font-weight-medium">{{ item.cliente?.first_name }} {{ item.cliente?.last_name }}</div>
-            <div class="text-caption text-medium-emphasis">{{ item.cliente?.email }}</div>
+          <div v-if="item.cliente">
+            <div class="font-weight-medium">
+              {{ item.cliente.razon_social || `${item.cliente.first_name || ''} ${item.cliente.last_name || ''}`.trim() || 'Sin nombre' }}
+            </div>
+            <div class="text-caption text-medium-emphasis">{{ item.cliente.email || item.cliente.identification }}</div>
+          </div>
+          <div v-else class="text-caption text-medium-emphasis">
+            Sin cliente
           </div>
         </template>
 
@@ -142,7 +147,7 @@
               @click="verDocumento(item)"
             >
               <v-icon start>mdi-file-pdf-box</v-icon>
-              Ver PDF
+              Descargar Documento
             </v-btn>
 
             <!-- Acciones secundarias -->
@@ -324,7 +329,10 @@ const cotizacionesFiltradas = computed(() => {
     const busqueda = filtros.value.busqueda.toLowerCase()
     resultado = resultado.filter(c => 
       c.numero?.toString().includes(busqueda) ||
-      c.cliente?.nombre?.toLowerCase().includes(busqueda) ||
+      c.cliente?.razon_social?.toLowerCase().includes(busqueda) ||
+      c.cliente?.first_name?.toLowerCase().includes(busqueda) ||
+      c.cliente?.last_name?.toLowerCase().includes(busqueda) ||
+      c.cliente?.identification?.toLowerCase().includes(busqueda) ||
       c.cliente?.email?.toLowerCase().includes(busqueda)
     )
   }
@@ -473,6 +481,13 @@ const onDocumentoGenerado = async (documento) => {
 }
 
 const verDocumento = async (cotizacion) => {
+  // Si ya tenemos la URL del PDF guardada, abrirla directamente
+  if (cotizacion.url_pdf_bsale) {
+    window.open(cotizacion.url_pdf_bsale, '_blank')
+    return
+  }
+  
+  // Si no hay URL guardada pero hay ID del documento, intentar obtener el PDF de Bsale
   if (cotizacion.id_documento_bsale) {
     try {
       const response = await api.get(`/api/bsale/documento/${cotizacion.id_documento_bsale}/pdf`)

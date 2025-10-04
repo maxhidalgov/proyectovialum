@@ -256,8 +256,11 @@ export default {
       console.log('🔄 Cargando datos iniciales BSALE...')
       
       try {
-        // Por ahora usar tipos de documento estáticos para evitar errores CORS
-        // TODO: Habilitar carga dinámica cuando se resuelvan los endpoints
+        // Cargar oficinas desde Bsale
+        await this.cargarOficinas()
+        
+        // Cargar tipos de documento desde Bsale
+        await this.cargarTiposDocumento()
         
         // Buscar cliente del cliente de la cotización
         if (this.cotizacion?.cliente?.rut || this.cotizacion?.cliente?.identification) {
@@ -271,8 +274,43 @@ export default {
         console.error('Response:', error.response?.data)
         console.error('Status:', error.response?.status)
         console.error('URL:', error.config?.url)
-        // this.$toast.error('Error al cargar datos de BSALE')
-        alert('Error al cargar datos de BSALE: ' + (error.message || 'Error desconocido'))
+        this.$toast?.error('Error al cargar datos de BSALE')
+      }
+    },
+
+    async cargarOficinas() {
+      try {
+        const response = await api.get('/api/bsale-oficinas')
+        this.oficinas = response.data.items.map(oficina => ({
+          id: oficina.id,
+          name: oficina.name,
+          description: oficina.description,
+          address: oficina.address
+        }))
+        console.log('✅ Oficinas cargadas:', this.oficinas.length)
+      } catch (error) {
+        console.error('❌ Error cargando oficinas:', error)
+        // Fallback con datos básicos
+        this.oficinas = [
+          { id: 1, name: 'Oficina Principal' }
+        ]
+      }
+    },
+
+    async cargarTiposDocumento() {
+      try {
+        const response = await api.get('/api/bsale-tipos-documento')
+        this.tiposDocumento = response.data.items.map(tipo => ({
+          id: tipo.id,
+          name: tipo.name,
+          codeSii: tipo.codeSii,
+          description: tipo.description
+        }))
+        console.log('✅ Tipos de documento cargados:', this.tiposDocumento.length)
+      } catch (error) {
+        console.error('❌ Error cargando tipos de documento:', error)
+        // Mantener los tipos estáticos como fallback
+        console.log('Usando tipos de documento estáticos como fallback')
       }
     },
 
@@ -288,7 +326,7 @@ export default {
         if (response.data.success) {
           this.clientesBsale = response.data.clientes.items?.map(cliente => ({
             ...cliente,
-            displayName: `${cliente.firstName} ${cliente.lastName} - ${cliente.code}`
+            displayName: `${cliente.company || `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim() || 'Sin nombre'} - ${cliente.code}`
           })) || []
         }
       } catch (error) {
@@ -309,7 +347,7 @@ export default {
           const clientes = response.data.clientes.items || []
           this.clientesBsale = clientes.map(cliente => ({
             ...cliente,
-            displayName: `${cliente.firstName} ${cliente.lastName} - ${cliente.code}`
+            displayName: `${cliente.company || `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim() || 'Sin nombre'} - ${cliente.code}`
           }))
 
           // Si encontramos el cliente, seleccionarlo automáticamente
@@ -333,7 +371,7 @@ export default {
       // Agregar el nuevo cliente a la lista
       this.clientesBsale.unshift({
         ...nuevoCliente,
-        displayName: `${nuevoCliente.firstName} ${nuevoCliente.lastName} - ${nuevoCliente.code}`
+        displayName: `${nuevoCliente.company || `${nuevoCliente.firstName || ''} ${nuevoCliente.lastName || ''}`.trim() || 'Sin nombre'} - ${nuevoCliente.code}`
       })
       
       // Seleccionarlo automáticamente
@@ -361,7 +399,7 @@ export default {
         const response = await api.post('/api/bsale/documento', payload)
 
         if (response.data && response.data.success) {
-          const documento = response.data.data
+          const documento = response.data.documento  // Cambiado de response.data.data
           const tipoDoc = this.tiposDocumento.find(t => t.id === this.formulario.tipo_documento)
           
           this.$toast.success(
@@ -385,12 +423,12 @@ export default {
           this.$emit('documento-generado', documento)
           this.cerrar()
         } else {
-          throw new Error(response.data?.error || 'Error desconocido')
+          throw new Error(response.data?.error || response.data?.message || 'Error desconocido')
         }
 
       } catch (error) {
         console.error('Error generando documento:', error)
-        const mensaje = error.response?.data?.error || error.message || 'Error al generar documento'
+        const mensaje = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al generar documento'
         this.$toast.error(mensaje)
       } finally {
         this.generandoDocumento = false

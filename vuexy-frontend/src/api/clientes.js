@@ -11,6 +11,16 @@ export async function fetchBsaleClientes() {
     }
 }
 
+export async function fetchClientesLocales() {
+    try {
+      const response = await api.get('/api/clientes')
+      return response.data // Array de clientes de la base de datos local
+    } catch (error) {
+      console.error('Error al obtener clientes locales:', error)
+      return []
+    }
+}
+
     export async function importarCliente(cliente) {
         try {
           const response = await api.post('/api/clientes', cliente)
