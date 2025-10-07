@@ -86,13 +86,23 @@ class SincronizarClientesBsale extends Command
                             'giro' => $clienteBsale['giro'] ?? null,
                         ];
 
-                        // Buscar si el cliente ya existe por bsale_id
-                        $clienteExistente = Cliente::where('bsale_id', $clienteBsale['id'])->first();
+                        // Buscar si el cliente ya existe por bsale_id O por RUT
+                        $clienteExistente = Cliente::where('bsale_id', $clienteBsale['id'])
+                            ->orWhere(function($query) use ($clienteBsale) {
+                                if (!empty($clienteBsale['identification'])) {
+                                    $query->where('identification', $clienteBsale['identification']);
+                                }
+                            })
+                            ->first();
 
                         if ($clienteExistente) {
-                            // Actualizar cliente existente
+                            // Actualizar cliente existente (incluyendo el bsale_id si no lo tenía)
                             $clienteExistente->update($datosCliente);
                             $totalActualizados++;
+                            
+                            if (empty($clienteExistente->bsale_id)) {
+                                $this->line("   ✅ Cliente actualizado con bsale_id: {$datosCliente['razon_social']} (RUT: {$datosCliente['identification']})");
+                            }
                         } else {
                             // Crear nuevo cliente
                             Cliente::create($datosCliente);
