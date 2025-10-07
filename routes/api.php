@@ -72,6 +72,7 @@ Route::middleware('api')->group(function () {
         Route::get('/tipos-documento', [\App\Http\Controllers\BsaleController::class, 'getTiposDocumento']);
         Route::get('/oficinas', [\App\Http\Controllers\BsaleController::class, 'getOficinas']);
         Route::get('/clientes', [\App\Http\Controllers\BsaleController::class, 'getClientes']);
+        Route::get('/clientes-sincronizados', [\App\Http\Controllers\BsaleController::class, 'getClientesSincronizados']);
         Route::post('/clientes', [\App\Http\Controllers\BsaleController::class, 'crearCliente']);
         Route::post('/documento', [\App\Http\Controllers\BsaleController::class, 'crearDocumentoDesdeCotzacion']);
         Route::get('/documento/{id}', [\App\Http\Controllers\BsaleController::class, 'getDocumento']);

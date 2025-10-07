@@ -208,6 +208,7 @@ public function store(Request $request)
     {
     $cotizacion = Cotizacion::with([
         'cliente',
+        'clienteFacturacion', // ✅ Agregada relación clienteFacturacion
         'vendedor',
         'ventanas.tipoVentana',
         'ventanas',
@@ -372,7 +373,8 @@ public function getAprobadas()
         Log::info("📄 Obteniendo cotizaciones aprobadas");
 
         $cotizaciones = Cotizacion::with([
-            'cliente', 
+            'cliente',
+            'clienteFacturacion', // ✅ Agregada relación clienteFacturacion
             'vendedor',
             'ventanas' => function($query) {
                 $query->with([

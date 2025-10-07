@@ -333,6 +333,89 @@
     </v-card>
   </v-container>
 
+  <!-- Modal para crear cliente LOCAL -->
+  <v-dialog v-model="modalCliente" max-width="600px">
+    <v-card>
+      <v-card-title class="text-h5 pa-4">
+        <v-icon class="mr-2" color="primary">mdi-account-plus</v-icon>
+        Crear Cliente Nuevo
+      </v-card-title>
+      <v-divider></v-divider>
+      <v-card-text class="pa-4">
+        <v-alert type="info" variant="tonal" class="mb-4">
+          Este cliente se guardará en tu base de datos local. Para facturar, deberás seleccionar un cliente sincronizado con Bsale.
+        </v-alert>
+        <v-form ref="formCliente">
+          <v-row>
+            <v-col cols="12">
+              <v-text-field
+                v-model="nuevoCliente.razon_social"
+                label="Razón Social / Nombre *"
+                :rules="[v => !!v || 'Razón social es requerida']"
+                required
+                outlined
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="nuevoCliente.identification"
+                label="RUT"
+                outlined
+                hint="Formato: 12345678-9"
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="nuevoCliente.email"
+                label="Email"
+                type="email"
+                outlined
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="nuevoCliente.phone"
+                label="Teléfono"
+                outlined
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="nuevoCliente.ciudad"
+                label="Ciudad"
+                outlined
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12">
+              <v-text-field
+                v-model="nuevoCliente.address"
+                label="Dirección"
+                outlined
+              ></v-text-field>
+            </v-col>
+          </v-row>
+        </v-form>
+      </v-card-text>
+      <v-divider></v-divider>
+      <v-card-actions class="pa-4">
+        <v-spacer></v-spacer>
+        <v-btn
+          color="grey"
+          text
+          @click="modalCliente = false"
+        >
+          Cancelar
+        </v-btn>
+        <v-btn
+          color="primary"
+          @click="guardarCliente"
+        >
+          <v-icon left>mdi-content-save</v-icon>
+          Guardar Cliente
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
  
 </template>
 
@@ -423,8 +506,14 @@ const modalCliente = ref(false)
 const comboboxKey = ref(0)
 
 const nuevoCliente = ref({
-  firstName: '', lastName: '', company: '', code: '', email: '',
-  phone: '', city: '', municipality: '', address: '', activity: ''
+  razon_social: '',
+  identification: '',
+  email: '',
+  phone: '',
+  address: '',
+  ciudad: '',
+  comuna: '',
+  giro: ''
 })
 
 const productosVidrioCombinados = computed(() => {
@@ -802,13 +891,47 @@ const limpiarBusqueda = () => {
 
 const guardarCliente = async () => {
   try {
-    const res = await api.post('/api/bsale-clientes', nuevoCliente.value)
-    clientes.value.push(res.data.cliente)
-    form.cliente = res.data.cliente
+    console.log('💾 Guardando cliente local:', nuevoCliente.value)
+    
+    // Guardar en la tabla local de clientes
+    const res = await api.post('/api/clientes', nuevoCliente.value)
+    
+    console.log('✅ Respuesta completa:', res.data)
+    
+    // La API devuelve { message, cliente }
+    const clienteCreado = res.data.cliente || res.data
+    
+    console.log('✅ Cliente creado:', clienteCreado)
+    
+    // Agregar a la lista de clientes disponibles
+    clientesBuscados.value.push(clienteCreado)
+    
+    // Seleccionar el cliente recién creado usando el mismo flujo que seleccionarCliente
+    form.cliente = clienteCreado
+    cotizacion.cliente_id = clienteCreado.id
+    terminoBusquedaCliente.value = clienteCreado.razon_social
+    mostrarDropdown.value = false
+    clientesBuscados.value = []
+    
+    // Cerrar modal y limpiar formulario
     modalCliente.value = false
+    nuevoCliente.value = {
+      razon_social: '',
+      identification: '',
+      email: '',
+      phone: '',
+      address: '',
+      ciudad: ''
+    }
+    
+    console.log('✅ Cliente seleccionado:', form.cliente)
+    console.log('✅ Cliente ID asignado:', cotizacion.cliente_id)
+    console.log('✅ Término búsqueda:', terminoBusquedaCliente.value)
+    
+    alert('✅ Cliente creado y seleccionado exitosamente')
   } catch (error) {
-    alert('❌ Error al crear cliente')
-    console.error(error)
+    console.error('❌ Error al crear cliente:', error)
+    alert('❌ Error al crear cliente: ' + (error.response?.data?.message || error.message))
   }
 }
 

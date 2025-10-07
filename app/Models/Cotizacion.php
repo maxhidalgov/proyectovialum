@@ -9,6 +9,7 @@ class Cotizacion extends Model
     protected $table = 'cotizaciones';
     protected $fillable = [
         'cliente_id',
+        'cliente_facturacion_id',
         'vendedor_id',
         'fecha',
         'estado_cotizacion_id',
@@ -26,6 +27,11 @@ class Cotizacion extends Model
     public function cliente()
     {
         return $this->belongsTo(Cliente::class);
+    }
+
+    public function clienteFacturacion()
+    {
+        return $this->belongsTo(Cliente::class, 'cliente_facturacion_id');
     }
 
     public function vendedor()

@@ -60,8 +60,70 @@
               ></v-select>
             </v-col>
 
-            <!-- Cliente BSALE -->
+            <!-- Cliente BSALE para facturación -->
             <v-col cols="12">
+              <v-alert 
+                :type="formulario.tipo_documento == 1 ? 'success' : 'info'" 
+                variant="tonal" 
+                class="mb-3"
+              >
+                <div class="d-flex align-center">
+                  <v-icon class="mr-2">mdi-information</v-icon>
+                  <div v-if="formulario.tipo_documento == 1">
+                    <strong>Boleta Electrónica:</strong> Para boletas no es necesario seleccionar un cliente específico.
+                    <br>
+                    <small>Si no seleccionas un cliente, se usará "Consumidor Final".</small>
+                  </div>
+                  <div v-else>
+                    <strong>Cliente de facturación:</strong> Selecciona el cliente que aparecerá en la factura de Bsale.
+                    <br>
+                    <small>Solo se muestran clientes sincronizados con Bsale. <strong>Campo obligatorio para facturas.</strong></small>
+                  </div>
+                </div>
+              </v-alert>
+              
+              <v-autocomplete
+                v-model="formulario.cliente_facturacion_id"
+                :items="clientesSincronizados"
+                item-value="id"
+                :item-title="item => `${item.razon_social} (${item.identification || 'Sin RUT'})`"
+                :label="formulario.tipo_documento == 1 ? 'Cliente para facturación (Opcional)' : 'Cliente para facturación'"
+                :loading="cargandoClientesSincronizados"
+                :rules="formulario.tipo_documento == 1 ? [] : [v => !!v || 'Cliente de facturación es requerido para facturas']"
+                :required="formulario.tipo_documento != 1"
+                outlined
+                prepend-inner-icon="mdi-account-cash"
+                clearable
+                :hint="formulario.tipo_documento == 1 ? 'Opcional: Deja en blanco para usar Consumidor Final' : 'Selecciona el cliente que recibirá la factura'"
+                persistent-hint
+              >
+                <template v-slot:item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template v-slot:title>
+                      {{ item.raw.razon_social }}
+                    </template>
+                    <template v-slot:subtitle>
+                      RUT: {{ item.raw.identification || 'Sin RUT' }} | Bsale ID: {{ item.raw.bsale_id }}
+                    </template>
+                  </v-list-item>
+                </template>
+                <template v-slot:no-data>
+                  <v-list-item>
+                    <v-list-item-content>
+                      <v-list-item-title>
+                        No hay clientes sincronizados
+                      </v-list-item-title>
+                      <v-list-item-subtitle>
+                        Ejecuta el comando de sincronización en el servidor
+                      </v-list-item-subtitle>
+                    </v-list-item-content>
+                  </v-list-item>
+                </template>
+              </v-autocomplete>
+            </v-col>
+
+            <!-- Cliente BSALE (oculto, ya no se usa el antiguo campo) -->
+            <v-col cols="12" v-if="false">
               <v-autocomplete
                 v-model="formulario.cliente_bsale_id"
                 :items="clientesBsale"
@@ -207,6 +269,7 @@ export default {
       formValid: false,
       generandoDocumento: false,
       cargandoClientes: false,
+      cargandoClientesSincronizados: false,
       busquedaCliente: '',
       dialogCrearCliente: false,
       tiposDocumento: [
@@ -216,6 +279,7 @@ export default {
       ],
       oficinas: [],
       clientesBsale: [],
+      clientesSincronizados: [],
       metodosPago: [
         { text: 'Efectivo', value: 'efectivo' },
         { text: 'Transferencia', value: 'transferencia' },
@@ -227,6 +291,7 @@ export default {
         tipo_documento: null,
         oficina_id: null,
         cliente_bsale_id: null,
+        cliente_facturacion_id: null,
         metodo_pago: 'transferencia',
         condiciones_pago: '30 días',
         fecha_vencimiento: this.getFechaVencimiento(),
@@ -262,9 +327,17 @@ export default {
         // Cargar tipos de documento desde Bsale
         await this.cargarTiposDocumento()
         
-        // Buscar cliente del cliente de la cotización
-        if (this.cotizacion?.cliente?.rut || this.cotizacion?.cliente?.identification) {
-          await this.buscarClientesPorRut(this.cotizacion.cliente.rut || this.cotizacion.cliente.identification)
+        // Cargar clientes sincronizados
+        await this.cargarClientesSincronizados()
+        
+        // Si la cotización tiene un cliente con bsale_id, seleccionarlo automáticamente
+        if (this.cotizacion?.cliente?.id) {
+          const clienteSincronizado = this.clientesSincronizados.find(
+            c => c.id === this.cotizacion.cliente.id
+          )
+          if (clienteSincronizado) {
+            this.formulario.cliente_facturacion_id = clienteSincronizado.id
+          }
         }
 
         console.log('✅ Datos iniciales cargados correctamente')
@@ -311,6 +384,23 @@ export default {
         console.error('❌ Error cargando tipos de documento:', error)
         // Mantener los tipos estáticos como fallback
         console.log('Usando tipos de documento estáticos como fallback')
+      }
+    },
+
+    async cargarClientesSincronizados() {
+      this.cargandoClientesSincronizados = true
+      try {
+        const response = await api.get('/api/bsale/clientes-sincronizados')
+        
+        if (response.data.success) {
+          this.clientesSincronizados = response.data.clientes
+          console.log('✅ Clientes sincronizados cargados:', this.clientesSincronizados.length)
+        }
+      } catch (error) {
+        console.error('❌ Error cargando clientes sincronizados:', error)
+        this.$toast?.error('Error al cargar clientes sincronizados')
+      } finally {
+        this.cargandoClientesSincronizados = false
       }
     },
 
@@ -389,12 +479,14 @@ export default {
         const payload = {
           cotizacion_id: this.cotizacion.id,
           tipo_documento: this.formulario.tipo_documento,
-          cliente_bsale_id: this.formulario.cliente_bsale_id,
+          cliente_facturacion_id: this.formulario.cliente_facturacion_id,
           metodo_pago: this.formulario.metodo_pago,
           condiciones_pago: this.formulario.condiciones_pago,
           fecha_vencimiento: this.formulario.fecha_vencimiento,
           observaciones: this.formulario.observaciones
         }
+
+        console.log('📤 Enviando documento a Bsale:', payload)
 
         const response = await api.post('/api/bsale/documento', payload)
 

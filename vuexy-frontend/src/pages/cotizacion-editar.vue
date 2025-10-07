@@ -501,6 +501,12 @@ cotizacion.value = cotizacionBase
 
     // 5. Asignar datos auxiliares
     clientes.value = clientesRes.data
+    
+    // Asegurarse de que el cliente de la cotización esté en la lista
+    if (cotizacionBase.cliente && !clientes.value.find(c => c.id === cotizacionBase.cliente.id)) {
+      clientes.value.unshift(cotizacionBase.cliente)
+    }
+    
     materiales.value = materialesRes.data
     cotizacionOriginal.value = JSON.parse(JSON.stringify(cotizacion.value))
     tiposVentanaTodos.value = tiposVentanaRes.data

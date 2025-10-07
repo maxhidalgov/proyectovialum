@@ -99,6 +99,31 @@
           </div>
         </template>
 
+        <!-- Cliente Facturación -->
+        <template #item.cliente_facturacion="{ item }">
+          <div v-if="item.cliente_facturacion_id && item.cliente_facturacion">
+            <!-- Solo mostrar si es diferente al cliente original -->
+            <div v-if="item.cliente_facturacion_id !== item.cliente_id" class="d-flex align-center">
+              <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
+              <div>
+                <div class="font-weight-medium text-warning">
+                  {{ item.cliente_facturacion.razon_social || `${item.cliente_facturacion.first_name || ''} ${item.cliente_facturacion.last_name || ''}`.trim() || 'Sin nombre' }}
+                </div>
+                <div class="text-caption">{{ item.cliente_facturacion.identification }}</div>
+              </div>
+            </div>
+            <!-- Si es el mismo cliente, mostrar ícono de check -->
+            <div v-else class="text-caption text-medium-emphasis">
+              <v-icon size="small" color="success" class="me-1">mdi-check</v-icon>
+              Mismo cliente
+            </div>
+          </div>
+          <div v-else class="text-caption text-medium-emphasis">
+            <v-icon size="small" color="info" class="me-1">mdi-account</v-icon>
+            Mismo cliente
+          </div>
+        </template>
+
         <!-- Total -->
         <template #item.total="{ item }">
           <div class="font-weight-bold text-success">
@@ -299,6 +324,7 @@ const filtros = ref({
 const headers = [
   { title: 'Número', key: 'numero', sortable: true },
   { title: 'Cliente', key: 'cliente', sortable: false },
+  { title: 'Facturado a', key: 'cliente_facturacion', sortable: false },
   { title: 'Total', key: 'total', sortable: true },
   { title: 'Estado', key: 'estado_facturacion', sortable: true },
   { title: 'Fecha aprobación', key: 'fecha_aprobacion', sortable: true },

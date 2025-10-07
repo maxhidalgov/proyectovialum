@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cotizacion;
+use App\Models\Cliente;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +17,32 @@ class BsaleController extends Controller
     {
         $this->baseUrl = config('services.bsale.base_url', 'https://api.bsale.cl/v1/');
         $this->accessToken = config('services.bsale.access_token', '4845c098298dba6a64cf559dbecb555e310458d4');
+    }
+
+    /**
+     * Obtener clientes sincronizados con Bsale
+     */
+    public function getClientesSincronizados()
+    {
+        try {
+            $clientes = Cliente::whereNotNull('bsale_id')
+                ->orderBy('razon_social')
+                ->get(['id', 'razon_social', 'identification', 'bsale_id']);
+
+            return response()->json([
+                'success' => true,
+                'clientes' => $clientes
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Error obteniendo clientes sincronizados:", [
+                'message' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Error al obtener clientes sincronizados'
+            ], 500);
+        }
     }
 
     /**
@@ -40,28 +67,79 @@ class BsaleController extends Controller
             
             $cotizacionId = $request->input('cotizacion_id');
             $tipoDocumento = $request->input('tipo_documento'); // 1=factura, 8=boleta, etc.
-            $clienteBsaleId = $request->input('cliente_bsale_id'); // ID del cliente en BSALE
+            $clienteFacturacionId = $request->input('cliente_facturacion_id'); // ID del cliente que facturará
             $metodoPago = $request->input('metodo_pago');
             $condicionesPago = $request->input('condiciones_pago');
             $fechaVencimiento = $request->input('fecha_vencimiento');
             $observaciones = $request->input('observaciones', '');
             
+            // Buscar cotización
+            $cotizacion = Cotizacion::with(['ventanas.tipoVentana', 'cliente'])
+                ->findOrFail($cotizacionId);
+
+            // Determinar qué cliente usar para facturación
+            $clienteFacturacion = null;
+            $clienteBsaleId = null;
+            
+            // Si es BOLETA ELECTRÓNICA (tipo 1), puede no requerir cliente específico
+            if ($tipoDocumento == 1) {
+                // Para boletas, intentar usar cliente de facturación si existe
+                if ($clienteFacturacionId) {
+                    $clienteFacturacion = Cliente::find($clienteFacturacionId);
+                    $clienteBsaleId = $clienteFacturacion->bsale_id ?? null;
+                } elseif ($cotizacion->cliente_facturacion_id) {
+                    $clienteFacturacion = Cliente::find($cotizacion->cliente_facturacion_id);
+                    $clienteBsaleId = $clienteFacturacion->bsale_id ?? null;
+                }
+                
+                // Si no hay cliente o no tiene bsale_id, usar cliente genérico "Consumidor Final"
+                // ID 1 es típicamente el consumidor final en Bsale
+                if (!$clienteBsaleId) {
+                    $clienteBsaleId = 1; // ID de "Consumidor Final" en Bsale
+                    Log::info("📝 Boleta sin cliente específico, usando Consumidor Final (ID: 1)");
+                }
+            } else {
+                // Para FACTURAS y otros documentos, cliente ES OBLIGATORIO
+                if ($clienteFacturacionId) {
+                    $clienteFacturacion = Cliente::find($clienteFacturacionId);
+                } elseif ($cotizacion->cliente_facturacion_id) {
+                    $clienteFacturacion = Cliente::find($cotizacion->cliente_facturacion_id);
+                } else {
+                    $clienteFacturacion = $cotizacion->cliente;
+                }
+
+                // Verificar que el cliente de facturación tenga bsale_id
+                if (!$clienteFacturacion || !$clienteFacturacion->bsale_id) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Para facturas, el cliente debe estar sincronizado con Bsale. Por favor selecciona un cliente que tenga RUT registrado en Bsale.'
+                    ], 400);
+                }
+                
+                $clienteBsaleId = $clienteFacturacion->bsale_id;
+            }
+
+            // Actualizar cliente_facturacion_id en la cotización si se proporcionó uno nuevo
+            if ($clienteFacturacionId && $cotizacion->cliente_facturacion_id != $clienteFacturacionId) {
+                $cotizacion->update(['cliente_facturacion_id' => $clienteFacturacionId]);
+            }
+            
             Log::info("🧾 Creando documento BSALE", [
                 'cotizacion_id' => $cotizacionId,
                 'tipo_documento' => $tipoDocumento,
+                'tipo_documento_nombre' => $tipoDocumento == 1 ? 'Boleta' : ($tipoDocumento == 5 ? 'Factura' : 'Otro'),
+                'cliente_cotizacion' => $cotizacion->cliente->razon_social ?? 'Sin cliente',
+                'cliente_facturacion' => $clienteFacturacion ? $clienteFacturacion->razon_social : 'Consumidor Final',
                 'cliente_bsale_id' => $clienteBsaleId,
                 'metodo_pago' => $metodoPago,
                 'condiciones_pago' => $condicionesPago
             ]);
 
-            // Buscar cotización
-            $cotizacion = Cotizacion::with(['ventanas.tipoVentana', 'cliente'])
-                ->findOrFail($cotizacionId);
-
             Log::info("🔍 Cotización encontrada", [
                 'id' => $cotizacion->id,
                 'ventanas_count' => $cotizacion->ventanas->count(),
-                'cliente' => $cotizacion->cliente->nombre ?? 'Sin cliente'
+                'cliente_cotizacion' => $cotizacion->cliente->razon_social ?? 'Sin cliente',
+                'cliente_facturacion' => $clienteFacturacion->razon_social
             ]);
 
             if ($cotizacion->estado_cotizacion_id != 2) { // 2 = Aprobada
