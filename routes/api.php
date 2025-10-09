@@ -16,6 +16,7 @@ use App\Http\Controllers\TipoVentanaController;
 use App\Http\Controllers\TipoProductoController;
 use App\Http\Controllers\Api\CotizadorController;
 use App\Http\Controllers\EstadoCotizacionController;
+use App\Http\Controllers\ListaPrecioController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -65,6 +66,10 @@ Route::middleware('api')->group(function () {
     Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
     Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
 
+    // Rutas Lista de Precios
+    Route::apiResource('lista-precios', ListaPrecioController::class);
+    Route::post('/lista-precios/importar', [ListaPrecioController::class, 'importarDesdeProductoColorProveedor']);
+    Route::get('/lista-precios/exportar', [ListaPrecioController::class, 'exportar']);
 
     // Rutas BSALE
     Route::prefix('bsale')->group(function () {

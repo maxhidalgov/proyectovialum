@@ -73,7 +73,7 @@ public function store(Request $request)
             'fecha' => $request->fecha,
             'estado_cotizacion_id' => $request->estado_cotizacion_id,
             'observaciones' => $request->observaciones,
-            'total' => collect($request->ventanas)->sum('precio'),
+            'total' => collect($request->ventanas)->sum('precio') + collect($request->productos ?? [])->sum('precio_venta'),
         ]);
 
         // Guardar ventanas y mantener referencia
@@ -103,6 +103,26 @@ public function store(Request $request)
                 'tipo_ventana_centro' => isset($ventana['tipo_ventana_centro']) ? json_encode($ventana['tipo_ventana_centro']) : null,
                 'tipo_ventana_derecha' => isset($ventana['tipo_ventana_derecha']) ? json_encode($ventana['tipo_ventana_derecha']) : null,
             ]);
+        }
+
+        // Guardar productos si existen
+        if ($request->has('productos') && is_array($request->productos)) {
+            Log::info("💼 PROCESANDO " . count($request->productos) . " PRODUCTOS");
+            
+            foreach ($request->productos as $index => $producto) {
+                Log::info("🔍 PRODUCTO $index:", $producto);
+                
+                \App\Models\CotizacionDetalle::create([
+                    'cotizacion_id' => $cotizacion->id,
+                    'tipo_item' => 'producto',
+                    'producto_lista_id' => $producto['producto_lista_id'] ?? null,
+                    'lista_precio_id' => $producto['lista_precio_id'] ?? null,
+                    'descripcion' => $producto['descripcion'] ?? '',
+                    'cantidad' => $producto['cantidad'] ?? 1,
+                    'precio_unitario' => $producto['precio_unitario'] ?? 0,
+                    'total' => $producto['total'] ?? 0
+                ]);
+            }
         }
 
         // Guardar imágenes con mejor manejo de errores
@@ -216,7 +236,9 @@ public function store(Request $request)
         'ventanas.productoVidrioProveedor.producto',
         'ventanas.productoVidrioProveedor.proveedor',
         'estado',
-      
+        'detalles.productoLista.tipoProducto',
+        'detalles.productoLista.unidad',
+        'detalles.listaPrecio'
     ])->findOrFail($id);
 
 
@@ -226,8 +248,11 @@ public function store(Request $request)
         return $ventana;
     });
 
-    // Calcular total de la cotización
-    $cotizacion->total_general = $cotizacion->ventanas->sum('precio_total');
+    // Calcular total de la cotización (ventanas + productos)
+    $totalVentanas = $cotizacion->ventanas->sum('precio_total');
+    $totalProductos = $cotizacion->detalles->where('tipo_item', 'producto')->sum('total');
+    $cotizacion->total_general = $totalVentanas + $totalProductos;
+    
     return response()->json($cotizacion);
     }
 
@@ -244,7 +269,7 @@ public function store(Request $request)
      */
     public function update(Request $request, $id)
     {
-        $cotizacion = Cotizacion::with('ventanas')->findOrFail($id);
+        $cotizacion = Cotizacion::with(['ventanas', 'detalles'])->findOrFail($id);
 
         DB::transaction(function () use ($request, $cotizacion) {
             $cotizacion->update([
@@ -254,6 +279,7 @@ public function store(Request $request)
                 'observaciones' => $request->observaciones,
             ]);
 
+            // ========== MANEJAR VENTANAS ==========
             $idsRecibidos = collect($request->ventanas)->pluck('id')->filter()->all();
 
             // Eliminar ventanas que ya no existen en el request
@@ -297,6 +323,49 @@ public function store(Request $request)
                     ]);
                 }
             }
+
+            // ========== MANEJAR PRODUCTOS ==========
+            if ($request->has('productos')) {
+                $idsProductosRecibidos = collect($request->productos)->pluck('id')->filter()->all();
+
+                // Eliminar productos que ya no existen en el request
+                $cotizacion->detalles()
+                    ->where('tipo_item', 'producto')
+                    ->whereNotIn('id', $idsProductosRecibidos)
+                    ->delete();
+
+                foreach ($request->productos as $productoData) {
+                    if (isset($productoData['id'])) {
+                        // Actualizar producto existente
+                        $detalle = $cotizacion->detalles()
+                            ->where('id', $productoData['id'])
+                            ->where('tipo_item', 'producto')
+                            ->first();
+                        
+                        if ($detalle) {
+                            $detalle->update([
+                                'producto_lista_id' => $productoData['producto_lista_id'],
+                                'lista_precio_id' => $productoData['lista_precio_id'],
+                                'descripcion' => $productoData['descripcion'],
+                                'cantidad' => $productoData['cantidad'],
+                                'precio_unitario' => $productoData['precio_unitario'],
+                                'total' => $productoData['total'],
+                            ]);
+                        }
+                    } else {
+                        // Crear nuevo producto
+                        $cotizacion->detalles()->create([
+                            'tipo_item' => 'producto',
+                            'producto_lista_id' => $productoData['producto_lista_id'],
+                            'lista_precio_id' => $productoData['lista_precio_id'],
+                            'descripcion' => $productoData['descripcion'],
+                            'cantidad' => $productoData['cantidad'],
+                            'precio_unitario' => $productoData['precio_unitario'],
+                            'total' => $productoData['total'],
+                        ]);
+                    }
+                }
+            }
         });
 
         return response()->json(['message' => 'Cotización actualizada correctamente']);
@@ -320,6 +389,11 @@ public function store(Request $request)
             'ventanas.color',
             'ventanas.productoVidrioProveedor.producto',
             'ventanas.productoVidrioProveedor.proveedor',
+            'detalles.producto',
+            'detalles.productoLista',
+            'detalles.listaPrecio.producto',
+            'detalles.listaPrecio.productoColorProveedor.color',
+            'detalles.listaPrecio.productoColorProveedor.proveedor'
         ])->findOrFail($id);
 
 

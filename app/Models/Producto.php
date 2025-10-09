@@ -41,6 +41,11 @@ class Producto extends Model
         return $this->belongsTo(TipoProducto::class, 'tipo_producto_id');
     }
 
+    public function listaPrecios()
+    {
+        return $this->hasMany(ListaPrecio::class, 'producto_id');
+    }
+
     public static function boot()
 {
     parent::boot();

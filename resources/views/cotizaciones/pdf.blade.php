@@ -36,11 +36,15 @@
 
     {{-- Logo + Datos empresa (derecha) --}}
     <td style="width: 40%; text-align: right; vertical-align: top; border: none;">
-      <img
-        src="{{ public_path('storage/logovialum.png') }}"
-        alt="Logo Vialum"
-        style="max-width: 180px; margin-bottom: 5px;"
-      />
+      @if(file_exists(public_path('storage/logovialum.png')))
+        <img
+          src="{{ public_path('storage/logovialum.png') }}"
+          alt="Logo Vialum"
+          style="max-width: 180px; margin-bottom: 5px;"
+        />
+      @else
+        <h3 style="margin: 0;">VIALUM</h3>
+      @endif
       <p style="margin: 0;"><strong>Dirección:</strong> Balmaceda 454, Los Ángeles</p>
       <p style="margin: 0;"><strong>Teléfono:</strong> +432311859</p>
       <p style="margin: 0;"><strong>Correo:</strong> contacto@vialum.cl</p>
@@ -96,8 +100,106 @@
     </table>
   @endforeach
 
-  <h4 style="text-align:right; margin-top:20px;">
-    Total: ${{ number_format($cotizacion->ventanas->sum(fn($v) => $v->precio * $v->cantidad), 0, ',', '.') }}
-  </h4>
+  {{-- Sección de Productos Adicionales --}}
+  @if($cotizacion->detalles && $cotizacion->detalles->count() > 0)
+    <h3 style="margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 5px;">
+      Productos Adicionales
+    </h3>
+    
+    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+      <thead style="background-color: #f0f0f0;">
+        <tr>
+          <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 50%;">Descripción</th>
+          <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 10%;">Cant.</th>
+          <th style="border: 1px solid #ccc; padding: 8px; text-align: right; width: 20%;">P. Unit.</th>
+          <th style="border: 1px solid #ccc; padding: 8px; text-align: right; width: 20%;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach($cotizacion->detalles as $detalle)
+          <tr>
+            <td style="border: 1px solid #ccc; padding: 6px;">
+              @if($detalle->listaPrecio)
+                {{-- Producto de lista de precios --}}
+                <strong>{{ $detalle->listaPrecio->producto->nombre ?? 'N/A' }}</strong>
+                @if($detalle->listaPrecio->productoColorProveedor)
+                  <br>
+                  <span style="font-size: 10px; color: #666;">
+                    Color: {{ $detalle->listaPrecio->productoColorProveedor->color->nombre ?? 'N/A' }} |
+                    Proveedor: {{ $detalle->listaPrecio->productoColorProveedor->proveedor->nombre ?? 'N/A' }}
+                  </span>
+                @endif
+              @elseif($detalle->producto)
+                {{-- Producto directo --}}
+                <strong>{{ $detalle->producto->nombre }}</strong>
+              @else
+                {{-- Descripción manual --}}
+                <strong>{{ $detalle->descripcion }}</strong>
+              @endif
+            </td>
+            <td style="border: 1px solid #ccc; padding: 6px; text-align: center;">
+              {{ number_format($detalle->cantidad, 0) }}
+            </td>
+            <td style="border: 1px solid #ccc; padding: 6px; text-align: right;">
+              ${{ number_format($detalle->precio_unitario, 0, ',', '.') }}
+            </td>
+            <td style="border: 1px solid #ccc; padding: 6px; text-align: right; font-weight: bold;">
+              ${{ number_format($detalle->total, 0, ',', '.') }}
+            </td>
+          </tr>
+        @endforeach
+      </tbody>
+    </table>
+  @endif
+
+  {{-- Total General --}}
+  @php
+    $totalVentanas = $cotizacion->ventanas->sum(fn($v) => $v->precio * $v->cantidad);
+    $totalProductos = $cotizacion->detalles->sum('total');
+    $totalGeneral = $totalVentanas + $totalProductos;
+  @endphp
+
+  <table style="width: 100%; margin-top: 20px; border: none;">
+    <tr>
+      <td style="width: 70%; border: none;"></td>
+      <td style="width: 30%; border: none;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          @if($totalVentanas > 0)
+            <tr>
+              <td style="padding: 5px; text-align: right; border-top: 1px solid #ccc;">
+                <strong>Subtotal Ventanas:</strong>
+              </td>
+              <td style="padding: 5px; text-align: right; border-top: 1px solid #ccc;">
+                ${{ number_format($totalVentanas, 0, ',', '.') }}
+              </td>
+            </tr>
+          @endif
+          @if($totalProductos > 0)
+            <tr>
+              <td style="padding: 5px; text-align: right;">
+                <strong>Subtotal Productos:</strong>
+              </td>
+              <td style="padding: 5px; text-align: right;">
+                ${{ number_format($totalProductos, 0, ',', '.') }}
+              </td>
+            </tr>
+          @endif
+          <tr style="background-color: #f0f0f0;">
+            <td style="padding: 8px; text-align: right; border-top: 2px solid #333;">
+              <strong>TOTAL:</strong>
+            </td>
+            <td style="padding: 8px; text-align: right; border-top: 2px solid #333; font-size: 14px;">
+              <strong>${{ number_format($totalGeneral, 0, ',', '.') }}</strong>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin-top: 20px; font-size: 10px; color: #666; text-align: center;">
+    Los precios no incluyen IVA. Cotización válida por 30 días.
+  </p>
+
 </body>
 </html>

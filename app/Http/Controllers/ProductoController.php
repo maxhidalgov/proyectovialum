@@ -11,12 +11,26 @@ class ProductoController extends Controller
 {
     public function index()
     {
-        return Producto::with([
-            'coloresPorProveedor.proveedor',
-            'coloresPorProveedor.color',
-            'unidad',
-            'tipoProducto'
-        ])->get();
+        try {
+            $productos = Producto::with([
+                'coloresPorProveedor.proveedor',
+                'coloresPorProveedor.color',
+                'unidad',
+                'tipoProducto',
+                'listaPrecios' // ✅ Agregar relación de lista de precios
+            ])->get();
+
+            return response()->json($productos);
+        } catch (\Exception $e) {
+            Log::error('Error en ProductoController@index: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json([
+                'error' => 'Error al cargar productos',
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ], 500);
+        }
     }
 
     public function store(Request $request)

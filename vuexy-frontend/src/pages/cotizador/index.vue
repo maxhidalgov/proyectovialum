@@ -1,7 +1,9 @@
 <template>
   <v-container fluid>
     <v-card class="pa-6" elevation="2">
-      <v-card-title class="text-h5 mb-4">Nueva Cotización</v-card-title>
+      <v-card-title class="text-h5 mb-4">
+        {{ modoEdicion ? 'Editar Cotización' : 'Nueva Cotización' }}
+      </v-card-title>
       
 
       <!-- Datos Generales -->
@@ -19,22 +21,21 @@
                   v-model="terminoBusquedaCliente"
                   @input="buscarClientesSimple"
                   @focus="onFocusBuscador"
+                  @click:clear="limpiarBusqueda"
                   label="Cliente"
                   placeholder="Buscar por RUT o nombre..."
                   outlined
                   clearable
                   :loading="buscandoClientes"
                   color="primary"
-                  @clear="limpiarBusqueda"
                   :append-inner-icon="form.cliente ? 'mdi-check-circle' : 'mdi-magnify'"
                   :hint="form.cliente ? `Seleccionado: ${form.cliente.razon_social}` : ''"
                   persistent-hint
-                  readonly-when-selected
                 />
                 
                 <!-- DROPDOWN DE RESULTADOS -->
                 <v-card
-                  v-if="mostrarDropdown && clientesBuscados.length > 0 && !form.cliente"
+                  v-if="mostrarDropdown && clientesBuscados.length > 0"
                   style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 300px; overflow-y: auto;"
                   class="mt-1"
                   elevation="8"
@@ -79,51 +80,89 @@
         </v-col>
       </v-row>
 
-      <!-- Material y Color -->
-      <v-row dense class="mb-4">
-        <v-col cols="12" md="6">
-          <v-select
-            v-model="cotizacion.material"
-            :items="materiales"
-            item-title="nombre"
-            item-value="id"
-            label="Material"
-            outlined
-            color="primary"
-          />
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-select
-            v-model="cotizacion.color"
-            :items="colores"
-            item-title="nombre"
-            item-value="id"
-            label="Color"
-            outlined
-            color="primary"
-          />
-        </v-col>
-      </v-row>
-
-      <!-- Vidrio por defecto -->
-      <v-card-subtitle class="text-h5">Vidrio por defecto</v-card-subtitle>
-      <v-divider class="mb-4" />
-      <v-row dense class="mb-4">
-        <v-col cols="12" sm="6">
-          <v-select v-model="cotizacion.tipoVidrio" :items="tiposVidrio" item-title="nombre" item-value="id" label="Tipo de vidrio" outlined color="primary" />
-        </v-col>
-        <v-col cols="12" sm="6">
-          <v-select v-model="cotizacion.productoVidrioProveedor" :items="productosVidrioFiltradosGeneral" item-title="nombre" item-value="id" label="Producto de vidrio" outlined color="primary" />
-        </v-col>
-      </v-row>
-
       <!-- Lista de Ventanas -->
-      <v-card-subtitle class="text-h5">Ventanas</v-card-subtitle>
+      <v-card-subtitle class="text-h5">Items de la Cotización</v-card-subtitle>
       <v-divider class="mb-4" />
 
-<v-btn color="primary" @click="abrirModalVentana" :disabled="!tiposVentanaTodos.length">
-  <v-icon left>mdi-plus</v-icon> Agregar ventana
-</v-btn>
+      <!-- Botones para agregar items -->
+      <v-row class="mb-4">
+        <v-col cols="auto">
+          <v-btn color="primary" @click="toggleSeccionVentana" :disabled="!tiposVentanaTodos.length">
+            <v-icon left>mdi-window-closed-variant</v-icon>
+            Ventana
+          </v-btn>
+        </v-col>
+        <v-col cols="auto">
+          <v-btn color="success" @click="abrirModalProductos">
+            <v-icon left>mdi-package-variant</v-icon>
+            Productos
+          </v-btn>
+        </v-col>
+      </v-row>
+
+      <!-- Sección colapsable de pre-configuración de ventanas -->
+      <v-expand-transition>
+        <v-card v-if="mostrarSeccionVentana" class="mb-4" outlined>
+          <v-card-text>
+            <v-card-subtitle class="text-subtitle-1 font-weight-bold">Pre-configuración de Ventana</v-card-subtitle>
+            <v-row dense class="mt-2">
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="cotizacion.material"
+                  :items="materiales"
+                  item-title="nombre"
+                  item-value="id"
+                  label="Material"
+                  outlined
+                  dense
+                  color="primary"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="cotizacion.color"
+                  :items="colores"
+                  item-title="nombre"
+                  item-value="id"
+                  label="Color"
+                  outlined
+                  dense
+                  color="primary"
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="cotizacion.tipoVidrio"
+                  :items="tiposVidrio"
+                  item-title="nombre"
+                  item-value="id"
+                  label="Tipo de vidrio"
+                  outlined
+                  dense
+                  color="primary"
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="cotizacion.productoVidrioProveedor"
+                  :items="productosVidrioFiltradosGeneral"
+                  item-title="nombre"
+                  item-value="id"
+                  label="Producto de vidrio"
+                  outlined
+                  dense
+                  color="primary"
+                />
+              </v-col>
+            </v-row>
+            
+            <v-btn color="primary" @click="abrirModalVentana" block class="mt-2">
+              <v-icon left>mdi-plus</v-icon>
+              Agregar Ventana
+            </v-btn>
+          </v-card-text>
+        </v-card>
+      </v-expand-transition>
 
         <v-data-table 
           :headers="headersVentanas"
@@ -148,6 +187,39 @@
         </template>
       </v-data-table>
 
+      <!-- Tabla de productos -->
+      <v-data-table
+        v-if="cotizacion.productos.length > 0"
+        :headers="headersProductos"
+        :items="cotizacion.productos"
+        class="mt-4"
+        :items-per-page="5"
+      >
+        <template #top>
+          <v-toolbar flat color="transparent">
+            <v-toolbar-title class="text-subtitle-1">Productos</v-toolbar-title>
+          </v-toolbar>
+        </template>
+
+        <template #item.precio_costo="{ item }">
+          ${{ formatearNumero(item.precio_costo) }}
+        </template>
+
+        <template #item.margen="{ item }">
+          {{ item.margen }}%
+        </template>
+
+        <template #item.precio_venta="{ item }">
+          ${{ formatearNumero(item.precio_venta) }}
+        </template>
+
+        <template #item.acciones="{ item, index }">
+          <v-btn icon color="error" @click="eliminarProducto(index)">
+            <v-icon>mdi-delete</v-icon>
+          </v-btn>
+        </template>
+      </v-data-table>
+
       <!-- Modal para agregar/editar ventana -->
       <AgregarVentanaModal
         v-model:mostrar="mostrarModalVentana"
@@ -164,6 +236,12 @@
         @guardar="guardarVentana"
       />
 
+      <!-- Modal para agregar productos -->
+      <ModalProductos
+        v-model:mostrar="mostrarModalProductos"
+        @agregar-productos="agregarProductosCotizacion"
+      />
+
       <!-- Botón para agregar ventana -->
       <v-divider class="my-4" />
       <v-btn
@@ -175,7 +253,7 @@
         <template #loader>
           <v-progress-circular indeterminate color="white" size="20" />
         </template>
-        Guardar Cotización
+        {{ modoEdicion ? 'Guardar Cambios' : 'Guardar Cotización' }}
       </v-btn>
        <!-- Renderización de ventanas para captura de imágenes -->
       <div v-if="cotizacion.ventanas.length > 0" class="mt-6">
@@ -423,11 +501,12 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import debounce from 'lodash/debounce'
 import api from '@/axiosInstance'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import Visor3D from '@/layouts/components/Visor3D.vue'
 import { color } from 'three/src/nodes/TSL.js'
 import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
 import AgregarVentanaModal from '@/pages/AgregarVentanaModal2.vue'
+import ModalProductos from '@/pages/ModalProductos.vue'
 import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 import VentanaProyectante from '@/components/VistaVentanaProyectanteS60.vue'
@@ -446,6 +525,11 @@ const tiposVentanaTodos = ref([])
 
 const margenVenta = 0.45 // Margen del 45%
 const router = useRouter()
+const route = useRoute()
+
+// Detectar modo edición
+const modoEdicion = ref(false)
+const cotizacionId = ref(null)
 
 const mapaTiposVentana = computed(() => {
   const map = {}
@@ -464,6 +548,7 @@ const cotizacion = reactive({
   tipoVidrio: '',
   productoVidrioProveedor: '',
   ventanas: [],
+  productos: [], // Productos agregados a la cotización
        
 })
 
@@ -517,32 +602,46 @@ const nuevoCliente = ref({
 })
 
 const productosVidrioCombinados = computed(() => {
-  return productosVidrio.value.flatMap(p => 
-    p.colores_por_proveedor.map(cpp => ({
+  return productosVidrio.value.flatMap(p => {
+    if (!p.colores_por_proveedor || !Array.isArray(p.colores_por_proveedor)) {
+      return []
+    }
+    return p.colores_por_proveedor.map(cpp => ({
       id: `${p.id}-${cpp.proveedor_id}`,
       producto_id: p.id,
       proveedor_id: cpp.proveedor_id,
       nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Proveedor desconocido'})`
     }))
-  )
+  })
 })
 
 const productosVidrioFiltradosGeneral = computed(() => {
   const tipo = cotizacion.tipoVidrio
   return productosVidrio.value
     .filter(p => p.tipo_producto_id === tipo)
-    .flatMap(p =>
-      p.colores_por_proveedor.map(cpp => ({
+    .flatMap(p => {
+      // Validar que colores_por_proveedor exista y sea un array
+      if (!p.colores_por_proveedor || !Array.isArray(p.colores_por_proveedor)) {
+        return []
+      }
+      return p.colores_por_proveedor.map(cpp => ({
         id: cpp.id,  // ✅ ID real de la tabla producto_color_proveedor
         producto_id: p.id,
         proveedor_id: cpp.proveedor_id,
         nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Proveedor desconocido'})`
       }))
-    )
+    })
 })
 
 onMounted(async () => {
   console.log('🔄 Iniciando carga de datos...')
+  
+  // Detectar modo edición
+  if (route.query.id) {
+    modoEdicion.value = true
+    cotizacionId.value = route.query.id
+    console.log('📝 MODO EDICIÓN activado - ID:', cotizacionId.value)
+  }
   
   try {
     // Cargar datos básicos (rápido)
@@ -563,12 +662,26 @@ onMounted(async () => {
   colores.value = coloresRes.data
   tiposVidrio.value = tiposProductoRes.data.filter(tp => [1, 2].includes(tp.id))
   productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
+  
+  console.log('📦 PRODUCTOS DE VIDRIO CARGADOS:', productosVidrio.value.length)
+  console.log('📦 Primer producto:', productosVidrio.value[0])
+  if (productosVidrio.value[0]) {
+    console.log('   - Tiene colores_por_proveedor?', !!productosVidrio.value[0].colores_por_proveedor)
+    console.log('   - Es array?', Array.isArray(productosVidrio.value[0].colores_por_proveedor))
+    console.log('   - Cantidad:', productosVidrio.value[0].colores_por_proveedor?.length)
+  }
+  
   tiposVentanaTodos.value = tiposVentanaRes.data
   console.log('TIPOS VENTANA CARGADOS:', tiposVentanaTodos.value)
   
   // Cargar solo los primeros clientes (rápido)
   console.log('🔄 Cargando primeros clientes...')
   cargarClientesIniciales()
+  
+  // SI ESTÁ EN MODO EDICIÓN, CARGAR LA COTIZACIÓN
+  if (modoEdicion.value) {
+    await cargarCotizacionExistente()
+  }
   
   // Cerrar dropdown al hacer clic fuera
   document.addEventListener('click', (e) => {
@@ -586,13 +699,116 @@ onMounted(async () => {
 
 const buscarRelacionVidrioProveedor = (id) => {
   id = parseInt(id)
-  return productosVidrio.value.flatMap(p =>
-    p.colores_por_proveedor.map(cpp => ({
+  return productosVidrio.value.flatMap(p => {
+    if (!p.colores_por_proveedor || !Array.isArray(p.colores_por_proveedor)) {
+      return []
+    }
+    return p.colores_por_proveedor.map(cpp => ({
       id: cpp.id,
       producto_id: p.id,
       proveedor_id: cpp.proveedor_id
     }))
-  ).find(p => p.id === id)
+  }).find(p => p.id === id)
+}
+
+// Función para cargar cotización existente en modo edición
+const cargarCotizacionExistente = async () => {
+  try {
+    console.log('📥 Cargando cotización ID:', cotizacionId.value)
+    const response = await api.get(`/api/cotizaciones/${cotizacionId.value}`)
+    const cotizacionData = response.data
+    
+    console.log('✅ Cotización cargada:', cotizacionData)
+    console.log('📦 DETALLES COMPLETOS:', cotizacionData.detalles)
+    
+    // Poblar cliente
+    if (cotizacionData.cliente) {
+      form.cliente = cotizacionData.cliente
+      cotizacion.cliente_id = cotizacionData.cliente.id
+      terminoBusquedaCliente.value = cotizacionData.cliente.razon_social
+    }
+    
+    // Poblar observaciones
+    cotizacion.observaciones = cotizacionData.observaciones || ''
+    
+    // Poblar ventanas
+    if (cotizacionData.ventanas && cotizacionData.ventanas.length > 0) {
+      cotizacion.ventanas = cotizacionData.ventanas.map(v => {
+        const relacion = buscarRelacionVidrioProveedor(v.producto_vidrio_proveedor_id)
+        
+        return {
+          tipo: v.tipo_ventana_id,
+          ancho: v.ancho,
+          alto: v.alto,
+          cantidad: v.cantidad || 1,
+          color: v.color_id,
+          tipoVidrio: v.tipo_vidrio_id,
+          productoVidrioProveedor: v.producto_vidrio_proveedor_id,
+          productoVidrio: relacion?.producto_id,
+          proveedorVidrio: relacion?.proveedor_id,
+          costo: v.costo || 0,
+          costo_unitario: v.costo_unitario || 0,
+          costo_total: v.costo || 0,
+          precio: v.precio || 0,
+          precio_unitario: v.precio_unitario || 0,
+          hojas_totales: v.hojas_totales,
+          hojas_moviles: v.hojas_moviles,
+          materiales: v.materiales || [],
+          // Para ventanas compuestas
+          tipoVentanaIzquierda: v.tipo_ventana_izquierda,
+          tipoVentanaCentro: v.tipo_ventana_centro,
+          tipoVentanaDerecha: v.tipo_ventana_derecha,
+          ancho_izquierda: v.ancho_izquierda,
+          ancho_centro: v.ancho_centro,
+          ancho_derecha: v.ancho_derecha,
+          // ID para actualización
+          id: v.id
+        }
+      })
+      
+      console.log('✅ Ventanas cargadas:', cotizacion.ventanas.length)
+    }
+    
+    // Poblar productos
+    if (cotizacionData.detalles && cotizacionData.detalles.length > 0) {
+      cotizacion.productos = cotizacionData.detalles
+        .filter(d => d.tipo_item === 'producto')
+        .map(p => {
+          console.log('📦 Detalle del producto:', p)
+          
+          // Obtener info del producto desde las relaciones (manejar snake_case y camelCase)
+          const productoInfo = p.producto_lista || p.productoLista || {}
+          const listaPrecioInfo = p.lista_precio || p.listaPrecio || {}
+          const tipoProductoInfo = productoInfo.tipo_producto || productoInfo.tipoProducto || {}
+          const unidadInfo = productoInfo.unidad || {}
+          
+          return {
+            id: p.id, // ID para actualización
+            producto_lista_id: p.producto_lista_id,
+            lista_precio_id: p.lista_precio_id,
+            descripcion: p.descripcion,
+            cantidad: p.cantidad,
+            precio_venta: p.precio_unitario,
+            total: p.total,
+            // Información adicional del producto
+            codigo: productoInfo.codigo || '',
+            nombre: productoInfo.nombre || p.descripcion,
+            tipo: tipoProductoInfo.nombre || '',
+            unidad: unidadInfo.nombre || unidadInfo.simbolo || '',
+            precio_costo: listaPrecioInfo.precio_costo || 0,
+            margen: listaPrecioInfo.margen || 0,
+          }
+        })
+      
+      console.log('✅ Productos cargados:', cotizacion.productos.length)
+      console.log('📦 Primer producto mapeado:', cotizacion.productos[0])
+    }
+    
+  } catch (error) {
+    console.error('❌ Error cargando cotización:', error)
+    alert('Error al cargar la cotización')
+    router.push({ name: 'cotizaciones' })
+  }
 }
 
 // Computed para mostrar productos de vidrio con proveedor
@@ -600,20 +816,25 @@ const productosVidrioFiltradosConProveedor = (ventana) => {
   const tipo = ventana.tipoVidrio ?? cotizacion.tipoVidrio
   return productosVidrio.value
     .filter(p => p.tipo_producto_id === tipo)
-    .flatMap(p =>
-      p.colores_por_proveedor.map(cpp => ({
+    .flatMap(p => {
+      if (!p.colores_por_proveedor || !Array.isArray(p.colores_por_proveedor)) {
+        return []
+      }
+      return p.colores_por_proveedor.map(cpp => ({
         id: cpp.id, // ✅ ID real de la tabla producto_color_proveedor
         producto_id: p.id,
         proveedor_id: cpp.proveedor_id,
         nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Proveedor desconocido'})`
       }))
-    )
+    })
 }
 
 // Función de clientes filtrados eliminada - ahora usamos búsqueda async
 
 // Ventanas
 const mostrarModalVentana = ref(false)
+const mostrarSeccionVentana = ref(false)
+const mostrarModalProductos = ref(false)
 const ventanaEnEdicion = ref(null)
 
 const headersVentanas = [
@@ -625,9 +846,29 @@ const headersVentanas = [
   { title: 'Acciones', key: 'acciones', sortable: false },
 ]
 
+const headersProductos = [
+  { title: 'Código', key: 'codigo' },
+  { title: 'Nombre', key: 'nombre' },
+  { title: 'Tipo', key: 'tipo_producto' },
+  { title: 'Unidad', key: 'unidad' },
+  { title: 'Cantidad', key: 'cantidad' },
+  { title: 'Precio Costo', key: 'precio_costo', align: 'end' },
+  { title: 'Margen', key: 'margen', align: 'center' },
+  { title: 'Precio Venta', key: 'precio_venta', align: 'end' },
+  { title: 'Acciones', key: 'acciones', sortable: false },
+]
+
 const abrirModalVentana = () => {
   ventanaEnEdicion.value = null // Para agregar nueva
   mostrarModalVentana.value = true
+}
+
+const toggleSeccionVentana = () => {
+  mostrarSeccionVentana.value = !mostrarSeccionVentana.value
+}
+
+const abrirModalProductos = () => {
+  mostrarModalProductos.value = true
 }
 
 const editarVentana = (index) => {
@@ -643,6 +884,38 @@ const guardarVentana = (ventana) => {
     cotizacion.ventanas.push({ ...ventana })
   }
   mostrarModalVentana.value = false
+}
+
+const agregarProductosCotizacion = (productos) => {
+  console.log('📦 PRODUCTOS RECIBIDOS DEL MODAL:', productos)
+  // Agregar productos al arreglo de la cotización
+  productos.forEach(item => {
+    const productoParaCotizacion = {
+      producto_lista_id: item.producto_lista_id, // ✅ ID del producto
+      lista_precio_id: item.lista_precio_id, // ✅ ID de la lista de precios
+      nombre: item.nombre || item.producto?.nombre,
+      codigo: item.codigo || item.producto?.codigo_proveedor,
+      tipo_producto: item.tipo || item.producto?.tipoProducto?.nombre || '-',
+      unidad: item.unidad || item.producto?.unidad?.abreviacion || '-',
+      cantidad: item.cantidad,
+      precio_costo: item.precio_costo,
+      margen: item.margen,
+      precio_venta: item.precio_venta,
+      descripcion: item.descripcion || item.nombre || item.producto?.nombre || '',
+      total: item.precio_venta * item.cantidad
+    }
+    
+    console.log('✅ PRODUCTO AGREGADO A COTIZACIÓN:', productoParaCotizacion)
+    cotizacion.productos.push(productoParaCotizacion)
+  })
+}
+
+const eliminarProducto = (index) => {
+  cotizacion.productos.splice(index, 1)
+}
+
+const formatearNumero = (numero) => {
+  return new Intl.NumberFormat('es-CL').format(numero || 0)
 }
 
 const eliminarVentana = (index) => {
@@ -821,13 +1094,14 @@ const abrirModalCliente = () => {
 
 // FUNCIONES SIMPLES QUE SÍ FUNCIONAN
 const buscarClientesSimple = async () => {
-  // Si ya hay un cliente seleccionado, no buscar
-  if (form.cliente) {
-    return
-  }
-  
   const query = terminoBusquedaCliente.value?.trim()
   console.log('🔍 BÚSQUEDA LOCAL:', query)
+  
+  // Si el usuario empieza a escribir de nuevo, limpiar la selección anterior
+  if (form.cliente && query !== form.cliente.razon_social) {
+    form.cliente = null
+    cotizacion.cliente_id = null
+  }
   
   if (!query || query.length < 2) {
     clientesBuscados.value = []
@@ -870,14 +1144,15 @@ const buscarClientesSimple = async () => {
 const seleccionarCliente = (cliente) => {
   console.log('✅ CLIENTE SELECCIONADO:', cliente)
   form.cliente = cliente
+  cotizacion.cliente_id = cliente.id // ✅ Actualizar el ID en cotización
   terminoBusquedaCliente.value = cliente.razon_social // Mostrar el nombre en el input
   mostrarDropdown.value = false // Ocultar dropdown
   clientesBuscados.value = [] // Limpiar resultados
 }
 
 const onFocusBuscador = () => {
-  // Solo mostrar dropdown si hay resultados y NO hay cliente seleccionado
-  if (clientesBuscados.value.length > 0 && !form.cliente) {
+  // Mostrar dropdown si hay resultados
+  if (clientesBuscados.value.length > 0) {
     mostrarDropdown.value = true
   }
 }
@@ -1235,6 +1510,7 @@ const guardarCotizacion = async () => {
       ventanas: cotizacion.ventanas.map(v => {
         const relacion = buscarRelacionVidrioProveedor(v.productoVidrioProveedor)
         return {
+          id: v.id, // ✅ Incluir ID para actualización
           tipo_ventana_id: v.tipo,
           ancho: v.ancho,
           alto: v.alto,
@@ -1256,19 +1532,43 @@ const guardarCotizacion = async () => {
 
         }
       }),
+      productos: (cotizacion.productos || []).map(p => ({
+        id: p.id, // ✅ Incluir ID para actualización
+        producto_lista_id: p.producto_lista_id,
+        lista_precio_id: p.lista_precio_id,
+        descripcion: p.descripcion || p.nombre || '',
+        cantidad: p.cantidad,
+        precio_unitario: p.precio_venta / p.cantidad, // Precio unitario
+        total: p.total || (p.precio_venta * p.cantidad)
+      })),
     }
         // ✅ AGREGAR ESTE LOG
     console.log('📤 PAYLOAD A ENVIAR:', payload)
     console.log('📤 VENTANAS ESPECÍFICAS:', payload.ventanas)
+    console.log('📤 PRODUCTOS ESPECÍFICOS:', payload.productos)
 
-    await api.post('api/cotizaciones', payload)
+    // ✅ USAR PUT SI ESTÁ EN MODO EDICIÓN, POST SI ES NUEVA
+    if (modoEdicion.value) {
+      console.log('🔄 Actualizando cotización existente ID:', cotizacionId.value)
+      await api.put(`/api/cotizaciones/${cotizacionId.value}`, payload)
+      alert('Cotización actualizada correctamente')
+    } else {
+      console.log('✨ Creando nueva cotización')
+      await api.post('/api/cotizaciones', payload)
+      alert('Cotización guardada correctamente')
+    }
 
-    alert('Cotización guardada correctamente')
     router.push({ name: 'cotizaciones' })
 
   } catch (error) {
     console.error('Error al guardar cotización:', error)
-    alert('Error al guardar la cotización')
+    
+    // Mostrar mensaje específico si es error de cliente
+    if (error.response?.data?.message) {
+      alert(error.response.data.message)
+    } else {
+      alert('Error al guardar la cotización')
+    }
   } finally {
     loading.value = false
   }

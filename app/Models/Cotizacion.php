@@ -52,4 +52,9 @@ class Cotizacion extends Model
     {
         return $this->hasMany(CotizacionDetalle::class);
     }
+
+    public function detalles()
+    {
+        return $this->hasMany(CotizacionDetalle::class);
+    }
 }

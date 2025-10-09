@@ -29,6 +29,11 @@ export default [
         to: { name: 'agregar-producto' },
         icon: { icon: 'mdi-plus-box' },
       },
+      {
+        title: 'Lista de Precios',
+        to: { name: 'lista-precios' },
+        icon: { icon: 'mdi-currency-usd' },
+      },
       // {
       //   title: 'Listado de Productos',
       //   to: { name: 'listado-productos' },

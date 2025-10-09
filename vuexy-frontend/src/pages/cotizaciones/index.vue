@@ -37,7 +37,7 @@
           >
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
-          <v-btn icon :href="`${apiBase}/api/cotizaciones/${item.id}/pdf`" target="_blank">
+          <v-btn icon @click="descargarPDF(item.id)">
             <v-icon>mdi-file-pdf-box</v-icon>
             </v-btn>
             <v-btn icon @click="duplicarCotizacion(item)">
@@ -53,7 +53,6 @@
   import { ref, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import api from '@/axiosInstance'
-  const apiBase = import.meta.env.VITE_API_BASE_URL
   
   const router = useRouter()
   const cotizaciones = ref([])
@@ -81,7 +80,7 @@
   }
   
   const editarCotizacion = (item) => {
-    router.push(`/cotizacion-editar?id=${item.id}`)
+    router.push(`/cotizador?id=${item.id}`)
     }
 
     const duplicarCotizacion = async (item) => {
@@ -90,11 +89,18 @@
   try {
     const res = await api.post(`/api/cotizaciones/${item.id}/duplicar`)
     alert('Cotización duplicada con éxito')
-    router.push(`/cotizacion-editar?id=${res.data.id}`)
+    router.push(`/cotizador?id=${res.data.id}`)
   } catch (error) {
     console.error(error)
     alert('Error al duplicar la cotización')
   }
+}
+
+const descargarPDF = (cotizacionId) => {
+  const baseURL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000' 
+    : 'https://proyectovialum-production.up.railway.app'
+  window.open(`${baseURL}/api/cotizaciones/${cotizacionId}/pdf`, '_blank')
 }
   
   onMounted(async () => {

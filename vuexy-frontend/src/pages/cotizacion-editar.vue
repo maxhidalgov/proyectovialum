@@ -115,6 +115,44 @@
         </div>
       </v-card>
 
+      <!-- Tabla de Productos -->
+      <v-card class="mt-4">
+        <v-card-title>
+          Productos
+          <v-spacer />
+          <v-btn icon @click="modalProductos = true" v-if="cotizacion.estado_cotizacion_id === 1">
+            <v-icon>mdi-plus</v-icon>
+          </v-btn>
+        </v-card-title>
+        
+        <v-data-table
+          v-if="productosDetalle.length > 0"
+          :headers="headersProductos"
+          :items="productosDetalle"
+          :items-per-page="5"
+          class="elevation-1"
+        >
+          <template #item.precio_unitario="{ item }">
+            ${{ Number(item.precio_unitario)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          </template>
+
+          <template #item.total="{ item }">
+            ${{ Number(item.total)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          </template>
+
+          <!-- Botón eliminar solo si está en modo edición -->
+          <template #item.actions="{ item }" v-if="cotizacion.estado_cotizacion_id === 1">
+            <v-btn icon size="small" @click="eliminarProducto(item)">
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </template>
+        </v-data-table>
+
+        <v-alert v-else type="info" variant="tonal" class="ma-4">
+          No hay productos agregados. Haz clic en el botón + para agregar productos.
+        </v-alert>
+      </v-card>
+
       <AgregarVentanaModal
         v-model="modalAgregarVentana"
         :tiposVentana="tiposVentanaTodos"
@@ -123,6 +161,11 @@
         :tiposVidrio="tiposVidrio"
         :productosVidrio="productosVidrio"
         @agregar="agregarVentanaDesdeModal"
+      />
+
+      <ModalProductos
+        v-model="modalProductos"
+        @producto-seleccionado="agregarProductoDesdeModal"
       />
     </template>
 
@@ -140,10 +183,13 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/axiosInstance'
 import VentanaForm from './VentanaForm.vue'
 import AgregarVentanaModal from './AgregarVentanaModal.vue'
+import ModalProductos from './ModalProductos.vue'
 import debounce from 'lodash/debounce'
 import { can } from '@/@layouts/plugins/casl'
 
 const modalAgregarVentana = ref(false)
+const modalProductos = ref(false)
+
 const agregarVentana = (ventana) => {
   cotizacion.value.ventanas.push(ventana)
 
@@ -340,6 +386,46 @@ const agregarVentanaDesdeModal = (ventana) => {
   modalAgregarVentana.value = false
 }
 
+// Funciones para productos
+const agregarProductoDesdeModal = (producto) => {
+  console.log('📦 Producto recibido del modal:', producto)
+  
+  // Crear el detalle del producto
+  const productoDetalle = {
+    tipo_item: 'producto',
+    producto_lista_id: producto.producto_lista_id,
+    lista_precio_id: producto.lista_precio_id,
+    descripcion: producto.descripcion,
+    cantidad: producto.cantidad,
+    precio_unitario: producto.precio_venta,
+    total: producto.precio_venta * producto.cantidad,
+    // Guardar info adicional para referencia
+    _producto: producto
+  }
+
+  // Agregar al array de detalles
+  if (!cotizacion.value.detalles) {
+    cotizacion.value.detalles = []
+  }
+  
+  cotizacion.value.detalles.push(productoDetalle)
+  
+  console.log('✅ Producto agregado a detalles:', productoDetalle)
+  console.log('📋 Detalles actuales:', cotizacion.value.detalles)
+  
+  modalProductos.value = false
+}
+
+const eliminarProducto = (producto) => {
+  if (!confirm(`¿Eliminar el producto "${producto.descripcion}"?`)) return
+  
+  const index = cotizacion.value.detalles.findIndex(d => d === producto)
+  if (index !== -1) {
+    cotizacion.value.detalles.splice(index, 1)
+    console.log('🗑️ Producto eliminado')
+  }
+}
+
 
 const form = ref(null)
 
@@ -356,10 +442,24 @@ const headers = [
   { title: 'Precio', value: 'precio' },
 ]
 
+const headersProductos = [
+  { title: 'Descripción', value: 'descripcion' },
+  { title: 'Cantidad', value: 'cantidad' },
+  { title: 'Precio Unitario', value: 'precio_unitario' },
+  { title: 'Total', value: 'total' },
+  { title: 'Acciones', value: 'actions', sortable: false },
+]
+
 const tiposVentanaTodos = ref([])
 const colores = ref([])
 const tiposVidrio = ref([])
 const productosVidrio = ref([])
+
+// Computed para filtrar solo los productos (tipo_item = 'producto')
+const productosDetalle = computed(() => {
+  if (!cotizacion.value?.detalles) return []
+  return cotizacion.value.detalles.filter(d => d.tipo_item === 'producto')
+})
 
 const productosVidrioFiltrados = computed(() => {
   return productosVidrio.value.flatMap(p =>
@@ -414,7 +514,19 @@ const guardarCambios = async () => {
       precio_unitario: v.precio_unitario || 0,
       hojas_totales: v.tipo_ventana_id === 3 || v.tipo_ventana_id === 46 ? v.hojas_totales : null,
       hojas_moviles: v.tipo_ventana_id === 3 || v.tipo_ventana_id === 46? v.hojas_moviles : null
-    }))
+    })),
+      productos: (cotizacion.value.detalles || [])
+        .filter(d => d.tipo_item === 'producto')
+        .map(p => ({
+          id: p.id,
+          producto_lista_id: p.producto_lista_id,
+          lista_precio_id: p.lista_precio_id,
+          descripcion: p.descripcion,
+          cantidad: p.cantidad,
+          precio_unitario: p.precio_unitario,
+          precio_venta: p.precio_unitario,
+          total: p.total
+        }))
     }
 
     await api.put(`/api/cotizaciones/${cotizacion.value.id}`, payload)

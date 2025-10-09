@@ -6,8 +6,8 @@
         <v-btn
           class="ml-2"
           color="secondary"
-          :href="`/cotizaciones/${cotizacion?.id}/pdf`"
-          target="_blank"
+          @click="descargarPDF"
+          :disabled="!cotizacion?.id"
         >
           Descargar PDF
         </v-btn>
@@ -82,11 +82,30 @@
         </v-col>
       </v-row>
     </v-card>
+
+    <!-- Tabla de Productos -->
+    <v-card v-if="productosDetalle.length > 0" class="mt-4">
+      <v-card-title>Productos</v-card-title>
+      <v-data-table
+        :headers="headersProductos"
+        :items="productosDetalle"
+        :items-per-page="5"
+        class="elevation-1"
+      >
+        <template #item.precio_unitario="{ item }">
+          ${{ Number(item.precio_unitario)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+        </template>
+
+        <template #item.total="{ item }">
+          ${{ Number(item.total)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+        </template>
+      </v-data-table>
+    </v-card>
   </v-container>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import api from '@/axiosInstance'
@@ -113,6 +132,19 @@ const headers = [
 
 ]
 
+const headersProductos = [
+  { title: 'Descripción', value: 'descripcion' },
+  { title: 'Cantidad', value: 'cantidad' },
+  { title: 'Precio Unitario', value: 'precio_unitario' },
+  { title: 'Total', value: 'total' },
+]
+
+// Computed para filtrar solo los productos (tipo_item = 'producto')
+const productosDetalle = computed(() => {
+  if (!cotizacion.value?.detalles) return []
+  return cotizacion.value.detalles.filter(d => d.tipo_item === 'producto')
+})
+
 const getEstadoColor = (estado) => {
   switch (estado) {
     case 'Evaluación': return 'grey'
@@ -124,6 +156,13 @@ const getEstadoColor = (estado) => {
 
 const volver = () => {
   router.push({ name: 'cotizaciones' })
+}
+
+const descargarPDF = () => {
+  const baseURL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000' 
+    : 'https://proyectovialum-production.up.railway.app'
+  window.open(`${baseURL}/api/cotizaciones/${cotizacion.value.id}/pdf`, '_blank')
 }
 
 onMounted(async () => {
