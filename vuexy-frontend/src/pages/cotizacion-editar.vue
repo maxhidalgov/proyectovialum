@@ -132,6 +132,12 @@
           :items-per-page="5"
           class="elevation-1"
         >
+          <template #item.descripcion="{ item }">
+            <div>
+              <div class="font-weight-medium">{{ item.descripcion }}</div>
+            </div>
+          </template>
+
           <template #item.precio_unitario="{ item }">
             ${{ Number(item.precio_unitario)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
           </template>
@@ -165,7 +171,7 @@
 
       <ModalProductos
         v-model="modalProductos"
-        @producto-seleccionado="agregarProductoDesdeModal"
+        @agregar-productos="agregarProductoDesdeModal"
       />
     </template>
 
@@ -387,30 +393,81 @@ const agregarVentanaDesdeModal = (ventana) => {
 }
 
 // Funciones para productos
-const agregarProductoDesdeModal = (producto) => {
-  console.log('📦 Producto recibido del modal:', producto)
+const agregarProductoDesdeModal = (productos) => {
+  console.log('📦 Productos recibidos del modal:', productos)
   
-  // Crear el detalle del producto
-  const productoDetalle = {
-    tipo_item: 'producto',
-    producto_lista_id: producto.producto_lista_id,
-    lista_precio_id: producto.lista_precio_id,
-    descripcion: producto.descripcion,
-    cantidad: producto.cantidad,
-    precio_unitario: producto.precio_venta,
-    total: producto.precio_venta * producto.cantidad,
-    // Guardar info adicional para referencia
-    _producto: producto
+  // El modal ahora envía un array de productos
+  if (!Array.isArray(productos)) {
+    productos = [productos]
   }
 
-  // Agregar al array de detalles
-  if (!cotizacion.value.detalles) {
-    cotizacion.value.detalles = []
-  }
+  productos.forEach(item => {
+    console.log('🔍 Item completo:', item)
+    console.log('🔍 Item.producto:', item.producto)
+    console.log('🔍 Lista precio ID:', item.lista_precio_id)
+    
+    // Construir descripción (solo nombre del producto)
+    let descripcion = item.producto?.nombre || item.nombre || 'Producto sin nombre'
+    
+    // Obtener información del color y proveedor desde la lista de precios
+    const listaPrecio = item.producto?.listaPrecios?.find(lp => lp.id === item.lista_precio_id) || 
+                       item.producto?.lista_precios?.find(lp => lp.id === item.lista_precio_id)
+    
+    console.log('📋 Lista precio encontrada:', listaPrecio)
+    
+    let colorNombre = '-'
+    let proveedorNombre = '-'
+    
+    if (listaPrecio) {
+      // Intentar obtener el producto_color_proveedor de diferentes formas
+      const pcp = listaPrecio.producto_color_proveedor || 
+                  listaPrecio.productoColorProveedor
+      
+      console.log('🎨 ProductoColorProveedor:', pcp)
+      
+      if (pcp) {
+        colorNombre = pcp.color?.nombre || '-'
+        proveedorNombre = pcp.proveedor?.nombre || '-'
+        
+        console.log('🎨 Color:', colorNombre)
+        console.log('🏢 Proveedor:', proveedorNombre)
+      }
+    }
+    
+    console.log('📝 Descripción final generada:', descripcion)
+    
+    // Crear el detalle del producto
+    const productoDetalle = {
+      tipo_item: 'producto',
+      producto_lista_id: item.producto_lista_id || item.producto?.id,
+      lista_precio_id: item.lista_precio_id,
+      descripcion: descripcion,
+      color: colorNombre,
+      proveedor: proveedorNombre,
+      cantidad: item.cantidad,
+      precio_unitario: item.precio_venta / item.cantidad, // Precio unitario
+      total: item.precio_venta * item.cantidad,
+      // Guardar info adicional para referencia
+      _producto: item.producto,
+      _listaPrecio: listaPrecio,
+      // Campos adicionales para vidrios
+      esVidrio: item.esVidrio || false,
+      ancho_mm: item.ancho_mm || null,
+      alto_mm: item.alto_mm || null,
+      m2: item.m2 || null,
+      pulido: item.pulido || false
+    }
+
+    // Agregar al array de detalles
+    if (!cotizacion.value.detalles) {
+      cotizacion.value.detalles = []
+    }
+    
+    cotizacion.value.detalles.push(productoDetalle)
+    
+    console.log('✅ Producto agregado a detalles:', productoDetalle)
+  })
   
-  cotizacion.value.detalles.push(productoDetalle)
-  
-  console.log('✅ Producto agregado a detalles:', productoDetalle)
   console.log('📋 Detalles actuales:', cotizacion.value.detalles)
   
   modalProductos.value = false
@@ -444,6 +501,8 @@ const headers = [
 
 const headersProductos = [
   { title: 'Descripción', value: 'descripcion' },
+  { title: 'Color', value: 'color' },
+  { title: 'Proveedor', value: 'proveedor' },
   { title: 'Cantidad', value: 'cantidad' },
   { title: 'Precio Unitario', value: 'precio_unitario' },
   { title: 'Total', value: 'total' },
@@ -609,6 +668,31 @@ cotizacionBase.ventanas = cotizacionBase.ventanas.map(v => ({
 }))
 // 3. Ahora sí asignas la cotización completa
 cotizacion.value = cotizacionBase
+
+// 4. Procesar detalles de productos para agregar color y proveedor
+if (cotizacionBase.detalles && Array.isArray(cotizacionBase.detalles)) {
+  cotizacion.value.detalles = cotizacionBase.detalles.map(detalle => {
+    // Si es un producto, intentar extraer color y proveedor
+    if (detalle.tipo_item === 'producto') {
+      // Extraer de la descripción si contiene " - " y " ("
+      let color = '-'
+      let proveedor = '-'
+      
+      const descMatch = detalle.descripcion?.match(/(.+?)\s*-\s*(.+?)\s*\((.+?)\)/)
+      if (descMatch) {
+        color = descMatch[2]?.trim() || '-'
+        proveedor = descMatch[3]?.trim() || '-'
+      }
+      
+      return {
+        ...detalle,
+        color: color,
+        proveedor: proveedor
+      }
+    }
+    return detalle
+  })
+}
 
 
     // 5. Asignar datos auxiliares

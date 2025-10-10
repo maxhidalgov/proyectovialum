@@ -17,7 +17,8 @@ class ProductoController extends Controller
                 'coloresPorProveedor.color',
                 'unidad',
                 'tipoProducto',
-                'listaPrecios' // ✅ Agregar relación de lista de precios
+                'listaPrecios.productoColorProveedor.color', // ✅ Cargar relación anidada
+                'listaPrecios.productoColorProveedor.proveedor' // ✅ Cargar relación anidada
             ])->get();
 
             return response()->json($productos);
@@ -127,18 +128,42 @@ class ProductoController extends Controller
             ]);
 
             if (!empty($validatedData['producto_color_proveedor'])) {
-                ProductoColorProveedor::where('producto_id', $producto->id)->delete();
+                // Obtener IDs de combos existentes para no perder referencias
+                $combosExistentes = ProductoColorProveedor::where('producto_id', $producto->id)->get();
+                $idsAMantener = [];
 
                 foreach ($validatedData['producto_color_proveedor'] as $combo) {
-                    ProductoColorProveedor::create([
-                        'producto_id' => $producto->id,
-                        'proveedor_id' => $combo['proveedor_id'],
-                        'color_id' => $combo['color_id'],
-                        'costo' => $combo['costo'],
-                        'codigo_proveedor' => $combo['codigo_proveedor'] ?? null,
-                        'stock' => 0,
-                    ]);
+                    // Buscar si ya existe esta combinación
+                    $existente = $combosExistentes->first(function($item) use ($combo) {
+                        return $item->proveedor_id == $combo['proveedor_id'] 
+                            && $item->color_id == $combo['color_id'];
+                    });
+
+                    if ($existente) {
+                        // ACTUALIZAR el existente para mantener el ID
+                        $existente->update([
+                            'costo' => $combo['costo'],
+                            'codigo_proveedor' => $combo['codigo_proveedor'] ?? null,
+                        ]);
+                        $idsAMantener[] = $existente->id;
+                    } else {
+                        // CREAR nuevo si no existe
+                        $nuevo = ProductoColorProveedor::create([
+                            'producto_id' => $producto->id,
+                            'proveedor_id' => $combo['proveedor_id'],
+                            'color_id' => $combo['color_id'],
+                            'costo' => $combo['costo'],
+                            'codigo_proveedor' => $combo['codigo_proveedor'] ?? null,
+                            'stock' => 0,
+                        ]);
+                        $idsAMantener[] = $nuevo->id;
+                    }
                 }
+
+                // SOLO eliminar los que ya NO están en la lista
+                ProductoColorProveedor::where('producto_id', $producto->id)
+                    ->whereNotIn('id', $idsAMantener)
+                    ->delete();
             }
 
             return response()->json([

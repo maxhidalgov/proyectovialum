@@ -17,13 +17,24 @@ class CotizacionDetalle extends Model
         'descripcion',
         'cantidad',
         'precio_unitario',
-        'total'
+        'total',
+        // Campos para productos tipo vidrio
+        'esVidrio',
+        'ancho_mm',
+        'alto_mm',
+        'm2',
+        'pulido'
     ];
 
     protected $casts = [
         'cantidad' => 'decimal:2',
         'precio_unitario' => 'decimal:2',
-        'total' => 'decimal:2'
+        'total' => 'decimal:2',
+        'esVidrio' => 'boolean',
+        'ancho_mm' => 'decimal:2',
+        'alto_mm' => 'decimal:2',
+        'm2' => 'decimal:4',
+        'pulido' => 'boolean'
     ];
 
     public function cotizacion()

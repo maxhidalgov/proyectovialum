@@ -65,40 +65,138 @@
             outlined
           >
             <v-row dense align="center">
-              <v-col cols="12" md="4">
-                <div class="text-subtitle-2">{{ item.producto.nombre }}</div>
-                <div class="text-caption text-grey">{{ item.producto.codigo_proveedor }}</div>
+              <v-col cols="12" md="3">
+                <div class="text-subtitle-2">{{ item.nombre }}</div>
+                <div class="text-caption text-grey">{{ item.codigo }}</div>
+                <v-chip v-if="item.esVidrio" size="x-small" color="info" class="mt-1">
+                  Venta por m²
+                </v-chip>
               </v-col>
 
               <v-col cols="6" md="2">
-                <v-text-field
-                  v-model.number="item.cantidad"
-                  label="Cantidad"
-                  type="number"
-                  min="1"
-                  outlined
-                  dense
-                  hide-details
-                  @input="calcularPrecio(item)"
-                />
+                <div class="text-caption text-grey">Color</div>
+                <div class="text-subtitle-2">{{ item.color || '-' }}</div>
               </v-col>
 
               <v-col cols="6" md="2">
-                <div class="text-caption text-grey">Precio Costo</div>
-                <div class="text-subtitle-2">${{ formatearNumero(item.precio_costo) }}</div>
+                <div class="text-caption text-grey">Proveedor</div>
+                <div class="text-subtitle-2">{{ item.proveedor || '-' }}</div>
               </v-col>
 
-              <v-col cols="6" md="2">
-                <div class="text-caption text-grey">Margen</div>
-                <div class="text-subtitle-2">{{ item.margen }}%</div>
-              </v-col>
+              <!-- Si es vidrio (tipo 1 o 2), mostrar campos de dimensiones -->
+              <template v-if="item.esVidrio">
+                <v-col cols="12" md="12">
+                  <v-divider class="my-2"></v-divider>
+                  <v-row dense>
+                    <v-col cols="6" md="2">
+                      <v-text-field
+                        v-model.number="item.ancho_mm"
+                        label="Ancho (mm)"
+                        type="number"
+                        outlined
+                        dense
+                        hide-details
+                        @input="recalcularPrecioVidrio(item)"
+                      />
+                    </v-col>
 
-              <v-col cols="4" md="1">
-                <div class="text-caption text-grey">Precio Venta</div>
-                <div class="text-subtitle-2 text-success">${{ formatearNumero(item.precio_venta) }}</div>
-              </v-col>
+                    <v-col cols="6" md="2">
+                      <v-text-field
+                        v-model.number="item.alto_mm"
+                        label="Alto (mm)"
+                        type="number"
+                        outlined
+                        dense
+                        hide-details
+                        @input="recalcularPrecioVidrio(item)"
+                      />
+                    </v-col>
 
-              <v-col cols="2" md="1" class="text-right">
+                    <v-col cols="6" md="2">
+                      <v-text-field
+                        :key="`m2-${item.ancho_mm}-${item.alto_mm}`"
+                        :model-value="calcularM2Display(item)"
+                        label="m²"
+                        readonly
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        class="text-primary font-weight-bold"
+                      >
+                        <template #append-inner>
+                          <v-icon size="small" color="info">mdi-texture-box</v-icon>
+                        </template>
+                      </v-text-field>
+                    </v-col>
+
+                    <v-col cols="6" md="1">
+                      <v-text-field
+                        v-model.number="item.cantidad"
+                        label="Cant."
+                        type="number"
+                        min="1"
+                        outlined
+                        dense
+                        hide-details
+                        @input="recalcularPrecioVidrio(item)"
+                      />
+                    </v-col>
+
+                    <v-col cols="6" md="2">
+                      <v-checkbox
+                        v-model="item.pulido"
+                        label="Pulido (+20%)"
+                        color="primary"
+                        hide-details
+                        @change="recalcularPrecioVidrio(item)"
+                      />
+                    </v-col>
+
+                    <v-col cols="6" md="1">
+                      <div class="text-caption text-grey">P. Costo/m²</div>
+                      <div class="text-subtitle-2">${{ formatearNumero(item.precio_costo_calculado || item.precio_costo) }}</div>
+                    </v-col>
+
+                    <v-col cols="6" md="2">
+                      <div class="text-caption text-grey">P. Venta Total</div>
+                      <div class="text-subtitle-2 text-success">${{ formatearNumero(item.precio_venta_total) }}</div>
+                    </v-col>
+                  </v-row>
+                </v-col>
+              </template>
+
+              <!-- Si NO es vidrio, mostrar campos normales -->
+              <template v-else>
+                <v-col cols="6" md="1">
+                  <v-text-field
+                    v-model.number="item.cantidad"
+                    label="Cant."
+                    type="number"
+                    min="1"
+                    outlined
+                    dense
+                    hide-details
+                    @input="calcularPrecio(item)"
+                  />
+                </v-col>
+
+                <v-col cols="6" md="1">
+                  <div class="text-caption text-grey">P. Costo</div>
+                  <div class="text-subtitle-2">${{ formatearNumero(item.precio_costo) }}</div>
+                </v-col>
+
+                <v-col cols="4" md="1">
+                  <div class="text-caption text-grey">Margen</div>
+                  <div class="text-subtitle-2">{{ item.margen }}%</div>
+                </v-col>
+
+                <v-col cols="4" md="1">
+                  <div class="text-caption text-grey">P. Venta</div>
+                  <div class="text-subtitle-2 text-success">${{ formatearNumero(item.precio_venta) }}</div>
+                </v-col>
+              </template>
+
+              <v-col :cols="item.esVidrio ? 12 : 4" :md="item.esVidrio ? 12 : 1" :class="item.esVidrio ? '' : 'text-right'">
                 <v-btn
                   icon="mdi-delete"
                   size="small"
@@ -170,27 +268,65 @@ const cargando = ref(false)
 const headers = [
   { title: 'Código', key: 'codigo_proveedor', sortable: true },
   { title: 'Nombre', key: 'nombre', sortable: true },
-  { title: 'Tipo', key: 'tipo_producto', sortable: true },
-  { title: 'Unidad', key: 'unidad', sortable: true },
+  { title: 'Color', key: 'color', sortable: true },
+  { title: 'Proveedor', key: 'proveedor', sortable: true },
+  { title: 'Precio', key: 'precio', sortable: true },
   { title: 'Acciones', key: 'acciones', sortable: false, align: 'center' }
 ]
 
-// Computed
+// Computed - Expandir productos por sus variantes de color/proveedor
 const productosFiltrados = computed(() => {
   if (!Array.isArray(productos.value)) return []
-  if (!busqueda.value) return productos.value
   
-  const termino = busqueda.value.toLowerCase()
-  return productos.value.filter(p => {
-    if (!p) return false
-    const nombre = p.nombre || ''
-    const codigo = p.codigo_proveedor || ''
-    return nombre.toLowerCase().includes(termino) || codigo.toLowerCase().includes(termino)
+  const productosExpandidos = []
+  
+  productos.value.forEach(producto => {
+    const listasPrecios = producto.listaPrecios || producto.lista_precios || []
+    const listasActivas = listasPrecios.filter(lp => {
+      return Number(lp.activo) === 1 || lp.activo === true || lp.activo === '1'
+    })
+    
+    if (listasActivas.length === 0) {
+      productosExpandidos.push({
+        ...producto,
+        _productoOriginal: producto,
+        _listaPrecio: null,
+        color: '-',
+        proveedor: '-',
+        precio: '-'
+      })
+    } else {
+      listasActivas.forEach(lp => {
+        const pcp = lp.productoColorProveedor || lp.producto_color_proveedor
+        productosExpandidos.push({
+          ...producto,
+          _productoOriginal: producto,
+          _listaPrecio: lp,
+          id: `${producto.id}_${lp.id}`,
+          color: pcp?.color?.nombre || '-',
+          proveedor: pcp?.proveedor?.nombre || '-',
+          precio: `$${Number(lp.precio_venta || 0).toLocaleString('es-CL')}`
+        })
+      })
+    }
   })
+  
+  if (!busqueda.value) return productosExpandidos
+  
+  const busquedaLower = busqueda.value.toLowerCase()
+  return productosExpandidos.filter(p => 
+    p.nombre?.toLowerCase().includes(busquedaLower) ||
+    p.codigo?.toLowerCase().includes(busquedaLower) ||
+    p.color?.toLowerCase().includes(busquedaLower) ||
+    p.proveedor?.toLowerCase().includes(busquedaLower)
+  )
 })
 
 const totalSeleccionados = computed(() => {
-  return productosSeleccionados.value.reduce((sum, item) => sum + item.precio_venta, 0)
+  return productosSeleccionados.value.reduce((sum, item) => {
+    const precio = item.esVidrio ? (item.precio_venta_total || 0) : (item.precio_venta || 0)
+    return sum + precio
+  }, 0)
 })
 
 // Watch
@@ -212,86 +348,79 @@ watch(modalProductos, (valor) => {
 const cargarProductos = async () => {
   cargando.value = true
   try {
-    console.log('🔍 Cargando productos desde /api/productos...')
-    console.log('🌐 Using API instance with baseURL')
     const response = await api.get('/api/productos')
-    console.log('✅ Respuesta recibida:', response)
-    console.log('📦 Data type:', typeof response.data)
-    console.log('📦 Data content:', response.data)
-    
-    // Si la respuesta es un string, intentar parsearlo
     let data = response.data
+    
     if (typeof data === 'string') {
-      console.log('⚠️ Respuesta es string, intentando parsear...')
-      console.log('📝 Primeros 500 caracteres:', data.substring(0, 500))
       try {
         data = JSON.parse(data)
       } catch (parseError) {
-        console.error('❌ No se pudo parsear como JSON:', parseError)
-        throw new Error('La respuesta no es JSON válido')
+        console.error('Error al parsear JSON:', parseError)
+        data = []
       }
     }
     
-    if (Array.isArray(data)) {
-      productos.value = data
-      console.log(`✅ ${productos.value.length} productos cargados`)
-    } else {
-      console.warn('⚠️ La respuesta no es un array:', typeof data)
-      console.log('Contenido:', data)
-      productos.value = []
-    }
+    productos.value = Array.isArray(data) ? data : []
   } catch (error) {
-    console.error('❌ Error al cargar productos:', error)
-    console.error('❌ Error completo:', error.response)
+    console.error('Error al cargar productos:', error)
     productos.value = []
-    
-    // Mostrar alerta al usuario
-    alert('Error al cargar productos. Por favor, verifica que el servidor esté corriendo.')
   } finally {
     cargando.value = false
   }
 }
 
-const seleccionarProducto = (producto) => {
-  // Verificar si ya está seleccionado
+const seleccionarProducto = (productoFila) => {
+  const producto = productoFila._productoOriginal
+  const listaPrecioActiva = productoFila._listaPrecio
+  
   const yaSeleccionado = productosSeleccionados.value.find(
-    item => item.producto.id === producto.id
+    item => item.producto_lista_id === producto.id && item.lista_precio_id === listaPrecioActiva?.id
   )
   
   if (yaSeleccionado) {
-    alert('Este producto ya fue seleccionado')
+    alert('Esta variante del producto ya fue seleccionada')
     return
   }
 
-  // Buscar lista de precios activa del producto
-  console.log('🔍 Producto seleccionado:', producto)
-  console.log('📋 Lista precios disponibles:', producto.listaPrecios || producto.lista_precios)
+  if (!listaPrecioActiva) {
+    alert('Este producto no tiene precio configurado')
+    return
+  }
   
-  const listaPrecioActiva = (producto.listaPrecios || producto.lista_precios)?.find(lp => lp.activo === 1 || lp.activo === true) || null
+  const pcp = listaPrecioActiva.productoColorProveedor || listaPrecioActiva.producto_color_proveedor
+  const precioCosto = parseFloat(listaPrecioActiva.precio_costo) || 0
+  const margenDefault = parseFloat(listaPrecioActiva.margen) || 30
   
-  console.log('✅ Lista precio activa encontrada:', listaPrecioActiva)
-  
-  const precioCosto = listaPrecioActiva ? parseFloat(listaPrecioActiva.precio_costo) : 0
-  const margenDefault = listaPrecioActiva ? parseFloat(listaPrecioActiva.margen) : 30
-  const precioVenta = precioCosto * (1 + margenDefault / 100)
-  
-  console.log('💰 Precio costo:', precioCosto)
-  console.log('📊 Margen:', margenDefault)
-  console.log('💵 Precio venta:', precioVenta)
+  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
+  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
+  const precioVenta = margenDefault >= 100 ? 0 : precioCosto / (1 - margenDefault / 100)
+
+  // Detectar si es vidrio (tipo_producto_id 1 o 2)
+  const esVidrio = producto.tipo_producto_id === 1 || producto.tipo_producto_id === 2
 
   productosSeleccionados.value.push({
     producto: { ...producto },
-    producto_lista_id: producto.id, // ✅ ID del producto
-    lista_precio_id: listaPrecioActiva?.id || null, // ✅ ID de la lista de precios
+    producto_lista_id: producto.id,
+    lista_precio_id: listaPrecioActiva.id,
     cantidad: 1,
     precio_costo: precioCosto,
     margen: margenDefault,
     precio_venta: precioVenta,
-    // Información adicional para mostrar
+    precio_venta_total: precioVenta, // Para vidrios, se recalculará
+    descripcion: `${producto.nombre} - ${pcp?.color?.nombre || 'Sin color'} (${pcp?.proveedor?.nombre || 'Sin proveedor'})`,
     codigo: producto.codigo,
     nombre: producto.nombre,
+    color: pcp?.color?.nombre || '-',
+    proveedor: pcp?.proveedor?.nombre || '-',
     tipo: producto.tipo_producto?.nombre || '',
-    unidad: producto.unidad?.nombre || producto.unidad?.simbolo || ''
+    unidad: producto.unidad?.nombre || producto.unidad?.simbolo || '',
+    // Campos específicos para vidrios
+    esVidrio: esVidrio,
+    ancho_mm: esVidrio ? null : undefined,
+    alto_mm: esVidrio ? null : undefined,
+    m2: esVidrio ? 0 : undefined,
+    pulido: esVidrio ? false : undefined,
+    precio_costo_calculado: esVidrio ? precioCosto : undefined
   })
 }
 
@@ -304,8 +433,68 @@ const calcularPrecio = (item) => {
   const cantidad = parseFloat(item.cantidad) || 1
   const margen = parseFloat(item.margen) || 0
   
-  const precioUnitario = costo * (1 + margen / 100)
+  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
+  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
+  if (margen >= 100) {
+    item.precio_venta = 0
+    return
+  }
+  
+  const precioUnitario = costo / (1 - margen / 100)
   item.precio_venta = precioUnitario * cantidad
+}
+
+// Función para calcular m² desde dimensiones en mm
+const calcularM2 = (item) => {
+  if (!item.esVidrio || !item.ancho_mm || !item.alto_mm) return 0
+  
+  const m2 = (item.ancho_mm * item.alto_mm) / 1000000
+  item.m2 = m2
+  return m2
+}
+
+// Función para mostrar m² formateado
+const calcularM2Display = (item) => {
+  const m2 = calcularM2(item)
+  return m2 > 0 ? m2.toFixed(4) : '0.0000'
+}
+
+// Función para recalcular precio cuando cambian las dimensiones del vidrio
+const recalcularPrecioVidrio = (item) => {
+  if (!item.esVidrio) return
+  
+  const m2 = calcularM2(item)
+  
+  if (m2 <= 0) {
+    item.precio_venta_total = 0
+    item.precio_costo_calculado = item.precio_costo
+    return
+  }
+  
+  // Aplicar costo de pulido si está activado (+20%)
+  let costoFinal = item.precio_costo
+  if (item.pulido) {
+    costoFinal = item.precio_costo * 1.20
+  }
+  item.precio_costo_calculado = costoFinal
+  
+  const margen = parseFloat(item.margen) || 0
+  
+  // Evitar división por cero si margen >= 100
+  if (margen >= 100) {
+    item.precio_venta_total = 0
+    item.precio_venta = 0
+    return
+  }
+  
+  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
+  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
+  const precioBase = costoFinal * m2
+  const precioConMargen = precioBase / (1 - margen / 100)
+  const cantidad = parseFloat(item.cantidad) || 1
+  
+  item.precio_venta_total = precioConMargen * cantidad
+  item.precio_venta = item.precio_venta_total // Para compatibilidad
 }
 
 const formatearNumero = (numero) => {
@@ -322,7 +511,31 @@ const cerrarModal = () => {
 }
 
 const agregarProductos = () => {
-  emit('agregar-productos', [...productosSeleccionados.value])
+  // Validar que los productos tipo vidrio tengan dimensiones
+  const vidriosSinDimensiones = productosSeleccionados.value.filter(
+    item => item.esVidrio && (!item.ancho_mm || !item.alto_mm || item.ancho_mm <= 0 || item.alto_mm <= 0)
+  )
+  
+  if (vidriosSinDimensiones.length > 0) {
+    alert('Por favor, ingresa las dimensiones (ancho y alto) para todos los productos de vidrio')
+    return
+  }
+  
+  // Preparar productos para enviar
+  const productosParaEnviar = productosSeleccionados.value.map(item => {
+    if (item.esVidrio) {
+      const pulidoTexto = item.pulido ? ' [PULIDO]' : ''
+      return {
+        ...item,
+        descripcion: `${item.nombre} - ${item.ancho_mm}mm x ${item.alto_mm}mm (${calcularM2Display(item)} m²)${pulidoTexto} - ${item.color} (${item.proveedor})`,
+        precio_venta: item.precio_venta_total,
+        m2: calcularM2(item)
+      }
+    }
+    return item
+  })
+  
+  emit('agregar-productos', productosParaEnviar)
   modalProductos.value = false
 }
 </script>

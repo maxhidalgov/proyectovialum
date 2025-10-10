@@ -120,7 +120,13 @@ public function store(Request $request)
                     'descripcion' => $producto['descripcion'] ?? '',
                     'cantidad' => $producto['cantidad'] ?? 1,
                     'precio_unitario' => $producto['precio_unitario'] ?? 0,
-                    'total' => $producto['total'] ?? 0
+                    'total' => $producto['total'] ?? 0,
+                    // Campos adicionales para vidrios
+                    'esVidrio' => $producto['esVidrio'] ?? false,
+                    'ancho_mm' => $producto['ancho_mm'] ?? null,
+                    'alto_mm' => $producto['alto_mm'] ?? null,
+                    'm2' => $producto['m2'] ?? null,
+                    'pulido' => $producto['pulido'] ?? false
                 ]);
             }
         }

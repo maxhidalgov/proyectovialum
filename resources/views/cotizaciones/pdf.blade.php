@@ -122,11 +122,23 @@
               @if($detalle->listaPrecio)
                 {{-- Producto de lista de precios --}}
                 <strong>{{ $detalle->listaPrecio->producto->nombre ?? 'N/A' }}</strong>
+                
+                {{-- Mostrar dimensiones y detalles si es vidrio --}}
+                @if($detalle->esVidrio && $detalle->ancho_mm && $detalle->alto_mm)
+                  <br>
+                  <span style="font-size: 10px; color: #666;">
+                    Dimensiones: {{ $detalle->ancho_mm }}mm x {{ $detalle->alto_mm }}mm 
+                    ({{ number_format($detalle->m2, 4) }} m²)
+                    @if($detalle->pulido)
+                      <strong>[PULIDO]</strong>
+                    @endif
+                  </span>
+                @endif
+                
                 @if($detalle->listaPrecio->productoColorProveedor)
                   <br>
                   <span style="font-size: 10px; color: #666;">
-                    Color: {{ $detalle->listaPrecio->productoColorProveedor->color->nombre ?? 'N/A' }} |
-                    Proveedor: {{ $detalle->listaPrecio->productoColorProveedor->proveedor->nombre ?? 'N/A' }}
+                    Color: {{ $detalle->listaPrecio->productoColorProveedor->color->nombre ?? 'N/A' }}
                   </span>
                 @endif
               @elseif($detalle->producto)

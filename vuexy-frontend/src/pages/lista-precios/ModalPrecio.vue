@@ -218,7 +218,14 @@ const dialogVisible = computed({
 const precioVentaCalculado = computed(() => {
   const costo = parseFloat(formulario.value.precio_costo) || 0
   const margen = parseFloat(formulario.value.margen) || 0
-  const venta = costo * (1 + margen / 100)
+  
+  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
+  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
+  if (margen >= 100) {
+    return formatearNumero(0) // Evitar división por cero
+  }
+  
+  const venta = costo / (1 - margen / 100)
   return formatearNumero(venta)
 })
 

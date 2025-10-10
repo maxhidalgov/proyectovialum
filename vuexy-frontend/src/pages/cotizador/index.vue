@@ -69,16 +69,19 @@
 
       <!-- Observaciones -->
       <v-row dense>
-        <v-col cols="6">
+        <v-col cols="4">
           <v-textarea
             v-model="cotizacion.observaciones"
             label="Observaciones"
+                      row-height="15"
+          rows="1"
             outlined
             color="primary"
             auto-grow
           />
         </v-col>
       </v-row>
+      <v-divider class="my-4" />
 
       <!-- Lista de Ventanas -->
       <v-card-subtitle class="text-h5">Items de la Cotización</v-card-subtitle>
@@ -164,12 +167,13 @@
         </v-card>
       </v-expand-transition>
 
-        <v-data-table 
-          :headers="headersVentanas"
-          :items="cotizacion.ventanas"
-          class="mt-4"
-          :items-per-page="5"
-        >
+      <v-data-table 
+        v-if="cotizacion.ventanas.length > 0"
+        :headers="headersVentanas"
+        :items="cotizacion.ventanas"
+        class="mt-4"
+        :items-per-page="5"
+      >
 
 
 <template #item.tipo="{ item }">
@@ -187,6 +191,10 @@
         </template>
       </v-data-table>
 
+      <v-alert v-else type="info" variant="tonal" class="mt-4">
+        No hay ventanas agregadas. Haz clic en "Agregar Ventana" para comenzar.
+      </v-alert>
+
       <!-- Tabla de productos -->
       <v-data-table
         v-if="cotizacion.productos.length > 0"
@@ -199,6 +207,15 @@
           <v-toolbar flat color="transparent">
             <v-toolbar-title class="text-subtitle-1">Productos</v-toolbar-title>
           </v-toolbar>
+        </template>
+
+        <template #item.nombre="{ item }">
+          <div>
+            <div class="font-weight-medium">{{ item.nombre }}</div>
+            <div v-if="item.descripcion && item.descripcion !== item.nombre" class="text-caption text-grey">
+              {{ item.descripcion }}
+            </div>
+          </div>
         </template>
 
         <template #item.precio_costo="{ item }">
@@ -244,17 +261,19 @@
 
       <!-- Botón para agregar ventana -->
       <v-divider class="my-4" />
-      <v-btn
-        color="primary"
-        :loading="loading"
-        :disabled="loading"
-        @click="guardarCotizacion"
-      >
-        <template #loader>
-          <v-progress-circular indeterminate color="white" size="20" />
-        </template>
-        {{ modoEdicion ? 'Guardar Cambios' : 'Guardar Cotización' }}
-      </v-btn>
+      <div class="d-flex justify-end">
+        <v-btn
+          color="primary"
+          :loading="loading"
+          :disabled="loading"
+          @click="guardarCotizacion"
+        >
+          <template #loader>
+            <v-progress-circular indeterminate color="white" size="20" />
+          </template>
+          {{ modoEdicion ? 'Guardar Cambios' : 'Guardar Cotización' }}
+        </v-btn>
+      </div>
        <!-- Renderización de ventanas para captura de imágenes -->
       <div v-if="cotizacion.ventanas.length > 0" class="mt-6">
         <v-card-subtitle class="text-h5">Vista previa de ventanas</v-card-subtitle>
@@ -849,11 +868,12 @@ const headersVentanas = [
 const headersProductos = [
   { title: 'Código', key: 'codigo' },
   { title: 'Nombre', key: 'nombre' },
+  { title: 'Color', key: 'color' },
+  { title: 'Proveedor', key: 'proveedor' },
   { title: 'Tipo', key: 'tipo_producto' },
   { title: 'Unidad', key: 'unidad' },
   { title: 'Cantidad', key: 'cantidad' },
   { title: 'Precio Costo', key: 'precio_costo', align: 'end' },
-  { title: 'Margen', key: 'margen', align: 'center' },
   { title: 'Precio Venta', key: 'precio_venta', align: 'end' },
   { title: 'Acciones', key: 'acciones', sortable: false },
 ]
@@ -895,6 +915,8 @@ const agregarProductosCotizacion = (productos) => {
       lista_precio_id: item.lista_precio_id, // ✅ ID de la lista de precios
       nombre: item.nombre || item.producto?.nombre,
       codigo: item.codigo || item.producto?.codigo_proveedor,
+      color: item.color || '-',
+      proveedor: item.proveedor || '-',
       tipo_producto: item.tipo || item.producto?.tipoProducto?.nombre || '-',
       unidad: item.unidad || item.producto?.unidad?.abreviacion || '-',
       cantidad: item.cantidad,
@@ -902,7 +924,13 @@ const agregarProductosCotizacion = (productos) => {
       margen: item.margen,
       precio_venta: item.precio_venta,
       descripcion: item.descripcion || item.nombre || item.producto?.nombre || '',
-      total: item.precio_venta * item.cantidad
+      total: item.precio_venta * item.cantidad,
+      // Campos adicionales para vidrios
+      esVidrio: item.esVidrio || false,
+      ancho_mm: item.ancho_mm || null,
+      alto_mm: item.alto_mm || null,
+      m2: item.m2 || null,
+      pulido: item.pulido || false
     }
     
     console.log('✅ PRODUCTO AGREGADO A COTIZACIÓN:', productoParaCotizacion)
@@ -1539,7 +1567,13 @@ const guardarCotizacion = async () => {
         descripcion: p.descripcion || p.nombre || '',
         cantidad: p.cantidad,
         precio_unitario: p.precio_venta / p.cantidad, // Precio unitario
-        total: p.total || (p.precio_venta * p.cantidad)
+        total: p.total || (p.precio_venta * p.cantidad),
+        // Campos adicionales para vidrios
+        esVidrio: p.esVidrio || false,
+        ancho_mm: p.ancho_mm || null,
+        alto_mm: p.alto_mm || null,
+        m2: p.m2 || null,
+        pulido: p.pulido || false
       })),
     }
         // ✅ AGREGAR ESTE LOG
