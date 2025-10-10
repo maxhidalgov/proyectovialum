@@ -159,174 +159,12 @@
     </v-card>
 
     <!-- Modal Agregar/Editar Precio -->
-    <v-dialog v-model="dialogPrecio" max-width="700px" persistent>
-      <v-card>
-        <v-card-title class="text-h6 bg-primary">
-          {{ modoEdicion ? 'Editar Precio' : 'Nuevo Precio' }}
-        </v-card-title>
-
-        <v-card-text class="pt-4">
-          <v-form ref="formPrecio">
-            <v-row>
-              <!-- Selector de Producto -->
-              <v-col cols="12">
-                <v-autocomplete
-                  v-model="formPrecio.producto_id"
-                  :items="productos"
-                  item-title="nombre"
-                  item-value="id"
-                  label="Producto *"
-                  prepend-inner-icon="mdi-package-variant"
-                  variant="outlined"
-                  density="compact"
-                  :rules="[v => !!v || 'El producto es requerido']"
-                  @update:model-value="onProductoChange"
-                >
-                  <template #item="{ props, item }">
-                    <v-list-item v-bind="props">
-                      <template #title>
-                        {{ item.raw.nombre }}
-                      </template>
-                      <template #subtitle>
-                        {{ item.raw.tipoProducto?.nombre }}
-                      </template>
-                    </v-list-item>
-                  </template>
-                </v-autocomplete>
-              </v-col>
-
-              <!-- Selector de Color/Proveedor -->
-              <v-col cols="12">
-                <v-autocomplete
-                  v-model="formPrecio.producto_color_proveedor_id"
-                  :items="productosColorProveedor"
-                  :item-title="item => `${item.color?.nombre || 'Sin color'} - ${item.proveedor?.nombre || 'Sin proveedor'}`"
-                  item-value="id"
-                  label="Color y Proveedor *"
-                  prepend-inner-icon="mdi-palette"
-                  variant="outlined"
-                  density="compact"
-                  :disabled="!formPrecio.producto_id"
-                  :rules="[v => !!v || 'Debes seleccionar un color y proveedor']"
-                  @update:model-value="autocompletarCosto"
-                >
-                  <template #item="{ props, item }">
-                    <v-list-item v-bind="props">
-                      <template #title>
-                        {{ item.raw.color?.nombre || 'Sin color' }} - {{ item.raw.proveedor?.nombre || 'Sin proveedor' }}
-                      </template>
-                      <template #subtitle>
-                        Costo: ${{ formatearNumero(item.raw.costo) }}
-                      </template>
-                    </v-list-item>
-                  </template>
-                </v-autocomplete>
-              </v-col>
-
-              <!-- Precio Costo -->
-              <v-col cols="12" md="4">
-                <v-text-field
-                  v-model.number="formPrecio.precio_costo"
-                  label="Precio Costo *"
-                  type="number"
-                  prefix="$"
-                  variant="outlined"
-                  density="compact"
-                  :rules="[
-                    v => v !== null && v !== undefined && v !== '' || 'El precio costo es requerido',
-                    v => v >= 0 || 'Debe ser mayor o igual a 0'
-                  ]"
-                  @update:model-value="calcularPrecioVenta"
-                />
-              </v-col>
-
-              <!-- Margen -->
-              <v-col cols="12" md="4">
-                <v-text-field
-                  v-model.number="formPrecio.margen"
-                  label="Margen % *"
-                  type="number"
-                  suffix="%"
-                  variant="outlined"
-                  density="compact"
-                  :rules="[
-                    v => v !== null && v !== undefined && v !== '' || 'El margen es requerido',
-                    v => v >= 0 || 'Debe ser mayor o igual a 0',
-                    v => v <= 100 || 'No puede ser mayor a 100'
-                  ]"
-                  @update:model-value="calcularPrecioVenta"
-                />
-              </v-col>
-
-              <!-- Precio Venta (calculado) -->
-              <v-col cols="12" md="4">
-                <v-text-field
-                  :model-value="precioVentaCalculado"
-                  label="Precio Venta"
-                  prefix="$"
-                  variant="outlined"
-                  density="compact"
-                  readonly
-                  bg-color="grey-lighten-4"
-                />
-              </v-col>
-
-              <!-- Fechas de Vigencia -->
-              <v-col cols="12" md="6">
-                <v-text-field
-                  v-model="formPrecio.vigencia_desde"
-                  label="Vigencia Desde"
-                  type="date"
-                  variant="outlined"
-                  density="compact"
-                />
-              </v-col>
-
-              <v-col cols="12" md="6">
-                <v-text-field
-                  v-model="formPrecio.vigencia_hasta"
-                  label="Vigencia Hasta"
-                  type="date"
-                  variant="outlined"
-                  density="compact"
-                />
-              </v-col>
-
-              <!-- Estado Activo -->
-              <v-col cols="12">
-                <v-switch
-                  v-model="formPrecio.activo"
-                  label="Precio Activo"
-                  color="success"
-                  hide-details
-                />
-              </v-col>
-            </v-row>
-          </v-form>
-        </v-card-text>
-
-        <v-divider></v-divider>
-
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn
-            color="grey"
-            variant="text"
-            @click="cerrarModal"
-          >
-            Cancelar
-          </v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            :loading="guardando"
-            @click="guardarPrecio"
-          >
-            {{ modoEdicion ? 'Actualizar' : 'Guardar' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <ModalPrecio 
+      v-model="dialogPrecio" 
+      :precio="precioEditando"
+      :modo-edicion="modoEdicion"
+      @guardado="cargarPrecios"
+    />
 
     <!-- Modal Importar desde PCP -->
     <v-dialog v-model="dialogImportar" max-width="500px">
@@ -415,15 +253,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import api from '@/axiosInstance'
+import ModalPrecio from './ModalPrecio.vue'
 
 // State
 const listaPrecios = ref([])
-const productos = ref([])
-const productosColorProveedor = ref([])
 const cargando = ref(false)
-const guardando = ref(false)
 const importando = ref(false)
 const eliminando = ref(false)
 const busqueda = ref('')
@@ -434,22 +270,9 @@ const dialogPrecio = ref(false)
 const dialogImportar = ref(false)
 const dialogEliminar = ref(false)
 const modoEdicion = ref(false)
+const precioEditando = ref(null)
 const precioAEliminar = ref(null)
 const margenImportacion = ref(45)
-
-// Form
-const formPrecio = ref({
-  id: null,
-  producto_id: null,
-  producto_color_proveedor_id: null,
-  precio_costo: 0,
-  margen: 45,
-  vigencia_desde: new Date().toISOString().split('T')[0],
-  vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  activo: true
-})
-
-const cargandoModal = ref(false)
 
 // Headers de la tabla
 const headers = [
@@ -462,14 +285,6 @@ const headers = [
   { title: 'Vigencia', key: 'vigencia', sortable: false },
   { title: 'Acciones', key: 'acciones', sortable: false, align: 'center' }
 ]
-
-// Computed
-const precioVentaCalculado = computed(() => {
-  const costo = parseFloat(formPrecio.value.precio_costo) || 0
-  const margen = parseFloat(formPrecio.value.margen) || 0
-  const venta = costo * (1 + margen / 100)
-  return formatearNumero(venta)
-})
 
 // Methods
 const cargarPrecios = async () => {
@@ -501,171 +316,16 @@ const buscarPrecios = () => {
   cargarPrecios()
 }
 
-const cargarProductos = async () => {
-  try {
-    const response = await api.get('/api/productos')
-    productos.value = response.data
-  } catch (error) {
-    console.error('Error al cargar productos:', error)
-  }
-}
-
-const cargarProductoColorProveedor = async () => {
-  if (!formPrecio.value.producto_id) {
-    productosColorProveedor.value = []
-    return
-  }
-
-  try {
-    const response = await api.get('/api/productos')
-    const producto = response.data.find(p => p.id === formPrecio.value.producto_id)
-    
-    // Laravel devuelve las relaciones en snake_case por defecto
-    const coloresProveedores = producto?.coloresPorProveedor || producto?.colores_por_proveedor || []
-    
-    if (coloresProveedores.length > 0) {
-      productosColorProveedor.value = coloresProveedores
-      console.log('📦 Colores y proveedores cargados:', productosColorProveedor.value)
-    } else {
-      productosColorProveedor.value = []
-      console.warn('⚠️ Producto sin colores/proveedores definidos')
-    }
-  } catch (error) {
-    console.error('Error al cargar producto-color-proveedor:', error)
-    productosColorProveedor.value = []
-  }
-}
-
-const onProductoChange = async (newProductoId, oldProductoId) => {
-  // No hacer nada si estamos cargando el modal (editando)
-  if (cargandoModal.value) {
-    return
-  }
-  
-  // Solo limpiar si realmente cambió el producto
-  if (oldProductoId !== undefined && newProductoId !== oldProductoId) {
-    formPrecio.value.producto_color_proveedor_id = null
-    formPrecio.value.precio_costo = 0
-  }
-  
-  await cargarProductoColorProveedor()
-}
-
-const autocompletarCosto = () => {
-  if (!formPrecio.value.producto_color_proveedor_id) return
-
-  const pcp = productosColorProveedor.value.find(
-    p => p.id === formPrecio.value.producto_color_proveedor_id
-  )
-
-  if (pcp && pcp.costo) {
-    formPrecio.value.precio_costo = parseFloat(pcp.costo)
-    calcularPrecioVenta()
-  }
-}
-
-const calcularPrecioVenta = () => {
-  // Trigger reactivity for computed
-}
-
-const abrirModalNuevo = async () => {
+const abrirModalNuevo = () => {
   modoEdicion.value = false
-  cargandoModal.value = false // Asegurar que está en false para nuevo
-  formPrecio.value = {
-    id: null,
-    producto_id: null,
-    producto_color_proveedor_id: null,
-    precio_costo: 0,
-    margen: 45,
-    vigencia_desde: new Date().toISOString().split('T')[0],
-    vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    activo: true
-  }
-  await cargarProductos()
+  precioEditando.value = null
   dialogPrecio.value = true
 }
 
-const abrirModalEditar = async (precio) => {
-  console.log('📝 Editando precio:', precio) // Debug
-  
+const abrirModalEditar = (precio) => {
   modoEdicion.value = true
-  cargandoModal.value = true // Activar flag de carga
-  
-  // PRIMERO: Inicializar el formulario con valores por defecto
-  formPrecio.value = {
-    id: null,
-    producto_id: null,
-    producto_color_proveedor_id: null,
-    precio_costo: 0,
-    margen: 45,
-    vigencia_desde: new Date().toISOString().split('T')[0],
-    vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    activo: true
-  }
-  
-  // SEGUNDO: Abrir el diálogo
+  precioEditando.value = precio
   dialogPrecio.value = true
-  
-  // TERCERO: Cargar productos
-  await cargarProductos()
-  
-  // CUARTO: Establecer el producto_id
-  formPrecio.value.producto_id = precio.producto_id
-  
-  // QUINTO: Cargar colores/proveedores para ese producto
-  await cargarProductoColorProveedor()
-  
-  // SEXTO: Establecer TODOS los valores del formulario
-  formPrecio.value = {
-    id: precio.id,
-    producto_id: precio.producto_id,
-    producto_color_proveedor_id: precio.producto_color_proveedor_id,
-    precio_costo: parseFloat(precio.precio_costo),
-    margen: parseFloat(precio.margen),
-    vigencia_desde: precio.vigencia_desde ? precio.vigencia_desde.split(' ')[0] : '',
-    vigencia_hasta: precio.vigencia_hasta ? precio.vigencia_hasta.split(' ')[0] : '',
-    activo: precio.activo
-  }
-  
-  console.log('📋 Formulario establecido:', formPrecio.value) // Debug
-  console.log('🎨 Colores/Proveedores cargados:', productosColorProveedor.value.length) // Debug
-  
-  cargandoModal.value = false // Desactivar flag de carga
-}
-
-const cerrarModal = () => {
-  dialogPrecio.value = false
-  formPrecio.value = {
-    id: null,
-    producto_id: null,
-    producto_color_proveedor_id: null,
-    precio_costo: 0,
-    margen: 45,
-    vigencia_desde: new Date().toISOString().split('T')[0],
-    vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    activo: true
-  }
-  productosColorProveedor.value = []
-}
-
-const guardarPrecio = async () => {
-  guardando.value = true
-  try {
-    if (modoEdicion.value) {
-      await api.put(`/api/lista-precios/${formPrecio.value.id}`, formPrecio.value)
-      alert('Precio actualizado correctamente')
-    } else {
-      await api.post('/api/lista-precios', formPrecio.value)
-      alert('Precio creado correctamente')
-    }
-    await cargarPrecios()
-    cerrarModal()
-  } catch (error) {
-    console.error('Error al guardar precio:', error)
-    alert('Error al guardar el precio')
-  } finally {
-    guardando.value = false
-  }
 }
 
 const confirmarEliminar = (precio) => {

@@ -66,10 +66,10 @@ Route::middleware('api')->group(function () {
     Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
     Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
 
-    // Rutas Lista de Precios
-    Route::apiResource('lista-precios', ListaPrecioController::class);
+    // Rutas Lista de Precios - Las específicas ANTES del resource
     Route::post('/lista-precios/importar', [ListaPrecioController::class, 'importarDesdeProductoColorProveedor']);
     Route::get('/lista-precios/exportar', [ListaPrecioController::class, 'exportar']);
+    Route::apiResource('lista-precios', ListaPrecioController::class);
 
     // Rutas BSALE
     Route::prefix('bsale')->group(function () {
