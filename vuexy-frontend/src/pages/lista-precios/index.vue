@@ -84,17 +84,25 @@
         </template>
 
         <template #item.color_proveedor="{ item }">
-          <div v-if="item.producto_color_proveedor">
+          <div>
             <div class="text-caption">
               <v-chip size="x-small" color="primary" class="mr-1">
-                {{ item.producto_color_proveedor.color?.nombre || 'Sin color' }}
+                {{ item.color?.nombre || item.producto_color_proveedor?.color?.nombre || 'Sin color' }}
               </v-chip>
             </div>
-            <div class="text-caption text-grey mt-1">
-              {{ item.producto_color_proveedor.proveedor?.nombre || 'Sin proveedor' }}
+            <!-- Mostrar proveedor sugerido solo internamente (tooltip) -->
+            <div v-if="item.proveedor_sugerido" class="text-caption text-grey mt-1">
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <span v-bind="props" class="text-decoration-underline">
+                    <v-icon size="x-small">mdi-information-outline</v-icon>
+                    Proveedor sugerido
+                  </span>
+                </template>
+                <span>{{ item.proveedor_sugerido.nombre }}</span>
+              </v-tooltip>
             </div>
           </div>
-          <span v-else class="text-grey">-</span>
         </template>
 
         <template #item.precio_costo="{ item }">

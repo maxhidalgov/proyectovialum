@@ -36,48 +36,45 @@
               </v-autocomplete>
             </v-col>
 
-            <!-- Selector de Color/Proveedor -->
+            <!-- Selector de Color -->
             <v-col cols="12">
               <v-autocomplete
-                v-model="formulario.producto_color_proveedor_id"
-                :items="productosColorProveedor"
-                :item-title="item => `${item.color?.nombre || 'Sin color'} - ${item.proveedor?.nombre || 'Sin proveedor'}`"
+                v-model="formulario.color_id"
+                :items="coloresDisponibles"
+                item-title="nombre"
                 item-value="id"
-                label="Color y Proveedor *"
+                label="Color *"
                 prepend-inner-icon="mdi-palette"
                 variant="outlined"
                 density="compact"
                 :disabled="!formulario.producto_id"
                 clearable
-                :rules="[v => !!v || 'Debes seleccionar un color y proveedor']"
-                @update:model-value="onColorProveedorChange"
+                :rules="[v => !!v || 'Debes seleccionar un color']"
+                @update:model-value="onColorChange"
               >
                 <template #item="{ props, item }">
                   <v-list-item v-bind="props">
                     <template #title>
-                      {{ item.raw.color?.nombre || 'Sin color' }} - {{ item.raw.proveedor?.nombre || 'Sin proveedor' }}
-                    </template>
-                    <template #subtitle>
-                      Costo: ${{ formatearNumero(item.raw.costo) }}
+                      {{ item.raw.nombre }}
                     </template>
                   </v-list-item>
                 </template>
               </v-autocomplete>
             </v-col>
 
-            <!-- Precio Costo -->
+            <!-- Precio Costo (calculado automáticamente) -->
             <v-col cols="12" md="4">
               <v-text-field
-                v-model.number="formulario.precio_costo"
-                label="Precio Costo *"
+                :model-value="formulario.precio_costo"
+                label="Precio Costo (Máximo)"
                 type="number"
                 prefix="$"
                 variant="outlined"
                 density="compact"
-                :rules="[
-                  v => v !== null && v !== undefined && v !== '' || 'El precio costo es requerido',
-                  v => v >= 0 || 'Debe ser mayor o igual a 0'
-                ]"
+                readonly
+                bg-color="grey-lighten-4"
+                :hint="proveedorHint"
+                persistent-hint
               />
             </v-col>
 
@@ -194,14 +191,15 @@ const emit = defineEmits(['update:modelValue', 'guardado'])
 
 // State
 const productos = ref([])
-const productosColorProveedor = ref([])
+const coloresDisponibles = ref([])
 const guardando = ref(false)
 const form = ref(null)
+const proveedorHint = ref('')
 
 const formulario = ref({
   id: null,
   producto_id: null,
-  producto_color_proveedor_id: null,
+  color_id: null,
   precio_costo: 0,
   margen: 45,
   vigencia_desde: new Date().toISOString().split('T')[0],
@@ -237,18 +235,23 @@ watch(() => props.modelValue, async (newVal) => {
     if (props.modoEdicion && props.precio) {
       // Modo edición
       formulario.value.producto_id = props.precio.producto_id
-      await cargarProductoColorProveedor()
+      await cargarColoresDisponibles()
       
       // Establecer todos los valores
       formulario.value = {
         id: props.precio.id,
         producto_id: props.precio.producto_id,
-        producto_color_proveedor_id: props.precio.producto_color_proveedor_id,
+        color_id: props.precio.color_id,
         precio_costo: parseFloat(props.precio.precio_costo),
         margen: parseFloat(props.precio.margen),
         vigencia_desde: props.precio.vigencia_desde ? props.precio.vigencia_desde.split(' ')[0] : '',
         vigencia_hasta: props.precio.vigencia_hasta ? props.precio.vigencia_hasta.split(' ')[0] : '',
         activo: props.precio.activo
+      }
+      
+      // Cargar hint del proveedor
+      if (props.precio.proveedor_sugerido) {
+        proveedorHint.value = `Proveedor: ${props.precio.proveedor_sugerido.nombre}`
       }
     } else {
       // Modo nuevo
@@ -267,9 +270,9 @@ const cargarProductos = async () => {
   }
 }
 
-const cargarProductoColorProveedor = async () => {
+const cargarColoresDisponibles = async () => {
   if (!formulario.value.producto_id) {
-    productosColorProveedor.value = []
+    coloresDisponibles.value = []
     return
   }
 
@@ -279,35 +282,69 @@ const cargarProductoColorProveedor = async () => {
     
     const coloresProveedores = producto?.coloresPorProveedor || producto?.colores_por_proveedor || []
     
-    if (coloresProveedores.length > 0) {
-      productosColorProveedor.value = coloresProveedores
-    } else {
-      productosColorProveedor.value = []
-      console.warn('⚠️ Producto sin colores/proveedores definidos')
+    // Extraer colores únicos
+    const coloresUnicos = new Map()
+    coloresProveedores.forEach(cp => {
+      if (cp.color && !coloresUnicos.has(cp.color.id)) {
+        coloresUnicos.set(cp.color.id, cp.color)
+      }
+    })
+    
+    coloresDisponibles.value = Array.from(coloresUnicos.values())
+    
+    if (coloresDisponibles.value.length === 0) {
+      console.warn('⚠️ Producto sin colores definidos')
     }
   } catch (error) {
-    console.error('Error al cargar producto-color-proveedor:', error)
-    productosColorProveedor.value = []
+    console.error('Error al cargar colores:', error)
+    coloresDisponibles.value = []
   }
 }
 
 const onProductoChange = async (newProductoId) => {
   if (newProductoId) {
-    formulario.value.producto_color_proveedor_id = null
+    formulario.value.color_id = null
     formulario.value.precio_costo = 0
-    await cargarProductoColorProveedor()
+    proveedorHint.value = ''
+    await cargarColoresDisponibles()
   }
 }
 
-const onColorProveedorChange = () => {
-  if (!formulario.value.producto_color_proveedor_id) return
+const onColorChange = async () => {
+  if (!formulario.value.color_id || !formulario.value.producto_id) {
+    formulario.value.precio_costo = 0
+    proveedorHint.value = ''
+    return
+  }
 
-  const pcp = productosColorProveedor.value.find(
-    p => p.id === formulario.value.producto_color_proveedor_id
-  )
-
-  if (pcp && pcp.costo) {
-    formulario.value.precio_costo = parseFloat(pcp.costo)
+  try {
+    // Buscar el costo máximo entre todos los proveedores de este producto+color
+    const response = await api.get('/api/productos')
+    const producto = response.data.find(p => p.id === formulario.value.producto_id)
+    
+    const coloresProveedores = producto?.coloresPorProveedor || producto?.colores_por_proveedor || []
+    
+    // Filtrar por el color seleccionado y buscar el costo más alto
+    const proveedoresDelColor = coloresProveedores.filter(cp => cp.color_id === formulario.value.color_id)
+    
+    if (proveedoresDelColor.length === 0) {
+      formulario.value.precio_costo = 0
+      proveedorHint.value = 'No hay proveedores para este color'
+      return
+    }
+    
+    // Encontrar el de mayor costo
+    const proveedorMaxCosto = proveedoresDelColor.reduce((max, current) => {
+      return (current.costo > max.costo) ? current : max
+    })
+    
+    formulario.value.precio_costo = parseFloat(proveedorMaxCosto.costo)
+    proveedorHint.value = `Proveedor con mayor costo: ${proveedorMaxCosto.proveedor?.nombre || 'N/A'} ($${formatearNumero(proveedorMaxCosto.costo)})`
+    
+  } catch (error) {
+    console.error('Error al calcular costo máximo:', error)
+    formulario.value.precio_costo = 0
+    proveedorHint.value = 'Error al calcular costo'
   }
 }
 
@@ -341,14 +378,15 @@ const resetFormulario = () => {
   formulario.value = {
     id: null,
     producto_id: null,
-    producto_color_proveedor_id: null,
+    color_id: null,
     precio_costo: 0,
     margen: 45,
     vigencia_desde: new Date().toISOString().split('T')[0],
     vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     activo: true
   }
-  productosColorProveedor.value = []
+  coloresDisponibles.value = []
+  proveedorHint.value = ''
 }
 
 const formatearNumero = (numero) => {

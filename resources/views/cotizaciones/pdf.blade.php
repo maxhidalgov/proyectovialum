@@ -135,10 +135,14 @@
                   </span>
                 @endif
                 
-                @if($detalle->listaPrecio->productoColorProveedor)
+                {{-- Mostrar color directo o desde productoColorProveedor (compatibilidad) --}}
+                @php
+                  $color = $detalle->listaPrecio->color ?? $detalle->listaPrecio->productoColorProveedor->color ?? null;
+                @endphp
+                @if($color)
                   <br>
                   <span style="font-size: 10px; color: #666;">
-                    Color: {{ $detalle->listaPrecio->productoColorProveedor->color->nombre ?? 'N/A' }}
+                    Color: {{ $color->nombre ?? 'N/A' }}
                   </span>
                 @endif
               @elseif($detalle->producto)

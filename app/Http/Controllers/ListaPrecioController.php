@@ -20,6 +20,9 @@ class ListaPrecioController extends Controller
             $query = ListaPrecio::with([
                 'producto.tipoProducto',
                 'producto.unidad',
+                'color',
+                'proveedorSugerido',
+                // Mantener por compatibilidad
                 'productoColorProveedor.color',
                 'productoColorProveedor.proveedor'
             ]);
@@ -40,11 +43,7 @@ class ListaPrecioController extends Controller
                 });
             }
 
-            $listaPrecios = $query->with([
-                'producto.tipoProducto',
-                'productoColorProveedor.color',
-                'productoColorProveedor.proveedor'
-            ])->orderBy('created_at', 'desc')->get();
+            $listaPrecios = $query->orderBy('created_at', 'desc')->get();
 
             return response()->json($listaPrecios);
         } catch (\Exception $e) {
@@ -61,8 +60,7 @@ class ListaPrecioController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'producto_id' => 'required|exists:productos,id',
-                'producto_color_proveedor_id' => 'required|exists:producto_color_proveedor,id',
-                'precio_costo' => 'required|numeric|min:0',
+                'color_id' => 'required|exists:colores,id',
                 'margen' => 'required|numeric|min:0|max:100',
                 'vigencia_desde' => 'nullable|date',
                 'vigencia_hasta' => 'nullable|date|after:vigencia_desde',
@@ -73,13 +71,31 @@ class ListaPrecioController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $precioCosto = floatval($request->precio_costo);
+            // Calcular costo máximo automáticamente
+            $costoData = ListaPrecio::calcularCostoMaximo($request->producto_id, $request->color_id);
+            
+            if ($costoData['costo_maximo'] == 0) {
+                return response()->json([
+                    'error' => 'No hay proveedores configurados para este producto y color'
+                ], 422);
+            }
+
+            $precioCosto = $costoData['costo_maximo'];
             $margen = floatval($request->margen);
-            $precioVenta = $precioCosto * (1 + $margen / 100);
+            
+            // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
+            // Despejando: PrecioVenta = Costo / (1 - Margen/100)
+            if ($margen >= 100) {
+                return response()->json(['error' => 'El margen no puede ser 100% o mayor'], 422);
+            }
+            
+            $precioVenta = $precioCosto / (1 - $margen / 100);
 
             $listaPrecio = ListaPrecio::create([
                 'producto_id' => $request->producto_id,
-                'producto_color_proveedor_id' => $request->producto_color_proveedor_id,
+                'color_id' => $request->color_id,
+                'proveedor_sugerido_id' => $costoData['proveedor_id'],
+                'producto_color_proveedor_id' => $costoData['producto_color_proveedor_id'], // Mantener compatibilidad
                 'precio_costo' => $precioCosto,
                 'margen' => $margen,
                 'precio_venta' => $precioVenta,
@@ -91,8 +107,8 @@ class ListaPrecioController extends Controller
             $listaPrecio->load([
                 'producto.tipoProducto',
                 'producto.unidad',
-                'productoColorProveedor.color',
-                'productoColorProveedor.proveedor'
+                'color',
+                'proveedorSugerido'
             ]);
 
             return response()->json($listaPrecio, 201);
@@ -132,8 +148,7 @@ class ListaPrecioController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'producto_id' => 'sometimes|required|exists:productos,id',
-                'producto_color_proveedor_id' => 'nullable|exists:producto_color_proveedor,id',
-                'precio_costo' => 'sometimes|required|numeric|min:0',
+                'color_id' => 'sometimes|required|exists:colores,id',
                 'margen' => 'sometimes|required|numeric|min:0|max:100',
                 'vigencia_desde' => 'nullable|date',
                 'vigencia_hasta' => 'nullable|date|after:vigencia_desde',
@@ -144,25 +159,43 @@ class ListaPrecioController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            // Actualizar campos
-            if ($request->has('producto_id')) {
+            // Si cambia producto o color, recalcular costo
+            $recalcularCosto = false;
+            
+            if ($request->has('producto_id') && $request->producto_id != $listaPrecio->producto_id) {
                 $listaPrecio->producto_id = $request->producto_id;
+                $recalcularCosto = true;
             }
 
-            if ($request->has('producto_color_proveedor_id')) {
-                $listaPrecio->producto_color_proveedor_id = $request->producto_color_proveedor_id;
+            if ($request->has('color_id') && $request->color_id != $listaPrecio->color_id) {
+                $listaPrecio->color_id = $request->color_id;
+                $recalcularCosto = true;
             }
 
-            if ($request->has('precio_costo')) {
-                $listaPrecio->precio_costo = floatval($request->precio_costo);
+            if ($recalcularCosto) {
+                $costoData = ListaPrecio::calcularCostoMaximo($listaPrecio->producto_id, $listaPrecio->color_id);
+                
+                if ($costoData['costo_maximo'] == 0) {
+                    return response()->json([
+                        'error' => 'No hay proveedores configurados para este producto y color'
+                    ], 422);
+                }
+                
+                $listaPrecio->precio_costo = $costoData['costo_maximo'];
+                $listaPrecio->proveedor_sugerido_id = $costoData['proveedor_id'];
+                $listaPrecio->producto_color_proveedor_id = $costoData['producto_color_proveedor_id'];
             }
 
             if ($request->has('margen')) {
                 $listaPrecio->margen = floatval($request->margen);
             }
 
-            // Recalcular precio venta
-            $listaPrecio->precio_venta = $listaPrecio->precio_costo * (1 + $listaPrecio->margen / 100);
+            // Recalcular precio venta con nueva fórmula
+            if ($listaPrecio->margen >= 100) {
+                return response()->json(['error' => 'El margen no puede ser 100% o mayor'], 422);
+            }
+            
+            $listaPrecio->precio_venta = $listaPrecio->precio_costo / (1 - $listaPrecio->margen / 100);
 
             if ($request->has('vigencia_desde')) {
                 $listaPrecio->vigencia_desde = $request->vigencia_desde;
@@ -181,8 +214,8 @@ class ListaPrecioController extends Controller
             $listaPrecio->load([
                 'producto.tipoProducto',
                 'producto.unidad',
-                'productoColorProveedor.color',
-                'productoColorProveedor.proveedor'
+                'color',
+                'proveedorSugerido'
             ]);
 
             return response()->json($listaPrecio);

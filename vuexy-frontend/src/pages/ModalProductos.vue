@@ -78,11 +78,6 @@
                 <div class="text-subtitle-2">{{ item.color || '-' }}</div>
               </v-col>
 
-              <v-col cols="6" md="2">
-                <div class="text-caption text-grey">Proveedor</div>
-                <div class="text-subtitle-2">{{ item.proveedor || '-' }}</div>
-              </v-col>
-
               <!-- Si es vidrio (tipo 1 o 2), mostrar campos de dimensiones -->
               <template v-if="item.esVidrio">
                 <v-col cols="12" md="12">
@@ -269,12 +264,11 @@ const headers = [
   { title: 'Código', key: 'codigo_proveedor', sortable: true },
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Color', key: 'color', sortable: true },
-  { title: 'Proveedor', key: 'proveedor', sortable: true },
   { title: 'Precio', key: 'precio', sortable: true },
   { title: 'Acciones', key: 'acciones', sortable: false, align: 'center' }
 ]
 
-// Computed - Expandir productos por sus variantes de color/proveedor
+// Computed - Expandir productos por sus variantes de color (sin mostrar proveedor al cliente)
 const productosFiltrados = computed(() => {
   if (!Array.isArray(productos.value)) return []
   
@@ -292,19 +286,19 @@ const productosFiltrados = computed(() => {
         _productoOriginal: producto,
         _listaPrecio: null,
         color: '-',
-        proveedor: '-',
         precio: '-'
       })
     } else {
       listasActivas.forEach(lp => {
-        const pcp = lp.productoColorProveedor || lp.producto_color_proveedor
+        // Obtener color directo o desde productoColorProveedor (compatibilidad)
+        const color = lp.color || lp.productoColorProveedor?.color
+        
         productosExpandidos.push({
           ...producto,
           _productoOriginal: producto,
           _listaPrecio: lp,
           id: `${producto.id}_${lp.id}`,
-          color: pcp?.color?.nombre || '-',
-          proveedor: pcp?.proveedor?.nombre || '-',
+          color: color?.nombre || '-',
           precio: `$${Number(lp.precio_venta || 0).toLocaleString('es-CL')}`
         })
       })
@@ -317,8 +311,7 @@ const productosFiltrados = computed(() => {
   return productosExpandidos.filter(p => 
     p.nombre?.toLowerCase().includes(busquedaLower) ||
     p.codigo?.toLowerCase().includes(busquedaLower) ||
-    p.color?.toLowerCase().includes(busquedaLower) ||
-    p.proveedor?.toLowerCase().includes(busquedaLower)
+    p.color?.toLowerCase().includes(busquedaLower)
   )
 })
 
@@ -388,6 +381,7 @@ const seleccionarProducto = (productoFila) => {
   }
   
   const pcp = listaPrecioActiva.productoColorProveedor || listaPrecioActiva.producto_color_proveedor
+  const color = listaPrecioActiva.color || pcp?.color
   const precioCosto = parseFloat(listaPrecioActiva.precio_costo) || 0
   const margenDefault = parseFloat(listaPrecioActiva.margen) || 30
   
@@ -407,11 +401,11 @@ const seleccionarProducto = (productoFila) => {
     margen: margenDefault,
     precio_venta: precioVenta,
     precio_venta_total: precioVenta, // Para vidrios, se recalculará
-    descripcion: `${producto.nombre} - ${pcp?.color?.nombre || 'Sin color'} (${pcp?.proveedor?.nombre || 'Sin proveedor'})`,
+    descripcion: `${producto.nombre} - ${color?.nombre || 'Sin color'}`,
     codigo: producto.codigo,
     nombre: producto.nombre,
-    color: pcp?.color?.nombre || '-',
-    proveedor: pcp?.proveedor?.nombre || '-',
+    color: color?.nombre || '-',
+    proveedor: '-', // Oculto al cliente
     tipo: producto.tipo_producto?.nombre || '',
     unidad: producto.unidad?.nombre || producto.unidad?.simbolo || '',
     // Campos específicos para vidrios
@@ -527,7 +521,7 @@ const agregarProductos = () => {
       const pulidoTexto = item.pulido ? ' [PULIDO]' : ''
       return {
         ...item,
-        descripcion: `${item.nombre} - ${item.ancho_mm}mm x ${item.alto_mm}mm (${calcularM2Display(item)} m²)${pulidoTexto} - ${item.color} (${item.proveedor})`,
+        descripcion: `${item.nombre} - ${item.ancho_mm}mm x ${item.alto_mm}mm (${calcularM2Display(item)} m²)${pulidoTexto} - ${item.color}`,
         precio_venta: item.precio_venta_total,
         m2: calcularM2(item)
       }
