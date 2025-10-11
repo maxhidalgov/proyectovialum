@@ -366,13 +366,19 @@ const seleccionarProducto = (productoFila) => {
   const producto = productoFila._productoOriginal
   const listaPrecioActiva = productoFila._listaPrecio
   
-  const yaSeleccionado = productosSeleccionados.value.find(
-    item => item.producto_lista_id === producto.id && item.lista_precio_id === listaPrecioActiva?.id
-  )
+  // Detectar si es vidrio (tipo_producto_id 1 o 2)
+  const esVidrio = producto.tipo_producto_id === 1 || producto.tipo_producto_id === 2
   
-  if (yaSeleccionado) {
-    alert('Esta variante del producto ya fue seleccionada')
-    return
+  // Solo validar duplicados si NO es vidrio (los vidrios pueden repetirse con distintas medidas)
+  if (!esVidrio) {
+    const yaSeleccionado = productosSeleccionados.value.find(
+      item => item.producto_lista_id === producto.id && item.lista_precio_id === listaPrecioActiva?.id
+    )
+    
+    if (yaSeleccionado) {
+      alert('Esta variante del producto ya fue seleccionada')
+      return
+    }
   }
 
   if (!listaPrecioActiva) {
@@ -388,9 +394,6 @@ const seleccionarProducto = (productoFila) => {
   // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
   // Despejando: PrecioVenta = Costo / (1 - Margen/100)
   const precioVenta = margenDefault >= 100 ? 0 : precioCosto / (1 - margenDefault / 100)
-
-  // Detectar si es vidrio (tipo_producto_id 1 o 2)
-  const esVidrio = producto.tipo_producto_id === 1 || producto.tipo_producto_id === 2
 
   productosSeleccionados.value.push({
     producto: { ...producto },
@@ -487,8 +490,23 @@ const recalcularPrecioVidrio = (item) => {
   const precioConMargen = precioBase / (1 - margen / 100)
   const cantidad = parseFloat(item.cantidad) || 1
   
-  item.precio_venta_total = precioConMargen * cantidad
+  // 1. Aplicar IVA (19%) al precio con margen
+  const precioConIVA = precioConMargen * 1.19
+  
+  // 2. Redondear hacia arriba al múltiplo de 500
+  const precioRedondeadoConIVA = redondearA500HaciaArriba(precioConIVA)
+  
+  // 3. Reversar el IVA para mostrar el precio sin IVA en el modal
+  const precioSinIVA = precioRedondeadoConIVA / 1.19
+  
+  // 4. Guardar el precio sin IVA (en el PDF se aplicará el 19% de nuevo)
+  item.precio_venta_total = precioSinIVA * cantidad
   item.precio_venta = item.precio_venta_total // Para compatibilidad
+}
+
+// Función para redondear hacia arriba al múltiplo de 500 más cercano
+const redondearA500HaciaArriba = (precio) => {
+  return Math.ceil(precio / 500) * 500
 }
 
 const formatearNumero = (numero) => {

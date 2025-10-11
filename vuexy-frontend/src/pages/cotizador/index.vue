@@ -1042,16 +1042,18 @@ const recalcularCosto = debounce(async (payload, ventanaRef) => {
     const res = await api.post('/api/cotizador/calcular-materiales', payload)
 
     // Asignar costo unitario (para mostrar si se desea)
-    ventanaRef.costo_total_unitario = res.data.costo_unitario
-
+    ventanaRef.costo_unitario = res.data.costo_unitario
 
     // Multiplicar por cantidad para obtener el costo total real
-    const cantidad = ventanaRef.cantidad > 0 ? ventanaRef.cantidad : 1
-    //ventanaRef.costo_total = res.data.costo_total * cantidad
-    ventanaRef.costo_total = res.data.costo_unitario * ventanaRef.cantidad
+    const cantidad = Number(ventanaRef.cantidad) > 0 ? Number(ventanaRef.cantidad) : 1
+    ventanaRef.costo_total = res.data.costo_unitario * cantidad
 
-    // Recalcular precio con margen de utilidad
-    ventanaRef.precio = Math.ceil(ventanaRef.costo_total / (1 - margenVenta))
+    // Calcular precio unitario con margen
+    const precioUnitario = Math.ceil(res.data.costo_unitario / (1 - margenVenta))
+    
+    // Precio total = precio unitario × cantidad
+    ventanaRef.precio_unitario = precioUnitario
+    ventanaRef.precio = precioUnitario * cantidad
 
     // Asignar materiales
     ventanaRef.materiales = res.data.materiales
@@ -1524,10 +1526,21 @@ const guardarCotizacion = async () => {
     console.log('🖼️ NÚMERO DE IMÁGENES:', imagenes.length)
     console.log('🖼️ PRIMERA IMAGEN (primeros 100 chars):', imagenes[0]?.substring(0, 100))
     const clienteSeleccionado = form.cliente
-    if (!clienteSeleccionado || cotizacion.ventanas.length === 0) {
-      alert('Debes seleccionar un cliente y agregar al menos una ventana')
+    
+    // Validar que haya cliente y al menos un item (ventana o producto)
+    if (!clienteSeleccionado) {
+      alert('Debes seleccionar un cliente')
       return
     }
+    
+    const tieneVentanas = cotizacion.ventanas.length > 0
+    const tieneProductos = cotizacion.productos && cotizacion.productos.length > 0
+    
+    if (!tieneVentanas && !tieneProductos) {
+      alert('Debes agregar al menos una ventana o un producto a la cotización')
+      return
+    }
+    
     const payload = {
       cliente_id: clienteSeleccionado.id,
       vendedor_id: 1,
@@ -1551,13 +1564,18 @@ const guardarCotizacion = async () => {
           costo_unitario: v.costo_unitario || 0,
           precio: v.precio || 0,
           precio_unitario: v.precio_unitario || 0,
+          // Campos para Bay Window
           tipo_ventana_izquierda: v.tipoVentanaIzquierda ?? null,
           tipo_ventana_centro: v.tipoVentanaCentro ?? null,
           tipo_ventana_derecha: v.tipoVentanaDerecha ?? null,
           ancho_izquierda: v.ancho_izquierda ?? null,
           ancho_centro: v.ancho_centro ?? null,
           ancho_derecha: v.ancho_derecha ?? null,
-
+          // Campos para Correderas
+          hojas_totales: v.hojas_totales ?? null,
+          hojas_moviles: v.hojas_moviles ?? null,
+          hoja_movil_seleccionada: v.hojaMovilSeleccionada ?? null,
+          hoja1_al_frente: v.hoja1AlFrente ?? null,
         }
       }),
       productos: (cotizacion.productos || []).map(p => ({

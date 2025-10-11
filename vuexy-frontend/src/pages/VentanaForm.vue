@@ -33,7 +33,7 @@
 
     <v-col cols="12" sm="3">
       <v-text-field
-        v-model="ventana.cantidad"
+        v-model.number="ventana.cantidad"
         label="Cantidad"
         type="number"
         min="1"
