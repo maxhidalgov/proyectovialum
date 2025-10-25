@@ -88,6 +88,7 @@ declare module 'vue' {
     VistaVentanaCorredera98: typeof import('./src/components/VistaVentanaCorredera98.vue')['default']
     VistaVentanaCorrederaAndes: typeof import('./src/components/VistaVentanaCorrederaAndes.vue')['default']
     VistaVentanaCorrederamini: typeof import('./src/components/VistaVentanaCorrederamini.vue')['default']
+    VistaVentanaFijaAL42: typeof import('./src/components/VistaVentanaFijaAL42.vue')['default']
     VistaVentanaFijaS60: typeof import('./src/components/VistaVentanaFijaS60.vue')['default']
     VistaVentanaFijaS60mini: typeof import('./src/components/VistaVentanaFijaS60mini.vue')['default']
     VistaVentanaMonorriel: typeof import('./src/components/VistaVentanaMonorriel.vue')['default']

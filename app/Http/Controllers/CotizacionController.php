@@ -49,37 +49,76 @@ public function store(Request $request)
     try {
         DB::beginTransaction();
 
-        // Validar que el cliente existe
+        // Buscar o crear cliente localmente desde Bsale
         $cliente = \App\Models\Cliente::find($request->cliente_id);
+        
         if (!$cliente) {
-            Log::error("❌ CLIENTE NO ENCONTRADO", [
-                'cliente_id' => $request->cliente_id,
-                'clientes_disponibles' => \App\Models\Cliente::count()
-            ]);
+            Log::warning("⚠️ Cliente ID {$request->cliente_id} no existe localmente, buscando en Bsale...");
             
-            return response()->json([
-                'success' => false,
-                'message' => 'El cliente seleccionado no existe. Por favor, recarga la página y selecciona el cliente nuevamente.',
-                'error' => 'Cliente no encontrado en la base de datos',
-                'cliente_id' => $request->cliente_id
-            ], 400);
+            // Intentar obtener el cliente desde Bsale
+            try {
+                $bsaleService = new BsaleClientService();
+                $clienteBsale = $bsaleService->getClient($request->cliente_id);
+                
+                if ($clienteBsale) {
+                    // Crear cliente localmente
+                    $cliente = \App\Models\Cliente::create([
+                        'id' => $clienteBsale['id'],
+                        'razon_social' => $clienteBsale['razon_social'] ?? $clienteBsale['company'] ?? 'Cliente sin nombre',
+                        'identification' => $clienteBsale['identification'] ?? '',
+                        'email' => $clienteBsale['email'] ?? '',
+                        'phone' => $clienteBsale['phone'] ?? '',
+                        'address' => $clienteBsale['address'] ?? '',
+                        'ciudad' => $clienteBsale['city'] ?? '',
+                    ]);
+                    
+                    Log::info("✅ Cliente sincronizado desde Bsale: {$cliente->id}");
+                } else {
+                    throw new \Exception("Cliente no encontrado en Bsale");
+                }
+            } catch (\Exception $e) {
+                Log::error("❌ Error al sincronizar cliente desde Bsale", [
+                    'cliente_id' => $request->cliente_id,
+                    'error' => $e->getMessage()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El cliente seleccionado no existe en Bsale. Por favor, verifica que el cliente esté activo.',
+                    'error' => $e->getMessage(),
+                    'cliente_id' => $request->cliente_id
+                ], 400);
+            }
         }
 
-        // Crear cotización directamente con ID de Bsale
-        // TODO: Implementar sincronización completa con base local
+        // Calcular total correctamente
+        $totalVentanas = 0;
+        if ($request->has('ventanas') && is_array($request->ventanas)) {
+            $totalVentanas = collect($request->ventanas)->sum(function($v) {
+                return ($v['precio'] ?? 0) * ($v['cantidad'] ?? 1);
+            });
+        }
+        
+        $totalProductos = 0;
+        if ($request->has('productos') && is_array($request->productos)) {
+            $totalProductos = collect($request->productos)->sum('total');
+        }
+
+        // Crear cotización con cliente validado
         $cotizacion = Cotizacion::create([
-            'cliente_id' => $request->cliente_id, // Por ahora usar ID de Bsale directamente
+            'cliente_id' => $request->cliente_id,
             'vendedor_id' => $request->vendedor_id,
             'fecha' => $request->fecha,
             'estado_cotizacion_id' => $request->estado_cotizacion_id,
             'observaciones' => $request->observaciones,
-            'total' => collect($request->ventanas)->sum('precio') + collect($request->productos ?? [])->sum('precio_venta'),
+            'total' => $totalVentanas + $totalProductos,
         ]);
 
         // Guardar ventanas y mantener referencia
         $ventanasGuardadas = [];
 
-        foreach ($request->ventanas as $index => $ventana) {
+        if ($request->has('ventanas') && is_array($request->ventanas)) {
+            foreach ($request->ventanas as $index => $ventana) {
             Log::info("🔍 VENTANA $index:", $ventana);
             
             $ventanasGuardadas[] = $cotizacion->ventanas()->create([
@@ -94,8 +133,8 @@ public function store(Request $request)
                 // Agregar campos para Bay Window y correderas
                 'hojas_totales' => $ventana['hojas_totales'] ?? null,
                 'hojas_moviles' => $ventana['hojas_moviles'] ?? null,
-                'hoja_movil_seleccionada' => $ventana['hojaMovilSeleccionada'] ?? null,
-                'hoja1_al_frente' => $ventana['hoja1AlFrente'] ?? null,
+                'hoja_movil_seleccionada' => $ventana['hoja_movil_seleccionada'] ?? null,
+                'hoja1_al_frente' => $ventana['hoja1_al_frente'] ?? null,
                 'ancho_izquierda' => $ventana['ancho_izquierda'] ?? null,
                 'ancho_centro' => $ventana['ancho_centro'] ?? null,
                 'ancho_derecha' => $ventana['ancho_derecha'] ?? null,
@@ -104,6 +143,7 @@ public function store(Request $request)
                 'tipo_ventana_derecha' => isset($ventana['tipo_ventana_derecha']) ? json_encode($ventana['tipo_ventana_derecha']) : null,
             ]);
         }
+        } // Cierre del if de ventanas
 
         // Guardar productos si existen
         if ($request->has('productos') && is_array($request->productos)) {
@@ -372,6 +412,68 @@ public function store(Request $request)
                     }
                 }
             }
+
+            // ========== MANEJAR IMÁGENES DE VENTANAS (EDICIÓN) ==========
+            if ($request->has('imagenes_ventanas') && is_array($request->imagenes_ventanas)) {
+                Log::info("🖼️ ACTUALIZANDO " . count($request->imagenes_ventanas) . " IMÁGENES");
+                
+                // Obtener ventanas actualizadas
+                $ventanasActualizadas = $cotizacion->ventanas()->orderBy('id')->get();
+                
+                foreach ($request->imagenes_ventanas as $index => $base64) {
+                    try {
+                        if (!$base64 || $base64 === null) {
+                            Log::info("⚠️ Imagen vacía en índice $index, saltando...");
+                            continue;
+                        }
+
+                        if (!str_starts_with($base64, 'data:image/png;base64,')) {
+                            Log::warning("⚠️ Imagen en índice $index no tiene formato correcto");
+                            continue;
+                        }
+
+                        $image = str_replace('data:image/png;base64,', '', $base64);
+                        $image = str_replace(' ', '+', $image);
+                        $imageData = base64_decode($image);
+
+                        if ($imageData === false) {
+                            Log::error("❌ Error decodificando base64 para imagen $index");
+                            continue;
+                        }
+
+                        $imageName = 'cotizacion_' . $cotizacion->id . '_ventana_' . $index . '_' . time() . '.png';
+                        $localPath = 'imagenes_ventanas/' . $imageName;
+
+                        // Guardar localmente
+                        Storage::disk('public')->put($localPath, $imageData);
+                        Log::info("✅ Imagen guardada localmente: $localPath");
+
+                        // Intentar subir por FTP si está configurado
+                        try {
+                            $ftpConfig = config('filesystems.disks.ftp_cpanel');
+                            if ($ftpConfig) {
+                                Storage::disk('ftp_cpanel')->put($imageName, $imageData);
+                                Log::info("✅ Imagen subida por FTP: $imageName");
+                            }
+                        } catch (\Exception $ftpError) {
+                            Log::error("❌ Error FTP: " . $ftpError->getMessage());
+                        }
+
+                        // Actualizar campo imagen en la ventana correspondiente
+                        if (isset($ventanasActualizadas[$index])) {
+                            $ventanasActualizadas[$index]->update([
+                                'imagen' => $imageName
+                            ]);
+                            Log::info("✅ Imagen asociada a ventana ID {$ventanasActualizadas[$index]->id}");
+                        } else {
+                            Log::warning("⚠️ No se encontró ventana para imagen en índice $index");
+                        }
+
+                    } catch (\Exception $e) {
+                        Log::error("❌ Error procesando imagen $index: " . $e->getMessage());
+                    }
+                }
+            }
         });
 
         return response()->json(['message' => 'Cotización actualizada correctamente']);
@@ -473,10 +575,8 @@ public function getAprobadas()
         ->orderBy('created_at', 'desc')
         ->get()
         ->map(function($cotizacion) {
-            // Mapear estado para el frontend
-            $estadoNombre = $cotizacion->estado->nombre ?? '';
-            
-            $cotizacion->estado_facturacion = match($estadoNombre) {
+            // Mapear estado para el frontend (simplificado)
+            $cotizacion->estado_facturacion = match($cotizacion->estado->nombre ?? '') {
                 'Aprobada' => 'aprobada',
                 'Facturada' => 'facturada', 
                 'Pagada' => 'pagada',

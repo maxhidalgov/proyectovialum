@@ -569,8 +569,17 @@
         <!-- Espacio para tu visor Konva o componentes visuales -->
         <v-row>
           <v-col cols="12">
+            <VentanaFijaAL42
+              v-if="ventana.tipo === 1"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+              :material="ventana.material"
+              :tipoVidrio="ventana.tipoVidrio"
+              :productoVidrioProveedor="ventana.productoVidrioProveedor"
+            />
             <VentanaEditor
-              v-if="ventana.tipo === 2"
+              v-else-if="ventana.tipo === 2"
               :ancho="ventana.ancho"
               :alto="ventana.alto"
               :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
@@ -893,6 +902,7 @@
 
 <script setup>
 import { ref, watch, computed, nextTick } from 'vue'
+import VentanaFijaAL42 from '@/components/VistaVentanaFijaAL42.vue'
 import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 import VentanaProyectante from '@/components/VistaVentanaProyectanteS60.vue'

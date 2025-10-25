@@ -283,8 +283,18 @@
             <v-card-title>{{ mapaTiposVentana[ventana.tipo] || `Ventana ${index + 1}` }}</v-card-title>
             <v-row>
               <v-col cols="6">
+                <VentanaFijaAL42
+                  v-if="ventana.tipo === 1"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                />
                 <VentanaEditor
-                  v-if="ventana.tipo === 2"
+                  v-else-if="ventana.tipo === 2"
                   :ref="el => { if (el) ventanaRefs[index] = el }"
                   :ancho="ventana.ancho"
                   :alto="ventana.alto"
@@ -526,6 +536,7 @@ import { color } from 'three/src/nodes/TSL.js'
 import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
 import AgregarVentanaModal from '@/pages/AgregarVentanaModal2.vue'
 import ModalProductos from '@/pages/ModalProductos.vue'
+import VentanaFijaAL42 from '@/components/VistaVentanaFijaAL42.vue'
 import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 import VentanaProyectante from '@/components/VistaVentanaProyectanteS60.vue'

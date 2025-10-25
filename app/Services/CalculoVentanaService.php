@@ -12,6 +12,11 @@ class CalculoVentanaService
     {
         $tipoVentanaId = $ventana['tipo'] ?? null;
 
+        // ✅ Ventana fija AL42
+        if ($tipoVentanaId == 1) {
+            return self::calcularFijaAL42($ventana);
+        }
+
         if ($tipoVentanaId == 2) {
             return self::calcularFijaS60($ventana);
         }
@@ -55,6 +60,160 @@ class CalculoVentanaService
         return [
             'materiales' => [],
             'costo_total' => 0,
+        ];
+    }
+
+    // ✅ VENTANA FIJA AL42 - ALUMINIO
+    protected static function calcularFijaAL42(array $ventana): array
+    {
+        Log::info("🪟 Calculando Fija AL42 - Parámetros recibidos:", $ventana);
+
+        $alto = $ventana['alto'];
+        $ancho = $ventana['ancho'];
+        $productoVidrioId = $ventana['productoVidrio'];
+        $colorId = $ventana['color'];
+        $proveedorVidrio = $ventana['proveedorVidrio'];
+        $tipoVidrioId = $ventana['tipoVidrio'] ?? null;
+        $cantidad = $ventana['cantidad'] ?? 1;
+
+        Log::info("🪟 Configuración Fija AL42", [
+            'alto' => $alto,
+            'ancho' => $ancho,
+            'tipo_vidrio_raw' => $tipoVidrioId,
+            'tipo_vidrio_type' => gettype($tipoVidrioId),
+            'cantidad' => $cantidad,
+            'color' => $colorId
+        ]);
+
+        // ✅ Determinar qué junquillo usar según tipo de vidrio
+        $idJunquillo = match ($tipoVidrioId) {
+            1 => 151, // Monolítico (código 4229)
+            2 => 153, // Termopanel (código 4206)
+            default => 151, // Default monolítico
+        };
+
+        Log::info("🔍 Junquillo seleccionado", [
+            'tipo_vidrio_id' => $tipoVidrioId,
+            'junquillo_id' => $idJunquillo,
+            'nombre' => $tipoVidrioId == 1 ? 'Monolítico (151/4229)' : 'Termopanel (153/4206)'
+        ]);
+
+        // ✅ Tabla de descuentos según imagen
+        // id_producto | DESC. | CANT. | Fórmula
+        $perfilesConfig = [
+            ['id' => 148, 'desc' => 'X', 'cant' => 1, 'formula' => fn($x, $y) => $x], // Marco superior
+            ['id' => 152, 'desc' => 'X+40', 'cant' => 1, 'formula' => fn($x, $y) => $x + 40], // Marco inferior
+            ['id' => 148, 'desc' => 'Y-20', 'cant' => 2, 'formula' => fn($x, $y) => $y - 20], // Marco lateral (2x)
+            ['id' => $idJunquillo, 'desc' => 'X-25.6', 'cant' => 2, 'formula' => fn($x, $y) => $x - 25.6], // Junquillo horizontal (2x)
+            ['id' => $idJunquillo, 'desc' => 'Y-45.61', 'cant' => 2, 'formula' => fn($x, $y) => $y - 45.61], // Junquillo vertical (2x)
+        ];
+
+        // ✅ IDs de herrajes universales (iguales a S60)
+        $idPuente = 36;
+        $idCalzoAmarillo = 37;
+        $idCalzoCeleste = 38;
+        $idCalzoRojo = 39;
+        $idTornilloAuto = 40;
+        $idTornilloAmo = 41;
+        $idTapaDesague = 43;
+        $idTapaTornillo = 42;
+        $idSilicona = 44;
+
+        // ✅ IDs únicos de perfiles AL42 + herrajes + vidrio
+        $perfilIds = array_merge(
+            array_unique(array_column($perfilesConfig, 'id')),
+            [$productoVidrioId, $idPuente, $idCalzoAmarillo, $idCalzoCeleste, $idCalzoRojo, 
+             $idTornilloAuto, $idTornilloAmo, $idTapaDesague, $idTapaTornillo, $idSilicona]
+        );
+
+        $productos = Producto::with('coloresPorProveedor.proveedor')
+            ->whereIn('id', $perfilIds)
+            ->get()
+            ->keyBy('id');
+
+        Log::info("📦 Productos cargados", [
+            'solicitados' => count($perfilIds),
+            'encontrados' => count($productos),
+            'faltantes' => array_diff($perfilIds, $productos->keys()->toArray())
+        ]);
+
+        $materiales = [];
+
+        // ✅ Calcular perfiles según tabla (incluye junquillo condicional)
+        foreach ($perfilesConfig as $config) {
+            $largoMm = $config['formula']($ancho, $alto);
+            $cantidadTotal = $config['cant'] * $cantidad;
+            
+            if (isset($productos[$config['id']])) {
+                $materiales[] = self::crearLinea($productos[$config['id']], $cantidadTotal, $largoMm, $colorId);
+                
+                Log::info("✅ Perfil agregado", [
+                    'id' => $config['id'],
+                    'desc' => $config['desc'],
+                    'cantidad' => $cantidadTotal,
+                    'largo_mm' => $largoMm
+                ]);
+            } else {
+                Log::warning("⚠️ Producto no encontrado", ['id' => $config['id']]);
+            }
+        }
+
+        // ✅ Herrajes universales (iguales a S60)
+        $materiales[] = self::crearHerraje($productos[$idPuente], $alto, $ancho, null, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idCalzoAmarillo], $alto, $ancho, null, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idCalzoCeleste], $alto, $ancho, null, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idCalzoRojo], $alto, $ancho, null, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idTornilloAuto], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[$idTornilloAmo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[$idTapaDesague], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idTapaTornillo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[$idSilicona], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
+
+        // ✅ Cálculo vidrio AL42 - Dimensiones específicas
+        // X = ancho - 45.6
+        // Y = alto - 65.6
+        $anchoVidrio = $ancho - 45.6;
+        $altoVidrio = $alto - 65.6;
+        $areaM2 = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+        
+        $productoVidrio = $productos[$productoVidrioId];
+        
+        // Verifica combinación exacta color + proveedor
+        $vidrioMatch = $productoVidrio->coloresPorProveedor->first(function ($cpp) use ($colorId, $proveedorVidrio) {
+            return (int)$cpp->color_id === (int)$colorId && (int)$cpp->proveedor_id === (int)$proveedorVidrio;
+        });
+
+        // Si no existe, intenta con color_id 3
+        $colorIdVidrio = $vidrioMatch ? $colorId : 3;
+        $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorIdVidrio, $proveedorVidrio);
+        $matchVidrio = $productoVidrio->coloresPorProveedor
+            ->first(fn($cpp) => $cpp->color_id == $colorIdVidrio && $cpp->proveedor_id == $proveedorVidrio);
+
+        $materiales[] = [
+            'producto_id' => $productoVidrio->id,
+            'nombre' => $productoVidrio->nombre,
+            'unidad' => 'm2',
+            'cantidad' => round($areaM2, 3) * $cantidad,
+            'costo_unitario' => round($costoVidrio),
+            'costo_total' => round($costoVidrio * $areaM2) * $cantidad,
+            'proveedor' => $matchVidrio?->proveedor?->nombre ?? 'N/A',
+        ];
+
+        $costoTotal = array_sum(array_column($materiales, 'costo_total'));
+
+        Log::info("💰 Fija AL42 calculada", [
+            'costo_total' => $costoTotal,
+            'costo_unitario' => round($costoTotal / $cantidad),
+            'materiales_count' => count($materiales),
+            'ancho_vidrio_mm' => $anchoVidrio,
+            'alto_vidrio_mm' => $altoVidrio,
+            'area_vidrio_m2' => $areaM2
+        ]);
+
+        return [
+            'materiales' => $materiales,
+            'costo_total' => round($costoTotal),
+            'costo_unitario' => round($costoTotal / $cantidad),
         ];
     }
 

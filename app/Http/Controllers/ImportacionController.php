@@ -59,7 +59,7 @@ class ImportacionController extends Controller
                 continue;
             }
 
-            if (!is_numeric($data[0]) || !is_numeric($data[1]) || !is_numeric($data[2]) || !is_numeric($data[3])) {
+            if (!is_numeric($data[0]) || !is_numeric($data[1]) || !is_numeric($data[2]) || !is_numeric($data[4])) {
                 $errores[] = "Valores numéricos inválidos: " . implode(',', $data);
                 continue;
             }
@@ -67,10 +67,10 @@ class ImportacionController extends Controller
             try {
                 ProductoColorProveedor::create([
                     'producto_id' => (int) $data[0],
-                    'color_id' => (int) $data[1],
-                    'proveedor_id' => (int) $data[2],
-                    'costo' => (float) $data[3],
-                    'codigo_proveedor' => trim($data[4]),
+                    'proveedor_id' => (int) $data[1],
+                    'color_id' => (int) $data[2],
+                    'codigo_proveedor' => trim($data[3]),
+                    'costo' => (float) $data[4],
                     'stock' => isset($data[5]) && is_numeric($data[5]) ? (int) $data[5] : 0,
                 ]);
 

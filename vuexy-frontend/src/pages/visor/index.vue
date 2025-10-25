@@ -33,11 +33,11 @@
                     <strong>Elige uno de los dos formatos (con cabecera):</strong>
                     <div class="text-caption">
                       <em>Por nombres:</em>
-                      <code>producto,color,proveedor,costo,codigo_proveedor,stock</code>
+                      <code>producto,proveedor,color,codigo_proveedor,costo,stock</code>
                     </div>
                     <div class="text-caption">
                       <em>Por IDs:</em>
-                      <code>producto_id,color_id,proveedor_id,costo,codigo_proveedor,stock</code>
+                      <code>producto_id,proveedor_id,color_id,codigo_proveedor,costo,stock</code>
                     </div>
                   </div>
                 </v-alert>
@@ -221,9 +221,9 @@ const requiredColumns = computed(() => {
   // PCP: aceptamos por nombres o por IDs (que valide al menos uno de los dos sets)
   return [
     // set A (por nombres)
-    ['producto', 'color', 'proveedor', 'costo', 'codigo_proveedor', 'stock'],
+    ['producto', 'proveedor', 'color', 'codigo_proveedor', 'costo', 'stock'],
     // set B (por IDs)
-    ['producto_id', 'color_id', 'proveedor_id', 'costo', 'codigo_proveedor', 'stock'],
+    ['producto_id', 'proveedor_id', 'color_id', 'codigo_proveedor', 'costo', 'stock'],
   ]
 })
 

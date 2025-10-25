@@ -171,8 +171,10 @@
   {{-- Total General --}}
   @php
     $totalVentanas = $cotizacion->ventanas->sum(fn($v) => $v->precio * $v->cantidad);
-    $totalProductos = $cotizacion->detalles->sum('total');
-    $totalGeneral = $totalVentanas + $totalProductos;
+    $totalProductos = $cotizacion->detalles->sum('total'); // Total productos SIN IVA
+    $subtotalNeto = $totalVentanas + $totalProductos; // Subtotal sin IVA
+    $iva = $subtotalNeto * 0.19; // IVA 19% sobre el subtotal completo
+    $totalGeneral = $subtotalNeto + $iva; // Total con IVA
   @endphp
 
   <table style="width: 100%; margin-top: 20px; border: none;">
@@ -200,6 +202,22 @@
               </td>
             </tr>
           @endif
+          <tr>
+            <td style="padding: 5px; text-align: right; border-top: 1px solid #ccc;">
+              <strong>Subtotal (neto):</strong>
+            </td>
+            <td style="padding: 5px; text-align: right; border-top: 1px solid #ccc;">
+              ${{ number_format($subtotalNeto, 0, ',', '.') }}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 5px; text-align: right;">
+              <strong>IVA 19%:</strong>
+            </td>
+            <td style="padding: 5px; text-align: right;">
+              ${{ number_format($iva, 0, ',', '.') }}
+            </td>
+          </tr>
           <tr style="background-color: #f0f0f0;">
             <td style="padding: 8px; text-align: right; border-top: 2px solid #333;">
               <strong>TOTAL:</strong>

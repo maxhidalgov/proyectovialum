@@ -16,6 +16,23 @@ class BsaleClientService
         $this->baseUrl = 'https://api.bsale.io/v1'; // Puedes ajustar esto si usas sandbox
     }
 
+    /**
+     * Obtiene un cliente específico por ID desde Bsale
+     */
+    public function getClient($clientId)
+    {
+        $response = Http::withHeaders([
+            'access_token' => $this->token,
+        ])->get("{$this->baseUrl}/clients/{$clientId}.json");
+
+        if ($response->successful()) {
+            $clientData = $response->json();
+            return $this->processClientItem($clientData);
+        }
+
+        throw new \Exception("Error al obtener cliente {$clientId} desde Bsale: " . $response->body());
+    }
+
     public function getClients($limit = 50, $offset = 0)
     {
         // Si se solicita más de 250, paginar automáticamente para obtener todos
@@ -95,28 +112,37 @@ class BsaleClientService
     private function processClientItems($items)
     {
         return collect($items)->map(function ($item) {
-            return [
-                'id'             => $item['id'] ?? null,
-                'firstName'      => $item['firstName'] ?? '',
-                'lastName'       => $item['lastName'] ?? '',
-                'company'        => $item['company'] ?? '',
-                'email'          => $item['email'] ?? '',
-                'identification' => $item['code'] ?? '',
-                'companyOrPerson' => $item['companyOrPerson'] ?? 0,
-                'tipo_cliente'   => $item['companyOrPerson'] == 1 ? 'empresa' : 'persona',
-                'razon_social'   => $item['company'] ?: trim(($item['firstName'] ?? '') . ' ' . ($item['lastName'] ?? '')),
-                'giro'           => $item['activity'] ?? '',
-                'city'           => $item['city'] ?? '',
-                'municipality'   => $item['municipality'] ?? '',
-                'address'        => $item['address'] ?? '',
-                'phone'          => $item['phone'] ?? '',
-                // Agregar campos adicionales de Bsale
-                'displayName'    => $item['company'] 
-                    ? $item['company'] 
-                    : trim(($item['firstName'] ?? '') . ' ' . ($item['lastName'] ?? '')),
-            ];
+            return $this->processClientItem($item);
         })->values()->toArray();
     }
+
+    /**
+     * Procesa y limpia los datos de un solo cliente de Bsale
+     */
+    private function processClientItem($item)
+    {
+        return [
+            'id'             => $item['id'] ?? null,
+            'firstName'      => $item['firstName'] ?? '',
+            'lastName'       => $item['lastName'] ?? '',
+            'company'        => $item['company'] ?? '',
+            'email'          => $item['email'] ?? '',
+            'identification' => $item['code'] ?? '',
+            'companyOrPerson' => $item['companyOrPerson'] ?? 0,
+            'tipo_cliente'   => $item['companyOrPerson'] == 1 ? 'empresa' : 'persona',
+            'razon_social'   => $item['company'] ?: trim(($item['firstName'] ?? '') . ' ' . ($item['lastName'] ?? '')),
+            'giro'           => $item['activity'] ?? '',
+            'city'           => $item['city'] ?? '',
+            'municipality'   => $item['municipality'] ?? '',
+            'address'        => $item['address'] ?? '',
+            'phone'          => $item['phone'] ?? '',
+            // Agregar campos adicionales de Bsale
+            'displayName'    => $item['company'] 
+                ? $item['company'] 
+                : trim(($item['firstName'] ?? '') . ' ' . ($item['lastName'] ?? '')),
+        ];
+    }
+
     public function crearCliente(array $data)
 {
     $payload = [
