@@ -1,5 +1,5 @@
 <template>
-  <v-stage :config="{ width: 400, height: 400 }">
+  <v-stage :config="stageConfig">
     <v-layer>
       
         <!-- Marco exterior con biseles -->

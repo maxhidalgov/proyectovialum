@@ -21,7 +21,7 @@
               required
             />
           </v-col>
-          <v-col cols="6" md="2">
+          <v-col v-if="ventana.tipo !== 58" cols="6" md="2">
             <v-text-field
               v-model.number="ventana.ancho"
               label="Ancho (mm)"
@@ -33,7 +33,7 @@
               required
             />
           </v-col>
-          <v-col cols="6" md="2">
+          <v-col v-if="ventana.tipo !== 58" cols="6" md="2">
             <v-text-field
               v-model.number="ventana.alto"
               label="Alto (mm)"
@@ -105,6 +105,177 @@
             />
           </v-col>
         </v-row>
+
+        <!-- Switch de Manillón para Corredera AL25 -->
+        <v-row v-if="ventana.tipo === 55" dense class="mt-2">
+          <v-col cols="12" md="6">
+            <v-switch
+              v-model="ventana.manillon"
+              color="primary"
+              label="Manillón"
+              hide-details
+              inset
+            >
+              <template v-slot:label>
+                <span class="text-body-1">
+                  <strong>Herraje:</strong> {{ ventana.manillon ? 'Manillón' : 'Pestillo' }}
+                </span>
+              </template>
+            </v-switch>
+            <div class="text-caption text-medium-emphasis ml-2">
+              Seleccione el tipo de herraje para la ventana corredera
+            </div>
+          </v-col>
+        </v-row>
+
+        <!-- Hojas totales y móviles para Corredera AL25 -->
+        <v-row v-if="ventana.tipo === 55" dense class="mt-2">
+          <v-col cols="6" md="3">
+            <v-select
+              v-model="ventana.hojas_totales"
+              :items="[2]"
+              label="Hojas totales"
+              outlined
+              color="primary"
+              disabled
+              hint="AL25 siempre tiene 2 hojas"
+              persistent-hint
+            />
+          </v-col>
+          <v-col cols="6" md="3">
+            <v-select
+              v-model="ventana.hojas_moviles"
+              :items="[1, 2]"
+              label="Hojas móviles"
+              outlined
+              color="primary"
+            />
+          </v-col>
+          <v-col cols="12" md="6" v-if="ventana.hojas_moviles === 1">
+            <v-select
+              v-model="ventana.hojaMovilSeleccionada"
+              :items="[
+                { value: 1, title: 'Hoja 1 (Izquierda)' },
+                { value: 2, title: 'Hoja 2 (Derecha)' }
+              ]"
+              item-title="title"
+              item-value="value"
+              label="¿Cuál hoja se mueve?"
+              outlined
+              color="primary"
+            />
+          </v-col>
+        </v-row>
+
+        <!-- Configuración de Ventana Compuesta AL42 -->
+        <v-row v-if="ventana.tipo === 57" dense class="mt-2">
+          <v-col cols="12">
+            <v-card variant="outlined" class="pa-3">
+              <v-card-title class="text-subtitle-1 pa-0 mb-2">
+                🪟 Configuración de Ventana Compuesta
+              </v-card-title>
+              
+              <!-- Filas y Columnas -->
+              <v-row dense>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model.number="ventana.filas"
+                    label="Número de filas"
+                    type="number"
+                    min="1"
+                    outlined
+                    color="primary"
+                    hint="Divisiones horizontales"
+                    persistent-hint
+                  />
+                </v-col>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model.number="ventana.columnas"
+                    label="Número de columnas"
+                    type="number"
+                    min="1"
+                    outlined
+                    color="primary"
+                    hint="Divisiones verticales"
+                    persistent-hint
+                  />
+                </v-col>
+              </v-row>
+
+              <!-- Dimensiones personalizadas -->
+              <v-row dense class="mt-3">
+                <v-col cols="12">
+                  <div class="text-caption mb-2">📏 Dimensiones personalizadas:</div>
+                </v-col>
+                <!-- Altos de filas -->
+                <v-col cols="6">
+                  <div class="text-caption mb-1">Altos de filas (mm):</div>
+                  <v-text-field
+                    v-for="(alto, idx) in ventana.altosFilas"
+                    :key="'alto-' + idx"
+                    v-model.number="ventana.altosFilas[idx]"
+                    :label="`Fila ${idx + 1}`"
+                    type="number"
+                    min="1"
+                    outlined
+                    dense
+                    color="primary"
+                    hide-details
+                    class="mb-2"
+                  />
+                </v-col>
+                <!-- Anchos de columnas -->
+                <v-col cols="6">
+                  <div class="text-caption mb-1">Anchos de columnas (mm):</div>
+                  <v-text-field
+                    v-for="(ancho, idx) in ventana.anchosColumnas"
+                    :key="'ancho-' + idx"
+                    v-model.number="ventana.anchosColumnas[idx]"
+                    :label="`Columna ${idx + 1}`"
+                    type="number"
+                    min="1"
+                    outlined
+                    dense
+                    color="primary"
+                    hide-details
+                    class="mb-2"
+                  />
+                </v-col>
+              </v-row>
+
+              <!-- Grid de secciones -->
+              <div class="mt-4">
+                <div class="text-caption mb-2">Configurar cada sección:</div>
+                <div v-for="(fila, filaIdx) in ventana.secciones" :key="'fila-' + filaIdx" class="mb-2">
+                  <v-row dense>
+                    <v-col 
+                      v-for="(seccion, colIdx) in fila" 
+                      :key="'sec-' + filaIdx + '-' + colIdx"
+                      :cols="12 / ventana.columnas"
+                    >
+                      <v-select
+                        v-model="seccion.tipo"
+                        :items="[
+                          { value: 1, title: 'Fija' },
+                          { value: 56, title: 'Proyectante' }
+                        ]"
+                        item-title="title"
+                        item-value="value"
+                        :label="`F${filaIdx + 1}C${colIdx + 1}`"
+                        outlined
+                        dense
+                        color="primary"
+                        hide-details
+                      />
+                    </v-col>
+                  </v-row>
+                </div>
+              </div>
+            </v-card>
+          </v-col>
+        </v-row>
+
           <!-- Agregar después de la primera v-row dense en AgregarVentanaModal2.vue -->
 
 <!-- Anchos específicos para Bay Window -->
@@ -596,6 +767,36 @@
               :tipoVidrio="ventana.tipoVidrio"
               :productoVidrioProveedor="ventana.productoVidrioProveedor"
             />
+            <VentanaProyectanteAL42
+              v-else-if="ventana.tipo === 56"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+              :material="ventana.material"
+              :tipoVidrio="ventana.tipoVidrio"
+              :productoVidrioProveedor="ventana.productoVidrioProveedor"
+            />
+            <VentanaCorrederaAL25
+              v-else-if="ventana.tipo === 55"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+              :hoja1AlFrente="ventana.hoja1AlFrente"
+              :hojas-moviles="ventana.hojas_moviles || 2"
+              :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada || 1"
+            />
+            <VistaVentanaCompuestaAL42
+              v-else-if="ventana.tipo === 57"
+              :key="`compuesta-${ventana.ancho}-${ventana.alto}-${ventana.filas}-${ventana.columnas}`"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+              :filas="ventana.filas"
+              :columnas="ventana.columnas"
+              :altos-filas="ventana.altosFilas"
+              :anchos-columnas="ventana.anchosColumnas"
+              :secciones="ventana.secciones"
+            />
             <VentanaCorredera
               v-else-if="ventana.tipo === 3"
               :ancho="ventana.ancho"
@@ -703,6 +904,19 @@
               @agregar-borde="handleAgregarBorde"
               @editar-ventana="handleEditarVentana"
               @eliminar-ventana="handleEliminarVentana"
+            />
+            <ArmadorVentanasComplejas
+              v-else-if="ventana.tipo === 58"
+              :tipos-ventana="tiposVentanaBayKonva"
+              :perfiles-marco="perfilesMarco"
+              :perfiles-divisores="perfilesDivisores"
+              :color-marco="(colores.find(c => c.id === ventana.color)?.nombre || 'blanco').toLowerCase()"
+              @actualizar="(config) => { 
+                console.log('📦 Configuración armador actualizada:', config)
+                ventana.configuracionArmador = config
+                recalcularCostos() 
+              }"
+              @cancelar="() => {}"
             />
 
           </v-col>
@@ -901,11 +1115,14 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, onMounted } from 'vue'
 import VentanaFijaAL42 from '@/components/VistaVentanaFijaAL42.vue'
 import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
 import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 import VentanaProyectante from '@/components/VistaVentanaProyectanteS60.vue'
+import VentanaProyectanteAL42 from '@/components/VistaVentanaProyectanteAL42.vue'
+import VentanaCorrederaAL25 from '@/components/VistaVentanaCorrederaAL25.vue'
+import VistaVentanaCompuestaAL42 from '@/components/VistaVentanaCompuestaAL42.vue'
 import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
 import BayWindow from '@/components/VistaBayWindow.vue'
 import VentanaAbatir from '@/components/VistaVentanaAbatirS60.vue'
@@ -914,6 +1131,7 @@ import VistaMamparaS60 from '@/components/VistaMamparaS60.vue'
 import VentanaCorredera98 from '@/components/VistaVentanaCorredera98.vue'
 import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
 import VistaVentanaCompuestaDinamica from '@/components/VistaVentanaCompuestaDinamica.vue'
+import ArmadorVentanasComplejas from '@/components/ArmadorVentanasComplejas.vue'
 
 import api from '@/axiosInstance'
 
@@ -988,6 +1206,16 @@ const baseVentana = {
   productoVidrioProveedor: props.productoVidrioDefault ?? null,
   hojas_totales: 2,
   hojas_moviles: 2,
+  hojaMovilSeleccionada: null, // Para AL25 con 1 hoja móvil: 1=izquierda, 2=derecha
+  manillon: false, // Para Corredera AL25 (tipo 55): false=pestillo, true=manillón
+  
+  // Para Ventana Compuesta AL42 (tipo 57)
+  filas: 1,
+  columnas: 1,
+  altosFilas: [],
+  anchosColumnas: [],
+  secciones: [[{ tipo: 1 }]], // Array 2D: secciones[fila][col] = { tipo: 1|56 }
+  
   materiales: [],
   costo_total: 0,
   costo_total_unitario: 0,
@@ -1026,27 +1254,97 @@ const baseVentana = {
     orientacionComp: 'horizontal',
   cantidadComp: 2,
   itemsComp: [baseItemComp(), baseItemComp()],
+  configuracionArmador: null, // Para ventana tipo 58 (Armador Universal)
 }
 
 const ventana = ref({ ...baseVentana, ...(props.ventana || {}) })
 
-// En AgregarVentanaModal2.vue <script setup>
-const tiposVentanaBayKonva = [
-  { id: 2, nombre: 'Fija' },           // ← ID real 2
-  { id: 45, nombre: 'Proyectante' },   // ← ID real 45
-  { id: 3, nombre: 'Corredera' },      // ← ID real 3
-  { id: 49, nombre: 'Abatible' },       // ← ID real 49
-  //{ id: 46, nombre: 'Corredera Andes' }, // ← ID real 46 (opcional)
-  { id: 50, nombre: 'Puerta S60' },       // ← ID real 50
+// Tipos de ventana disponibles para el armador
+const tiposVentanaBayKonvaBase = [
+  { id: 2, nombre: 'Fija' },
+  { id: 45, nombre: 'Proyectante' },
+  { id: 3, nombre: 'Corredera' },
+  { id: 49, nombre: 'Abatible' },
+  { id: 50, nombre: 'Puerta S60' },
 ]
+
+// Filtrar tipos de ventana por material
+const tiposVentanaBayKonva = computed(() => {
+  const materialId = ventana.value.material ?? props.materialDefault
+  // Filtrar usando los tipos completos de props.tiposVentana
+  const tiposDisponibles = props.tiposVentana.filter(t => t.material_id === materialId)
+  
+  console.log('🔍 Filtrando tipos ventana:', {
+    materialId,
+    tiposVentanaTotal: props.tiposVentana.length,
+    tiposDisponibles: tiposDisponibles.length,
+    tiposDisponiblesIds: tiposDisponibles.map(t => ({ id: t.id, nombre: t.nombre })),
+    tiposBase: tiposVentanaBayKonvaBase.length
+  })
+  
+  // Retornar solo los IDs que están en tiposVentanaBayKonvaBase y coinciden con el material
+  const resultado = tiposVentanaBayKonvaBase.filter(base => 
+    tiposDisponibles.some(t => t.id === base.id)
+  )
+  
+  console.log('✅ Tipos ventana filtrados:', resultado)
+  
+  // Si no hay coincidencias con la base, retornar todos los disponibles
+  if (resultado.length === 0 && tiposDisponibles.length > 0) {
+    console.log('⚠️ No hay coincidencias con base, usando todos los disponibles')
+    return tiposDisponibles.map(t => ({ id: t.id, nombre: t.nombre }))
+  }
+  
+  return resultado
+})
 
 const tiposVentanaCentro = [
   { id: 2, nombre: 'Fija' },
   { id: 3, nombre: 'Corredera Sliding' },
   { id: 45, nombre: 'Proyectante S60' },
-  //{ id: 46, nombre: 'Corredera Andes' },
   { id: 50, nombre: 'Puerta S60' },
 ]
+
+// Perfiles para el armador
+const perfilesMarco = ref([])
+const perfilesDivisores = ref([])
+
+// Cargar perfiles al montar
+onMounted(async () => {
+  try {
+    // Cargar todos los productos y filtrar por categoría
+    const resProductos = await api.get('/api/productos')
+    const todosProductos = resProductos.data.data || []
+    
+    // TODO: Ajustar estos filtros según tu BD
+    // Opción 1: Filtrar por tipo_producto_id
+    // perfilesMarco.value = todosProductos.filter(p => p.tipo_producto_id === 1)
+    // perfilesDivisores.value = todosProductos.filter(p => p.tipo_producto_id === 2)
+    
+    // Opción 2: Filtrar por nombre que contenga ciertas palabras
+    perfilesMarco.value = todosProductos.filter(p => 
+      p.nombre && (
+        p.nombre.toLowerCase().includes('marco') ||
+        p.nombre.toLowerCase().includes('jamba')
+      )
+    )
+    
+    perfilesDivisores.value = todosProductos.filter(p => 
+      p.nombre && (
+        p.nombre.toLowerCase().includes('divisor') ||
+        p.nombre.toLowerCase().includes('travesaño') ||
+        p.nombre.toLowerCase().includes('parteluz')
+      )
+    )
+    
+    console.log('Perfiles cargados:', {
+      marcos: perfilesMarco.value.length,
+      divisores: perfilesDivisores.value.length
+    })
+  } catch (error) {
+    console.error('Error cargando perfiles:', error)
+  }
+})
 
 
 watch(
@@ -1116,10 +1414,14 @@ const cerrarModal = () => {
 const margenVenta = 0.45
 
 async function recalcularCostos() {
+  // Para tipo 58, validar que tenga configuración del armador en lugar de ancho/alto
+  const tienesDimensiones = ventana.value.tipo === 58 
+    ? ventana.value.configuracionArmador?.ancho && ventana.value.configuracionArmador?.alto
+    : ventana.value.ancho && ventana.value.alto
+  
   if (
     ventana.value.tipo &&
-    ventana.value.ancho &&
-    ventana.value.alto &&
+    tienesDimensiones &&
     ventana.value.cantidad &&
     ventana.value.color &&
     ventana.value.productoVidrioProveedor
@@ -1134,30 +1436,54 @@ async function recalcularCostos() {
         })))
         .find(p => p.id === ventana.value.productoVidrioProveedor)
 
+      if (!relacion) {
+        console.error('❌ No se encontró la relación producto-proveedor para ID:', ventana.value.productoVidrioProveedor)
+        return
+      }
+
       const payload = {
         tipo_ventana_id: ventana.value.tipo,
         tipo: ventana.value.tipo,
-        ancho: ventana.value.ancho,
-        alto: ventana.value.alto,
+        ancho: ventana.value.tipo === 58 && ventana.value.configuracionArmador 
+          ? ventana.value.configuracionArmador.ancho 
+          : ventana.value.ancho,
+        alto: ventana.value.tipo === 58 && ventana.value.configuracionArmador 
+          ? ventana.value.configuracionArmador.alto 
+          : ventana.value.alto,
         cantidad: ventana.value.cantidad,
         color_id: ventana.value.color,
         color: ventana.value.color,
         producto_vidrio_proveedor_id: ventana.value.productoVidrioProveedor,
-        producto_id: relacion?.producto_id,
-        proveedor_id: relacion?.proveedor_id,
-        productoVidrio: relacion?.producto_id, // <--- ESTE CAMPO ES OBLIGATORIO
-        proveedorVidrio: relacion?.proveedor_id, // (si tu backend lo usa)
+        producto_id: relacion.producto_id,
+        proveedor_id: relacion.proveedor_id,
+        productoVidrio: relacion.producto_id,
+        proveedorVidrio: relacion.proveedor_id,
         tipoVidrio: ventana.value.tipoVidrio,
+        manillon: ventana.value.tipo === 55 ? ventana.value.manillon : undefined, // ✅ Para Corredera AL25
         
         // ✅ Propiedades específicas por tipo
-        hojas_totales: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hojas_totales : undefined,
-        hojas_moviles: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
-        hojaMovilSeleccionada: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
+        hojas_totales: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojas_totales : undefined,
+        hojas_moviles: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
+        hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
         hoja1AlFrente: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hoja1AlFrente : undefined,
         direccionApertura: ventana.value.direccionApertura,
         ladoApertura: ventana.value.ladoApertura,
         pasoLibre: [50, 51].includes(ventana.value.tipo) ? ventana.value.pasoLibre : undefined,
         hojaActiva: ventana.value.tipo === 51 ? ventana.value.hojaActiva : undefined,
+
+        // ✅ Ventana Compuesta AL42 (tipo 57)
+        ...(ventana.value.tipo === 57 && {
+          filas: ventana.value.filas,
+          columnas: ventana.value.columnas,
+          altos_filas: ventana.value.altosFilas,
+          anchos_columnas: ventana.value.anchosColumnas,
+          secciones: ventana.value.secciones,
+        }),
+
+        // ✅ Ventana Universal - Armador (tipo 58)
+        ...(ventana.value.tipo === 58 && ventana.value.configuracionArmador && {
+          configuracionArmador: ventana.value.configuracionArmador,
+        }),
 
         ...(ventana.value.tipo === 47 && {
           ancho_izquierda: ventana.value.ancho_izquierda,
@@ -1170,13 +1496,25 @@ async function recalcularCostos() {
 
       }
 
-      console.log('Payload a calcular-materiales:', payload)
+      console.log('💰 Payload a calcular-materiales:', payload)
+      console.log('📦 Tipo 58 - configuracionArmador:', ventana.value.configuracionArmador)
+      
       const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
+      
+      console.log('✅ Respuesta del backend:', data)
+      
       ventana.value.costo_total_unitario = data.costo_unitario
       ventana.value.costo_total = data.costo_unitario * ventana.value.cantidad
       ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta))
       ventana.value.materiales = data.materiales
+
+      console.log('💵 Valores asignados:')
+      console.log('   - costo_total_unitario:', ventana.value.costo_total_unitario)
+      console.log('   - costo_total:', ventana.value.costo_total)
+      console.log('   - precio:', ventana.value.precio)
+      console.log('   - materiales:', ventana.value.materiales?.length || 0, 'items')
     } catch (e) {
+      console.error('❌ Error en recalcularCostos:', e)
       ventana.value.costo_total_unitario = 0
       ventana.value.costo_total = 0
       ventana.value.precio = 0
@@ -1214,6 +1552,10 @@ watch(
     ventana.value.color,
     ventana.value.tipoVidrio,
     ventana.value.productoVidrioProveedor,
+    ventana.value.manillon, // ✅ Para Corredera AL25
+    ventana.value.hojas_totales, // ✅ Para Corredera AL25 y otras
+    ventana.value.hojas_moviles, // ✅ Para Corredera AL25 y otras  
+    ventana.value.hojaMovilSeleccionada, // ✅ Para Corredera AL25 con 1 hoja móvil
     ventana.value.direccionApertura, // ✅ AGREGAR ESTA LÍNEA
     ventana.value.ladoApertura,      // ✅ OPCIONAL: También lado apertura
     ventana.value.pasoLibre,
@@ -1252,6 +1594,16 @@ watch(
     ventana.value.tipoVentanaDerecha?.partes?.[1]?.alto,
     ventana.value.tipoVentanaDerecha?.partes?.[1]?.ladoApertura,
     ventana.value.tipoVentanaDerecha?.partes?.[1]?.direccionApertura,
+    
+    // ✅ Ventana Compuesta AL42 (tipo 57)
+    ventana.value.filas,
+    ventana.value.columnas,
+    JSON.stringify(ventana.value.altosFilas),
+    JSON.stringify(ventana.value.anchosColumnas),
+    JSON.stringify(ventana.value.secciones),
+    
+    // ✅ Ventana Universal - Armador (tipo 58)
+    JSON.stringify(ventana.value.configuracionArmador),
   ],
   recalcularCostos,
   { immediate: true }
@@ -1292,7 +1644,76 @@ watch(() => ventana.value.tipo, (val) => {
     // Siempre inicializa con tipo válido
     ventana.value.itemsComp ??= [baseItemComp(), baseItemComp()]
   }
+  
+  // Inicializa ventana compuesta AL42 (tipo 57)
+  if (Number(val) === 57) {
+    ventana.value.filas ??= 1
+    ventana.value.columnas ??= 1
+    actualizarGridSecciones()
+  }
 })
+
+// Watcher para actualizar grid cuando cambien filas o columnas
+watch(
+  () => [ventana.value.filas, ventana.value.columnas],
+  () => {
+    if (ventana.value.tipo === 57) {
+      actualizarGridSecciones()
+    }
+  }
+)
+
+// Watcher para actualizar dimensiones cuando cambien alto o ancho
+// Solo recalcula proporcionalmente si todas las dimensiones son iguales (no personalizadas)
+watch(
+  () => [ventana.value.alto, ventana.value.ancho],
+  ([nuevoAlto, nuevoAncho], [viejoAlto, viejoAncho]) => {
+    if (ventana.value.tipo === 57 && nuevoAlto && nuevoAncho) {
+      const filas = ventana.value.filas || 1
+      const columnas = ventana.value.columnas || 1
+      
+      // Verificar si las dimensiones actuales son proporcionales (no personalizadas)
+      const altosUniformes = ventana.value.altosFilas?.every((v, i, arr) => Math.abs(v - arr[0]) < 1)
+      const anchosUniformes = ventana.value.anchosColumnas?.every((v, i, arr) => Math.abs(v - arr[0]) < 1)
+      
+      // Solo recalcular si son uniformes (el usuario no ha personalizado)
+      if (nuevoAlto !== viejoAlto && altosUniformes && ventana.value.altosFilas) {
+        ventana.value.altosFilas = Array(filas).fill(nuevoAlto / filas)
+      }
+      
+      if (nuevoAncho !== viejoAncho && anchosUniformes && ventana.value.anchosColumnas) {
+        ventana.value.anchosColumnas = Array(columnas).fill(nuevoAncho / columnas)
+      }
+    }
+  }
+)
+
+// Función para actualizar el grid de secciones
+function actualizarGridSecciones() {
+  const filas = ventana.value.filas || 1
+  const columnas = ventana.value.columnas || 1
+  
+  // Crear grid 2D con todas las secciones
+  const nuevoGrid = []
+  for (let f = 0; f < filas; f++) {
+    const fila = []
+    for (let c = 0; c < columnas; c++) {
+      // Mantener configuración existente o crear nueva
+      const seccionExistente = ventana.value.secciones?.[f]?.[c]
+      fila.push(seccionExistente || { tipo: 1 }) // Default: Fija
+    }
+    nuevoGrid.push(fila)
+  }
+  
+  ventana.value.secciones = nuevoGrid
+  
+  // Calcular tamaños proporcionales
+  const altoTotal = ventana.value.alto || 1000
+  const anchoTotal = ventana.value.ancho || 1000
+  
+  ventana.value.altosFilas = Array(filas).fill(altoTotal / filas)
+  ventana.value.anchosColumnas = Array(columnas).fill(anchoTotal / columnas)
+}
 
 // (opcional) si no necesitas refs para el preview, elimina setVentanaRef/ventanaRefs
 
@@ -1511,7 +1932,7 @@ const costoVentanaIndividual = computed(() => {
 })
 
 function getTipoVentanaNombre(tipo) {
-  const ventanaTipo = tiposVentanaBayKonva.find(t => t.id === tipo)
+  const ventanaTipo = tiposVentanaBayKonva.value.find(t => t.id === tipo)
   return ventanaTipo ? ventanaTipo.nombre : `Tipo ${tipo}`
 }
 

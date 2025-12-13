@@ -313,6 +313,38 @@
                   :tipoVidrio="ventana.tipoVidrio"
                   :productoVidrioProveedor="ventana.productoVidrioProveedor"
                 />
+                <VentanaProyectanteAL42
+                  v-else-if="ventana.tipo === 56"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :material="ventana.material"
+                  :tipoVidrio="ventana.tipoVidrio"
+                  :productoVidrioProveedor="ventana.productoVidrioProveedor"
+                />
+                <VentanaCorrederaAL25
+                  v-else-if="ventana.tipo === 55"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :hoja1AlFrente="ventana.hoja1AlFrente"
+                  :hojas-moviles="ventana.hojas_moviles || 2"
+                  :hoja-movil-seleccionada="ventana.hojaMovilSeleccionada || 1"
+                />
+                <VistaVentanaCompuestaAL42
+                  v-else-if="ventana.tipo === 57"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :filas="ventana.filas || 1"
+                  :columnas="ventana.columnas || 1"
+                  :altos-filas="ventana.altosFilas || []"
+                  :anchos-columnas="ventana.anchosColumnas || []"
+                  :secciones="ventana.secciones || [[{ tipo: 1 }]]"
+                />
                 <VentanaCorredera
                   v-else-if="ventana.tipo === 3"
                   :ref="el => { if (el) ventanaRefs[index] = el }"
@@ -412,14 +444,14 @@
                   :direccion-apertura="ventana.direccionApertura"
                   :paso-libre="ventana.pasoLibre"
                 />
-                <VistaVentanaCompuestaDinamica
+                <ArmadorUniversal
                   v-else-if="ventana.tipo === 58"
                   :ref="el => { if (el) ventanaRefs[index] = el }"
                   :ancho="ventana.ancho"
                   :alto="ventana.alto"
                   :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
-                  :orientacion="ventana.orientacionComp"
-                  :items="ventana.itemsComp"
+                  :configuracion-inicial="ventana.configuracionArmador"
+                  :tipos-ventana="tiposVentanaBayKonva"
                 />
               </v-col>
               <v-col cols="6">
@@ -547,6 +579,10 @@ import VistaMamparaS60 from '@/components/VistaMamparaS60.vue'
 import VentanaCorredera98 from '@/components/VistaVentanaCorredera98.vue'
 import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
 import VistaVentanaCompuestaDinamica from '@/components/VistaVentanaCompuestaDinamica.vue'
+import VentanaProyectanteAL42 from '@/components/VistaVentanaProyectanteAL42.vue'
+import VentanaCorrederaAL25 from '@/components/VistaVentanaCorrederaAL25.vue'
+import VistaVentanaCompuestaAL42 from '@/components/VistaVentanaCompuestaAL42.vue'
+import ArmadorUniversal from '@/components/ArmadorUniversal.vue'
 
 
 
@@ -973,6 +1009,14 @@ const agregarVentana = (ventanaModal = null) => {
     productoVidrioProveedor: cotizacion.productoVidrioProveedor ?? null,
     hojas_totales: 2,
     hojas_moviles: 2,
+    
+    // Para Ventana Compuesta AL42 (tipo 57)
+    filas: 1,
+    columnas: 1,
+    altosFilas: [],
+    anchosColumnas: [],
+    secciones: [[{ tipo: 1 }]],
+    
     materiales: [],
     costo_total: 0,
     costo_total_unitario: 0,

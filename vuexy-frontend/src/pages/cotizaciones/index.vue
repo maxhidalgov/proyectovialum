@@ -97,7 +97,7 @@
 }
 
 const descargarPDF = (cotizacionId) => {
-  const baseURL = window.location.hostname === 'localhost' 
+  const baseURL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:8000' 
     : 'https://proyectovialum-production.up.railway.app'
   window.open(`${baseURL}/api/cotizaciones/${cotizacionId}/pdf`, '_blank')

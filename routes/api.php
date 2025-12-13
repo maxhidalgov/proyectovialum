@@ -55,6 +55,29 @@ Route::middleware('api')->group(function () {
     Route::get('/clientes/buscar', [ClienteController::class, 'buscar']);
     Route::get('/clientes', [ClienteController::class, 'index']);
     Route::get('proveedores/{productoId}/{colorId}', [ProductoController::class, 'getProveedoresPorProductoYColor']);
+    
+    // Ruta temporal para debug de colores en productos
+    Route::get('/debug/producto-colores/{id}', function ($id) {
+        $producto = \App\Models\Producto::with('coloresPorProveedor.proveedor', 'coloresPorProveedor.color')->find($id);
+        if (!$producto) {
+            return response()->json(['error' => 'Producto no encontrado'], 404);
+        }
+        return response()->json([
+            'producto_id' => $producto->id,
+            'nombre' => $producto->nombre,
+            'codigo' => $producto->codigo,
+            'largo_total' => $producto->largo_total,
+            'colores_disponibles' => $producto->coloresPorProveedor->map(fn($cpp) => [
+                'id' => $cpp->id,
+                'color_id' => $cpp->color_id,
+                'color_nombre' => $cpp->color->nombre ?? 'N/A',
+                'proveedor_id' => $cpp->proveedor_id,
+                'proveedor_nombre' => $cpp->proveedor->nombre ?? 'N/A',
+                'costo' => $cpp->costo,
+            ])
+        ]);
+    });
+    
     Route::get('/cotizaciones', [CotizacionController::class, 'index']);
     Route::post('/cotizaciones', [CotizacionController::class, 'store']);
     route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
