@@ -20,6 +20,7 @@ declare module 'vue-router/auto-routes' {
   export interface RouteNamedMap {
     'root': RouteRecordInfo<'root', '/', Record<never, never>, Record<never, never>>,
     '$error': RouteRecordInfo<'$error', '/:error(.*)', { error: ParamValue<true> }, { error: ParamValue<false> }>,
+    'admin-secret-panel': RouteRecordInfo<'admin-secret-panel', '/admin-secret-panel', Record<never, never>, Record<never, never>>,
     'agregar-producto': RouteRecordInfo<'agregar-producto', '/agregar-producto', Record<never, never>, Record<never, never>>,
     'agregar-ventana-modal': RouteRecordInfo<'agregar-ventana-modal', '/AgregarVentanaModal', Record<never, never>, Record<never, never>>,
     'agregar-ventana-modal2': RouteRecordInfo<'agregar-ventana-modal2', '/AgregarVentanaModal2', Record<never, never>, Record<never, never>>,

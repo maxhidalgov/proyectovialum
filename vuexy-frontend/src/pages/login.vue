@@ -162,7 +162,8 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                 </VBtn>
               </VCol>
 
-              <!-- create account -->
+              <!-- Removed: Create account section -->
+              <!--
               <VCol
                 cols="12"
                 class="text-body-1 text-center"
@@ -177,6 +178,7 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                   Create an account
                 </a>
               </VCol>
+              -->
 
               <VCol
                 cols="12"
