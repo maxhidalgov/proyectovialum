@@ -17,22 +17,42 @@ use App\Http\Controllers\TipoProductoController;
 use App\Http\Controllers\Api\CotizadorController;
 use App\Http\Controllers\EstadoCotizacionController;
 use App\Http\Controllers\ListaPrecioController;
+use App\Http\Controllers\UserController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
+// ⛔ REGISTRO PÚBLICO DESHABILITADO - Solo admin puede crear usuarios
+// Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
+
+// 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
+Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin')->group(function () {
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::put('/users/{id}', [UserController::class, 'update']);
+    Route::delete('/users/{id}', [UserController::class, 'destroy']);
+    Route::get('/roles', [UserController::class, 'getRoles']);
+    
+    // Gestión de permisos por rol
+    Route::get('/permissions', [UserController::class, 'getPermissions']);
+    Route::get('/roles/{id}/permissions', [UserController::class, 'getRolePermissions']);
+    Route::put('/roles/{id}/permissions', [UserController::class, 'updateRolePermissions']);
+});
 
 Route::middleware('api')->group(function () {
         // Ruta específica para facturación
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
     // Rutas resource (deben ir DESPUÉS de las rutas específicas)
     Route::apiResource('cotizaciones', CotizacionController::class);
+    
+    // 🔐 PRODUCTOS - Requiere permiso para crear/editar/eliminar
     Route::get('/productos', [ProductoController::class, 'index']);
-    Route::post('/productos', [ProductoController::class, 'store']);
+    Route::middleware(['auth:api', 'permission:gestionar_productos'])->group(function () {
+        Route::post('/productos', [ProductoController::class, 'store']);
+        Route::put('/productos/{id}', [ProductoController::class, 'update']);
+        Route::delete('/productos/{id}', [ProductoController::class, 'destroy']);
+    });
     Route::get('/productos/{id}', [ProductoController::class, 'show']);
-    Route::put('/productos/{id}', [ProductoController::class, 'update']);
-    Route::delete('/productos/{id}', [ProductoController::class, 'destroy']);
     Route::get('/proveedores', [ProveedorController::class, 'index']);
     Route::post('/proveedores', [ProveedorController::class, 'store']);
     Route::get('/colores', [ColorController::class, 'index']);

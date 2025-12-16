@@ -18,6 +18,9 @@ class AuthController extends Controller
         }
 
         $user = Auth::guard('api')->user();
+        
+        // Cargar rol y permisos
+        $user->load('role.permissions');
 
         return response()->json([
             'token' => $token,
@@ -26,6 +29,8 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role->nombre ?? null,
+                'role_id' => $user->role_id,
+                'permissions' => $user->role ? $user->role->permissions->pluck('nombre') : [],
             ]
         ]);
 
