@@ -36,6 +36,7 @@ declare module 'vue-router/auto-routes' {
     'cotizador2': RouteRecordInfo<'cotizador2', '/cotizador2', Record<never, never>, Record<never, never>>,
     'dashboardventas': RouteRecordInfo<'dashboardventas', '/dashboardventas', Record<never, never>, Record<never, never>>,
     'facturacion': RouteRecordInfo<'facturacion', '/facturacion', Record<never, never>, Record<never, never>>,
+    'importador': RouteRecordInfo<'importador', '/importador', Record<never, never>, Record<never, never>>,
     'lista-precios': RouteRecordInfo<'lista-precios', '/lista-precios', Record<never, never>, Record<never, never>>,
     'lista-precios-modal-precio': RouteRecordInfo<'lista-precios-modal-precio', '/lista-precios/ModalPrecio', Record<never, never>, Record<never, never>>,
     'listado-productos': RouteRecordInfo<'listado-productos', '/listado-productos', Record<never, never>, Record<never, never>>,
@@ -47,7 +48,6 @@ declare module 'vue-router/auto-routes' {
     'second-page': RouteRecordInfo<'second-page', '/second-page', Record<never, never>, Record<never, never>>,
     'ventana-form': RouteRecordInfo<'ventana-form', '/VentanaForm', Record<never, never>, Record<never, never>>,
     'ventanapreview': RouteRecordInfo<'ventanapreview', '/ventanapreview', Record<never, never>, Record<never, never>>,
-    'visor': RouteRecordInfo<'visor', '/visor', Record<never, never>, Record<never, never>>,
     'visor3d': RouteRecordInfo<'visor3d', '/visor3d', Record<never, never>, Record<never, never>>,
   }
 }

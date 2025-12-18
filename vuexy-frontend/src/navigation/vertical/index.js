@@ -55,6 +55,12 @@ const allMenuItems = [
         icon: { icon: 'mdi-currency-usd' },
         permission: 'ver_productos',
       },
+      {
+        title: 'Importador',
+        to: { name: 'importador' },
+        icon: { icon: 'tabler-file-import' },
+        permission: 'gestionar_productos',
+      },
     ],
   },
   {
@@ -82,16 +88,23 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
-    title: 'Visor',
-    to: { name: 'visor' },
-    icon: { icon: 'tabler-file' },
-    // Sin permiso = siempre visible
+    title: 'Administración',
+    icon: { icon: 'tabler-settings' },
+    permission: 'gestionar_usuarios', // Solo admin
+    children: [
+      {
+        title: 'Gestión de Usuarios',
+        to: { name: 'admin-secret-panel' },
+        icon: { icon: 'tabler-users' },
+        permission: 'gestionar_usuarios',
+      },
+    ],
   },
-  {
-    title: 'Visorfabrik',
-    to: { name: 'visor3d' },
-    icon: { icon: 'tabler-file' },
-  },
+  // {
+  //   title: 'Visorfabrik',
+  //   to: { name: 'visor3d' },
+  //   icon: { icon: 'tabler-file' },
+  // },
 ]
 
 // Filtrar menú según permisos
