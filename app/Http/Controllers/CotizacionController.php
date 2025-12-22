@@ -74,9 +74,11 @@ public function store(Request $request)
                     
                     Log::info("✅ Cliente sincronizado desde Bsale: {$cliente->id}");
                 } else {
+                    DB::rollBack();
                     throw new \Exception("Cliente no encontrado en Bsale");
                 }
             } catch (\Exception $e) {
+                DB::rollBack();
                 Log::error("❌ Error al sincronizar cliente desde Bsale", [
                     'cliente_id' => $request->cliente_id,
                     'error' => $e->getMessage()
@@ -84,11 +86,22 @@ public function store(Request $request)
                 
                 return response()->json([
                     'success' => false,
-                    'message' => 'El cliente seleccionado no existe en Bsale. Por favor, verifica que el cliente esté activo.',
+                    'message' => 'El cliente seleccionado no existe. Por favor, verifica que el cliente esté registrado en el sistema.',
                     'error' => $e->getMessage(),
                     'cliente_id' => $request->cliente_id
                 ], 400);
             }
+        }
+
+        // Validación adicional: asegurarse que el cliente exista antes de continuar
+        if (!$cliente || !$cliente->id) {
+            DB::rollBack();
+            Log::error("❌ Cliente no pudo ser validado", ['cliente_id' => $request->cliente_id]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación: el cliente no existe en el sistema.',
+                'cliente_id' => $request->cliente_id
+            ], 400);
         }
 
         // Calcular total correctamente
@@ -104,9 +117,9 @@ public function store(Request $request)
             $totalProductos = collect($request->productos)->sum('total');
         }
 
-        // Crear cotización con cliente validado
+        // Crear cotización con cliente validado - USAR $cliente->id que puede ser diferente al request
         $cotizacion = Cotizacion::create([
-            'cliente_id' => $request->cliente_id,
+            'cliente_id' => $cliente->id, // ✅ Usar el ID del cliente sincronizado/encontrado
             'vendedor_id' => $request->vendedor_id,
             'fecha' => $request->fecha,
             'estado_cotizacion_id' => $request->estado_cotizacion_id,

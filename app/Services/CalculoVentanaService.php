@@ -3154,21 +3154,31 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
                 ]);
                 return $match;
             } else {
-                // ❌ Color no encontrado - NO usar fallback para perfiles
-                Log::warning("❌ Color NO encontrado - Devolviendo null (costo = 0)", [
+                // ⚠️ Color no encontrado - intentar fallback
+                Log::warning("⚠️ Color NO encontrado - Intentando fallback sin color", [
                     'producto_id' => $producto->id,
                     'producto_nombre' => $producto->nombre,
                     'color_solicitado' => $colorId,
                     'tipo_producto_id' => $producto->tipo_producto_id
                 ]);
+                // Intentar buscar primer registro sin filtro de color (útil para refuerzos y productos estructurales)
+                $match = $producto->coloresPorProveedor->first();
+                if ($match) {
+                    Log::info("✅ Usando primer costo disponible (producto sin color específico)", [
+                        'color_id' => $match->color_id,
+                        'proveedor_id' => $match->proveedor_id,
+                        'costo' => $match->costo
+                    ]);
+                    return $match;
+                }
                 return null;
             }
         }
 
-        // 4. Último recurso: primer proveedor disponible (SOLO para vidrio o cuando no se especifica color)
-        if (in_array($producto->tipo_producto_id, [1, 2])) {
-            $match = $producto->coloresPorProveedor->first();
-            Log::info("⚠️ Usando primer proveedor disponible (vidrio sin color específico)", [
+        // 4. Último recurso: primer proveedor disponible (cuando no se especifica color)
+        $match = $producto->coloresPorProveedor->first();
+        if ($match) {
+            Log::info("⚠️ Usando primer proveedor disponible (sin color especificado)", [
                 'color_id' => $match?->color_id,
                 'proveedor_id' => $match?->proveedor_id,
                 'costo' => $match?->costo
@@ -3176,8 +3186,8 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
             return $match;
         }
         
-        // Si no es vidrio y no se encontró el color, devolver null
-        Log::warning("❌ No se encontró color y no es vidrio - Devolviendo null");
+        // Si no hay ningún costo disponible, devolver null
+        Log::warning("❌ No se encontró ningún costo disponible para este producto");
         return null;
     }
 
