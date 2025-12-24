@@ -237,7 +237,7 @@
         </template>
       </v-data-table>
 
-      <!-- Modal para agregar/editar ventana -->
+      <!-- Modal para AGREGAR ventana -->
       <AgregarVentanaModal
         v-model:mostrar="mostrarModalVentana"
         :materiales="materiales"
@@ -245,11 +245,22 @@
         :tiposVidrio="tiposVidrio"
         :productosVidrio="productosVidrio"
         :tiposVentana="tiposVentanaTodos"
-        :ventana="ventanaEnEdicion"
         :material-default="cotizacion.material"
         :color-default="cotizacion.color"
         :tipo-vidrio-default="cotizacion.tipoVidrio"
         :producto-vidrio-default="cotizacion.productoVidrioProveedor"
+        @guardar="guardarVentana"
+      />
+
+      <!-- Modal para EDITAR ventana -->
+      <EditarVentanaModal
+        v-model:mostrar="mostrarModalEditar"
+        :ventana="ventanaEnEdicion"
+        :materiales="materiales"
+        :colores="colores"
+        :tiposVidrio="tiposVidrio"
+        :productosVidrio="productosVidrio"
+        :tiposVentana="tiposVentanaTodos"
         @guardar="guardarVentana"
       />
 
@@ -567,6 +578,7 @@ import Visor3D from '@/layouts/components/Visor3D.vue'
 import { color } from 'three/src/nodes/TSL.js'
 import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
 import AgregarVentanaModal from '@/pages/AgregarVentanaModal2.vue'
+import EditarVentanaModal from '@/pages/EditarVentanaModal.vue'
 import ModalProductos from '@/pages/ModalProductos.vue'
 import VentanaFijaAL42 from '@/components/VistaVentanaFijaAL42.vue'
 import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
@@ -700,6 +712,7 @@ const productosVidrioFiltradosGeneral = computed(() => {
 })
 
 onMounted(async () => {
+  console.log('�🚀🚀 ARCHIVO INDEX.VUE CARGADO')
   console.log('🔄 Iniciando carga de datos...')
   
   // Detectar modo edición
@@ -735,10 +748,23 @@ onMounted(async () => {
     console.log('   - Tiene colores_por_proveedor?', !!productosVidrio.value[0].colores_por_proveedor)
     console.log('   - Es array?', Array.isArray(productosVidrio.value[0].colores_por_proveedor))
     console.log('   - Cantidad:', productosVidrio.value[0].colores_por_proveedor?.length)
+    const idsDisponibles = productosVidrio.value.flatMap(p => 
+      (p.colores_por_proveedor || []).map(cpp => cpp.id)
+    )
+    console.log('   - IDs disponibles:', idsDisponibles)
+    console.log('   - ¿Incluye ID 64?:', idsDisponibles.includes(64))
+    console.log('   - ¿Incluye ID 2?:', idsDisponibles.includes(2))
+  }
+  
+  // 🔍 Log de estructura completa de un producto para verificar
+  if (productosVidrio.value.length > 0) {
+    console.log('📦 ESTRUCTURA COMPLETA DEL PRIMER PRODUCTO:')
+    console.log(JSON.stringify(productosVidrio.value[0], null, 2))
   }
   
   tiposVentanaTodos.value = tiposVentanaRes.data
-  console.log('TIPOS VENTANA CARGADOS:', tiposVentanaTodos.value)
+  console.log('TIPOS VENTANA CARGADOS:', tiposVentanaTodos.value.length)
+  console.log('🔍 Mapa de tipos ventana:', tiposVentanaTodos.value.map(t => `${t.id}: ${t.nombre}`))
   
   // Cargar solo los primeros clientes (rápido)
   console.log('🔄 Cargando primeros clientes...')
@@ -800,15 +826,71 @@ const cargarCotizacionExistente = async () => {
     // Poblar ventanas
     if (cotizacionData.ventanas && cotizacionData.ventanas.length > 0) {
       cotizacion.ventanas = cotizacionData.ventanas.map(v => {
+        console.log('🔄 Mapeando ventana desde BD - DATOS COMPLETOS:', JSON.stringify(v, null, 2))
+        console.log('🔄 tipo_ventana_id:', v.tipo_ventana_id)
+        console.log('🔄 material_id:', v.material_id)
+        console.log('🔄 color_id:', v.color_id)
+        console.log('🔄 tipo_vidrio_id:', v.tipo_vidrio_id)
+        console.log('🔄 producto_vidrio_proveedor_id:', v.producto_vidrio_proveedor_id)
+        
+        // Inferir material y tipo_vidrio si no vienen en la BD
+        let materialInferido = v.material_id
+        let tipoVidrioInferido = v.tipo_vidrio_id
+        
+        console.log('🔧 Valores originales - material_id:', v.material_id, 'tipo_vidrio_id:', v.tipo_vidrio_id)
+        
+        if (!tipoVidrioInferido && v.producto_vidrio_proveedor_id) {
+          const idBuscado = parseInt(v.producto_vidrio_proveedor_id)
+          console.log('🔧 Buscando ID:', idBuscado)
+          
+          // Buscar en TODOS los colores_por_proveedor de TODOS los productos
+          for (const producto of productosVidrio.value) {
+            if (producto.colores_por_proveedor) {
+              for (const cpp of producto.colores_por_proveedor) {
+                if (parseInt(cpp.id) === idBuscado) {
+                  tipoVidrioInferido = producto.tipo_producto_id
+                  console.log('✅ ENCONTRADO! Producto:', producto.nombre, '→ tipo_producto_id:', tipoVidrioInferido)
+                  break
+                }
+              }
+              if (tipoVidrioInferido) break
+            }
+          }
+          
+          if (!tipoVidrioInferido) {
+            console.log('❌ ID', idBuscado, 'no encontrado en ningún producto')
+          }
+        }
+        
+        if (!materialInferido && v.tipo_ventana_id) {
+          console.log('🔧 Intentando inferir material...')
+          console.log('🔧 tiposVentanaTodos.value disponibles:', tiposVentanaTodos.value.length)
+          console.log('🔧 Buscando tipo_ventana_id:', v.tipo_ventana_id)
+          
+          // Buscar el material desde el tipo de ventana
+          const tipoVentana = tiposVentanaTodos.value.find(tv => tv.id === v.tipo_ventana_id)
+          console.log('🔧 Tipo de ventana encontrado:', tipoVentana)
+          
+          if (tipoVentana) {
+            materialInferido = tipoVentana.material_id
+            console.log('✅ material inferido:', materialInferido, 'desde tipo ventana:', tipoVentana.nombre)
+          } else {
+            console.log('❌ No se encontró el tipo de ventana con ID:', v.tipo_ventana_id)
+          }
+        }
+        
+        console.log('🔧 Valores finales - materialInferido:', materialInferido, 'tipoVidrioInferido:', tipoVidrioInferido)
+        
         const relacion = buscarRelacionVidrioProveedor(v.producto_vidrio_proveedor_id)
         
-        return {
+        const ventanaMapeada = {
           tipo: v.tipo_ventana_id,
           ancho: v.ancho,
           alto: v.alto,
           cantidad: v.cantidad || 1,
+          material: materialInferido,
           color: v.color_id,
-          tipoVidrio: v.tipo_vidrio_id,
+          tipoVidrio: tipoVidrioInferido,
           productoVidrioProveedor: v.producto_vidrio_proveedor_id,
           productoVidrio: relacion?.producto_id,
           proveedorVidrio: relacion?.proveedor_id,
@@ -830,6 +912,11 @@ const cargarCotizacionExistente = async () => {
           // ID para actualización
           id: v.id
         }
+        
+        console.log('🔄 Ventana mapeada:', ventanaMapeada)
+        console.log('🔄 tipoVidrio en ventana mapeada:', ventanaMapeada.tipoVidrio)
+        
+        return ventanaMapeada
       })
       
       console.log('✅ Ventanas cargadas:', cotizacion.ventanas.length)
@@ -898,7 +985,8 @@ const productosVidrioFiltradosConProveedor = (ventana) => {
 // Función de clientes filtrados eliminada - ahora usamos búsqueda async
 
 // Ventanas
-const mostrarModalVentana = ref(false)
+const mostrarModalVentana = ref(false) // Para agregar
+const mostrarModalEditar = ref(false) // Para editar
 const mostrarSeccionVentana = ref(false)
 const mostrarModalProductos = ref(false)
 const ventanaEnEdicion = ref(null)
@@ -926,6 +1014,8 @@ const headersProductos = [
 ]
 
 const abrirModalVentana = () => {
+  console.log('➕ ABRIENDO MODAL PARA NUEVA VENTANA')
+  console.log('➕ productosVidrio disponibles:', productosVidrio.value.length)
   ventanaEnEdicion.value = null // Para agregar nueva
   mostrarModalVentana.value = true
 }
@@ -939,17 +1029,65 @@ const abrirModalProductos = () => {
 }
 
 const editarVentana = (index) => {
-  ventanaEnEdicion.value = { ...cotizacion.ventanas[index], index }
-  mostrarModalVentana.value = true
+  console.log('🔧 EDITANDO VENTANA - Índice:', index)
+  const ventanaOriginal = cotizacion.ventanas[index]
+  console.log('🔧 Datos originales de la ventana:', ventanaOriginal)
+  
+  // Clonar la ventana
+  const ventanaCompleta = { ...ventanaOriginal, index }
+  
+  // ✅ INFERIR tipoVidrio si falta (AQUÍ EN INDEX, NO EN EL MODAL)
+  if (!ventanaCompleta.tipoVidrio && ventanaCompleta.productoVidrioProveedor) {
+    const idBuscado = parseInt(ventanaCompleta.productoVidrioProveedor)
+    console.log('🔍 Buscando tipoVidrio para producto ID:', idBuscado)
+    
+    for (const producto of productosVidrio.value) {
+      if (producto.colores_por_proveedor) {
+        const encontrado = producto.colores_por_proveedor.find(
+          cpp => parseInt(cpp.id) === idBuscado
+        )
+        if (encontrado) {
+          ventanaCompleta.tipoVidrio = producto.tipo_producto_id
+          console.log('✅ tipoVidrio inferido:', ventanaCompleta.tipoVidrio)
+          break
+        }
+      }
+    }
+  }
+  
+  // ✅ INFERIR material_id si falta (AQUÍ EN INDEX, NO EN EL MODAL)
+  if (!ventanaCompleta.material && ventanaCompleta.tipo) {
+    const tipoVentana = tiposVentanaTodos.value.find(tv => parseInt(tv.id) === parseInt(ventanaCompleta.tipo))
+    if (tipoVentana && tipoVentana.material_id) {
+      ventanaCompleta.material = tipoVentana.material_id
+      console.log('✅ material_id inferido:', ventanaCompleta.material)
+    }
+  }
+  
+  console.log('✅ Ventana COMPLETA preparada:', ventanaCompleta)
+  console.log('✅ tipoVidrio final:', ventanaCompleta.tipoVidrio)
+  console.log('✅ material final:', ventanaCompleta.material)
+  console.log('✅ productoVidrioProveedor final:', ventanaCompleta.productoVidrioProveedor)
+  
+  // Asignar ventana YA COMPLETA
+  ventanaEnEdicion.value = ventanaCompleta
+  
+  // Abrir modal de EDICIÓN (no el de agregar)
+  mostrarModalEditar.value = true
 }
 
 const guardarVentana = (ventana) => {
-    console.log('VENTANA RECIBIDA:', ventana)
+    console.log('💾 VENTANA RECIBIDA DEL MODAL:', ventana)
+    console.log('💾 tipoVidrio en ventana recibida:', ventana.tipoVidrio)
+    console.log('💾 productoVidrioProveedor en ventana recibida:', ventana.productoVidrioProveedor)
+    console.log('💾 color en ventana recibida:', ventana.color)
+    console.log('💾 tipo en ventana recibida:', ventana.tipo)
   if (ventana.index !== undefined) {
     cotizacion.ventanas[ventana.index] = { ...ventana }
   } else {
     cotizacion.ventanas.push({ ...ventana })
   }
+  console.log('💾 Ventana guardada en cotizacion.ventanas:', cotizacion.ventanas[cotizacion.ventanas.length - 1])
   mostrarModalVentana.value = false
 }
 
@@ -1147,7 +1285,9 @@ watch(() => cotizacion.ventanas, (ventanas) => {
       if (!relacion) errores.push(`relación producto-proveedor no encontrada (ID: ${ventana.productoVidrioProveedor})`)
 
       if (errores.length > 0) {
-        console.warn(`❌ No se puede recalcular la ventana (tipo ${ventana.tipo}):`, errores.join(', '))
+        // ℹ️ ESTE ES SOLO UN AVISO, NO UN ERROR CRÍTICO
+        // Se dispara cuando los datos aún no están completos (ej: al abrir modal)
+        console.log(`ℹ️ Esperando datos completos para recalcular ventana (tipo ${ventana.tipo}):`, errores.join(', '))
         return
       }
 
@@ -1603,15 +1743,21 @@ const guardarCotizacion = async () => {
       estado_cotizacion_id: cotizacion.estado_cotizacion_id ?? 1, // default: Evaluacióna
       observaciones: cotizacion.observaciones,
       imagenes_ventanas: imagenes, // base64 strings
-      ventanas: cotizacion.ventanas.map(v => {
+      ventanas: cotizacion.ventanas.map((v, index) => {
+        console.log(`🔍 Mapeando ventana ${index}:`, v)
+        console.log(`🔍 v.tipoVidrio (para tipo_vidrio_id):`, v.tipoVidrio)
+        console.log(`🔍 v.productoVidrioProveedor:`, v.productoVidrioProveedor)
+        
         const relacion = buscarRelacionVidrioProveedor(v.productoVidrioProveedor)
-        return {
+        
+        const ventanaMapeada = {
           id: v.id, // ✅ Incluir ID para actualización
           tipo_ventana_id: v.tipo,
           ancho: v.ancho,
           alto: v.alto,
           cantidad: v.cantidad,
           color_id: v.color,
+          tipo_vidrio_id: v.tipoVidrio, // ✅ AGREGAR ESTE CAMPO
           producto_vidrio_proveedor_id: v.productoVidrioProveedor,  
           producto_id: relacion?.producto_id,
           proveedor_id: relacion?.proveedor_id,
@@ -1632,6 +1778,11 @@ const guardarCotizacion = async () => {
           hoja_movil_seleccionada: v.hojaMovilSeleccionada ?? null,
           hoja1_al_frente: v.hoja1AlFrente ?? null,
         }
+        
+        console.log(`🔍 Ventana ${index} mapeada:`, ventanaMapeada)
+        console.log(`🔍 tipo_vidrio_id en ventana mapeada:`, ventanaMapeada.tipo_vidrio_id)
+        
+        return ventanaMapeada
       }),
       productos: (cotizacion.productos || []).map(p => ({
         id: p.id, // ✅ Incluir ID para actualización

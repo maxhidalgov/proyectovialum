@@ -93,7 +93,7 @@
               color="primary"
             />
           </v-col>
-          <v-col cols="6" md="3">
+          <v-col v-if="ventana.tipoVidrio" cols="6" md="3" :key="`col-vidrio-${ventana.tipoVidrio}`">
             <v-select
               v-model="ventana.productoVidrioProveedor"
               :items="productosVidrioFiltrados"
@@ -102,6 +102,25 @@
               label="Producto de vidrio"
               outlined
               color="primary"
+              clearable
+            >
+              <template #no-data>
+                <v-list-item>
+                  <v-list-item-title>
+                    No hay productos disponibles
+                  </v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-select>
+          </v-col>
+          <v-col v-else cols="6" md="3">
+            <v-select
+              disabled
+              label="Producto de vidrio"
+              outlined
+              color="primary"
+              hint="Selecciona un tipo de vidrio primero"
+              persistent-hint
             />
           </v-col>
         </v-row>
@@ -946,27 +965,43 @@
         <!-- Detalle de materiales usados -->
         <v-row v-if="ventana.materiales && ventana.materiales.length">
           <v-col cols="12">
-            <v-data-table
-              :headers="[
-                { title: 'Material', key: 'nombre' },
-                { title: 'Proveedor', key: 'proveedor' },
-                { title: 'Cantidad', key: 'cantidad' },
-                { title: 'Unidad', key: 'unidad' },
-                { title: 'Costo unitario', key: 'costo_unitario' },
-                { title: 'Costo total', key: 'costo_total' }
-              ]"
-              :items="ventana.materiales"
-              class="mt-2"
-              dense
-              hide-default-footer
-            >
-              <template #item.costo_unitario="{ item }">
-                ${{ item.costo_unitario }}
-              </template>
-              <template #item.costo_total="{ item }">
-                ${{ item.costo_total }}
-              </template>
-            </v-data-table>
+            <v-card variant="outlined">
+              <v-card-title class="d-flex align-center">
+                <span>Detalle de materiales</span>
+                <v-spacer />
+                <v-btn 
+                  color="success" 
+                  variant="tonal" 
+                  size="small"
+                  @click="descargarMateriales"
+                >
+                  <v-icon left>mdi-download</v-icon>
+                  Descargar Excel
+                </v-btn>
+              </v-card-title>
+              <v-data-table
+                :headers="[
+                  { title: 'Material', key: 'nombre' },
+                  { title: 'Proveedor', key: 'proveedor' },
+                  { title: 'Cantidad', key: 'cantidad' },
+                  { title: 'Unidad', key: 'unidad' },
+                  { title: 'Costo unitario', key: 'costo_unitario' },
+                  { title: 'Costo total', key: 'costo_total' }
+                ]"
+                :items="ventana.materiales"
+                class="mt-2"
+                dense
+                :items-per-page="10"
+                :items-per-page-options="[5, 10, 25, 50, { value: -1, title: 'Todos' }]"
+              >
+                <template #item.costo_unitario="{ item }">
+                  ${{ item.costo_unitario }}
+                </template>
+                <template #item.costo_total="{ item }">
+                  ${{ item.costo_total }}
+                </template>
+              </v-data-table>
+            </v-card>
           </v-col>
         </v-row>
 
@@ -1153,6 +1188,7 @@ const props = defineProps({
 const emit = defineEmits(['update:mostrar', 'guardar'])
 
 const localMostrar = ref(props.mostrar)
+const datosListos = ref(false) // ⬅️ Flag para indicar que los datos están listos
 watch(() => props.mostrar, val => { localMostrar.value = val })
 watch(localMostrar, val => { emit('update:mostrar', val) })
 
@@ -1351,7 +1387,7 @@ watch(
   () => props.mostrar,
   (val) => {
     if (val && !props.ventana) {
-      // Si es agregar (no editar), refresca los valores por defecto
+      // Modo AGREGAR - valores por defecto
       ventana.value = {
         ...baseVentana,
         material: props.materialDefault ?? null,
@@ -1378,26 +1414,59 @@ watch(
         },
       }
     }
+    
     if (val && props.ventana) {
-      // Si es editar, carga la ventana a editar
-      ventana.value = { ...baseVentana, ...props.ventana }
+      // Modo EDITAR - los datos YA vienen completos desde index.vue
+      console.log('📥 MODAL - Recibiendo ventana completa:', props.ventana)
+      console.log('📥 MODAL - tipoVidrio recibido:', props.ventana.tipoVidrio)
+      console.log('📥 MODAL - material recibido:', props.ventana.material)
+      
+      // Simplemente asignar TODO - sin inferencia
+      ventana.value = { 
+        ...baseVentana, 
+        ...props.ventana
+      }
+      
+      console.log('✅ MODAL - Ventana asignada:', ventana.value)
     }
   },
   { immediate: true }
 )
 
 const productosVidrioFiltrados = computed(() => {
-  if (!ventana.value.tipoVidrio) return []
-  return props.productosVidrio
-    .filter(p => p.tipo_producto_id === ventana.value.tipoVidrio)
-    .flatMap(p =>
-      p.colores_por_proveedor.map(cpp => ({
+  console.log('🔍 MODAL - Calculando productosVidrioFiltrados')
+  console.log('🔍 MODAL - ventana.value.tipoVidrio:', ventana.value.tipoVidrio)
+  
+  if (!ventana.value.tipoVidrio) {
+    console.log('🔍 MODAL - No hay tipoVidrio, retornando []')
+    return []
+  }
+  
+  const tipoVidrioBuscado = parseInt(ventana.value.tipoVidrio)
+  
+  const filtrados = props.productosVidrio
+    .filter(p => parseInt(p.tipo_producto_id) === tipoVidrioBuscado)
+    .flatMap(p => {
+      console.log('🔍 MODAL - Procesando producto:', p.nombre, 'tipo_producto_id:', p.tipo_producto_id)
+      if (!p.colores_por_proveedor || !Array.isArray(p.colores_por_proveedor)) {
+        console.warn('⚠️ MODAL - Producto sin colores_por_proveedor:', p.nombre)
+        return []
+      }
+      const items = p.colores_por_proveedor.map(cpp => ({
         id: cpp.id,
         producto_id: p.id,
         proveedor_id: cpp.proveedor_id,
         nombre: `${p.nombre} (${cpp.proveedor?.nombre || 'Proveedor desconocido'})`
       }))
-    )
+      console.log('   → Generó', items.length, 'items con IDs:', items.map(i => i.id))
+      return items
+    })
+  
+  console.log('✅ MODAL - productosVidrioFiltrados total:', filtrados.length)
+  console.log('✅ MODAL - IDs disponibles:', filtrados.map(p => p.id))
+  console.log('✅ MODAL - ¿Incluye ID 64?:', filtrados.some(p => parseInt(p.id) === 64))
+  
+  return filtrados
 })
 
 const tiposVentanaFiltrados = computed(() => {
@@ -1529,12 +1598,22 @@ async function recalcularCostos() {
 }
 
 const onGuardar = () => {
+  console.log('💾 MODAL - Guardando ventana')
+  console.log('💾 MODAL - ventana.value completo:', ventana.value)
+  console.log('💾 MODAL - tipoVidrio antes de guardar:', ventana.value.tipoVidrio)
+  console.log('💾 MODAL - productoVidrioProveedor antes de guardar:', ventana.value.productoVidrioProveedor)
+  console.log('💾 MODAL - color antes de guardar:', ventana.value.color)
+  
   // Validación básica
   if (!ventana.value.tipo || !ventana.value.ancho || !ventana.value.alto || !ventana.value.cantidad) {
     alert('Completa todos los campos obligatorios')
     return
   }
-  emit('guardar', { ...ventana.value, index: props.ventana?.index })
+  
+  const ventanaAGuardar = { ...ventana.value, index: props.ventana?.index }
+  console.log('💾 MODAL - Enviando ventana al componente padre:', ventanaAGuardar)
+  
+  emit('guardar', ventanaAGuardar)
   cerrarModal()
 }
 
@@ -1622,6 +1701,50 @@ const isAbatir = (t) => {
   if (t === null || t === undefined) return false
   const n = Number(t)
   return (!Number.isNaN(n) && n === 49) || String(t).toLowerCase().includes('abat')
+}
+
+// Función para descargar materiales como CSV/Excel
+const descargarMateriales = () => {
+  if (!ventana.value.materiales || ventana.value.materiales.length === 0) {
+    alert('No hay materiales para descargar')
+    return
+  }
+
+  // Crear CSV
+  const headers = ['Material', 'Proveedor', 'Cantidad', 'Unidad', 'Costo Unitario', 'Costo Total']
+  const rows = ventana.value.materiales.map(m => [
+    m.nombre || '',
+    m.proveedor || '',
+    m.cantidad || 0,
+    m.unidad || '',
+    m.costo_unitario || 0,
+    m.costo_total || 0
+  ])
+
+  // Construir CSV
+  let csvContent = headers.join(',') + '\n'
+  rows.forEach(row => {
+    csvContent += row.map(cell => {
+      // Escapar comas y comillas
+      const cellStr = String(cell).replace(/"/g, '""')
+      return cellStr.includes(',') ? `"${cellStr}"` : cellStr
+    }).join(',') + '\n'
+  })
+
+  // Crear blob y descargar
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  
+  const tipoVentana = props.tiposVentana.find(t => t.id === ventana.value.tipo)?.nombre || 'ventana'
+  const filename = `materiales_${tipoVentana}_${new Date().toISOString().split('T')[0]}.csv`
+  
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 // ✅ almacena refs de componentes renderizados en el modal

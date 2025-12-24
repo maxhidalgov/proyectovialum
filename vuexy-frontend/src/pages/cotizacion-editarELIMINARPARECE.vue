@@ -62,13 +62,18 @@
             :key="index"
             class="mb-6"
           >
+            <!-- Solo renderizar cuando todos los datos estén cargados -->
             <VentanaForm
-            :ventana="ventana"
-            :tiposVentana="tiposVentanaTodos"
-            :colores="colores"
-            :tiposVidrio="tiposVidrio"
-            :productosVidrio="productosVidrioFiltrados" 
-          />
+              v-if="tiposVentanaTodos.length && colores.length && tiposVidrio.length && productosVidrioFiltrados.length"
+              :ventana="ventana"
+              :tiposVentana="tiposVentanaTodos"
+              :colores="colores"
+              :tiposVidrio="tiposVidrio"
+              :productosVidrio="productosVidrioFiltrados" 
+            />
+            <v-alert v-else type="info" variant="outlined">
+              Cargando datos de ventana...
+            </v-alert>
 
 
             <v-row class="mt-2 px-4">
@@ -184,6 +189,8 @@
 </template>
 
 <script setup>
+console.log('🚀🚀🚀 ARCHIVO COTIZACION-EDITAR.VUE CARGADO - VERSIÓN NUEVA 🚀🚀🚀')
+
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/axiosInstance'
@@ -634,6 +641,10 @@ onMounted(async () => {
   }))
 )
 
+console.log('🔍 IDs disponibles en productosVidrioMapeados:', productosVidrioMapeados.map(p => p.id))
+console.log('🔍 Buscando ID 64 en:', productosVidrioMapeados.find(p => p.id === 64))
+console.log('🔍 Total items mapeados:', productosVidrioMapeados.length)
+
 // 1. Captura respuesta del backend
 const cotizacionBase = cotizacionRes.data
 
@@ -648,7 +659,8 @@ cotizacionBase.ventanas = (cotizacionBase.ventanas || []).map(v => {
     hojas_moviles: v.hojas_moviles ?? 2,
     producto_vidrio_proveedor_id: id,
     cantidad: v.cantidad || 1,
-    tipo_vidrio_id: relacion?.producto?.tipo_producto_id ?? null,
+    // ✅ Mantener el tipo_vidrio_id original de la ventana, NO usar tipo_producto_id
+    tipo_vidrio_id: v.tipo_vidrio_id ?? relacion?.producto?.tipo_producto_id ?? null,
     producto_vidrio_proveedor: relacion || null,
     producto_vidrio_nombre: relacion?.nombre || '—',
   }
@@ -710,8 +722,13 @@ if (cotizacionBase.detalles && Array.isArray(cotizacionBase.detalles)) {
     tiposVidrio.value = tiposVidrioRes.data.filter(t => [1, 2].includes(t.id))
     estadosCotizacion.value = estadosRes.data
 
-     console.log('🧪 productosVidrioFiltrados:', productosVidrioFiltrados.value)
-    console.log('🧾 ventanas:', cotizacion.value.ventanas.map(v => v.producto_vidrio_proveedor_id))
+    console.log('🧪 productosVidrioFiltrados:', productosVidrioFiltrados.value)
+    console.log('🧾 ventanas:', cotizacion.value.ventanas)
+    console.log('🔍 DEBUG - tiposVentanaTodos:', tiposVentanaTodos.value.length)
+    console.log('🔍 DEBUG - colores:', colores.value.length)
+    console.log('🔍 DEBUG - tiposVidrio:', tiposVidrio.value.length)
+    console.log('🔍 DEBUG - productosVidrioFiltrados:', productosVidrioFiltrados.value)
+    console.log('🔍 DEBUG - ventana ejemplo:', cotizacion.value.ventanas[0])
   } catch (error) {
     console.error('Error al cargar cotización:', error)
   }

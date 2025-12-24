@@ -132,6 +132,22 @@ const props = defineProps({
   productosVidrio: Array // <- aquí lo estás recibiendo como 'productosVidrioFiltrados'
 })
 
+// Ejecutar recálculo cuando los productos se carguen Y la ventana tenga datos
+watch(
+  () => props.productosVidrio.length,
+  (newLength) => {
+    if (newLength > 0 && 
+        props.ventana.tipo_ventana_id && 
+        props.ventana.ancho && 
+        props.ventana.alto && 
+        props.ventana.producto_vidrio_proveedor_id) {
+      console.log('✅ Productos cargados, ejecutando recálculo inicial')
+      recalcularCosto()
+    }
+  },
+  { immediate: true }
+)
+
 const margenVenta = 0.45
 
 const recalcularCosto = debounce(async () => {
