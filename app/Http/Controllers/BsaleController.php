@@ -16,7 +16,7 @@ class BsaleController extends Controller
     public function __construct()
     {
         $this->baseUrl = config('services.bsale.base_url', 'https://api.bsale.cl/v1/');
-        $this->accessToken = config('services.bsale.access_token', '4845c098298dba6a64cf559dbecb555e310458d4');
+        $this->accessToken = config('services.bsale.access_token');
     }
 
     /**

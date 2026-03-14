@@ -39,27 +39,34 @@ Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin'
     Route::put('/roles/{id}/permissions', [UserController::class, 'updateRolePermissions']);
 });
 
-Route::middleware('api')->group(function () {
-        // Ruta específica para facturación
+Route::middleware('auth:api')->group(function () {
+    // Ruta específica para facturación (debe ir ANTES del apiResource)
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
-    // Rutas resource (deben ir DESPUÉS de las rutas específicas)
+    // Rutas resource
     Route::apiResource('cotizaciones', CotizacionController::class);
-    
-    // 🔐 PRODUCTOS - Requiere permiso para crear/editar/eliminar
+
+    Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
+    Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
+    Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
+    Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
+    Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
+    Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
+
+    // PRODUCTOS - Requiere permiso para crear/editar/eliminar
     Route::get('/productos', [ProductoController::class, 'index']);
-    Route::middleware(['auth:api', 'permission:gestionar_productos'])->group(function () {
+    Route::get('/productos/{id}', [ProductoController::class, 'show']);
+    Route::middleware(['permission:gestionar_productos'])->group(function () {
         Route::post('/productos', [ProductoController::class, 'store']);
         Route::put('/productos/{id}', [ProductoController::class, 'update']);
         Route::delete('/productos/{id}', [ProductoController::class, 'destroy']);
     });
-    Route::get('/productos/{id}', [ProductoController::class, 'show']);
+
     Route::get('/proveedores', [ProveedorController::class, 'index']);
     Route::post('/proveedores', [ProveedorController::class, 'store']);
     Route::get('/colores', [ColorController::class, 'index']);
     Route::post('/colores', [ColorController::class, 'store']);
     Route::get('/unidades', [UnidadController::class, 'index']);
     Route::get('/tipos_material', [CotizadorController::class, 'tiposMaterial']);
-    Route::get('/colores', [CotizadorController::class, 'colores']);
     Route::get('/tipos_producto', [CotizadorController::class, 'tiposProducto']);
     Route::get('/tipos_ventana', [TipoVentanaController::class, 'index']);
     Route::post('/cotizador/calcular-materiales', [App\Http\Controllers\CotizadorController::class, 'calcularMateriales']);
@@ -75,39 +82,6 @@ Route::middleware('api')->group(function () {
     Route::get('/clientes/buscar', [ClienteController::class, 'buscar']);
     Route::get('/clientes', [ClienteController::class, 'index']);
     Route::get('proveedores/{productoId}/{colorId}', [ProductoController::class, 'getProveedoresPorProductoYColor']);
-    
-    // Ruta temporal para debug de colores en productos
-    Route::get('/debug/producto-colores/{id}', function ($id) {
-        $producto = \App\Models\Producto::with('coloresPorProveedor.proveedor', 'coloresPorProveedor.color')->find($id);
-        if (!$producto) {
-            return response()->json(['error' => 'Producto no encontrado'], 404);
-        }
-        return response()->json([
-            'producto_id' => $producto->id,
-            'nombre' => $producto->nombre,
-            'codigo' => $producto->codigo,
-            'largo_total' => $producto->largo_total,
-            'colores_disponibles' => $producto->coloresPorProveedor->map(fn($cpp) => [
-                'id' => $cpp->id,
-                'color_id' => $cpp->color_id,
-                'color_nombre' => $cpp->color->nombre ?? 'N/A',
-                'proveedor_id' => $cpp->proveedor_id,
-                'proveedor_nombre' => $cpp->proveedor->nombre ?? 'N/A',
-                'costo' => $cpp->costo,
-            ])
-        ]);
-    });
-    
-    Route::get('/cotizaciones', [CotizacionController::class, 'index']);
-    Route::post('/cotizaciones', [CotizacionController::class, 'store']);
-    route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
-    Route::get('/cotizaciones/{id}', [CotizacionController::class, 'show']);
-    Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
-    Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
-    Route::put('/cotizaciones/{id}', [CotizacionController::class, 'update']);
-    Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
-    Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
-    Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
 
     // Rutas Lista de Precios - Las específicas ANTES del resource
     Route::post('/lista-precios/importar', [ListaPrecioController::class, 'importarDesdeProductoColorProveedor']);

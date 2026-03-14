@@ -37,7 +37,7 @@ return [
 
     'bsale' => [
         'base_url' => env('BSALE_BASE_URL', 'https://api.bsale.cl/v1/'),
-        'access_token' => env('BSALE_ACCESS_TOKEN', '4845c098298dba6a64cf559dbecb555e310458d4'),
+        'access_token' => env('BSALE_ACCESS_TOKEN'),
         'token' => env('BSALE_TOKEN'),
     ],
 
