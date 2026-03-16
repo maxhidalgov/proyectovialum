@@ -1,5 +1,6 @@
 <script setup>
-import navItems from '@/navigation/vertical'
+import { ref, onMounted } from 'vue'
+import { getNavItems } from '@/navigation/vertical'
 import { themeConfig } from '@themeConfig'
 
 // Components
@@ -10,6 +11,12 @@ import NavBarI18n from '@core/components/I18n.vue'
 
 // @layouts plugin
 import { VerticalNavLayout } from '@layouts'
+
+const navItems = ref(getNavItems())
+
+onMounted(() => {
+  navItems.value = getNavItems()
+})
 </script>
 
 <template>

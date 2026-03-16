@@ -133,5 +133,7 @@ const filterMenuByPermissions = (items) => {
   })
 }
 
-// Exportar menú filtrado
-export default filterMenuByPermissions(allMenuItems)
+// Exportar función para obtener menú filtrado dinámicamente
+export const getNavItems = () => filterMenuByPermissions(JSON.parse(JSON.stringify(allMenuItems)))
+
+export default getNavItems()
