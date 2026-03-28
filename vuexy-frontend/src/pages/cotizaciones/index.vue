@@ -96,11 +96,21 @@
   }
 }
 
-const descargarPDF = (cotizacionId) => {
-  const baseURL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:8000' 
-    : 'https://proyectovialum-production.up.railway.app'
-  window.open(`${baseURL}/api/cotizaciones/${cotizacionId}/pdf`, '_blank')
+const descargarPDF = async (cotizacionId) => {
+  try {
+    const response = await api.get(`/api/cotizaciones/${cotizacionId}/pdf`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `cotizacion_${cotizacionId}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Error al descargar PDF:', error)
+    alert('Error al descargar el PDF. Verifica que estás autenticado.')
+  }
 }
   
   onMounted(async () => {
