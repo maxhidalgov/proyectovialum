@@ -21,11 +21,40 @@
         </template>
   
         <template #item.estado="{ item }">
-          <v-chip :color="getEstadoColor(item.estado?.nombre)">
+          <v-menu v-if="item.estado?.nombre === 'Evaluación' || item.estado?.nombre === 'Aprobada'">
+            <template #activator="{ props }">
+              <v-chip
+                v-bind="props"
+                :color="getEstadoColor(item.estado?.nombre)"
+                style="cursor:pointer"
+                append-icon="mdi-chevron-down"
+              >
+                {{ item.estado?.nombre || '—' }}
+              </v-chip>
+            </template>
+            <v-list density="compact">
+              <v-list-item
+                v-if="item.estado?.nombre === 'Evaluación'"
+                prepend-icon="mdi-check-circle"
+                title="Aprobar"
+                @click="cambiarEstado(item, 'Aprobada')"
+              />
+              <v-list-item
+                prepend-icon="mdi-close-circle"
+                title="Rechazar"
+                @click="cambiarEstado(item, 'Rechazada')"
+              />
+            </v-list>
+          </v-menu>
+          <v-chip v-else :color="getEstadoColor(item.estado?.nombre)">
             {{ item.estado?.nombre || '—' }}
           </v-chip>
         </template>
   
+        <template #item.total="{ item }">
+          ${{ Number(item.total).toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }}
+        </template>
+
         <template #item.acciones="{ item }">
           <v-btn icon @click="verCotizacion(item)">
             <v-icon>mdi-eye</v-icon>
@@ -63,6 +92,7 @@
     { title: 'Vendedor', value: 'vendedor' },
     { title: 'Fecha', value: 'fecha' },
     { title: 'Estado', value: 'estado' },
+    { title: 'Total', value: 'total' },
     { title: 'Acciones', value: 'acciones', sortable: false },
   ]
   
@@ -72,6 +102,16 @@
       case 'Aprobada': return 'green'
       case 'Rechazada': return 'red'
       default: return 'blue'
+    }
+  }
+
+  const cambiarEstado = async (item, nuevoEstado) => {
+    if (!confirm(`¿Cambiar cotización #${item.id} a "${nuevoEstado}"?`)) return
+    try {
+      const { data } = await api.patch(`/api/cotizaciones/${item.id}/estado`, { estado: nuevoEstado })
+      item.estado = data.estado
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al cambiar el estado.')
     }
   }
   
@@ -106,7 +146,7 @@ const descargarPDF = async (cotizacionId) => {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    window.URL.revokeObjectURL(url)
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   } catch (error) {
     console.error('Error al descargar PDF:', error)
     alert('Error al descargar el PDF. Verifica que estás autenticado.')

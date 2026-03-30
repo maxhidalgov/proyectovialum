@@ -154,9 +154,21 @@ const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
                   </a>
                 </div>
 
+                <VAlert
+                  v-if="error"
+                  type="error"
+                  variant="tonal"
+                  class="mb-4"
+                  closable
+                  @click:close="error = null"
+                >
+                  {{ error }}
+                </VAlert>
+
                 <VBtn
                   block
                   type="submit"
+                  :loading="loading"
                 >
                   Login
                 </VBtn>

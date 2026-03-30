@@ -47,6 +47,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
     Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
+    Route::patch('/cotizaciones/{id}/estado', [CotizacionController::class, 'cambiarEstado']);
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
     Route::put('/ventanas/{id}', [VentanaController::class, 'update']);
     Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);

@@ -517,10 +517,67 @@ public function store(Request $request)
             'detalles.listaPrecio.productoColorProveedor.proveedor'
         ])->findOrFail($id);
 
+        // Pre-fetch ventana images as base64 so DomPDF doesn't make
+        // external HTTP requests during rendering (fails on Railway).
+        // Locally images are in storage/app/public/imagenes_ventanas/,
+        // in production they are fetched from the external FTP URL.
+        $imagenesBase64 = [];
+        $imageBaseUrl = rtrim(env('IMAGENES_BASE_URL', 'https://vialum.cl/laravelupload/imagenes_cotizaciones'), '/');
+        foreach ($cotizacion->ventanas as $ventana) {
+            if ($ventana->imagen) {
+                try {
+                    // 1) Check local storage first (works in local dev and if images were stored locally)
+                    $localPath = storage_path('app/public/imagenes_ventanas/' . $ventana->imagen);
+                    if (file_exists($localPath)) {
+                        $data = file_get_contents($localPath);
+                    } else {
+                        // 2) Fallback: fetch from external FTP/URL (production with vialum.cl FTP)
+                        $url = $imageBaseUrl . '/' . $ventana->imagen;
+                        $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+                        $data = @file_get_contents($url, false, $ctx);
+                    }
+                    if ($data !== false) {
+                        $imagenesBase64[$ventana->id] = 'data:image/png;base64,' . base64_encode($data);
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('PDF: no se pudo cargar imagen para ventana ' . $ventana->id . ': ' . $e->getMessage());
+                }
+            }
+        }
 
-    $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion'));
+        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64'));
 
-    return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');
+        return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');
+    }
+
+    public function cambiarEstado(Request $request, $id)
+    {
+        $cotizacion = Cotizacion::with('estado')->findOrFail($id);
+        $estadoActual = $cotizacion->estado->nombre;
+
+        $transicionesPermitidas = [
+            'Evaluación' => ['Aprobada', 'Rechazada'],
+            'Aprobada'   => ['Rechazada'],
+        ];
+
+        $nuevoNombre = $request->input('estado');
+        $permitidos  = $transicionesPermitidas[$estadoActual] ?? [];
+
+        if (!in_array($nuevoNombre, $permitidos)) {
+            return response()->json([
+                'message' => "No se puede cambiar de '{$estadoActual}' a '{$nuevoNombre}'."
+            ], 422);
+        }
+
+        $nuevoEstado = EstadoCotizacion::where('nombre', $nuevoNombre)->firstOrFail();
+        $cotizacion->update(['estado_cotizacion_id' => $nuevoEstado->id]);
+
+        Log::info("✅ Cotización #{$id} cambiada de '{$estadoActual}' a '{$nuevoNombre}' por usuario " . auth()->id());
+
+        return response()->json([
+            'message' => "Estado actualizado a '{$nuevoNombre}'.",
+            'estado'  => ['id' => $nuevoEstado->id, 'nombre' => $nuevoEstado->nombre],
+        ]);
     }
 
     public function duplicar($id)

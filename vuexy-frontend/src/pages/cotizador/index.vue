@@ -1736,9 +1736,11 @@ const guardarCotizacion = async () => {
       return
     }
     
+    const usuarioActual = JSON.parse(localStorage.getItem('user') || '{}')
+
     const payload = {
       cliente_id: clienteSeleccionado.id,
-      vendedor_id: 1,
+      vendedor_id: usuarioActual.id ?? 1,
       fecha: new Date().toISOString().split('T')[0],
       estado_cotizacion_id: cotizacion.estado_cotizacion_id ?? 1, // default: Evaluacióna
       observaciones: cotizacion.observaciones,

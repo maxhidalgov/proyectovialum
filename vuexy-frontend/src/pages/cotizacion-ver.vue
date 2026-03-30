@@ -1,7 +1,7 @@
 <template>
   <v-container>
     <v-card class="mb-4">
-      <v-card-title>
+      <v-card-title class="d-flex align-center flex-wrap gap-2">
         Cotización #{{ cotizacion?.id }}
         <v-btn
           class="ml-2"
@@ -11,6 +11,22 @@
         >
           Descargar PDF
         </v-btn>
+
+        <!-- Botones de cambio de estado -->
+        <template v-if="cotizacion?.estado?.nombre === 'Evaluación'">
+          <v-btn color="green" class="ml-2" :loading="loadingEstado" @click="cambiarEstado('Aprobada')">
+            <v-icon start>mdi-check-circle</v-icon> Aprobar
+          </v-btn>
+          <v-btn color="red" class="ml-2" :loading="loadingEstado" @click="cambiarEstado('Rechazada')">
+            <v-icon start>mdi-close-circle</v-icon> Rechazar
+          </v-btn>
+        </template>
+        <template v-if="cotizacion?.estado?.nombre === 'Aprobada'">
+          <v-btn color="red" class="ml-2" :loading="loadingEstado" @click="cambiarEstado('Rechazada')">
+            <v-icon start>mdi-close-circle</v-icon> Rechazar
+          </v-btn>
+        </template>
+
         <v-spacer />
         <v-btn icon @click="volver">
           <v-icon>mdi-arrow-left</v-icon>
@@ -154,6 +170,22 @@ const getEstadoColor = (estado) => {
   }
 }
 
+const loadingEstado = ref(false)
+
+const cambiarEstado = async (nuevoEstado) => {
+  if (!confirm(`¿Confirmas cambiar el estado a "${nuevoEstado}"?`)) return
+  loadingEstado.value = true
+  try {
+    const { data } = await api.patch(`/api/cotizaciones/${cotizacion.value.id}/estado`, { estado: nuevoEstado })
+    cotizacion.value.estado = data.estado
+    alert(data.message)
+  } catch (err) {
+    alert(err.response?.data?.message || 'Error al cambiar el estado.')
+  } finally {
+    loadingEstado.value = false
+  }
+}
+
 const volver = () => {
   router.push({ name: 'cotizaciones' })
 }
@@ -168,7 +200,7 @@ const descargarPDF = async () => {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    window.URL.revokeObjectURL(url)
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   } catch (error) {
     console.error('Error al descargar PDF:', error)
     alert('Error al descargar el PDF. Verifica que estás autenticado.')

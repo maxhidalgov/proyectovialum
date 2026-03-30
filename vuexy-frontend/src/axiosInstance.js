@@ -19,13 +19,14 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   response => response,
   error => {
-    if (error.response?.status === 401) {
+    const isLoginRequest = error.config?.url?.includes('/login')
+    if (error.response?.status === 401 && !isLoginRequest) {
       // Token expirado o inválido - cerrar sesión
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       
       // Redirigir al login
-      window.location.href = '/#/login'
+      window.location.href = '/login'
     }
     return Promise.reject(error)
   }

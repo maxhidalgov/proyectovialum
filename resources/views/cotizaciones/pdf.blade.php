@@ -59,12 +59,14 @@
       <tr>
         {{-- Imagen --}}
         <td width="50%" align="center" style="vertical-align: top;">
-          @if ($ventana->imagen)
+          @if ($ventana->imagen && isset($imagenesBase64[$ventana->id]))
             <img
-              src="https://vialum.cl/laravelupload/imagenes_cotizaciones/{{ $ventana->imagen }}"
+              src="{{ $imagenesBase64[$ventana->id] }}"
               style="max-width: 100%; height: auto; border: none;"
               alt="Vista ventana"
             />
+          @elseif ($ventana->imagen)
+            <p style="color: gray; font-size: 10px;">Imagen no disponible</p>
           @else
             <p style="color: gray;">Sin imagen</p>
           @endif
