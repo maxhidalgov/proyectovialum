@@ -1,11 +1,5 @@
 <template>
   <v-card>
-    <v-card-title class="d-flex justify-space-between align-center">
-      <span>Clientes ({{ clientes.length }})</span>
-      <v-chip color="primary" variant="outlined">
-        {{ clientes.length }} clientes
-      </v-chip>
-    </v-card-title>
     <v-data-table
       :headers="headers"
       :items="clientes"
@@ -55,36 +49,43 @@
         </div>
       </template>
 
-      <!-- Bsale ID -->
+      <!-- Origen -->
       <template #item.bsale_id="{ item }">
         <v-chip v-if="item.bsale_id" size="x-small" color="success" variant="outlined">
           Bsale #{{ item.bsale_id }}
         </v-chip>
         <span v-else class="text-caption text-medium-emphasis">Local</span>
       </template>
+
+      <!-- Acciones -->
+      <template #item.acciones="{ item }">
+        <v-btn
+          icon="mdi-eye-outline"
+          size="small"
+          variant="text"
+          color="primary"
+          :to="{ name: 'clientes-id', params: { id: item.id } }"
+        />
+      </template>
     </v-data-table>
   </v-card>
 </template>
-  
+
 <script setup>
+import { useRouter } from 'vue-router'
+
 const props = defineProps({
-  clientes: {
-    type: Array,
-    default: () => [],
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
+  clientes: { type: Array, default: () => [] },
+  loading:  { type: Boolean, default: false },
 })
 
-// Headers para clientes locales
 const headers = [
   { title: 'Razón Social / Nombre', value: 'razon_social', sortable: true },
-  { title: 'RUT', value: 'identification', sortable: true },
-  { title: 'Email / Teléfono', value: 'email', sortable: true },
-  { title: 'Ubicación', value: 'ubicacion', sortable: false },
-  { title: 'Origen', value: 'bsale_id', sortable: true },
+  { title: 'RUT',                   value: 'identification', sortable: true },
+  { title: 'Email / Teléfono',      value: 'email', sortable: true },
+  { title: 'Ubicación',             value: 'ubicacion', sortable: false },
+  { title: 'Origen',                value: 'bsale_id', sortable: true },
+  { title: '',                      value: 'acciones', sortable: false, align: 'end' },
 ]
 </script>
   

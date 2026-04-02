@@ -61,7 +61,14 @@ class ProveedorController extends Controller
      */
     public function update(Request $request, Proveedor $proveedor)
     {
-        //
+        $request->validate([
+            'nombre'   => 'required|string|max:255',
+            'contacto' => 'nullable|string|max:255',
+        ]);
+
+        $proveedor->update($request->only(['nombre', 'contacto']));
+
+        return response()->json($proveedor);
     }
 
     /**
@@ -69,6 +76,8 @@ class ProveedorController extends Controller
      */
     public function destroy(Proveedor $proveedor)
     {
-        //
+        $proveedor->delete();
+
+        return response()->json(['message' => 'Proveedor eliminado'], 200);
     }
 }

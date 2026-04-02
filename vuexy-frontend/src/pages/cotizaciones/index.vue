@@ -21,7 +21,7 @@
         </template>
   
         <template #item.estado="{ item }">
-          <v-menu v-if="item.estado?.nombre === 'Evaluación' || item.estado?.nombre === 'Aprobada'">
+          <v-menu v-if="['Evaluación','Aprobada','En Producción','Entregada'].includes(item.estado?.nombre)">
             <template #activator="{ props }">
               <v-chip
                 v-bind="props"
@@ -33,13 +33,32 @@
               </v-chip>
             </template>
             <v-list density="compact">
-              <v-list-item
+                  <v-list-item
                 v-if="item.estado?.nombre === 'Evaluación'"
                 prepend-icon="mdi-check-circle"
                 title="Aprobar"
                 @click="cambiarEstado(item, 'Aprobada')"
               />
               <v-list-item
+                v-if="item.estado?.nombre === 'Aprobada'"
+                prepend-icon="mdi-factory"
+                title="Pasar a Producción"
+                @click="cambiarEstado(item, 'En Producción')"
+              />
+              <v-list-item
+                v-if="item.estado?.nombre === 'En Producción'"
+                prepend-icon="mdi-truck-delivery"
+                title="Marcar Entregada"
+                @click="cambiarEstado(item, 'Entregada')"
+              />
+              <v-list-item
+                v-if="item.estado?.nombre === 'Entregada'"
+                prepend-icon="mdi-currency-usd"
+                title="Marcar Facturada"
+                @click="cambiarEstado(item, 'Facturada')"
+              />
+              <v-list-item
+                v-if="['Evaluación','Aprobada'].includes(item.estado?.nombre)"
                 prepend-icon="mdi-close-circle"
                 title="Rechazar"
                 @click="cambiarEstado(item, 'Rechazada')"
@@ -66,10 +85,13 @@
           >
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
-          <v-btn icon @click="descargarPDF(item.id)">
+          <v-btn icon @click="descargarPDF(item.id)" title="Descargar Cotización PDF">
             <v-icon>mdi-file-pdf-box</v-icon>
-            </v-btn>
-            <v-btn icon @click="duplicarCotizacion(item)">
+          </v-btn>
+          <v-btn icon color="orange" @click="descargarOT(item.id)" title="Descargar Orden de Trabajo">
+            <v-icon>mdi-file-document-outline</v-icon>
+          </v-btn>
+          <v-btn icon @click="duplicarCotizacion(item)">
             <v-icon>mdi-content-copy</v-icon>
             </v-btn>
 
@@ -98,10 +120,15 @@
   
   const getEstadoColor = (estadoNombre) => {
     switch (estadoNombre) {
-      case 'Evaluación': return 'grey'
-      case 'Aprobada': return 'green'
-      case 'Rechazada': return 'red'
-      default: return 'blue'
+      case 'Evaluación':    return 'grey'
+      case 'Aprobada':      return 'green'
+      case 'En Producción': return 'blue'
+      case 'Entregada':     return 'purple'
+      case 'Facturada':     return 'teal'
+      case 'Rechazada':     return 'red'
+      case 'Anulada':       return 'red'
+      case 'Enviada':       return 'orange'
+      default:              return 'grey'
     }
   }
 
@@ -133,6 +160,23 @@
   } catch (error) {
     console.error(error)
     alert('Error al duplicar la cotización')
+  }
+}
+
+const descargarOT = async (cotizacionId) => {
+  try {
+    const response = await api.get(`/api/cotizaciones/${cotizacionId}/orden-trabajo`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `OT_${cotizacionId}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+  } catch (error) {
+    console.error('Error al descargar OT:', error)
+    alert('Error al descargar la Orden de Trabajo.')
   }
 }
 

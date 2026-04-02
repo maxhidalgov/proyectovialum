@@ -218,6 +218,8 @@ const colorHexMap = {
   gris: '#808080',
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
+  mate: '#c0beba',
+  titanio: '#7a7672',
 }
 
 const colorMarcoHex = computed(() => {

@@ -67,7 +67,7 @@
               <div class="text-body-2">
                 <strong>Total:</strong> 
                 <span class="text-success text-h6 ms-1">
-                  ${{ cotizacion?.total?.toLocaleString() }}
+                  {{ clp(cotizacion?.total) }}
                 </span>
               </div>
             </v-card-text>
@@ -133,14 +133,14 @@
                 <!-- Precio unitario -->
                 <template #item.precio_unitario="{ item }">
                   <div class="font-weight-medium">
-                    ${{ (item.precio_unitario || item.precio || 0).toLocaleString() }}
+                    {{ clp(item.precio_unitario || item.precio) }}
                   </div>
                 </template>
 
                 <!-- Total -->
                 <template #item.total="{ item }">
                   <div class="font-weight-bold text-success">
-                    ${{ calcularTotalVentana(item).toLocaleString() }}
+                    {{ clp(calcularTotalVentana(item)) }}
                   </div>
                 </template>
 
@@ -179,16 +179,16 @@
             <v-card-text>
               <div class="text-body-2 d-flex justify-space-between mb-2">
                 <span>Subtotal:</span>
-                <span>${{ calcularSubtotal().toLocaleString() }}</span>
+                <span>{{ clp(calcularSubtotal()) }}</span>
               </div>
               <div class="text-body-2 d-flex justify-space-between mb-2" v-if="calcularDescuento() > 0">
                 <span>Descuento:</span>
-                <span class="text-error">-${{ calcularDescuento().toLocaleString() }}</span>
+                <span class="text-error">-{{ clp(calcularDescuento()) }}</span>
               </div>
               <v-divider class="my-3" />
               <div class="text-h5 font-weight-bold text-success d-flex justify-space-between">
                 <span>Total:</span>
-                <span>${{ (cotizacion?.total || 0).toLocaleString() }}</span>
+                <span>{{ clp(cotizacion?.total) }}</span>
               </div>
               <div class="text-caption text-medium-emphasis mt-2">
                 {{ cotizacion?.ventanas?.length || 0 }} ventanas
@@ -216,6 +216,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+
+const clp = (n) => '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(n) || 0)
 
 const props = defineProps({
   cotizacion: Object

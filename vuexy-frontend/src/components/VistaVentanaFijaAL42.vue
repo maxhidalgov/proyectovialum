@@ -29,7 +29,8 @@ const colorHexMap = {
   gris: '#808080',
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
-  // agrega más colores según los que uses en tu sistema
+  mate: '#c0beba',
+  titanio: '#7a7672',
 }
 
 const texturas = {

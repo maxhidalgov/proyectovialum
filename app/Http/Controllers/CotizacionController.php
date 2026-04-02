@@ -550,14 +550,60 @@ public function store(Request $request)
         return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');
     }
 
+    public function generarOrdenTrabajo($id)
+    {
+        $cotizacion = Cotizacion::with([
+            'cliente',
+            'vendedor',
+            'estado',
+            'ventanas.tipoVentana',
+            'ventanas.color',
+            'ventanas.productoVidrioProveedor.producto',
+            'ventanas.productoVidrioProveedor.proveedor',
+            'detalles.producto',
+            'detalles.productoLista',
+            'detalles.listaPrecio.producto',
+            'detalles.listaPrecio.productoColorProveedor.color',
+            'detalles.listaPrecio.productoColorProveedor.proveedor'
+        ])->findOrFail($id);
+
+        $imagenesBase64 = [];
+        $imageBaseUrl = rtrim(env('IMAGENES_BASE_URL', 'https://vialum.cl/laravelupload/imagenes_cotizaciones'), '/');
+        foreach ($cotizacion->ventanas as $ventana) {
+            if ($ventana->imagen) {
+                try {
+                    $localPath = storage_path('app/public/imagenes_ventanas/' . $ventana->imagen);
+                    if (file_exists($localPath)) {
+                        $data = file_get_contents($localPath);
+                    } else {
+                        $url = $imageBaseUrl . '/' . $ventana->imagen;
+                        $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+                        $data = @file_get_contents($url, false, $ctx);
+                    }
+                    if ($data !== false) {
+                        $imagenesBase64[$ventana->id] = 'data:image/png;base64,' . base64_encode($data);
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('OT: no se pudo cargar imagen para ventana ' . $ventana->id . ': ' . $e->getMessage());
+                }
+            }
+        }
+
+        $pdf = Pdf::loadView('cotizaciones.orden-trabajo', compact('cotizacion', 'imagenesBase64'));
+
+        return $pdf->download('OT_' . $cotizacion->id . '.pdf');
+    }
+
     public function cambiarEstado(Request $request, $id)
     {
         $cotizacion = Cotizacion::with('estado')->findOrFail($id);
         $estadoActual = $cotizacion->estado->nombre;
 
         $transicionesPermitidas = [
-            'Evaluación' => ['Aprobada', 'Rechazada'],
-            'Aprobada'   => ['Rechazada'],
+            'Evaluación'    => ['Aprobada', 'Rechazada'],
+            'Aprobada'      => ['En Producción', 'Rechazada'],
+            'En Producción' => ['Entregada'],
+            'Entregada'     => ['Facturada'],
         ];
 
         $nuevoNombre = $request->input('estado');

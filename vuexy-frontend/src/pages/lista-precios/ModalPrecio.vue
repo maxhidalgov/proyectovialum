@@ -99,7 +99,7 @@
             <v-col cols="12" md="4">
               <v-text-field
                 :model-value="precioVentaCalculado"
-                label="Precio Venta"
+                label="Precio Venta (Neto)"
                 prefix="$"
                 variant="outlined"
                 density="compact"

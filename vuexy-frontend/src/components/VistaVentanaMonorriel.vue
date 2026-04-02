@@ -50,7 +50,7 @@ onMounted(() => {
   const load = (url, key) => { const img = new Image(); img.src = url; img.onload = () => (texturas[key] = img) }
   load(robleUrl, 'roble'); load(nogalUrl, 'nogal')
 })
-const colorHexMap = { blanco:'#ffffff', negro:'#0a0a0a', gris:'#808080', grafito:'#2f2f2f', nogal:'#8b5a2b', roble:'#c9a36b' }
+const colorHexMap = { blanco:'#ffffff', negro:'#0a0a0a', gris:'#808080', grafito:'#2f2f2f', nogal:'#8b5a2b', roble:'#c9a36b', mate:'#c0beba', titanio:'#7a7672' }
 const colorMarcoHex = computed(() => colorHexMap[props.colorMarco?.toLowerCase?.()] || '#ffffff')
 function getMitraProps(points) {
   const nombre = props.colorMarco?.toLowerCase?.()

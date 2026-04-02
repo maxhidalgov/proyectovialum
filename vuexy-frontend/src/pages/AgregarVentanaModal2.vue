@@ -1,14 +1,31 @@
 <template>
-  <v-dialog v-model="localMostrar" max-width="1200px" persistent>
-    <v-card class="pa-4">
-      <v-card-title class="text-h5">
-        {{ isEdit ? 'Editar ventana' : 'Agregar ventana' }}
-      </v-card-title>
-      <v-divider class="mb-4" />
+  <v-dialog v-model="localMostrar" max-width="1200px" persistent scrollable>
+    <v-card>
+      <!-- Header -->
+      <div class="d-flex align-center justify-space-between px-5 py-3 bg-surface">
+        <div class="d-flex align-center">
+          <v-icon color="primary" class="mr-2">mdi-window-open</v-icon>
+          <span class="text-h6 font-weight-bold">{{ isEdit ? 'Editar ventana' : 'Agregar ventana' }}</span>
+        </div>
+        <div class="d-flex align-center gap-2">
+          <v-chip v-if="calculando" size="small" color="warning" variant="tonal">
+            <v-progress-circular indeterminate size="12" width="2" class="mr-1" />
+            Calculando...
+          </v-chip>
+          <v-chip v-else-if="ventana.precio" size="small" color="success" variant="tonal">
+            <v-icon start size="14">mdi-check-circle</v-icon>
+            Precio calculado
+          </v-chip>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="cerrarModal" />
+        </div>
+      </div>
+      <v-divider />
 
+      <v-card-text class="pa-5">
       <v-form ref="formRef" @submit.prevent="onGuardar">
-        <v-row dense>
-          <v-col cols="12" md="4">
+        <!-- Fila 1: Tipo + Dimensiones + Cantidad -->
+        <v-row dense class="mb-3">
+          <v-col cols="12" md="5">
             <v-select
               v-model="ventana.tipo"
               :items="tiposVentanaFiltrados"
@@ -16,50 +33,56 @@
               item-value="id"
               label="Tipo de ventana"
               :rules="[v => !!v || 'Requerido']"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details="auto"
+              prepend-inner-icon="mdi-window-open-variant"
               required
             />
           </v-col>
-          <v-col v-if="ventana.tipo !== 58" cols="6" md="2">
+          <v-col v-if="ventana.tipo !== 58" cols="5" md="2">
             <v-text-field
               v-model.number="ventana.ancho"
               label="Ancho (mm)"
               type="number"
               min="1"
               :rules="[v => !!v || 'Requerido']"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details="auto"
               required
             />
           </v-col>
-          <v-col v-if="ventana.tipo !== 58" cols="6" md="2">
+          <v-col v-if="ventana.tipo !== 58" cols="5" md="2">
             <v-text-field
               v-model.number="ventana.alto"
               label="Alto (mm)"
               type="number"
               min="1"
               :rules="[v => !!v || 'Requerido']"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details="auto"
               required
             />
           </v-col>
-          <v-col cols="6" md="2">
+          <v-col cols="2" md="1">
             <v-text-field
               v-model.number="ventana.cantidad"
-              label="Cantidad"
+              label="Cant."
               type="number"
               min="1"
               :rules="[v => !!v || 'Requerido']"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details="auto"
               required
             />
           </v-col>
         </v-row>
 
-        <v-row dense>
+        <!-- Fila 2: Material + Color + Vidrio + Producto -->
+        <v-row dense class="mb-4">
           <v-col cols="6" md="3">
             <v-select
               v-model="ventana.material"
@@ -67,19 +90,23 @@
               item-title="nombre"
               item-value="id"
               label="Material"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-layers-outline"
             />
           </v-col>
           <v-col cols="6" md="3">
             <v-select
               v-model="ventana.color"
-              :items="colores"
+              :items="coloresFiltrados"
               item-title="nombre"
               item-value="id"
               label="Color"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-palette"
             />
           </v-col>
           <v-col cols="6" md="3">
@@ -89,8 +116,10 @@
               item-title="nombre"
               item-value="id"
               label="Tipo de vidrio"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-layers"
             />
           </v-col>
           <v-col v-if="ventana.tipoVidrio" cols="6" md="3" :key="`col-vidrio-${ventana.tipoVidrio}`">
@@ -100,15 +129,15 @@
               item-title="nombre"
               item-value="id"
               label="Producto de vidrio"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-package-variant"
               clearable
             >
               <template #no-data>
                 <v-list-item>
-                  <v-list-item-title>
-                    No hay productos disponibles
-                  </v-list-item-title>
+                  <v-list-item-title>No hay productos disponibles</v-list-item-title>
                 </v-list-item>
               </template>
             </v-select>
@@ -117,8 +146,10 @@
             <v-select
               disabled
               label="Producto de vidrio"
-              outlined
-              color="primary"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-inner-icon="mdi-package-variant"
               hint="Selecciona un tipo de vidrio primero"
               persistent-hint
             />
@@ -943,22 +974,34 @@
 
         <v-divider class="my-4" />
 
-        <!-- Mostrar costos y materiales -->
-        <v-row>
-          <v-col cols="12" md="4">
-            <v-alert v-if="ventana.costo_total_unitario" type="info" variant="outlined">
-              <strong>Costo unitario:</strong> ${{ ventana.costo_total_unitario }}
-            </v-alert>
+        <!-- Costos — siempre visible -->
+        <v-row dense class="mb-2">
+          <v-col cols="4">
+            <div class="rounded-lg pa-3 bg-surface-variant text-center">
+              <div class="text-caption text-medium-emphasis mb-1">Costo unitario</div>
+              <div v-if="calculando"><v-progress-linear indeterminate color="warning" height="2" rounded /></div>
+              <div v-else class="text-body-2 font-weight-bold">
+                {{ ventana.costo_total_unitario ? '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(ventana.costo_total_unitario) : '—' }}
+              </div>
+            </div>
           </v-col>
-          <v-col cols="12" md="4">
-            <v-alert v-if="ventana.costo_total" type="info" variant="tonal">
-              <strong>Costo total:</strong> ${{ ventana.costo_total }}
-            </v-alert>
+          <v-col cols="4">
+            <div class="rounded-lg pa-3 bg-surface-variant text-center">
+              <div class="text-caption text-medium-emphasis mb-1">Costo total</div>
+              <div v-if="calculando"><v-progress-linear indeterminate color="warning" height="2" rounded /></div>
+              <div v-else class="text-body-2 font-weight-bold">
+                {{ ventana.costo_total ? '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(ventana.costo_total) : '—' }}
+              </div>
+            </div>
           </v-col>
-          <v-col cols="12" md="4">
-            <v-alert v-if="ventana.precio" type="success" variant="tonal">
-              <strong>Precio de venta:</strong> ${{ ventana.precio }}
-            </v-alert>
+          <v-col cols="4">
+            <div class="rounded-lg pa-3 text-center" style="background: rgba(var(--v-theme-success), 0.1)">
+              <div class="text-caption text-medium-emphasis mb-1">Precio de venta (Neto)</div>
+              <div v-if="calculando"><v-progress-linear indeterminate color="success" height="2" rounded /></div>
+              <div v-else class="text-body-1 font-weight-bold text-success">
+                {{ ventana.precio ? '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(ventana.precio) : '—' }}
+              </div>
+            </div>
           </v-col>
         </v-row>
 
@@ -975,7 +1018,7 @@
                   size="small"
                   @click="descargarMateriales"
                 >
-                  <v-icon left>mdi-download</v-icon>
+                  <v-icon start>mdi-download</v-icon>
                   Descargar Excel
                 </v-btn>
               </v-card-title>
@@ -1017,15 +1060,14 @@
           </v-col>
         </v-row>
 
-        <v-card-actions class="justify-end">
-          <v-btn color="secondary" variant="text" @click="cerrarModal">
-            Cancelar
-          </v-btn>
-          <v-btn color="primary" type="submit">
+        <v-card-actions class="justify-end px-0">
+          <v-btn color="grey" variant="text" @click="cerrarModal">Cancelar</v-btn>
+          <v-btn color="primary" variant="elevated" type="submit" prepend-icon="mdi-check">
             {{ isEdit ? 'Guardar cambios' : 'Agregar ventana' }}
           </v-btn>
         </v-card-actions>
       </v-form>
+      </v-card-text>
     </v-card>
   </v-dialog>
 
@@ -1189,6 +1231,7 @@ const emit = defineEmits(['update:mostrar', 'guardar'])
 
 const localMostrar = ref(props.mostrar)
 const datosListos = ref(false) // ⬅️ Flag para indicar que los datos están listos
+const calculando = ref(false)
 watch(() => props.mostrar, val => { localMostrar.value = val })
 watch(localMostrar, val => { emit('update:mostrar', val) })
 
@@ -1332,6 +1375,15 @@ const tiposVentanaBayKonva = computed(() => {
   }
   
   return resultado
+})
+
+// Colores filtrados por material: Aluminio solo muestra los colores de aluminio
+const coloresFiltrados = computed(() => {
+  const materialId = ventana.value.material ?? props.materialDefault
+  const idsAluminio = [1, 2, 4, 7, 8] // Blanco, Negro, Roble, Mate, Titanio
+  const idsPVC     = [1, 2, 4, 5, 6]  // Blanco, Negro, Roble, Nogal, Grafito
+  const ids = materialId === 1 ? idsAluminio : idsPVC
+  return props.colores.filter(c => ids.includes(c.id))
 })
 
 const tiposVentanaCentro = [
@@ -1568,26 +1620,21 @@ async function recalcularCostos() {
       console.log('💰 Payload a calcular-materiales:', payload)
       console.log('📦 Tipo 58 - configuracionArmador:', ventana.value.configuracionArmador)
       
+      calculando.value = true
       const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
-      
-      console.log('✅ Respuesta del backend:', data)
       
       ventana.value.costo_total_unitario = data.costo_unitario
       ventana.value.costo_total = data.costo_unitario * ventana.value.cantidad
       ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta))
       ventana.value.materiales = data.materiales
-
-      console.log('💵 Valores asignados:')
-      console.log('   - costo_total_unitario:', ventana.value.costo_total_unitario)
-      console.log('   - costo_total:', ventana.value.costo_total)
-      console.log('   - precio:', ventana.value.precio)
-      console.log('   - materiales:', ventana.value.materiales?.length || 0, 'items')
     } catch (e) {
       console.error('❌ Error en recalcularCostos:', e)
       ventana.value.costo_total_unitario = 0
       ventana.value.costo_total = 0
       ventana.value.precio = 0
       ventana.value.materiales = []
+    } finally {
+      calculando.value = false
     }
   } else {
     ventana.value.costo_total_unitario = 0

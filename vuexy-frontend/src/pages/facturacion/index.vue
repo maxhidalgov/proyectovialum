@@ -127,7 +127,7 @@
         <!-- Total -->
         <template #item.total="{ item }">
           <div class="font-weight-bold text-success">
-            ${{ item.total?.toLocaleString() }}
+            {{ clp(item.total) }}
           </div>
         </template>
 
@@ -225,9 +225,9 @@
                             <td>{{ ventana.tipo_ventana?.nombre }}</td>
                             <td>{{ ventana.ancho }}mm × {{ ventana.alto }}mm</td>
                             <td>{{ ventana.cantidad }}</td>
-                            <td>${{ ventana.precio_unitario?.toLocaleString() }}</td>
+                            <td>{{ clp(ventana.precio_unitario) }}</td>
                             <td class="font-weight-bold">
-                              ${{ (ventana.precio_unitario * ventana.cantidad).toLocaleString() }}
+                              {{ clp(ventana.precio_unitario * ventana.cantidad) }}
                             </td>
                           </tr>
                         </tbody>
@@ -240,16 +240,16 @@
                       <v-card-text>
                         <div class="d-flex justify-space-between mb-2">
                           <span>Subtotal:</span>
-                          <span>${{ calcularSubtotal(item).toLocaleString() }}</span>
+                          <span>{{ clp(calcularSubtotal(item)) }}</span>
                         </div>
                         <div class="d-flex justify-space-between mb-2">
                           <span>Descuento:</span>
-                          <span class="text-error">-${{ calcularDescuento(item).toLocaleString() }}</span>
+                          <span class="text-error">-{{ clp(calcularDescuento(item)) }}</span>
                         </div>
                         <v-divider class="my-2" />
                         <div class="d-flex justify-space-between font-weight-bold">
                           <span>Total:</span>
-                          <span class="text-success">${{ item.total?.toLocaleString() }}</span>
+                          <span class="text-success">{{ clp(item.total) }}</span>
                         </div>
                       </v-card-text>
                     </v-card>
@@ -299,6 +299,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+
+const clp = (n) => '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(n) || 0)
 import api from '@/axiosInstance'
 import ModalBsale from '@/components/facturacion/ModalBsale.vue'
 import ModalFacturacion from '@/components/ModalFacturacion.vue'

@@ -286,9 +286,9 @@ const margenImportacion = ref(45)
 const headers = [
   { title: 'Producto', key: 'producto', sortable: true },
   { title: 'Color / Proveedor', key: 'color_proveedor', sortable: false },
-  { title: 'Precio Costo', key: 'precio_costo', sortable: true, align: 'end' },
+  { title: 'Precio Costo (Neto)', key: 'precio_costo', sortable: true, align: 'end' },
   { title: 'Margen', key: 'margen', sortable: true, align: 'center' },
-  { title: 'Precio Venta', key: 'precio_venta', sortable: true, align: 'end' },
+  { title: 'Precio Venta (Neto)', key: 'precio_venta', sortable: true, align: 'end' },
   { title: 'Estado', key: 'activo', sortable: true, align: 'center' },
   { title: 'Vigencia', key: 'vigencia', sortable: false },
   { title: 'Acciones', key: 'acciones', sortable: false, align: 'center' }
@@ -405,7 +405,7 @@ const exportarPrecios = async () => {
 }
 
 const formatearNumero = (numero) => {
-  return new Intl.NumberFormat('es-CL').format(numero || 0)
+  return new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(numero) || 0)
 }
 
 const formatearFecha = (fecha) => {

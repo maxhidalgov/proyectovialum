@@ -74,8 +74,12 @@ class BsaleController extends Controller
             $observaciones = $request->input('observaciones', '');
             
             // Buscar cotización
-            $cotizacion = Cotizacion::with(['ventanas.tipoVentana', 'cliente'])
-                ->findOrFail($cotizacionId);
+            $cotizacion = Cotizacion::with([
+                    'ventanas.tipoVentana',
+                    'cliente',
+                    'detalles.listaPrecio.producto',
+                    'detalles.producto',
+                ])->findOrFail($cotizacionId);
 
             // Determinar qué cliente usar para facturación
             $clienteFacturacion = null;
@@ -250,21 +254,88 @@ class BsaleController extends Controller
             'cliente_direccion' => $cotizacion->cliente->direccion ?? 'Sin dirección'
         ]);
 
-        // Procesar cada ventana de la cotización (formato BSALE correcto)
-        foreach ($cotizacion->ventanas as $index => $ventana) {
+        // Procesar ventanas
+        foreach ($cotizacion->ventanas as $ventana) {
             $precioUnitario = $ventana->precio ?? 0;
             $cantidad = (int)($ventana->cantidad ?? 1);
-            
-            // Calcular neto unitario (precio sin IVA)
-            $netoUnitario = $precioUnitario / 1.19; // Asumiendo IVA 19%
+            $netoUnitario = $precioUnitario / 1.19;
 
             $detalles[] = [
-                "netUnitValue" => (float)$netoUnitario, // BSALE espera float, no entero
-                "quantity" => $cantidad,
-                "taxId" => "[1]", // IVA 19% - ID de impuesto 1
-                "comment" => $this->generarDescripcionVentana($ventana),
-                "discount" => 0
-                // Sin variantId ni code para crear producto dinámico
+                'netUnitValue' => round((float)$netoUnitario, 4),
+                'quantity'     => $cantidad,
+                'taxId'        => '[1]',
+                'comment'      => $this->generarDescripcionVentana($ventana),
+                'discount'     => 0,
+            ];
+
+            $totalNeto += $netoUnitario * $cantidad;
+        }
+
+        // Procesar productos/detalles
+        // Vidrios: agrupar por nombre de producto sumando m2
+        // No-vidrios: agrupar por nombre sumando cantidad
+        $grupos = [];
+        foreach ($cotizacion->detalles as $detalle) {
+            $nombreProducto = $detalle->listaPrecio?->producto?->nombre
+                ?? $detalle->producto?->nombre
+                ?? $detalle->descripcion
+                ?? 'Producto';
+
+            $esVidrio = (bool)($detalle->es_vidrio ?? $detalle->esVidrio ?? false);
+
+            if ($esVidrio && $detalle->m2 > 0) {
+                // Clave de grupo: nombre del producto
+                $clave = $nombreProducto;
+                if (!isset($grupos[$clave])) {
+                    $grupos[$clave] = [
+                        'descripcion'   => $nombreProducto,
+                        'es_vidrio'     => true,
+                        'm2_total'      => 0,
+                        'precio_por_m2' => 0,
+                        'muestras'      => 0,
+                    ];
+                }
+                $grupos[$clave]['m2_total']      += (float)$detalle->m2;
+                // precio_unitario es por el trozo, precio_por_m2 = precio_unitario / m2
+                $grupos[$clave]['precio_por_m2'] += ($detalle->m2 > 0)
+                    ? ((float)$detalle->precio_unitario / (float)$detalle->m2)
+                    : 0;
+                $grupos[$clave]['muestras']++;
+            } else {
+                $clave = $nombreProducto;
+                if (!isset($grupos[$clave])) {
+                    $grupos[$clave] = [
+                        'descripcion'       => $nombreProducto,
+                        'es_vidrio'         => false,
+                        'cantidad'          => 0,
+                        'precio_unitario'   => (float)$detalle->precio_unitario,
+                    ];
+                }
+                $grupos[$clave]['cantidad'] += (int)($detalle->cantidad ?? 1);
+            }
+        }
+
+        foreach ($grupos as $grupo) {
+            if ($grupo['es_vidrio']) {
+                // Precio por m2 promedio (en caso de distintos precios)
+                $precioPorM2 = $grupo['muestras'] > 0
+                    ? $grupo['precio_por_m2'] / $grupo['muestras']
+                    : 0;
+                $netoUnitario = $precioPorM2 / 1.19;
+                $cantidad     = round($grupo['m2_total'], 4);
+                $descripcion  = $grupo['descripcion'] . ' (m²)';
+            } else {
+                $netoUnitario = (float)$grupo['precio_unitario'] / 1.19;
+                $cantidad     = $grupo['cantidad'];
+                $descripcion  = $grupo['descripcion'];
+            }
+
+            $detalles[] = [
+                'netUnitValue' => round($netoUnitario, 4),
+                'quantity'     => $cantidad,
+                'taxId'        => '[1]',
+                'comment'      => $descripcion,
+                'discount'     => 0,
             ];
 
             $totalNeto += $netoUnitario * $cantidad;
@@ -326,12 +397,18 @@ class BsaleController extends Controller
      */
     private function getPaymentTypeId($metodoPago)
     {
+        // IDs reales de la cuenta BSALE (verificados via API payment_types.json)
         $paymentTypes = [
-            'efectivo' => 1,
-            'transferencia' => 2,
-            'tarjeta_credito' => 3,
-            'tarjeta_debito' => 4,
-            'cheque' => 5
+            'efectivo'        => 1,
+            'tarjeta_credito' => 2,
+            'nota_credito'    => 3,
+            'credito'         => 4,
+            'cheque'          => 5,
+            'tarjeta_debito'  => 6,
+            'abono'           => 7,
+            'transferencia'   => 8,
+            'webpay'          => 10,
+            'mercadopago'     => 13,
         ];
 
         return $paymentTypes[$metodoPago] ?? 1; // Por defecto efectivo

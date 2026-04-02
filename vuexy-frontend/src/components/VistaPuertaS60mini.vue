@@ -53,7 +53,7 @@ const props = defineProps({
 })
 
 // Colores/texturas igual que Abatir mini
-const colorHexMap = { blanco: '#ffffff', negro: '#0a0a0a', gris: '#808080', grafito: '#2f2f2f', nogal: '#8b5a2b' }
+const colorHexMap = { blanco: '#ffffff', negro: '#0a0a0a', gris: '#808080', grafito: '#2f2f2f', nogal: '#8b5a2b', mate: '#c0beba', titanio: '#7a7672' }
 const texturas = { roble: new Image(), nogal: new Image() }
 texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
 texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href

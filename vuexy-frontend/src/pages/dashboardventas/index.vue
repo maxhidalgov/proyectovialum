@@ -105,7 +105,7 @@ const headersClientes = [
   { title: 'Total', key: 'total' },
 ]
 
-const formatoPesos = valor => typeof valor === 'number' ? '$' + valor.toLocaleString('es-CL') : '$0'
+const formatoPesos = (valor) => '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(valor) || 0)
 
 const meses = [
   { text: 'Enero', value: 1 },
@@ -169,7 +169,7 @@ const cargarDatos = async () => {
           y: {
             beginAtZero: true,
             ticks: {
-              callback: value => '$' + value.toLocaleString('es-CL'),
+              callback: value => '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(value) || 0),
             },
           },
         },

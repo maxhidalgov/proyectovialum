@@ -78,22 +78,22 @@
         </template>
 
           <template #item.costo="{ item }">
-            ${{ Number(item.costo)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+            {{ clp(item.costo) }}
           </template>
 
           <template #item.precio="{ item }">
-            ${{ Number(item.precio)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+            {{ clp(item.precio) }}
           </template>
 
         <template #item.precio_total="{ item }">
-          ${{ Number(item.precio_total)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}  
+          {{ clp(item.precio_total) }}
         </template>
       </v-data-table>
       <v-row justify="end" class="px-6 pb-4">
         <v-col cols="12" sm="4" class="text-right">
           <v-alert type="success" variant="tonal" border="start" border-color="green">
             <strong>Total general:</strong>
-            ${{ cotizacion?.total_general?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+            {{ clp(cotizacion?.total_general) }}
           </v-alert>
         </v-col>
       </v-row>
@@ -109,11 +109,11 @@
         class="elevation-1"
       >
         <template #item.precio_unitario="{ item }">
-          ${{ Number(item.precio_unitario)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          {{ clp(item.precio_unitario) }}
         </template>
 
         <template #item.total="{ item }">
-          ${{ Number(item.total)?.toLocaleString('es-CL', { minimumFractionDigits: 0 }) || 0 }}
+          {{ clp(item.total) }}
         </template>
       </v-data-table>
     </v-card>
@@ -122,6 +122,8 @@
 
 <script setup>
 import { onMounted, ref, computed } from 'vue'
+
+const clp = (n) => '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(n) || 0)
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import api from '@/axiosInstance'

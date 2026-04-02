@@ -339,12 +339,21 @@ class CalculoVentanaService
         $idTapaDesague = 43;
         $idTapaTornillo = 42;
         $idSilicona = 44;
+        // IDs brazos Acero Inoxidable (221=DT20, 222=DT8, 223=DT12, 224=DT10, 225=DT16, 226=DT24)
+        $idsBrazos = [221, 222, 223, 224, 225, 226];
+        $idManilla        = 227;
+        $idEscuadra       = 220;
+        $idBurleteRedondo = 228;
+        $idBurleteBase    = 229;
+        $idBurleteCuna    = 230;
 
-        // ✅ IDs únicos de perfiles + herrajes + vidrio
+        // ✅ IDs únicos de perfiles + herrajes + brazos + vidrio
         $perfilIds = array_merge(
             array_unique(array_column($perfilesConfig, 'id')),
-            [$productoVidrioId, $idPuente, $idCalzoAmarillo, $idCalzoCeleste, $idCalzoRojo, 
-             $idTornilloAuto, $idTornilloAmo, $idTapaDesague, $idTapaTornillo, $idSilicona]
+            [$productoVidrioId, $idCalzoAmarillo, $idCalzoCeleste, $idCalzoRojo,
+             $idSilicona, $idManilla,
+             $idEscuadra, $idBurleteRedondo, $idBurleteBase, $idBurleteCuna],
+            $idsBrazos
         );
 
         $productos = Producto::with('coloresPorProveedor.proveedor')
@@ -398,20 +407,40 @@ class CalculoVentanaService
             }
         }
 
-        // ✅ Herrajes universales (mismas fórmulas que Fija AL42)
-        $materiales[] = self::crearHerraje($productos[$idPuente], $alto, $ancho, null, $colorId);
+        // ✅ Herrajes
         $materiales[] = self::crearHerraje($productos[$idCalzoAmarillo], $alto, $ancho, null, $colorId);
         $materiales[] = self::crearHerraje($productos[$idCalzoCeleste], $alto, $ancho, null, $colorId);
         $materiales[] = self::crearHerraje($productos[$idCalzoRojo], $alto, $ancho, null, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTornilloAuto], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTornilloAmo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTapaDesague], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTapaTornillo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[$idSilicona], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idManilla],  $alto, $ancho, $cantidad, $colorId);
+        $materiales[] = self::crearHerraje($productos[$idEscuadra], $alto, $ancho, 8 * $cantidad, $colorId);
 
-        // ✅ Calcular vidrio con dimensiones: X-96, Y-116
-        $anchoVidrio = $ancho - 96;
-        $altoVidrio = $alto - 116;
+        // ✅ Burletes (cantidad en metros lineales)
+        $perimetro = (2 * $ancho + 2 * $alto) / 1000; // en metros
+        $addBurlete = function($idBurlete, $factorPerimetro) use (&$materiales, $productos, $colorId, $perimetro, $cantidad) {
+            $producto = $productos[$idBurlete] ?? null;
+            if (!$producto) return;
+            $largo = $producto->largo_total > 0 ? $producto->largo_total : 1;
+            $costo = self::buscarCostoPorColor($producto, $colorId);
+            $costoPorMetro = $costo / $largo;
+            $metros = $factorPerimetro * $perimetro * $cantidad;
+            $materiales[] = [
+                'producto_id'    => $producto->id,
+                'nombre'         => $producto->nombre,
+                'unidad'         => 'm',
+                'cantidad'       => round($metros, 3),
+                'costo_unitario' => round($costoPorMetro),
+                'costo_total'    => round($costoPorMetro * $metros),
+                'proveedor'      => self::buscarNombreProveedor($producto, $colorId),
+            ];
+        };
+        $addBurlete($idBurleteBase,    1); // (2*ancho + 2*alto) metros
+        $addBurlete($idBurleteCuna,    1); // (2*ancho + 2*alto) metros
+        $addBurlete($idBurleteRedondo, 2); // (4*ancho + 4*alto) metros
+
+        // ✅ Calcular vidrio con dimensiones: X-93, Y-113
+        $anchoVidrio = $ancho - 93;
+        $altoVidrio = $alto - 113;
         $areaM2 = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
 
         $productoVidrio = $productos[$productoVidrioId] ?? null;
@@ -435,6 +464,78 @@ class CalculoVentanaService
             'costo_total' => round($costoVidrio * $areaM2) * $cantidad,
             'proveedor' => $matchVidrio?->proveedor?->nombre ?? 'N/A',
         ];
+
+        // ✅ Brazos - peso de hoja: todos los perfiles de la hoja + vidrio
+        // Hoja AL42: sup(X-18) + inf(X-18) + pierna(Y-38)×2 + junquillo horiz(X-90)×2 + junquillo lateral(Y-110)×2 + vidrio
+        $productoHoja      = $productos[150] ?? null;        // ID 150: hoja sup/inf y piernas
+        $productoJunquillo = $productos[$idJunquillo] ?? null;
+        $pesoPerfil150     = $productoHoja      ? ($productoHoja->peso_por_metro      ?? 0) : 0;
+        $pesoJunquillo     = $productoJunquillo ? ($productoJunquillo->peso_por_metro ?? 0) : 0;
+        $pesoHoja = 0;
+        $pesoHoja += $pesoPerfil150 * (($ancho - 18)  / 1000) * 2; // hoja sup + hoja inf
+        $pesoHoja += $pesoPerfil150 * (($alto - 38)   / 1000) * 2; // pierna izq + pierna der
+        $pesoHoja += $pesoJunquillo * (($ancho - 90)  / 1000) * 2; // junquillo horiz sup + inf
+        $pesoHoja += $pesoJunquillo * (($alto - 110)  / 1000) * 2; // junquillo lateral izq + der
+        $pesoHoja += ($productoVidrio->peso_por_metro ?? 0) * $areaM2; // vidrio
+
+        // Selección de brazo según alto de vidrio (mm) y peso de hoja (kg)
+        // Fórmula Excel: ALTO en metros → aquí se compara altoVidrio en mm
+        // IDs: 222=DT8, 224=DT10, 223=DT12, 225=DT16, 221=DT20, 226=DT24
+        $brazoId = 226; // default: DT 24
+        $brazoReglas = [
+            ['id' => 222, 'a_min' => 296, 'a_max' => 400,  'p_min' => 0,    'p_max' => 10],   // DT 8
+            ['id' => 224, 'a_min' => 296, 'a_max' => 400,  'p_min' => 10.1, 'p_max' => 16],   // DT 10
+            ['id' => 223, 'a_min' => 396, 'a_max' => 400,  'p_min' => 16.1, 'p_max' => 22.2], // DT 12
+            ['id' => 224, 'a_min' => 401, 'a_max' => 500,  'p_min' => 0,    'p_max' => 16],   // DT 10
+            ['id' => 223, 'a_min' => 401, 'a_max' => 500,  'p_min' => 16.1, 'p_max' => 21],   // DT 12
+            ['id' => 225, 'a_min' => 496, 'a_max' => 500,  'p_min' => 16.1, 'p_max' => 22],   // DT 16
+            ['id' => 223, 'a_min' => 501, 'a_max' => 600,  'p_min' => 0,    'p_max' => 21.1], // DT 12
+            ['id' => 225, 'a_min' => 501, 'a_max' => 600,  'p_min' => 21.1, 'p_max' => 22],   // DT 16
+            ['id' => 221, 'a_min' => 596, 'a_max' => 600,  'p_min' => 22.1, 'p_max' => 24],   // DT 20
+            ['id' => 225, 'a_min' => 601, 'a_max' => 700,  'p_min' => 0,    'p_max' => 22],   // DT 16
+            ['id' => 221, 'a_min' => 601, 'a_max' => 700,  'p_min' => 22.1, 'p_max' => 24],   // DT 20
+            ['id' => 226, 'a_min' => 696, 'a_max' => 700,  'p_min' => 24.1, 'p_max' => 32],   // DT 24
+            ['id' => 225, 'a_min' => 701, 'a_max' => 800,  'p_min' => 0,    'p_max' => 22],   // DT 16
+            ['id' => 221, 'a_min' => 701, 'a_max' => 800,  'p_min' => 22.1, 'p_max' => 24],   // DT 20
+            ['id' => 226, 'a_min' => 701, 'a_max' => 800,  'p_min' => 24.1, 'p_max' => 32],   // DT 24
+            ['id' => 226, 'a_min' => 801, 'a_max' => 1400, 'p_min' => 24.1, 'p_max' => 32],   // DT 24
+            ['id' => 226, 'a_min' => 801, 'a_max' => 1400, 'p_min' => 0,    'p_max' => 26],   // DT 24
+        ];
+
+        foreach ($brazoReglas as $regla) {
+            if (
+                $altoVidrio >= $regla['a_min'] && $altoVidrio <= $regla['a_max'] &&
+                $pesoHoja >= $regla['p_min'] && $pesoHoja <= $regla['p_max']
+            ) {
+                $brazoId = $regla['id'];
+                break;
+            }
+        }
+
+        if (isset($productos[$brazoId])) {
+            $brazo = $productos[$brazoId];
+            $costoBrazo = self::buscarCostoPorColor($brazo, $colorId);
+            $materiales[] = [
+                'producto_id' => $brazo->id,
+                'nombre'      => $brazo->nombre,
+                'unidad'      => 'par',
+                'cantidad'    => $cantidad,
+                'costo_unitario' => round($costoBrazo),
+                'costo_total'    => round($costoBrazo * $cantidad),
+                'proveedor'   => self::buscarNombreProveedor($brazo, $colorId),
+            ];
+            Log::info("✅ Brazo Proyectante AL42", [
+                'brazo_id' => $brazoId,
+                'nombre'  => $brazo->nombre,
+                'alto_vidrio_mm' => $altoVidrio,
+                'peso_hoja_kg' => round($pesoHoja, 3),
+            ]);
+        } else {
+            Log::warning("⚠️ Brazo ID {$brazoId} no encontrado en productos (Proyectante AL42)", [
+                'alto_vidrio_mm' => $altoVidrio,
+                'peso_hoja_kg' => round($pesoHoja, 3),
+            ]);
+        }
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
 
@@ -529,18 +630,9 @@ class CalculoVentanaService
         }
 
         // ✅ IDs de herrajes
-        $idPuente = 79;
-        $idCalzoAmarillo = 43;
-        $idCalzoCeleste = 44;
-        $idCalzoRojo = 45;
-        $idTornilloAuto = 80;
-        $idTornilloAmo = 81;
-        $idTapaDesague = 49;
-        $idTapaTornillo = 50;
-        $idSilicona = 86;
+        $idSilicona = 44;
 
-        $idsHerrajes = [$idPuente, $idCalzoAmarillo, $idCalzoCeleste, $idCalzoRojo, 
-                        $idTornilloAuto, $idTornilloAmo, $idTapaDesague, $idTapaTornillo, $idSilicona];
+        $idsHerrajes = [$idSilicona];
 
         // ✅ Cargar productos únicos (perfiles + herrajes + vidrio)
         $idsUnicos = array_unique(array_column($perfilesConfig, 'id'));
@@ -598,15 +690,7 @@ class CalculoVentanaService
             ]);
         }
 
-        // ✅ HERRAJES - Agregar usando los IDs ya definidos
-        $materiales[] = self::crearHerraje($productos[$idPuente], $alto, $ancho, null, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idCalzoAmarillo], $alto, $ancho, null, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idCalzoCeleste], $alto, $ancho, null, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idCalzoRojo], $alto, $ancho, null, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTornilloAuto], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTornilloAmo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTapaDesague], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[$idTapaTornillo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
+        // ✅ HERRAJES
         $materiales[] = self::crearHerraje($productos[$idSilicona], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
 
         // ✅ Calcular vidrio - 2 hojas con dimensiones específicas

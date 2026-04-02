@@ -20,4 +20,9 @@ class Cliente extends Model
         'ciudad',
         'comuna',
     ];
+
+    public function cotizaciones()
+    {
+        return $this->hasMany(\App\Models\Cotizacion::class, 'cliente_id');
+    }
 }

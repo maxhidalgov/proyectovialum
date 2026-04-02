@@ -176,6 +176,8 @@ const colorHexMap = {
   bronce: '#CD7F32',
   'negro mate': '#1A1A1A',
   inox: '#C0C0C0',
+  mate: '#c0beba',
+  titanio: '#7a7672',
 }
 
 const colorMarcoHex = computed(() => {

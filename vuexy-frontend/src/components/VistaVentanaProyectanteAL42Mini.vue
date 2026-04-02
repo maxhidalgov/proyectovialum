@@ -50,6 +50,8 @@ const colorMarcoHex = computed(() => {
     plata: '#C0C0C0',
     gris: '#808080',
     grafito: '#4A4A4A',
+    mate: '#c0beba',
+    titanio: '#7a7672',
   }
   return colorMap[props.colorMarco?.toLowerCase()] || '#D8D8D8'
 })

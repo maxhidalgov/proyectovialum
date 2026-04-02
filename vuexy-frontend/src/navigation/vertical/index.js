@@ -82,6 +82,12 @@ const allMenuItems = [
     permissions: ['ver_cotizaciones', 'gestionar_cotizaciones'],
   },
   {
+    title: 'CRM',
+    to: { name: 'crm' },
+    icon: { icon: 'mdi-view-kanban' },
+    permissions: ['ver_cotizaciones', 'gestionar_cotizaciones'],
+  },
+  {
     title: 'Facturacion',
     to: { name: 'facturacion' },
     icon: { icon: 'mdi-file-document-multiple' },
@@ -96,6 +102,12 @@ const allMenuItems = [
         title: 'Gestión de Usuarios',
         to: { name: 'admin-secret-panel' },
         icon: { icon: 'tabler-users' },
+        permission: 'gestionar_usuarios',
+      },
+      {
+        title: 'Proveedores',
+        to: { name: 'proveedores' },
+        icon: { icon: 'mdi-truck' },
         permission: 'gestionar_usuarios',
       },
     ],

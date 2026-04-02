@@ -1,26 +1,30 @@
 <template>
-  <v-dialog v-model="modalProductos" max-width="1000px" persistent>
+  <v-dialog v-model="modalProductos" max-width="1000px" persistent scrollable>
     <v-card>
-      <v-card-title class="text-h6 d-flex justify-space-between align-center">
-        <span>Agregar Productos</span>
-        <v-btn icon="mdi-close" variant="text" @click="cerrarModal"></v-btn>
+      <!-- Header -->
+      <v-card-title class="d-flex align-center justify-space-between pa-4 bg-surface">
+        <div class="d-flex align-center gap-2">
+          <v-icon color="primary" class="mr-2">mdi-package-variant-plus</v-icon>
+          <span class="text-h6 font-weight-bold">Agregar Productos</span>
+        </div>
+        <v-btn icon="mdi-close" variant="text" size="small" @click="cerrarModal" />
       </v-card-title>
-      
-      <v-card-text>
-        <v-row dense>
-          <!-- Buscador de productos -->
-          <v-col cols="12">
-            <v-text-field
-              v-model="busqueda"
-              label="Buscar producto por nombre o código"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              outlined
-              dense
-              hide-details="auto"
-            />
-          </v-col>
-        </v-row>
+
+      <v-divider />
+
+      <v-card-text class="pa-4">
+        <!-- Buscador -->
+        <v-text-field
+          v-model="busqueda"
+          label="Buscar producto por nombre o código"
+          prepend-inner-icon="mdi-magnify"
+          clearable
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="mb-4"
+          bg-color="surface"
+        />
 
         <!-- Tabla de productos -->
         <v-data-table
@@ -28,209 +32,237 @@
           :items="productosFiltrados"
           :loading="cargando"
           item-value="id"
-          class="elevation-1 mt-4"
           density="compact"
           :items-per-page="10"
           :items-per-page-options="[5, 10, 25, 50]"
+          class="rounded-lg border"
+          hover
         >
-          <template #item.tipo_producto="{ item }">
-            {{ item.tipoProducto?.nombre || '-' }}
+          <template #item.nombre="{ item }">
+            <div class="py-1">
+              <div class="text-body-2 font-weight-medium">{{ item.nombre }}</div>
+              <div v-if="item.codigo" class="text-caption text-medium-emphasis">{{ item.codigo }}</div>
+            </div>
           </template>
 
-          <template #item.unidad="{ item }">
-            {{ item.unidad?.abreviacion || '-' }}
+          <template #item.color="{ item }">
+            <v-chip v-if="item.color && item.color !== '-'" size="x-small" variant="tonal" color="secondary">
+              {{ item.color }}
+            </v-chip>
+            <span v-else class="text-caption text-disabled">—</span>
+          </template>
+
+          <template #item.precio="{ item }">
+            <span class="text-body-2 font-weight-medium text-success">{{ item.precio }}</span>
           </template>
 
           <template #item.acciones="{ item }">
             <v-btn
               icon="mdi-plus"
               size="small"
-              color="success"
+              color="primary"
               variant="tonal"
               @click="seleccionarProducto(item)"
-            ></v-btn>
+            />
+          </template>
+
+          <template #no-data>
+            <div class="text-center py-6 text-medium-emphasis">
+              <v-icon size="40" class="mb-2">mdi-package-variant-remove</v-icon>
+              <div>No hay productos con precios configurados</div>
+            </div>
           </template>
         </v-data-table>
 
-        <v-divider class="my-4"></v-divider>
-
         <!-- Productos seleccionados -->
-        <div v-if="productosSeleccionados.length > 0">
-          <h3 class="text-subtitle-1 mb-3">Productos seleccionados ({{ productosSeleccionados.length }})</h3>
-          
+        <template v-if="productosSeleccionados.length > 0">
+          <div class="d-flex align-center mt-5 mb-3">
+            <v-icon color="primary" size="small" class="mr-2">mdi-cart-check</v-icon>
+            <span class="text-subtitle-2 font-weight-bold">
+              Productos seleccionados
+            </span>
+            <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
+              {{ productosSeleccionados.length }}
+            </v-chip>
+          </div>
+
           <v-card
             v-for="(item, index) in productosSeleccionados"
             :key="index"
-            class="mb-3 pa-3"
-            outlined
+            class="mb-3"
+            variant="outlined"
           >
-            <v-row dense align="center">
-              <v-col cols="12" md="3">
-                <div class="text-subtitle-2">{{ item.nombre }}</div>
-                <div class="text-caption text-grey">{{ item.codigo }}</div>
-                <v-chip v-if="item.esVidrio" size="x-small" color="info" class="mt-1">
-                  Venta por m²
-                </v-chip>
-              </v-col>
+            <!-- Cabecera del producto -->
+            <div class="d-flex align-center justify-space-between px-4 pt-3 pb-2">
+              <div class="d-flex align-center gap-3 flex-wrap">
+                <div>
+                  <div class="text-body-1 font-weight-semibold">{{ item.nombre }}</div>
+                  <div class="d-flex align-center gap-2 mt-1">
+                    <v-chip v-if="item.codigo" size="x-small" variant="tonal" color="secondary">
+                      {{ item.codigo }}
+                    </v-chip>
+                    <v-chip v-if="item.color && item.color !== '-'" size="x-small" variant="tonal" color="info">
+                      {{ item.color }}
+                    </v-chip>
+                    <v-chip v-if="item.esVidrio" size="x-small" color="primary" variant="tonal">
+                      <v-icon start size="10">mdi-texture-box</v-icon>
+                      Venta por m²
+                    </v-chip>
+                  </div>
+                </div>
+              </div>
+              <v-btn
+                icon="mdi-delete-outline"
+                size="small"
+                color="error"
+                variant="text"
+                @click="eliminarProductoSeleccionado(index)"
+              />
+            </div>
 
-              <v-col cols="6" md="2">
-                <div class="text-caption text-grey">Color</div>
-                <div class="text-subtitle-2">{{ item.color || '-' }}</div>
-              </v-col>
+            <v-divider />
 
-              <!-- Si es vidrio (tipo 1 o 2), mostrar campos de dimensiones -->
+            <div class="px-4 py-3">
+              <!-- VIDRIO: dimensiones en 2 filas -->
               <template v-if="item.esVidrio">
-                <v-col cols="12" md="12">
-                  <v-divider class="my-2"></v-divider>
-                  <v-row dense>
-                    <v-col cols="6" md="2">
-                      <v-text-field
-                        v-model.number="item.ancho_mm"
-                        label="Ancho (mm)"
-                        type="number"
-                        outlined
-                        dense
-                        hide-details
-                        @input="recalcularPrecioVidrio(item)"
-                      />
-                    </v-col>
+                <!-- Fila 1: dimensiones -->
+                <v-row dense class="mb-2">
+                  <v-col cols="6" sm="3">
+                    <v-text-field
+                      v-model.number="item.ancho_mm"
+                      label="Ancho (mm)"
+                      type="number"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                      @update:modelValue="recalcularPrecioVidrio(item)"
+                    />
+                  </v-col>
+                  <v-col cols="6" sm="3">
+                    <v-text-field
+                      v-model.number="item.alto_mm"
+                      label="Alto (mm)"
+                      type="number"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                      @update:modelValue="recalcularPrecioVidrio(item)"
+                    />
+                  </v-col>
+                  <v-col cols="6" sm="2">
+                    <v-text-field
+                      :key="`m2-${item.ancho_mm}-${item.alto_mm}`"
+                      :model-value="calcularM2Display(item)"
+                      label="m²"
+                      readonly
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                      bg-color="primary-darken-4"
+                    >
+                      <template #append-inner>
+                        <v-icon size="small" color="primary">mdi-texture-box</v-icon>
+                      </template>
+                    </v-text-field>
+                  </v-col>
+                  <v-col cols="6" sm="2">
+                    <v-text-field
+                      v-model.number="item.cantidad"
+                      label="Cant."
+                      type="number"
+                      min="1"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                      @update:modelValue="recalcularPrecioVidrio(item)"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="2" class="d-flex align-center">
+                    <v-checkbox
+                      v-model="item.pulido"
+                      label="Pulido (+20%)"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      @update:modelValue="(val) => { item.pulido = val; recalcularPrecioVidrio(item) }"
+                    />
+                  </v-col>
+                </v-row>
 
-                    <v-col cols="6" md="2">
-                      <v-text-field
-                        v-model.number="item.alto_mm"
-                        label="Alto (mm)"
-                        type="number"
-                        outlined
-                        dense
-                        hide-details
-                        @input="recalcularPrecioVidrio(item)"
-                      />
-                    </v-col>
-
-                    <v-col cols="6" md="2">
-                      <v-text-field
-                        :key="`m2-${item.ancho_mm}-${item.alto_mm}`"
-                        :model-value="calcularM2Display(item)"
-                        label="m²"
-                        readonly
-                        variant="outlined"
-                        density="compact"
-                        hide-details
-                        class="text-primary font-weight-bold"
-                      >
-                        <template #append-inner>
-                          <v-icon size="small" color="info">mdi-texture-box</v-icon>
-                        </template>
-                      </v-text-field>
-                    </v-col>
-
-                    <v-col cols="6" md="1">
-                      <v-text-field
-                        v-model.number="item.cantidad"
-                        label="Cant."
-                        type="number"
-                        min="1"
-                        outlined
-                        dense
-                        hide-details
-                        @input="recalcularPrecioVidrio(item)"
-                      />
-                    </v-col>
-
-                    <v-col cols="6" md="2">
-                      <v-checkbox
-                        v-model="item.pulido"
-                        label="Pulido (+20%)"
-                        color="primary"
-                        hide-details
-                        @change="recalcularPrecioVidrio(item)"
-                      />
-                    </v-col>
-
-                    <v-col cols="6" md="1">
-                      <div class="text-caption text-grey">P. Costo/m²</div>
-                      <div class="text-subtitle-2">${{ formatearNumero(item.precio_costo_calculado || item.precio_costo) }}</div>
-                    </v-col>
-
-                    <v-col cols="6" md="2">
-                      <div class="text-caption text-grey">P. Venta Total</div>
-                      <div class="text-subtitle-2 text-success">${{ formatearNumero(item.precio_venta_total) }}</div>
-                    </v-col>
-                  </v-row>
-                </v-col>
+                <!-- Fila 2: precios resultantes -->
+                <v-row dense>
+                  <v-col cols="6" sm="3">
+                    <div class="rounded-lg pa-2 bg-surface-variant text-center">
+                      <div class="text-caption text-medium-emphasis mb-1">P. Costo/m²</div>
+                      <div class="text-body-2 font-weight-bold">${{ formatearNumero(item.precio_costo_calculado || item.precio_costo) }}</div>
+                    </div>
+                  </v-col>
+                  <v-col cols="6" sm="3">
+                    <div class="rounded-lg pa-2 text-center" style="background: rgba(var(--v-theme-success), 0.1)">
+                      <div class="text-caption text-medium-emphasis mb-1">P. Venta Total</div>
+                      <div class="text-body-1 font-weight-bold text-success">${{ formatearNumero(item.precio_venta_total) }}</div>
+                    </div>
+                  </v-col>
+                </v-row>
               </template>
 
-              <!-- Si NO es vidrio, mostrar campos normales -->
+              <!-- NO VIDRIO: cantidad y precio en una fila -->
               <template v-else>
-                <v-col cols="6" md="1">
-                  <v-text-field
-                    v-model.number="item.cantidad"
-                    label="Cant."
-                    type="number"
-                    min="1"
-                    outlined
-                    dense
-                    hide-details
-                    @input="calcularPrecio(item)"
-                  />
-                </v-col>
-
-                <v-col cols="6" md="1">
-                  <div class="text-caption text-grey">P. Costo</div>
-                  <div class="text-subtitle-2">${{ formatearNumero(item.precio_costo) }}</div>
-                </v-col>
-
-                <v-col cols="4" md="1">
-                  <div class="text-caption text-grey">Margen</div>
-                  <div class="text-subtitle-2">{{ item.margen }}%</div>
-                </v-col>
-
-                <v-col cols="4" md="1">
-                  <div class="text-caption text-grey">P. Venta</div>
-                  <div class="text-subtitle-2 text-success">${{ formatearNumero(item.precio_venta) }}</div>
-                </v-col>
+                <v-row dense align="center">
+                  <v-col cols="6" sm="2">
+                    <v-text-field
+                      v-model.number="item.cantidad"
+                      label="Cant."
+                      type="number"
+                      min="1"
+                      variant="outlined"
+                      density="compact"
+                      hide-details
+                      @update:modelValue="calcularPrecio(item)"
+                    />
+                  </v-col>
+                  <v-col cols="6" sm="2">
+                    <div class="rounded-lg pa-2 bg-surface-variant text-center">
+                      <div class="text-caption text-medium-emphasis mb-1">Margen</div>
+                      <div class="text-body-2 font-weight-bold">{{ item.margen }}%</div>
+                    </div>
+                  </v-col>
+                  <v-col cols="6" sm="3">
+                    <div class="rounded-lg pa-2 text-center" style="background: rgba(var(--v-theme-success), 0.1)">
+                      <div class="text-caption text-medium-emphasis mb-1">P. Venta</div>
+                      <div class="text-body-1 font-weight-bold text-success">${{ formatearNumero(item.precio_venta) }}</div>
+                    </div>
+                  </v-col>
+                </v-row>
               </template>
-
-              <v-col :cols="item.esVidrio ? 12 : 4" :md="item.esVidrio ? 12 : 1" :class="item.esVidrio ? '' : 'text-right'">
-                <v-btn
-                  icon="mdi-delete"
-                  size="small"
-                  color="error"
-                  variant="text"
-                  @click="eliminarProductoSeleccionado(index)"
-                ></v-btn>
-              </v-col>
-            </v-row>
+            </div>
           </v-card>
 
           <!-- Total -->
-          <v-card class="pa-3 bg-primary-lighten-5" outlined>
-            <v-row>
-              <v-col cols="12" class="text-right">
-                <div class="text-subtitle-2 text-grey">Total productos seleccionados:</div>
-                <div class="text-h6 text-primary">${{ formatearNumero(totalSeleccionados) }}</div>
-              </v-col>
-            </v-row>
-          </v-card>
-        </div>
+          <div class="d-flex justify-end align-center mt-2 px-1">
+            <span class="text-body-2 text-medium-emphasis mr-3">Total productos seleccionados:</span>
+            <span class="text-h6 font-weight-bold text-primary">${{ formatearNumero(totalSeleccionados) }}</span>
+          </div>
+        </template>
 
-        <v-alert v-else type="info" variant="tonal" class="mt-4">
+        <v-alert v-else type="info" variant="tonal" class="mt-4" density="compact">
           Busca y selecciona productos de la tabla para agregarlos a la cotización
         </v-alert>
       </v-card-text>
 
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="cerrarModal">
-          Cancelar
-        </v-btn>
+      <v-divider />
+
+      <v-card-actions class="pa-3">
+        <v-spacer />
+        <v-btn color="grey" variant="text" @click="cerrarModal">Cancelar</v-btn>
         <v-btn
           color="primary"
           variant="elevated"
           :disabled="productosSeleccionados.length === 0"
+          prepend-icon="mdi-check"
           @click="agregarProductos"
         >
-          Agregar {{ productosSeleccionados.length }} producto(s)
+          Agregar {{ productosSeleccionados.length > 0 ? productosSeleccionados.length : '' }} producto{{ productosSeleccionados.length !== 1 ? 's' : '' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -261,11 +293,10 @@ const cargando = ref(false)
 
 // Headers de la tabla
 const headers = [
-  { title: 'Código', key: 'codigo_proveedor', sortable: true },
   { title: 'Nombre', key: 'nombre', sortable: true },
   { title: 'Color', key: 'color', sortable: true },
   { title: 'Precio', key: 'precio', sortable: true },
-  { title: 'Acciones', key: 'acciones', sortable: false, align: 'center' }
+  { title: '', key: 'acciones', sortable: false, align: 'end', width: '60px' }
 ]
 
 // Computed - Expandir productos por sus variantes de color (sin mostrar proveedor al cliente)
@@ -280,15 +311,7 @@ const productosFiltrados = computed(() => {
       return Number(lp.activo) === 1 || lp.activo === true || lp.activo === '1'
     })
     
-    if (listasActivas.length === 0) {
-      productosExpandidos.push({
-        ...producto,
-        _productoOriginal: producto,
-        _listaPrecio: null,
-        color: '-',
-        precio: '-'
-      })
-    } else {
+    if (listasActivas.length > 0) {
       listasActivas.forEach(lp => {
         // Obtener color directo o desde productoColorProveedor (compatibilidad)
         const color = lp.color || lp.productoColorProveedor?.color
@@ -299,7 +322,7 @@ const productosFiltrados = computed(() => {
           _listaPrecio: lp,
           id: `${producto.id}_${lp.id}`,
           color: color?.nombre || '-',
-          precio: `$${Number(lp.precio_venta || 0).toLocaleString('es-CL')}`
+          precio: `$${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(lp.precio_venta || 0))}`
         })
       })
     }
@@ -457,6 +480,16 @@ const calcularM2Display = (item) => {
 }
 
 // Función para recalcular precio cuando cambian las dimensiones del vidrio
+const calcularPrecioTotal = (costo, m2, margen, cantidad) => {
+  // PrecioVenta = Costo / (1 - Margen/100)
+  const precioBase = costo * m2
+  const precioConMargen = precioBase / (1 - margen / 100)
+  const precioConIVA = precioConMargen * 1.19
+  const precioRedondeado = redondearA500HaciaArriba(precioConIVA)
+  const precioSinIVA = precioRedondeado / 1.19
+  return precioSinIVA * cantidad
+}
+
 const recalcularPrecioVidrio = (item) => {
   if (!item.esVidrio) return
   
@@ -468,40 +501,37 @@ const recalcularPrecioVidrio = (item) => {
     return
   }
   
-  // Aplicar costo de pulido si está activado (+20%)
-  let costoFinal = item.precio_costo
-  if (item.pulido) {
-    costoFinal = item.precio_costo * 1.20
-  }
-  item.precio_costo_calculado = costoFinal
-  
   const margen = parseFloat(item.margen) || 0
+  const cantidad = parseFloat(item.cantidad) || 1
   
-  // Evitar división por cero si margen >= 100
   if (margen >= 100) {
     item.precio_venta_total = 0
     item.precio_venta = 0
     return
   }
   
-  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
-  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
-  const precioBase = costoFinal * m2
-  const precioConMargen = precioBase / (1 - margen / 100)
-  const cantidad = parseFloat(item.cantidad) || 1
+  // Precio sin pulido
+  const totalSinPulido = calcularPrecioTotal(item.precio_costo, m2, margen, cantidad)
   
-  // 1. Aplicar IVA (19%) al precio con margen
-  const precioConIVA = precioConMargen * 1.19
+  if (!item.pulido) {
+    item.precio_costo_calculado = item.precio_costo
+    item.precio_venta_total = totalSinPulido
+    item.precio_venta = totalSinPulido
+    return
+  }
   
-  // 2. Redondear hacia arriba al múltiplo de 500
-  const precioRedondeadoConIVA = redondearA500HaciaArriba(precioConIVA)
+  // Precio con pulido (+20% en costo)
+  const costoConPulido = item.precio_costo * 1.20
+  item.precio_costo_calculado = costoConPulido
+  let totalConPulido = calcularPrecioTotal(costoConPulido, m2, margen, cantidad)
   
-  // 3. Reversar el IVA para mostrar el precio sin IVA en el modal
-  const precioSinIVA = precioRedondeadoConIVA / 1.19
+  // Mínimo $1.000 de surcharge por pulido
+  if (totalConPulido - totalSinPulido < 1000) {
+    totalConPulido = totalSinPulido + 1000
+  }
   
-  // 4. Guardar el precio sin IVA (en el PDF se aplicará el 19% de nuevo)
-  item.precio_venta_total = precioSinIVA * cantidad
-  item.precio_venta = item.precio_venta_total // Para compatibilidad
+  item.precio_venta_total = totalConPulido
+  item.precio_venta = totalConPulido
 }
 
 // Función para redondear hacia arriba al múltiplo de 500 más cercano
@@ -510,7 +540,7 @@ const redondearA500HaciaArriba = (precio) => {
 }
 
 const formatearNumero = (numero) => {
-  return new Intl.NumberFormat('es-CL').format(numero || 0)
+  return new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(numero) || 0)
 }
 
 const limpiarSeleccion = () => {

@@ -46,6 +46,7 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('cotizaciones', CotizacionController::class);
 
     Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
+    Route::get('/cotizaciones/{id}/orden-trabajo', [CotizacionController::class, 'generarOrdenTrabajo']);
     Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
     Route::patch('/cotizaciones/{id}/estado', [CotizacionController::class, 'cambiarEstado']);
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);
@@ -64,6 +65,8 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/proveedores', [ProveedorController::class, 'index']);
     Route::post('/proveedores', [ProveedorController::class, 'store']);
+    Route::put('/proveedores/{proveedor}', [ProveedorController::class, 'update']);
+    Route::delete('/proveedores/{proveedor}', [ProveedorController::class, 'destroy']);
     Route::get('/colores', [ColorController::class, 'index']);
     Route::post('/colores', [ColorController::class, 'store']);
     Route::get('/unidades', [UnidadController::class, 'index']);
@@ -82,6 +85,8 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/bsale-clientes', [BsaleClientController::class, 'store']);
     Route::get('/clientes/buscar', [ClienteController::class, 'buscar']);
     Route::get('/clientes', [ClienteController::class, 'index']);
+    Route::get('/clientes/{cliente}', [ClienteController::class, 'show']);
+    Route::put('/clientes/{cliente}', [ClienteController::class, 'update']);
     Route::get('proveedores/{productoId}/{colorId}', [ProductoController::class, 'getProveedoresPorProductoYColor']);
 
     // Rutas Lista de Precios - Las específicas ANTES del resource

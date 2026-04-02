@@ -242,6 +242,20 @@
       @cliente-creado="onClienteCreado"
     />
   </v-dialog>
+
+  <!-- Snackbar de notificaciones -->
+  <v-snackbar
+    v-model="snackbar.show"
+    :color="snackbar.color"
+    :timeout="snackbar.timeout"
+    location="top right"
+    multi-line
+  >
+    {{ snackbar.text }}
+    <template #actions>
+      <v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn>
+    </template>
+  </v-snackbar>
 </template>
 
 <script>
@@ -282,11 +296,18 @@ export default {
       clientesSincronizados: [],
       metodosPago: [
         { text: 'Efectivo', value: 'efectivo' },
-        { text: 'Transferencia', value: 'transferencia' },
-        { text: 'Cheque', value: 'cheque' },
+        { text: 'Transferencia Bancaria', value: 'transferencia' },
         { text: 'Tarjeta de Crédito', value: 'tarjeta_credito' },
-        { text: 'Tarjeta de Débito', value: 'tarjeta_debito' }
+        { text: 'Tarjeta de Débito', value: 'tarjeta_debito' },
+        { text: 'Cheque', value: 'cheque' },
+        { text: 'WebPay', value: 'webpay' },
       ],
+      snackbar: {
+        show: false,
+        text: '',
+        color: 'success',
+        timeout: 6000
+      },
       formulario: {
         tipo_documento: null,
         oficina_id: null,
@@ -317,6 +338,13 @@ export default {
     }
   },
   methods: {
+    mostrarNotificacion(text, color = 'success', timeout = 5000) {
+      this.snackbar.text = text
+      this.snackbar.color = color
+      this.snackbar.timeout = timeout
+      this.snackbar.show = true
+    },
+
     async cargarDatosIniciales() {
       console.log('🔄 Cargando datos iniciales BSALE...')
       
@@ -347,7 +375,7 @@ export default {
         console.error('Response:', error.response?.data)
         console.error('Status:', error.response?.status)
         console.error('URL:', error.config?.url)
-        this.$toast?.error('Error al cargar datos de BSALE')
+        this.mostrarNotificacion('Error al cargar datos de BSALE', 'error')
       }
     },
 
@@ -398,7 +426,7 @@ export default {
         }
       } catch (error) {
         console.error('❌ Error cargando clientes sincronizados:', error)
-        this.$toast?.error('Error al cargar clientes sincronizados')
+        this.mostrarNotificacion('Error al cargar clientes sincronizados', 'error')
       } finally {
         this.cargandoClientesSincronizados = false
       }
@@ -467,7 +495,7 @@ export default {
       // Seleccionarlo automáticamente
       this.formulario.cliente_bsale_id = nuevoCliente.id
       
-      this.$toast.success('Cliente creado exitosamente')
+      this.mostrarNotificacion('Cliente creado exitosamente', 'success')
     },
 
     async generarDocumento() {
@@ -494,22 +522,15 @@ export default {
           const documento = response.data.documento  // Cambiado de response.data.data
           const tipoDoc = this.tiposDocumento.find(t => t.id === this.formulario.tipo_documento)
           
-          this.$toast.success(
-            `${tipoDoc?.name || 'Documento'} #${documento.number} generado exitosamente\n` +
-            `Total: $${documento.totalAmount?.toLocaleString('es-CL')}\n` +
-            `ID BSALE: ${documento.id}`,
-            { timeout: 8000 }
+          const tipoNombre = tipoDoc?.name || 'Documento'
+          this.mostrarNotificacion(
+            `${tipoNombre} #${documento.number} generado — $${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(documento.totalAmount || 0)}`,
+            'success',
+            8000
           )
-          
-          // Si hay URL del PDF, mostrar opción para descargar
+
           if (documento.urlPdf) {
-            this.$toast.info(`PDF disponible: ${documento.urlPdf}`, {
-              timeout: 10000,
-              action: {
-                text: 'Abrir PDF',
-                onClick: () => window.open(documento.urlPdf, '_blank')
-              }
-            })
+            window.open(documento.urlPdf, '_blank')
           }
           
           this.$emit('documento-generado', documento)
@@ -521,7 +542,7 @@ export default {
       } catch (error) {
         console.error('Error generando documento:', error)
         const mensaje = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al generar documento'
-        this.$toast.error(mensaje)
+        this.mostrarNotificacion(mensaje, 'error')
       } finally {
         this.generandoDocumento = false
       }

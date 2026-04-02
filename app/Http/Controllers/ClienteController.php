@@ -58,7 +58,12 @@ class ClienteController extends Controller
      */
     public function show(Cliente $cliente)
     {
-        //
+        $cliente->load([
+            'cotizaciones.estado',
+            'cotizaciones.vendedor',
+        ]);
+
+        return response()->json($cliente);
     }
 
     /**
@@ -211,21 +216,29 @@ public function buscar(Request $request)
 public function sincronizarBsale()
 {
     try {
-        // Ejecutar el comando de sincronización
         \Illuminate\Support\Facades\Artisan::call('bsale:sincronizar-clientes');
-        
+
         $output = \Illuminate\Support\Facades\Artisan::output();
-        
+
+        preg_match('/Total procesados:\s*(\d+)/i', $output, $mTotal);
+        preg_match('/Nuevos clientes:\s*(\d+)/i', $output, $mNuevos);
+        preg_match('/Actualizados:\s*(\d+)/i', $output, $mActualizados);
+        preg_match('/Errores:\s*(\d+)/i', $output, $mErrores);
+
         return response()->json([
             'success' => true,
             'message' => 'Sincronización completada exitosamente',
-            'output' => $output
+            'stats' => [
+                'total'       => isset($mTotal[1])       ? (int) $mTotal[1]       : 0,
+                'nuevos'      => isset($mNuevos[1])      ? (int) $mNuevos[1]      : 0,
+                'actualizados'=> isset($mActualizados[1])? (int) $mActualizados[1]: 0,
+                'errores'     => isset($mErrores[1])     ? (int) $mErrores[1]     : 0,
+            ],
         ]);
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Error al sincronizar clientes',
-            'error' => $e->getMessage()
+            'message' => 'Error al sincronizar clientes: ' . $e->getMessage(),
         ], 500);
     }
 }

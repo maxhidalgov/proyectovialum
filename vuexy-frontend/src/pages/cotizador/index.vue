@@ -7,75 +7,72 @@
       
 
       <!-- Datos Generales -->
-      <v-card-subtitle class="text-h5">Datos generales</v-card-subtitle>
+      <div class="text-subtitle-1 font-weight-bold mb-2">Datos generales</div>
       <v-divider class="mb-4" />
 
-      <!-- Cliente + botón en fila -->
-      <v-row dense>
-        <v-col cols="6" md="4">
-          <v-row no-gutters align="center">
-            <v-col>
-              <!-- BUSCADOR TÍPICO CON DROPDOWN -->
-              <div style="position: relative;">
-                <v-text-field
-                  v-model="terminoBusquedaCliente"
-                  @input="buscarClientesSimple"
-                  @focus="onFocusBuscador"
-                  @click:clear="limpiarBusqueda"
-                  label="Cliente"
-                  placeholder="Buscar por RUT o nombre..."
-                  outlined
-                  clearable
-                  :loading="buscandoClientes"
-                  color="primary"
-                  :append-inner-icon="form.cliente ? 'mdi-check-circle' : 'mdi-magnify'"
-                  :hint="form.cliente ? `Seleccionado: ${form.cliente.razon_social}` : ''"
-                  persistent-hint
-                />
-                
-                <!-- DROPDOWN DE RESULTADOS -->
-                <v-card
-                  v-if="mostrarDropdown && clientesBuscados.length > 0"
-                  style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 300px; overflow-y: auto;"
-                  class="mt-1"
-                  elevation="8"
+      <v-row align="start">
+        <!-- Cliente -->
+        <v-col cols="12" md="5">
+          <div style="position: relative;">
+            <v-text-field
+              v-model="terminoBusquedaCliente"
+              @input="buscarClientesSimple"
+              @focus="onFocusBuscador"
+              @click:clear="limpiarBusqueda"
+              label="Cliente"
+              placeholder="Buscar por RUT o nombre..."
+              variant="outlined"
+              density="compact"
+              clearable
+              :loading="buscandoClientes"
+              color="primary"
+              :append-inner-icon="form.cliente ? 'mdi-check-circle' : 'mdi-magnify'"
+              :hint="form.cliente ? `Seleccionado: ${form.cliente.razon_social || (form.cliente.first_name + ' ' + form.cliente.last_name).trim()}` : ''"
+              persistent-hint
+            />
+            <!-- DROPDOWN DE RESULTADOS -->
+            <v-card
+              v-if="mostrarDropdown && clientesBuscados.length > 0"
+              style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 300px; overflow-y: auto;"
+              class="mt-1"
+              elevation="8"
+            >
+              <v-list density="compact">
+                <v-list-item
+                  v-for="cliente in clientesBuscados"
+                  :key="cliente.id"
+                  @click="seleccionarCliente(cliente)"
                 >
-                  <v-list density="compact">
-                    <v-list-item
-                      v-for="cliente in clientesBuscados"
-                      :key="cliente.id"
-                      @click="seleccionarCliente(cliente)"
-                      class="cursor-pointer"
-                      hover
-                    >
-                      <template v-slot:prepend>
-                        <v-icon>mdi-account</v-icon>
-                      </template>
-                      <v-list-item-title>{{ cliente.razon_social }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ cliente.identification }}</v-list-item-subtitle>
-                    </v-list-item>
-                  </v-list>
-                </v-card>
-              </div>
-            </v-col>
-            <v-col cols="auto">
-              <v-btn icon color="primary" @click="abrirModalCliente" class="ml-2">
-                <v-icon>mdi-plus</v-icon>
-              </v-btn>
-            </v-col>
-          </v-row>
+                  <template #prepend>
+                    <v-icon>mdi-account</v-icon>
+                  </template>
+                  <v-list-item-title>{{ cliente.razon_social || `${cliente.first_name || ''} ${cliente.last_name || ''}`.trim() }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ cliente.identification }}</v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </div>
         </v-col>
-      </v-row>
 
-      <!-- Observaciones -->
-      <v-row dense>
-        <v-col cols="4">
+        <!-- Botón nuevo cliente -->
+        <v-col cols="auto" class="pt-1">
+          <v-btn
+            icon="mdi-plus"
+            color="primary"
+            variant="tonal"
+            size="small"
+            @click="abrirModalCliente"
+          />
+        </v-col>
+
+        <!-- Observaciones -->
+        <v-col cols="12" md="5">
           <v-textarea
             v-model="cotizacion.observaciones"
             label="Observaciones"
-                      row-height="15"
-          rows="1"
-            outlined
+            rows="1"
+            variant="outlined"
+            density="compact"
             color="primary"
             auto-grow
           />
@@ -84,20 +81,20 @@
       <v-divider class="my-4" />
 
       <!-- Lista de Ventanas -->
-      <v-card-subtitle class="text-h5">Items de la Cotización</v-card-subtitle>
+      <div class="text-subtitle-1 font-weight-bold mb-2">Items de la Cotización</div>
       <v-divider class="mb-4" />
 
       <!-- Botones para agregar items -->
-      <v-row class="mb-4">
+      <v-row class="mb-4" align="center">
         <v-col cols="auto">
-          <v-btn color="primary" @click="toggleSeccionVentana" :disabled="!tiposVentanaTodos.length">
-            <v-icon left>mdi-window-closed-variant</v-icon>
+          <v-btn color="primary" variant="tonal" @click="toggleSeccionVentana" :disabled="!tiposVentanaTodos.length">
+            <v-icon start>mdi-window-closed-variant</v-icon>
             Ventana
           </v-btn>
         </v-col>
         <v-col cols="auto">
-          <v-btn color="success" @click="abrirModalProductos">
-            <v-icon left>mdi-package-variant</v-icon>
+          <v-btn color="success" variant="tonal" @click="abrirModalProductos">
+            <v-icon start>mdi-package-variant</v-icon>
             Productos
           </v-btn>
         </v-col>
@@ -105,10 +102,10 @@
 
       <!-- Sección colapsable de pre-configuración de ventanas -->
       <v-expand-transition>
-        <v-card v-if="mostrarSeccionVentana" class="mb-4" outlined>
+        <v-card v-if="mostrarSeccionVentana" class="mb-4" variant="outlined">
           <v-card-text>
-            <v-card-subtitle class="text-subtitle-1 font-weight-bold">Pre-configuración de Ventana</v-card-subtitle>
-            <v-row dense class="mt-2">
+            <div class="text-subtitle-2 font-weight-bold mb-3">Pre-configuración de Ventana</div>
+            <v-row dense>
               <v-col cols="12" md="6">
                 <v-select
                   v-model="cotizacion.material"
@@ -116,20 +113,20 @@
                   item-title="nombre"
                   item-value="id"
                   label="Material"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   color="primary"
                 />
               </v-col>
               <v-col cols="12" md="6">
                 <v-select
                   v-model="cotizacion.color"
-                  :items="colores"
+                  :items="coloresFiltrados"
                   item-title="nombre"
                   item-value="id"
                   label="Color"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   color="primary"
                 />
               </v-col>
@@ -140,8 +137,8 @@
                   item-title="nombre"
                   item-value="id"
                   label="Tipo de vidrio"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   color="primary"
                 />
               </v-col>
@@ -152,15 +149,14 @@
                   item-title="nombre"
                   item-value="id"
                   label="Producto de vidrio"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   color="primary"
                 />
               </v-col>
             </v-row>
-            
-            <v-btn color="primary" @click="abrirModalVentana" block class="mt-2">
-              <v-icon left>mdi-plus</v-icon>
+            <v-btn color="primary" variant="flat" @click="abrirModalVentana" block class="mt-3">
+              <v-icon start>mdi-plus</v-icon>
               Agregar Ventana
             </v-btn>
           </v-card-text>
@@ -270,11 +266,40 @@
         @agregar-productos="agregarProductosCotizacion"
       />
 
-      <!-- Botón para agregar ventana -->
       <v-divider class="my-4" />
+
+      <!-- Total en tiempo real -->
+      <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0" class="mb-2" justify="end">
+        <v-col cols="auto">
+          <v-card variant="tonal" color="primary" rounded="lg" min-width="260">
+            <v-card-text class="pa-3">
+              <v-row dense no-gutters>
+                <v-col>
+                  <div class="text-caption text-medium-emphasis">Subtotal ventanas</div>
+                  <div class="text-caption text-medium-emphasis mt-1">Subtotal productos</div>
+                  <v-divider class="my-2" />
+                  <div class="text-subtitle-2 font-weight-bold">Total neto</div>
+                  <div class="text-caption text-medium-emphasis">IVA (19%)</div>
+                  <div class="text-subtitle-1 font-weight-bold mt-1">Total con IVA</div>
+                </v-col>
+                <v-col cols="auto" class="text-right">
+                  <div class="text-caption">${{ formatearNumero(totalVentanas) }}</div>
+                  <div class="text-caption mt-1">${{ formatearNumero(totalProductos) }}</div>
+                  <v-divider class="my-2" />
+                  <div class="text-subtitle-2 font-weight-bold">${{ formatearNumero(totalNeto) }}</div>
+                  <div class="text-caption">${{ formatearNumero(totalIva) }}</div>
+                  <div class="text-subtitle-1 font-weight-bold mt-1 text-primary">${{ formatearNumero(totalConIva) }}</div>
+                </v-col>
+              </v-row>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+
       <div class="d-flex justify-end">
         <v-btn
           color="primary"
+          size="large"
           :loading="loading"
           :disabled="loading"
           @click="guardarCotizacion"
@@ -282,6 +307,7 @@
           <template #loader>
             <v-progress-circular indeterminate color="white" size="20" />
           </template>
+          <v-icon start>mdi-content-save</v-icon>
           {{ modoEdicion ? 'Guardar Cambios' : 'Guardar Cotización' }}
         </v-btn>
       </div>
@@ -472,7 +498,7 @@
                     <p><strong>Ancho:</strong> {{ ventana.ancho }}mm</p>
                     <p><strong>Alto:</strong> {{ ventana.alto }}mm</p>
                     <p><strong>Cantidad:</strong> {{ ventana.cantidad }}</p>
-                    <p><strong>Precio:</strong> ${{ ventana.precio }}</p>
+                    <p><strong>Precio:</strong> ${{ formatearNumero(ventana.precio) }}</p>
                   </v-card-text>
                 </v-card>
               </v-col>
@@ -484,89 +510,145 @@
   </v-container>
 
   <!-- Modal para crear cliente LOCAL -->
-  <v-dialog v-model="modalCliente" max-width="600px">
+  <v-dialog v-model="modalCliente" max-width="600" persistent>
     <v-card>
-      <v-card-title class="text-h5 pa-4">
-        <v-icon class="mr-2" color="primary">mdi-account-plus</v-icon>
-        Crear Cliente Nuevo
+      <v-card-title class="d-flex align-center justify-space-between pa-4">
+        <div class="d-flex align-center gap-2">
+          <v-icon color="primary">mdi-account-plus</v-icon>
+          Crear Cliente Nuevo
+        </div>
+        <v-btn icon="mdi-close" variant="text" @click="modalCliente = false" />
       </v-card-title>
-      <v-divider></v-divider>
+      <v-divider />
       <v-card-text class="pa-4">
-        <v-alert type="info" variant="tonal" class="mb-4">
-          Este cliente se guardará en tu base de datos local. Para facturar, deberás seleccionar un cliente sincronizado con Bsale.
-        </v-alert>
         <v-form ref="formCliente">
           <v-row>
             <v-col cols="12">
-              <v-text-field
-                v-model="nuevoCliente.razon_social"
-                label="Razón Social / Nombre *"
-                :rules="[v => !!v || 'Razón social es requerida']"
-                required
-                outlined
-              ></v-text-field>
+              <v-select
+                v-model="nuevoCliente.tipo_cliente"
+                :items="[{ title: 'Empresa', value: 'empresa' }, { title: 'Persona natural', value: 'persona' }]"
+                label="Tipo de cliente *"
+                variant="outlined"
+                density="compact"
+                :rules="[v => !!v || 'Requerido']"
+              />
             </v-col>
+            <template v-if="nuevoCliente.tipo_cliente === 'empresa'">
+              <v-col cols="12">
+                <v-text-field
+                  v-model="nuevoCliente.razon_social"
+                  label="Razón social *"
+                  variant="outlined"
+                  density="compact"
+                  :rules="[v => !!v || 'Razón social es requerida']"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="nuevoCliente.giro"
+                  label="Giro"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+            </template>
+            <template v-else-if="nuevoCliente.tipo_cliente === 'persona'">
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="nuevoCliente.first_name"
+                  label="Nombre *"
+                  variant="outlined"
+                  density="compact"
+                  :rules="[v => !!v || 'Nombre es requerido']"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="nuevoCliente.last_name"
+                  label="Apellido"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+            </template>
             <v-col cols="12" md="6">
               <v-text-field
                 v-model="nuevoCliente.identification"
                 label="RUT"
-                outlined
-                hint="Formato: 12345678-9"
-              ></v-text-field>
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="nuevoCliente.email"
-                label="Email"
-                type="email"
-                outlined
-              ></v-text-field>
+                variant="outlined"
+                density="compact"
+                placeholder="12.345.678-9"
+              />
             </v-col>
             <v-col cols="12" md="6">
               <v-text-field
                 v-model="nuevoCliente.phone"
                 label="Teléfono"
-                outlined
-              ></v-text-field>
+                variant="outlined"
+                density="compact"
+              />
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col cols="12">
               <v-text-field
-                v-model="nuevoCliente.ciudad"
-                label="Ciudad"
-                outlined
-              ></v-text-field>
+                v-model="nuevoCliente.email"
+                label="Email"
+                type="email"
+                variant="outlined"
+                density="compact"
+              />
             </v-col>
             <v-col cols="12">
               <v-text-field
                 v-model="nuevoCliente.address"
                 label="Dirección"
-                outlined
-              ></v-text-field>
+                variant="outlined"
+                density="compact"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="nuevoCliente.ciudad"
+                label="Ciudad"
+                variant="outlined"
+                density="compact"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="nuevoCliente.comuna"
+                label="Comuna"
+                variant="outlined"
+                density="compact"
+              />
             </v-col>
           </v-row>
         </v-form>
       </v-card-text>
-      <v-divider></v-divider>
+      <v-divider />
       <v-card-actions class="pa-4">
-        <v-spacer></v-spacer>
-        <v-btn
-          color="grey"
-          text
-          @click="modalCliente = false"
-        >
-          Cancelar
-        </v-btn>
+        <v-spacer />
+        <v-btn variant="text" @click="modalCliente = false">Cancelar</v-btn>
         <v-btn
           color="primary"
+          variant="flat"
+          :loading="guardandoCliente"
           @click="guardarCliente"
         >
-          <v-icon left>mdi-content-save</v-icon>
-          Guardar Cliente
+          <v-icon start>mdi-content-save</v-icon>
+          Guardar cliente
         </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
- 
+
+  <!-- Snackbar -->
+  <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout" location="bottom right" multi-line>
+    {{ snackbar.text }}
+    <template #actions>
+      <v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn>
+    </template>
+  </v-snackbar>
+
 </template>
 
 <script setup>
@@ -657,6 +739,14 @@ const colores = ref([])
 const tiposVidrio = ref([])
 const productosVidrio = ref([])
 
+// Colores filtrados por material: Aluminio solo muestra sus colores, PVC los suyos
+const coloresFiltrados = computed(() => {
+  const idsAluminio = [1, 2, 4, 7, 8] // Blanco, Negro, Roble, Mate, Titanio
+  const idsPVC      = [1, 2, 4, 5, 6] // Blanco, Negro, Roble, Nogal, Grafito
+  const ids = cotizacion.material === 1 ? idsAluminio : idsPVC
+  return colores.value.filter(c => ids.includes(c.id))
+})
+
 const clientes = ref([])
 const clientesBuscados = ref([])
 const buscandoClientes = ref(false)
@@ -666,18 +756,20 @@ const mostrarDropdown = ref(false)
 
 const clienteSearch = ref('')
 const modalCliente = ref(false)
+const formCliente = ref(null)
 const comboboxKey = ref(0)
+const guardandoCliente = ref(false)
 
-const nuevoCliente = ref({
-  razon_social: '',
-  identification: '',
-  email: '',
-  phone: '',
-  address: '',
-  ciudad: '',
-  comuna: '',
-  giro: ''
+const snackbar = ref({ show: false, text: '', color: 'success', timeout: 5000 })
+const mostrarNotificacion = (text, color = 'success', timeout = 5000) => {
+  snackbar.value = { show: true, text, color, timeout }
+}
+
+const nuevoClienteVacio = () => ({
+  tipo_cliente: null, razon_social: '', first_name: '', last_name: '',
+  identification: '', email: '', phone: '', address: '', ciudad: '', comuna: '', giro: '',
 })
+const nuevoCliente = ref(nuevoClienteVacio())
 
 const productosVidrioCombinados = computed(() => {
   return productosVidrio.value.flatMap(p => {
@@ -1008,8 +1100,8 @@ const headersProductos = [
   { title: 'Tipo', key: 'tipo_producto' },
   { title: 'Unidad', key: 'unidad' },
   { title: 'Cantidad', key: 'cantidad' },
-  { title: 'Precio Costo', key: 'precio_costo', align: 'end' },
-  { title: 'Precio Venta', key: 'precio_venta', align: 'end' },
+  { title: 'Precio Costo (Neto)', key: 'precio_costo', align: 'end' },
+  { title: 'Precio Venta (Neto)', key: 'precio_venta', align: 'end' },
   { title: 'Acciones', key: 'acciones', sortable: false },
 ]
 
@@ -1128,8 +1220,18 @@ const eliminarProducto = (index) => {
 }
 
 const formatearNumero = (numero) => {
-  return new Intl.NumberFormat('es-CL').format(numero || 0)
+  return new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(numero) || 0)
 }
+
+const totalVentanas = computed(() =>
+  cotizacion.ventanas.reduce((sum, v) => sum + (Number(v.precio) || 0), 0)
+)
+const totalProductos = computed(() =>
+  cotizacion.productos.reduce((sum, p) => sum + (Number(p.precio_venta) * Number(p.cantidad) || 0), 0)
+)
+const totalNeto = computed(() => totalVentanas.value + totalProductos.value)
+const totalIva = computed(() => Math.round(totalNeto.value * 0.19))
+const totalConIva = computed(() => totalNeto.value + totalIva.value)
 
 const eliminarVentana = (index) => {
   cotizacion.ventanas.splice(index, 1)
@@ -1390,48 +1492,32 @@ const limpiarBusqueda = () => {
 }
 
 const guardarCliente = async () => {
+  const { valid } = await formCliente.value.validate()
+  if (!valid) return
   try {
-    console.log('💾 Guardando cliente local:', nuevoCliente.value)
-    
-    // Guardar en la tabla local de clientes
+    guardandoCliente.value = true
     const res = await api.post('/api/clientes', nuevoCliente.value)
-    
-    console.log('✅ Respuesta completa:', res.data)
-    
-    // La API devuelve { message, cliente }
     const clienteCreado = res.data.cliente || res.data
-    
-    console.log('✅ Cliente creado:', clienteCreado)
-    
-    // Agregar a la lista de clientes disponibles
-    clientesBuscados.value.push(clienteCreado)
-    
-    // Seleccionar el cliente recién creado usando el mismo flujo que seleccionarCliente
+
+    // Seleccionar el cliente recién creado
     form.cliente = clienteCreado
     cotizacion.cliente_id = clienteCreado.id
-    terminoBusquedaCliente.value = clienteCreado.razon_social
+    terminoBusquedaCliente.value =
+      clienteCreado.razon_social ||
+      `${clienteCreado.first_name || ''} ${clienteCreado.last_name || ''}`.trim()
     mostrarDropdown.value = false
     clientesBuscados.value = []
-    
-    // Cerrar modal y limpiar formulario
+
     modalCliente.value = false
-    nuevoCliente.value = {
-      razon_social: '',
-      identification: '',
-      email: '',
-      phone: '',
-      address: '',
-      ciudad: ''
-    }
-    
-    console.log('✅ Cliente seleccionado:', form.cliente)
-    console.log('✅ Cliente ID asignado:', cotizacion.cliente_id)
-    console.log('✅ Término búsqueda:', terminoBusquedaCliente.value)
-    
-    alert('✅ Cliente creado y seleccionado exitosamente')
+    nuevoCliente.value = nuevoClienteVacio()
+    formCliente.value.reset()
+
+    mostrarNotificacion('Cliente creado y seleccionado correctamente.', 'success')
   } catch (error) {
-    console.error('❌ Error al crear cliente:', error)
-    alert('❌ Error al crear cliente: ' + (error.response?.data?.message || error.message))
+    const msg = error.response?.data?.message || error.message
+    mostrarNotificacion('Error al crear cliente: ' + msg, 'error', 8000)
+  } finally {
+    guardandoCliente.value = false
   }
 }
 
