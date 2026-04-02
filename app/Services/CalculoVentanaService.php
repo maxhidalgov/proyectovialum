@@ -564,6 +564,7 @@ class CalculoVentanaService
         $proveedorVidrio = $ventana['proveedorVidrio'] ?? $ventana['proveedor_vidrio'] ?? 5;
         $tipoVidrioId = $ventana['tipoVidrio'] ?? 2; // 1=monolítico, 2=termopanel
         $manillon = $ventana['manillon'] ?? false; // true=manillón, false=pestillo
+        $hojasMoviles = $ventana['hojas_moviles'] ?? 2; // hojas con carro, cremona y manilla
 
         Log::info("🪟 Iniciando cálculo Corredera AL25", [
             'tipo_ventana_id' => 55,
@@ -631,8 +632,20 @@ class CalculoVentanaService
 
         // ✅ IDs de herrajes
         $idSilicona = 44;
+        // Cremonas (mismos IDs que Corredera Sliding E15, solo aplican con manillón)
+        $idsCremonas = [55, 57, 58, 59, 60, 61, 63, 64];
+        // Carros: 231=Termopanel, 232=Monolítico
+        $idCarroTP  = 231;
+        $idCarroMon = 232;
+        // Manillas: 68=manillón, 233=pestillo <1800mm, 234=pestillo >=1800mm
+        $idManillaManillon   = 68;
+        $idManillaPestillo   = 233;
+        $idManillaPestilloXL = 234;
 
-        $idsHerrajes = [$idSilicona];
+        $idsHerrajes = array_merge(
+            [$idSilicona, $idCarroTP, $idCarroMon, $idManillaManillon, $idManillaPestillo, $idManillaPestilloXL],
+            $manillon ? $idsCremonas : []
+        );
 
         // ✅ Cargar productos únicos (perfiles + herrajes + vidrio)
         $idsUnicos = array_unique(array_column($perfilesConfig, 'id'));
@@ -692,6 +705,67 @@ class CalculoVentanaService
 
         // ✅ HERRAJES
         $materiales[] = self::crearHerraje($productos[$idSilicona], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
+
+        // ✅ CARROS - 2 por hoja móvil
+        $idCarro = ($tipoVidrioId == 2) ? $idCarroTP : $idCarroMon;
+        if (isset($productos[$idCarro])) {
+            $carro = $productos[$idCarro];
+            $costoCarro = self::buscarCostoPorColor($carro, $colorId);
+            $materiales[] = [
+                'producto_id'    => $carro->id,
+                'nombre'         => $carro->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $hojasMoviles * 2 * $cantidad,
+                'costo_unitario' => round($costoCarro),
+                'costo_total'    => round($costoCarro * $hojasMoviles * 2 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($carro, $colorId),
+            ];
+        }
+
+        // ✅ CREMONAS - solo cuando es manillón, 1 por hoja móvil
+        if ($manillon) {
+            $cremonaId = 55; // default: 210mm / 250mm
+            if ($alto <= 400)       $cremonaId = 55;
+            elseif ($alto <= 800)   $cremonaId = 57;
+            elseif ($alto <= 1000)  $cremonaId = 58;
+            elseif ($alto <= 1200)  $cremonaId = 59;
+            elseif ($alto <= 1400)  $cremonaId = 60;
+            elseif ($alto <= 1600)  $cremonaId = 61;
+            elseif ($alto <= 2000)  $cremonaId = 63;
+            else                    $cremonaId = 64;
+
+            if (isset($productos[$cremonaId])) {
+                $cremona = $productos[$cremonaId];
+                $costoCremona = self::buscarCostoPorColor($cremona, $colorId);
+                $materiales[] = [
+                    'producto_id'    => $cremona->id,
+                    'nombre'         => $cremona->nombre,
+                    'unidad'         => 'unidad',
+                    'cantidad'       => $hojasMoviles * $cantidad,
+                    'costo_unitario' => round($costoCremona),
+                    'costo_total'    => round($costoCremona * $hojasMoviles * $cantidad),
+                    'proveedor'      => self::buscarNombreProveedor($cremona, $colorId),
+                ];
+            }
+        }
+
+        // ✅ MANILLAS - 1 por hoja móvil
+        $idManilla = $manillon
+            ? $idManillaManillon
+            : ($alto < 1800 ? $idManillaPestillo : $idManillaPestilloXL);
+        if (isset($productos[$idManilla])) {
+            $manilla = $productos[$idManilla];
+            $costoManilla = self::buscarCostoPorColor($manilla, $colorId);
+            $materiales[] = [
+                'producto_id'    => $manilla->id,
+                'nombre'         => $manilla->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $hojasMoviles * $cantidad,
+                'costo_unitario' => round($costoManilla),
+                'costo_total'    => round($costoManilla * $hojasMoviles * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($manilla, $colorId),
+            ];
+        }
 
         // ✅ Calcular vidrio - 2 hojas con dimensiones específicas
         // Ancho por hoja: (X/2)-68
