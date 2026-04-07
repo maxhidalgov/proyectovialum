@@ -1846,6 +1846,8 @@ const guardarCotizacion = async () => {
           cantidad: v.cantidad,
           color_id: v.color,
           tipo_vidrio_id: v.tipoVidrio, // ✅ AGREGAR ESTE CAMPO
+          tipo_vidrio: v.tipoVidrio,   // ✅ Para hoja de cortes (CortesService)
+          manillon: v.manillon ?? null, // ✅ Para hoja de cortes (Corredera AL25)
           producto_vidrio_proveedor_id: v.productoVidrioProveedor,  
           producto_id: relacion?.producto_id,
           proveedor_id: relacion?.proveedor_id,

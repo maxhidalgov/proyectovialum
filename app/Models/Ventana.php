@@ -23,7 +23,8 @@ class Ventana extends Model
         'hojas_moviles',
         'cantidad',
         'costo_unitario',
-        'precio_unitario'
+        'precio_unitario',
+        'config',
     ];
 
     protected $casts = [
@@ -31,6 +32,7 @@ class Ventana extends Model
         'precio' => 'decimal:2',
         'costo_unitario' => 'decimal:2',
         'precio_unitario' => 'decimal:2',
+        'config' => 'array',
     ];
 
     // ✅ Relación con TipoVentana

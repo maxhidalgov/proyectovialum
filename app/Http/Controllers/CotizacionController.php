@@ -135,15 +135,14 @@ public function store(Request $request)
             Log::info("🔍 VENTANA $index:", $ventana);
             
             $ventanasGuardadas[] = $cotizacion->ventanas()->create([
-                'tipo_ventana_id' => $ventana['tipo_ventana_id'] ?? null,           // ✅ CORREGIDO
+                'tipo_ventana_id' => $ventana['tipo_ventana_id'] ?? null,
                 'ancho' => $ventana['ancho'] ?? null,
                 'alto' => $ventana['alto'] ?? null,
                 'cantidad' => $ventana['cantidad'] ?? 1,
-                'color_id' => $ventana['color_id'] ?? null,                        // ✅ CORREGIDO
-                'producto_vidrio_proveedor_id' => $ventana['producto_vidrio_proveedor_id'] ?? null, // ✅ CORREGIDO
+                'color_id' => $ventana['color_id'] ?? null,
+                'producto_vidrio_proveedor_id' => $ventana['producto_vidrio_proveedor_id'] ?? null,
                 'costo' => $ventana['costo'] ?? 0,
                 'precio' => $ventana['precio'] ?? 0,
-                // Agregar campos para Bay Window y correderas
                 'hojas_totales' => $ventana['hojas_totales'] ?? null,
                 'hojas_moviles' => $ventana['hojas_moviles'] ?? null,
                 'hoja_movil_seleccionada' => $ventana['hoja_movil_seleccionada'] ?? null,
@@ -154,6 +153,12 @@ public function store(Request $request)
                 'tipo_ventana_izquierda' => isset($ventana['tipo_ventana_izquierda']) ? json_encode($ventana['tipo_ventana_izquierda']) : null,
                 'tipo_ventana_centro' => isset($ventana['tipo_ventana_centro']) ? json_encode($ventana['tipo_ventana_centro']) : null,
                 'tipo_ventana_derecha' => isset($ventana['tipo_ventana_derecha']) ? json_encode($ventana['tipo_ventana_derecha']) : null,
+                // Parámetros extra para recalculo y hoja de cortes
+                'config' => array_filter([
+                    'tipo_vidrio'     => $ventana['tipo_vidrio'] ?? $ventana['tipoVidrio'] ?? null,
+                    'manillon'        => $ventana['manillon'] ?? null,
+                    'proveedor_vidrio'=> $ventana['proveedor_vidrio'] ?? $ventana['proveedorVidrio'] ?? null,
+                ], fn($v) => $v !== null),
             ]);
         }
         } // Cierre del if de ventanas
@@ -361,9 +366,14 @@ public function store(Request $request)
                             'precio' => $ventanaData['precio'],
                             'costo_unitario' => $ventanaData['costo_unitario'] ?? null,
                             'precio_unitario' => $ventanaData['precio_unitario'] ?? null,
-                            'hojas_totales' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_totales'] : null,
-                            'hojas_moviles' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_moviles'] : null,
+                            'hojas_totales' => $ventanaData['hojas_totales'] ?? null,
+                            'hojas_moviles' => $ventanaData['hojas_moviles'] ?? null,
                             'cantidad' => $ventanaData['cantidad'] ?? 1,
+                            'config' => array_filter([
+                                'tipo_vidrio'      => $ventanaData['tipo_vidrio'] ?? $ventanaData['tipoVidrio'] ?? null,
+                                'manillon'         => $ventanaData['manillon'] ?? null,
+                                'proveedor_vidrio' => $ventanaData['proveedor_vidrio'] ?? $ventanaData['proveedorVidrio'] ?? null,
+                            ], fn($v) => $v !== null) ?: null,
                         ]);
                     }
                 } else {
@@ -376,9 +386,14 @@ public function store(Request $request)
                         'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
                         'costo' => $ventanaData['costo'] ?? 0,
                         'precio' => $ventanaData['precio'] ?? 0,
-                        'hojas_totales' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_totales'] : null,
-                        'hojas_moviles' => $ventanaData['tipo_ventana_id'] === 3 ? $ventanaData['hojas_moviles'] : null,
+                        'hojas_totales' => $ventanaData['hojas_totales'] ?? null,
+                        'hojas_moviles' => $ventanaData['hojas_moviles'] ?? null,
                         'cantidad' => $ventanaData['cantidad'] ?? 1,
+                        'config' => array_filter([
+                            'tipo_vidrio'      => $ventanaData['tipo_vidrio'] ?? $ventanaData['tipoVidrio'] ?? null,
+                            'manillon'         => $ventanaData['manillon'] ?? null,
+                            'proveedor_vidrio' => $ventanaData['proveedor_vidrio'] ?? $ventanaData['proveedorVidrio'] ?? null,
+                        ], fn($v) => $v !== null) ?: null,
                     ]);
                 }
             }
@@ -488,6 +503,11 @@ public function store(Request $request)
                 }
             }
         });
+
+        // Recalcular y guardar el total actualizado
+        $totalVentanas = collect($request->ventanas)->sum(fn($v) => ($v['precio'] ?? 0) * ($v['cantidad'] ?? 1));
+        $totalProductos = $request->has('productos') ? collect($request->productos)->sum('total') : 0;
+        $cotizacion->update(['total' => $totalVentanas + $totalProductos]);
 
         return response()->json(['message' => 'Cotización actualizada correctamente']);
     }

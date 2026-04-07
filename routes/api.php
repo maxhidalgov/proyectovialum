@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\CotizadorController;
 use App\Http\Controllers\EstadoCotizacionController;
 use App\Http\Controllers\ListaPrecioController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ProduccionController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -47,6 +48,8 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
     Route::get('/cotizaciones/{id}/orden-trabajo', [CotizacionController::class, 'generarOrdenTrabajo']);
+    Route::get('/cotizaciones/{id}/hoja-cortes', [ProduccionController::class, 'hojaCortes']);
+    Route::get('/cotizaciones/{id}/materiales', [ProduccionController::class, 'resumenMateriales']);
     Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
     Route::patch('/cotizaciones/{id}/estado', [CotizacionController::class, 'cambiarEstado']);
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);

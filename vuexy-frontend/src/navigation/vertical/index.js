@@ -94,6 +94,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Producción',
+    to: { name: 'produccion' },
+    icon: { icon: 'mdi-scissors-cutting' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Administración',
     icon: { icon: 'tabler-settings' },
     permission: 'gestionar_usuarios', // Solo admin
