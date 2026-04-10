@@ -31,6 +31,7 @@ declare module 'vue-router/auto-routes' {
     'cotizacion-editar-eliminarparece': RouteRecordInfo<'cotizacion-editar-eliminarparece', '/cotizacion-editarELIMINARPARECE', Record<never, never>, Record<never, never>>,
     'cotizacion-ver': RouteRecordInfo<'cotizacion-ver', '/cotizacion-ver', Record<never, never>, Record<never, never>>,
     'cotizaciones': RouteRecordInfo<'cotizaciones', '/cotizaciones', Record<never, never>, Record<never, never>>,
+    'cotizaciones-importar-pvc': RouteRecordInfo<'cotizaciones-importar-pvc', '/cotizaciones/importar-pvc', Record<never, never>, Record<never, never>>,
     'cotizador': RouteRecordInfo<'cotizador', '/cotizador', Record<never, never>, Record<never, never>>,
     'cotizador-index-posiblenuevo': RouteRecordInfo<'cotizador-index-posiblenuevo', '/cotizador/indexPOSIBLENUEVO', Record<never, never>, Record<never, never>>,
     'cotizador2': RouteRecordInfo<'cotizador2', '/cotizador2', Record<never, never>, Record<never, never>>,

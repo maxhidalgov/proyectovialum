@@ -592,7 +592,7 @@ class CalculoVentanaService
                 ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],        // Marco Superior
                 ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],        // Marco Inferior
                 ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],                // Jamba
-                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja
+                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja (arriba+abajo × 2 hojas)
                 ['id' => 166, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // Junquillo Lateral
                 ['id' => 165, 'desc' => '(X/2)-65', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) - 65], // Junquillo Horizontal
             ];
@@ -602,7 +602,7 @@ class CalculoVentanaService
                 ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
                 ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
                 ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],
-                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) + 3],
+                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja (arriba+abajo × 2 hojas)
                 ['id' => 176, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // Junquillo Lateral (Pestillo)
                 ['id' => 165, 'desc' => '(X/2)-65', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) - 65],
             ];
@@ -641,10 +641,16 @@ class CalculoVentanaService
         $idManillaManillon   = 68;
         $idManillaPestillo   = 233;
         $idManillaPestilloXL = 234;
+        // Burlete: termopanel→235(2218), monolítico según espesor: vid4mm(31)→238, vid5mm(240)→237, vid6mm(241)→239
+        $burleteMapMonolitico = [31 => 238, 240 => 237, 241 => 239];
+        $idBurlete = ($tipoVidrioId == 2)
+            ? 235
+            : ($burleteMapMonolitico[$productoVidrioId] ?? null);
 
         $idsHerrajes = array_merge(
             [$idSilicona, $idCarroTP, $idCarroMon, $idManillaManillon, $idManillaPestillo, $idManillaPestilloXL],
-            $manillon ? $idsCremonas : []
+            $manillon ? $idsCremonas : [],
+            $idBurlete ? [$idBurlete] : []
         );
 
         // ✅ Cargar productos únicos (perfiles + herrajes + vidrio)
@@ -764,6 +770,26 @@ class CalculoVentanaService
                 'costo_unitario' => round($costoManilla),
                 'costo_total'    => round($costoManilla * $hojasMoviles * $cantidad),
                 'proveedor'      => self::buscarNombreProveedor($manilla, $colorId),
+            ];
+        }
+
+        // ✅ BURLETE - según espesor de cristal monolítico (solo aplica a monolítico)
+        // Dimensiones de la hoja (marco): anchoHoja = (X/2)+3, altoHoja = Y-58
+        // Cantidad en metros: (4 * anchoHoja + 4 * altoHoja) / 1000  [2 hojas × 2 lados c/u = 4×]
+        if ($idBurlete && isset($productos[$idBurlete])) {
+            $burlete = $productos[$idBurlete];
+            $anchoHoja = ($ancho / 2) + 3;
+            $altoHoja  = $alto - 58;
+            $metrosBurlete = (4 * $anchoHoja + 4 * $altoHoja) / 1000;
+            $costoBurlete = self::buscarCostoPorColor($burlete, $colorId);
+            $materiales[] = [
+                'producto_id'    => $burlete->id,
+                'nombre'         => $burlete->nombre,
+                'unidad'         => 'm',
+                'cantidad'       => round($metrosBurlete * $cantidad, 3),
+                'costo_unitario' => round($costoBurlete),
+                'costo_total'    => round($costoBurlete * $metrosBurlete * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($burlete, $colorId),
             ];
         }
 

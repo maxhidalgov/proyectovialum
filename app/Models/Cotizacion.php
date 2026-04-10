@@ -22,6 +22,7 @@ class Cotizacion extends Model
         'estado_facturacion',
         'url_pdf_bsale',
         'token_bsale',
+        'adjunto_winperfil',
     ];
 
     public function cliente()

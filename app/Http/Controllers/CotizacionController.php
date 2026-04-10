@@ -774,4 +774,316 @@ public function getAprobadas()
     }
 }
 
+    // ─────────────────────────────────────────────────────────────
+    // PARSEAR PDF WINPERFIL → devuelve datos estructurados
+    // ─────────────────────────────────────────────────────────────
+    public function parseWinperfil(Request $request)
+    {
+        $request->validate(['pdf' => 'required|file|mimes:pdf|max:20480']);
+
+        try {
+            $parser = new \Smalot\PdfParser\Parser();
+            $pdf    = $parser->parseFile($request->file('pdf')->getRealPath());
+            $texto  = $pdf->getText();
+
+            return response()->json(self::parsearTextoWinperfil($texto));
+        } catch (\Exception $e) {
+            Log::error('❌ Error parseando PDF WINPERFIL', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'No se pudo leer el PDF: ' . $e->getMessage()], 422);
+        }
+    }
+
+    private static function parsearTextoWinperfil(string $text): array
+    {
+        $text  = str_replace(["\r\n", "\r"], "\n", $text);
+        $lines = array_values(array_filter(
+            array_map('trim', explode("\n", $text)),
+            fn($l) => $l !== ''
+        ));
+
+        $resultado = [
+            'numero_presupuesto' => '',
+            'fecha'              => '',
+            'cliente_nombre'     => '',
+            'items'              => [],
+            'total_neto'         => 0,
+        ];
+
+        // ── Presupuesto Nº ──────────────────────────────────────
+        foreach ($lines as $line) {
+            if (preg_match('/Presupuesto\s+N[ºo°]?\s*[:\-]\s*(.+)/ui', $line, $m)) {
+                $resultado['numero_presupuesto'] = trim($m[1]);
+                break;
+            }
+        }
+
+        // ── Fecha DD-MM-YYYY → YYYY-MM-DD ───────────────────────
+        foreach ($lines as $line) {
+            if (preg_match('/^Fecha:\s*(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/i', $line, $m)) {
+                $resultado['fecha'] = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+                break;
+            }
+        }
+
+        // ── Cliente: primera línea no vacía después de "OBRA:" ───
+        foreach ($lines as $i => $line) {
+            if (preg_match('/^OBRA:\s*$/i', $line)) {
+                for ($j = $i + 1; $j < min($i + 5, count($lines)); $j++) {
+                    if ($lines[$j] !== '' && !preg_match('/^[-\s]*\(/', $lines[$j])) {
+                        $resultado['cliente_nombre'] = $lines[$j];
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        // ── Items: buscar filas Vx cant precio CLP$ total CLP$ ──
+        $itemMatches = [];
+        foreach ($lines as $i => $line) {
+            if (preg_match('/^\s*(V\d+[A-Za-z]?)\s+(\d+)\s+([\d\.]+)\s+CLP\$\s+([\d\.]+)\s+CLP\$/i', $line, $m)) {
+                $itemMatches[] = [
+                    'index'           => $i,
+                    'tipo'            => $m[1],
+                    'cantidad'        => (int) $m[2],
+                    'precio_unitario' => (int) str_replace('.', '', $m[3]),
+                    'total'           => (int) str_replace('.', '', $m[4]),
+                ];
+            }
+        }
+
+        // Para cada item, buscar hacia atrás su título, color y medida
+        $ignorar = [
+            '/GRAFICO/i',           // captura "GRAFICO", "DESCRIPCIÓNGRAFICO", etc.
+            '/DESCRIPCI/i',         // captura "DESCRIPCIÓN" y variantes combinadas
+            '/^TIPO\s+CANTIDAD/i',
+            '/^DATOS DEL/i', '/^Vialum/i', '/^Balmaceda/i', '/^\s*\(/',
+            '/^Rut:/i', '/^Tel[eé]/i', '/^Celular/i', '/^Fax/i',
+            '/^Forma de/i', '/^OBRA:/i', '/página/ui',
+            '/^[⦁•\-]\s/', '/^Presupuesto/i', '/^Fecha/i',
+            '/^termopanel/i', '/^m\s*\(/i', '/^\d+[\.,]/i',
+        ];
+
+        foreach ($itemMatches as $match) {
+            $titulo     = '';
+            $serie      = '';
+            $color      = '';
+            $medida     = '';
+            $superficie = '';
+
+            for ($j = $match['index'] - 1; $j >= max(0, $match['index'] - 30); $j--) {
+                $l = $lines[$j];
+
+                // Parar si encontramos la línea de otro item (V2, V6A, etc.)
+                if ($j < $match['index'] - 1 && preg_match('/^\s*V\d+[A-Za-z]?\s+\d+\s+[\d\.]+\s+CLP\$/i', $l)) {
+                    break;
+                }
+
+                if (preg_match('/Serie:\s*(.+)/i',      $l, $m)) $serie      = trim($m[1]);
+                if (preg_match('/Color:\s*(.+)/i',      $l, $m)) $color      = trim($m[1]);
+                if (preg_match('/Medida:\s*(.+)/i',     $l, $m)) $medida     = trim($m[1]);
+                if (preg_match('/Superficie:\s*(.+)/i', $l, $m)) $superficie = trim($m[1]);
+
+                // Título: línea sin ":", empieza con mayúscula, no coincide con ignorar
+                if (empty($titulo) && strlen($l) > 3 && !str_contains($l, ':') && preg_match('/^\p{Lu}/u', $l)) {
+                    $skip = false;
+                    foreach ($ignorar as $pat) {
+                        if (preg_match($pat, $l)) { $skip = true; break; }
+                    }
+                    if (!$skip && !preg_match('/^\s*V\d+[A-Za-z]?/i', $l)) {
+                        $titulo = strtoupper($l);
+                    }
+                }
+            }
+
+            // Formato: "V1 - TÍTULO, Serie, Color: X, Medida: X, Superficie: X"
+            $partes = array_filter([
+                $serie,
+                $color      ? "Color: $color"           : '',
+                $medida     ? "Medida: $medida"         : '',
+                $superficie ? "Superficie: $superficie" : '',
+            ]);
+            $tituloDesc = $titulo ?: "VENTANA PVC";
+            $desc = "{$match['tipo']} - {$tituloDesc}, " . implode(', ', $partes);
+            $desc = rtrim($desc, ', ');
+
+            $resultado['items'][] = [
+                'descripcion'     => $desc,
+                'cantidad'        => $match['cantidad'],
+                'precio_unitario' => $match['precio_unitario'],
+                'total'           => $match['total'],
+            ];
+        }
+
+        // ── Total neto: número CLP$ justo antes de "Suma Total Neto" ─
+        foreach ($lines as $i => $line) {
+            if (preg_match('/Suma\s+Total\s+Neto/i', $line)) {
+                for ($j = $i - 1; $j >= max(0, $i - 4); $j--) {
+                    if (preg_match('/([\d\.]+)\s*CLP\$/i', $lines[$j], $m)) {
+                        $resultado['total_neto'] = (int) str_replace('.', '', $m[1]);
+                        break 2;
+                    }
+                    if (preg_match('/^([\d\.]{4,})$/', $lines[$j], $m)) {
+                        $resultado['total_neto'] = (int) str_replace('.', '', $m[1]);
+                        break 2;
+                    }
+                }
+                break;
+            }
+        }
+
+        return $resultado;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // IMPORTAR COTIZACIÓN DESDE WINPERFIL (PVC) + guardar PDF
+    // ─────────────────────────────────────────────────────────────
+    public function importarWinperfil(Request $request)
+    {
+        $request->validate([
+            'cliente_id'              => 'required|exists:clientes,id',
+            'fecha'                   => 'required|date',
+            'items'                   => 'required|array|min:1',
+            'items.*.descripcion'     => 'required|string',
+            'items.*.cantidad'        => 'required|numeric|min:0.01',
+            'items.*.precio_unitario' => 'required|numeric|min:0',
+            'pdf'                     => 'nullable|file|mimes:pdf|max:20480',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $obs = 'Importado desde WINPERFIL (PVC)';
+            if ($request->filled('numero_presupuesto')) {
+                $obs .= ' — Presupuesto Nº: ' . $request->numero_presupuesto;
+            }
+            if ($request->filled('observaciones')) {
+                $obs .= "\n" . $request->observaciones;
+            }
+
+            $total = collect($request->items)
+                ->sum(fn($i) => ($i['cantidad'] ?? 0) * ($i['precio_unitario'] ?? 0));
+
+            $estadoEvaluacion = EstadoCotizacion::where('nombre', 'like', '%valuaci%')->first();
+
+            // Subir PDF a Cloudflare R2
+            $adjuntoUrl = null;
+            if ($request->hasFile('pdf')) {
+                $file     = $request->file('pdf');
+                $filename = 'winperfil/' . now()->format('Ymd_His') . '_' . uniqid() . '.pdf';
+                \Illuminate\Support\Facades\Storage::disk('r2')->put($filename, file_get_contents($file->getRealPath()), 'public');
+                $adjuntoUrl = rtrim(env('R2_PUBLIC_URL'), '/') . '/' . $filename;
+            }
+
+            $cotizacion = Cotizacion::create([
+                'cliente_id'          => $request->cliente_id,
+                'vendedor_id'         => auth()->id(),
+                'fecha'               => $request->fecha,
+                'estado_cotizacion_id'=> $estadoEvaluacion?->id ?? 1,
+                'observaciones'       => $obs,
+                'total'               => $total,
+                'adjunto_winperfil'   => $adjuntoUrl,
+            ]);
+
+            foreach ($request->items as $item) {
+                $cant   = $item['cantidad'] ?? 1;
+                $precio = $item['precio_unitario'] ?? 0;
+                \App\Models\CotizacionDetalle::create([
+                    'cotizacion_id'   => $cotizacion->id,
+                    'tipo_item'       => 'winperfil',
+                    'descripcion'     => $item['descripcion'],
+                    'cantidad'        => $cant,
+                    'precio_unitario' => $precio,
+                    'total'           => $cant * $precio,
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success'       => true,
+                'cotizacion_id' => $cotizacion->id,
+                'message'       => 'Cotización WINPERFIL importada correctamente',
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('❌ Error importando WINPERFIL', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTUALIZAR COTIZACIÓN WINPERFIL EXISTENTE
+    // ─────────────────────────────────────────────────────────────
+    public function actualizarWinperfil(Request $request, $id)
+    {
+        $request->validate([
+            'cliente_id'              => 'required|exists:clientes,id',
+            'fecha'                   => 'required|date',
+            'items'                   => 'required|array|min:1',
+            'items.*.descripcion'     => 'required|string',
+            'items.*.cantidad'        => 'required|numeric|min:0.01',
+            'items.*.precio_unitario' => 'required|numeric|min:0',
+            'pdf'                     => 'nullable|file|mimes:pdf|max:20480',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $cotizacion = Cotizacion::findOrFail($id);
+
+            $total = collect($request->items)->sum(fn($i) =>
+                ($i['cantidad'] ?? 1) * ($i['precio_unitario'] ?? 0)
+            );
+
+            $obs = $request->observaciones ?? $cotizacion->observaciones;
+
+            // Subir nuevo PDF si fue adjuntado
+            $adjuntoUrl = $cotizacion->adjunto_winperfil;
+            if ($request->hasFile('pdf')) {
+                $file     = $request->file('pdf');
+                $filename = 'winperfil/' . now()->format('Ymd_His') . '_' . uniqid() . '.pdf';
+                \Illuminate\Support\Facades\Storage::disk('r2')->put($filename, file_get_contents($file->getRealPath()), 'public');
+                $adjuntoUrl = rtrim(env('R2_PUBLIC_URL'), '/') . '/' . $filename;
+            }
+
+            $cotizacion->update([
+                'cliente_id'        => $request->cliente_id,
+                'fecha'             => $request->fecha,
+                'observaciones'     => $obs,
+                'total'             => $total,
+                'adjunto_winperfil' => $adjuntoUrl,
+            ]);
+
+            // Reemplazar todos los detalles winperfil
+            $cotizacion->detalles()->where('tipo_item', 'winperfil')->delete();
+
+            foreach ($request->items as $item) {
+                $cant   = $item['cantidad'] ?? 1;
+                $precio = $item['precio_unitario'] ?? 0;
+                \App\Models\CotizacionDetalle::create([
+                    'cotizacion_id'   => $cotizacion->id,
+                    'tipo_item'       => 'winperfil',
+                    'descripcion'     => $item['descripcion'],
+                    'cantidad'        => $cant,
+                    'precio_unitario' => $precio,
+                    'total'           => $cant * $precio,
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success'       => true,
+                'cotizacion_id' => $cotizacion->id,
+                'message'       => 'Cotización WINPERFIL actualizada correctamente',
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
 }

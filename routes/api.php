@@ -41,8 +41,11 @@ Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin'
 });
 
 Route::middleware('auth:api')->group(function () {
-    // Ruta específica para facturación (debe ir ANTES del apiResource)
+    // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
+    Route::post('/cotizaciones/parse-winperfil', [CotizacionController::class, 'parseWinperfil']);
+    Route::post('/cotizaciones/importar-winperfil', [CotizacionController::class, 'importarWinperfil']);
+    Route::post('/cotizaciones/{id}/actualizar-winperfil', [CotizacionController::class, 'actualizarWinperfil']);
     // Rutas resource
     Route::apiResource('cotizaciones', CotizacionController::class);
 

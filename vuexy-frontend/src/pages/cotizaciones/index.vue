@@ -3,6 +3,15 @@
       <v-card-title>
         Cotizaciones
         <v-spacer />
+        <v-btn
+          color="secondary"
+          variant="tonal"
+          class="mr-2"
+          prepend-icon="mdi-window-open"
+          @click="router.push('/cotizaciones/importar-pvc')"
+        >
+          Importar WINPERFIL
+        </v-btn>
         <v-btn color="primary" @click="router.push({ name: 'cotizador' })">Nueva</v-btn>
       </v-card-title>
   
@@ -93,7 +102,17 @@
           </v-btn>
           <v-btn icon @click="duplicarCotizacion(item)">
             <v-icon>mdi-content-copy</v-icon>
-            </v-btn>
+          </v-btn>
+          <v-btn
+            v-if="item.adjunto_winperfil"
+            icon
+            color="blue"
+            :href="item.adjunto_winperfil"
+            target="_blank"
+            title="Ver PDF WINPERFIL"
+          >
+            <v-icon>mdi-paperclip</v-icon>
+          </v-btn>
 
         </template>
       </v-data-table>
@@ -147,8 +166,12 @@
   }
   
   const editarCotizacion = (item) => {
-    router.push(`/cotizador?id=${item.id}`)
+    if (item.adjunto_winperfil) {
+      router.push(`/cotizaciones/importar-pvc?edit=${item.id}`)
+    } else {
+      router.push(`/cotizador?id=${item.id}`)
     }
+  }
 
     const duplicarCotizacion = async (item) => {
   if (!confirm(`¿Deseas duplicar la cotización #${item.id}?`)) return

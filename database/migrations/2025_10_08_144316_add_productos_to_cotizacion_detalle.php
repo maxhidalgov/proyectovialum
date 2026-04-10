@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('cotizacion_detalles', function (Blueprint $table) {
             // Agregar campo tipo_item para diferenciar entre ventana y producto
-            $table->enum('tipo_item', ['ventana', 'producto'])->default('ventana');
+            $table->enum('tipo_item', ['ventana', 'producto', 'winperfil'])->default('ventana');
             
             // Agregar referencias a productos
             $table->unsignedBigInteger('producto_lista_id')->nullable();
