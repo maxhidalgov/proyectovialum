@@ -150,9 +150,9 @@ public function store(Request $request)
                 'ancho_izquierda' => $ventana['ancho_izquierda'] ?? null,
                 'ancho_centro' => $ventana['ancho_centro'] ?? null,
                 'ancho_derecha' => $ventana['ancho_derecha'] ?? null,
-                'tipo_ventana_izquierda' => isset($ventana['tipo_ventana_izquierda']) ? json_encode($ventana['tipo_ventana_izquierda']) : null,
-                'tipo_ventana_centro' => isset($ventana['tipo_ventana_centro']) ? json_encode($ventana['tipo_ventana_centro']) : null,
-                'tipo_ventana_derecha' => isset($ventana['tipo_ventana_derecha']) ? json_encode($ventana['tipo_ventana_derecha']) : null,
+                'tipo_ventana_izquierda' => $ventana['tipo_ventana_izquierda'] ?? null,
+                'tipo_ventana_centro'    => $ventana['tipo_ventana_centro'] ?? null,
+                'tipo_ventana_derecha'   => $ventana['tipo_ventana_derecha'] ?? null,
                 // Parámetros extra para recalculo y hoja de cortes
                 'config' => array_filter([
                     'tipo_vidrio'     => $ventana['tipo_vidrio'] ?? $ventana['tipoVidrio'] ?? null,
@@ -351,6 +351,9 @@ public function store(Request $request)
                 ->whereNotIn('id', $idsRecibidos)
                 ->delete();
 
+            // Collect ventana models in request order so image indices match exactly
+            $ventanasEnOrden = [];
+
             foreach ($request->ventanas as $ventanaData) {
                 if (isset($ventanaData['id'])) {
                     // Actualizar ventana existente
@@ -368,17 +371,27 @@ public function store(Request $request)
                             'precio_unitario' => $ventanaData['precio_unitario'] ?? null,
                             'hojas_totales' => $ventanaData['hojas_totales'] ?? null,
                             'hojas_moviles' => $ventanaData['hojas_moviles'] ?? null,
+                            'hoja_movil_seleccionada' => $ventanaData['hoja_movil_seleccionada'] ?? null,
+                            'hoja1_al_frente' => $ventanaData['hoja1_al_frente'] ?? null,
                             'cantidad' => $ventanaData['cantidad'] ?? 1,
+                            // Bay Window
+                            'ancho_izquierda' => $ventanaData['ancho_izquierda'] ?? null,
+                            'ancho_centro'    => $ventanaData['ancho_centro'] ?? null,
+                            'ancho_derecha'   => $ventanaData['ancho_derecha'] ?? null,
+                            'tipo_ventana_izquierda' => $ventanaData['tipo_ventana_izquierda'] ?? null,
+                            'tipo_ventana_centro'    => $ventanaData['tipo_ventana_centro'] ?? null,
+                            'tipo_ventana_derecha'   => $ventanaData['tipo_ventana_derecha'] ?? null,
                             'config' => array_filter([
                                 'tipo_vidrio'      => $ventanaData['tipo_vidrio'] ?? $ventanaData['tipoVidrio'] ?? null,
                                 'manillon'         => $ventanaData['manillon'] ?? null,
                                 'proveedor_vidrio' => $ventanaData['proveedor_vidrio'] ?? $ventanaData['proveedorVidrio'] ?? null,
                             ], fn($v) => $v !== null) ?: null,
                         ]);
+                        $ventanasEnOrden[] = $ventana;
                     }
                 } else {
                     // Crear nueva ventana
-                    $cotizacion->ventanas()->create([
+                    $ventana = $cotizacion->ventanas()->create([
                         'tipo_ventana_id' => $ventanaData['tipo_ventana_id'],
                         'ancho' => $ventanaData['ancho'],
                         'alto' => $ventanaData['alto'],
@@ -388,13 +401,23 @@ public function store(Request $request)
                         'precio' => $ventanaData['precio'] ?? 0,
                         'hojas_totales' => $ventanaData['hojas_totales'] ?? null,
                         'hojas_moviles' => $ventanaData['hojas_moviles'] ?? null,
+                        'hoja_movil_seleccionada' => $ventanaData['hoja_movil_seleccionada'] ?? null,
+                        'hoja1_al_frente' => $ventanaData['hoja1_al_frente'] ?? null,
                         'cantidad' => $ventanaData['cantidad'] ?? 1,
+                        // Bay Window
+                        'ancho_izquierda' => $ventanaData['ancho_izquierda'] ?? null,
+                        'ancho_centro'    => $ventanaData['ancho_centro'] ?? null,
+                        'ancho_derecha'   => $ventanaData['ancho_derecha'] ?? null,
+                        'tipo_ventana_izquierda' => $ventanaData['tipo_ventana_izquierda'] ?? null,
+                        'tipo_ventana_centro'    => $ventanaData['tipo_ventana_centro'] ?? null,
+                        'tipo_ventana_derecha'   => $ventanaData['tipo_ventana_derecha'] ?? null,
                         'config' => array_filter([
                             'tipo_vidrio'      => $ventanaData['tipo_vidrio'] ?? $ventanaData['tipoVidrio'] ?? null,
                             'manillon'         => $ventanaData['manillon'] ?? null,
                             'proveedor_vidrio' => $ventanaData['proveedor_vidrio'] ?? $ventanaData['proveedorVidrio'] ?? null,
                         ], fn($v) => $v !== null) ?: null,
                     ]);
+                    $ventanasEnOrden[] = $ventana;
                 }
             }
 
@@ -444,14 +467,11 @@ public function store(Request $request)
             // ========== MANEJAR IMÁGENES DE VENTANAS (EDICIÓN) ==========
             if ($request->has('imagenes_ventanas') && is_array($request->imagenes_ventanas)) {
                 Log::info("🖼️ ACTUALIZANDO " . count($request->imagenes_ventanas) . " IMÁGENES");
-                
-                // Obtener ventanas actualizadas
-                $ventanasActualizadas = $cotizacion->ventanas()->orderBy('id')->get();
-                
+
                 foreach ($request->imagenes_ventanas as $index => $base64) {
                     try {
                         if (!$base64 || $base64 === null) {
-                            Log::info("⚠️ Imagen vacía en índice $index, saltando...");
+                            Log::info("⚠️ Imagen vacía en índice $index, preservando imagen existente");
                             continue;
                         }
 
@@ -487,12 +507,12 @@ public function store(Request $request)
                             Log::error("❌ Error FTP: " . $ftpError->getMessage());
                         }
 
-                        // Actualizar campo imagen en la ventana correspondiente
-                        if (isset($ventanasActualizadas[$index])) {
-                            $ventanasActualizadas[$index]->update([
+                        // Actualizar campo imagen en la ventana correspondiente (usando orden del request)
+                        if (isset($ventanasEnOrden[$index])) {
+                            $ventanasEnOrden[$index]->update([
                                 'imagen' => $imageName
                             ]);
-                            Log::info("✅ Imagen asociada a ventana ID {$ventanasActualizadas[$index]->id}");
+                            Log::info("✅ Imagen asociada a ventana ID {$ventanasEnOrden[$index]->id}");
                         } else {
                             Log::warning("⚠️ No se encontró ventana para imagen en índice $index");
                         }
@@ -692,8 +712,9 @@ public function getAprobadas()
 
         $cotizaciones = Cotizacion::with([
             'cliente',
-            'clienteFacturacion', // ✅ Agregada relación clienteFacturacion
+            'clienteFacturacion',
             'vendedor',
+            'documentosFacturacion',
             'ventanas' => function($query) {
                 $query->with([
                     'tipoVentana', // ✅ Usar camelCase

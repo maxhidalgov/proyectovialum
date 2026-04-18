@@ -62,7 +62,7 @@
           @if ($ventana->imagen && isset($imagenesBase64[$ventana->id]))
             <img
               src="{{ $imagenesBase64[$ventana->id] }}"
-              style="max-width: 100%; height: auto; border: none;"
+              style="max-width: 100%; max-height: 220px; width: auto; height: auto; border: none; display: block; margin: 0 auto;"
               alt="Vista ventana"
             />
           @elseif ($ventana->imagen)

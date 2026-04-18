@@ -1,591 +1,325 @@
 <template>
-  <v-dialog v-model="dialog" max-width="800px" persistent>
-    <v-card>
-      <v-card-title class="text-h5 pa-4">
-        <v-icon class="mr-2" color="success">mdi-receipt</v-icon>
-        Generar Documento Electrónico
+  <v-dialog v-model="dialog" max-width="520" persistent>
+    <v-card v-if="cotizacion">
+      <v-card-title class="pa-4 pb-2 d-flex align-center gap-2">
+        <v-icon color="success">mdi-receipt-text</v-icon>
+        Emitir documento
+        <v-spacer />
+        <v-btn icon size="x-small" variant="text" @click="cerrar">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
       </v-card-title>
 
-      <v-divider></v-divider>
+      <v-card-subtitle class="px-4 pb-3">
+        {{ nombreCliente }} — Total: <strong>{{ clp(cotizacion.total) }}</strong>
+        <span v-if="yaEmitido > 0" class="ml-2 text-caption">
+          · Ya emitido: <strong class="text-success">{{ clp(yaEmitido) }}</strong>
+          · Saldo: <strong class="text-warning">{{ clp(cotizacion.total - yaEmitido) }}</strong>
+        </span>
+      </v-card-subtitle>
+
+      <v-divider />
 
       <v-card-text class="pa-4">
-        <!-- Información de la cotización -->
-        <v-row class="mb-4">
-          <v-col cols="12">
-            <v-card outlined class="pa-3">
-              <h4 class="mb-2">Cotización #{{ cotizacion?.numero || 'N/A' }}</h4>
-              <p class="mb-1">
-                <strong>Cliente:</strong> {{ cotizacion?.cliente?.nombre || 'N/A' }}
-              </p>
-              <p class="mb-1">
-                <strong>Total:</strong> ${{ formatearPrecio(cotizacion?.total || 0) }}
-              </p>
-              <p class="mb-0">
-                <strong>Fecha:</strong> {{ formatearFecha(cotizacion?.created_at) }}
-              </p>
-            </v-card>
+        <!-- Resumen previo si ya hay documentos -->
+        <v-alert
+          v-if="yaEmitido > 0"
+          type="info" density="compact" variant="tonal" class="mb-3 text-caption"
+        >
+          Ya se emitieron <strong>{{ clp(yaEmitido) }}</strong> ({{ pctYaEmitido }}%).
+          El saldo pendiente es <strong>{{ clp(cotizacion.total - yaEmitido) }}</strong> ({{ 100 - pctYaEmitido }}%).
+        </v-alert>
+
+        <!-- ¿Cuánto vas a facturar? -->
+        <p class="text-caption text-medium-emphasis mb-2 font-weight-medium">¿Cuánto vas a facturar?</p>
+        <div class="d-flex gap-2 flex-wrap mb-1">
+          <v-chip
+            v-for="opt in opcionesDisponibles"
+            :key="opt.value"
+            :color="porcentaje === opt.value && !personalizado ? 'primary' : undefined"
+            :variant="porcentaje === opt.value && !personalizado ? 'flat' : 'outlined'"
+            size="small"
+            clickable
+            @click="seleccionarPorcentaje(opt.value)"
+          >
+            {{ opt.label }}
+          </v-chip>
+          <v-chip
+            :color="personalizado ? 'primary' : undefined"
+            :variant="personalizado ? 'flat' : 'outlined'"
+            size="small"
+            clickable
+            @click="personalizado = true"
+          >
+            Otro monto
+          </v-chip>
+        </div>
+
+        <!-- Input personalizado -->
+        <div v-if="personalizado" class="d-flex align-center gap-2 mt-2 mb-1">
+          <v-text-field
+            v-model.number="porcentaje"
+            type="number"
+            min="1" :max="100 - pctYaEmitido"
+            density="compact"
+            variant="outlined"
+            hide-details
+            suffix="%"
+            style="max-width: 100px"
+          />
+          <span class="text-body-2 text-medium-emphasis">= {{ clp(montoCalculado) }}</span>
+        </div>
+
+        <!-- Monto resultante -->
+        <div v-if="!personalizado" class="text-body-2 text-medium-emphasis mb-3">
+          Monto a facturar: <strong class="text-success">{{ clp(montoCalculado) }}</strong>
+        </div>
+
+        <v-divider class="my-3" />
+
+        <!-- Paso 2: Tipo de documento y cliente -->
+        <v-row dense>
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="form.tipo_documento"
+              :items="tiposDocumento"
+              item-value="id"
+              item-title="name"
+              label="Tipo de documento"
+              density="compact"
+              variant="outlined"
+              hide-details
+              :loading="cargando"
+              :rules="[v => !!v || 'Requerido']"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="form.metodo_pago"
+              :items="metodosPago"
+              item-title="text"
+              item-value="value"
+              label="Forma de pago"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" class="mt-2">
+            <v-autocomplete
+              v-model="form.cliente_facturacion_id"
+              :items="clientesSincronizados"
+              item-value="id"
+              :item-title="(c) => `${c.razon_social} (${c.identification || 'Sin RUT'})`"
+              :label="form.tipo_documento == 1 ? 'Cliente (opcional para boleta)' : 'Cliente para factura'"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              :loading="cargandoClientes"
+              :rules="form.tipo_documento != 1 ? [v => !!v || 'Requerido para facturas'] : []"
+            >
+              <template #no-data>
+                <v-list-item>
+                  <v-list-item-title class="text-caption">No hay clientes sincronizados con Bsale</v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-autocomplete>
           </v-col>
         </v-row>
 
-        <!-- Formulario -->
-        <v-form ref="form" v-model="formValid">
-          <v-row>
-            <!-- Tipo de documento -->
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formulario.tipo_documento"
-                :items="tiposDocumento"
-                item-value="id"
-                item-title="name"
-                label="Tipo de documento"
-                :rules="[v => !!v || 'Tipo de documento es requerido']"
-                required
-                outlined
-                prepend-inner-icon="mdi-file-document"
-              ></v-select>
-            </v-col>
-
-            <!-- Oficina -->
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formulario.oficina_id"
-                :items="oficinas"
-                item-value="id"
-                item-title="name"
-                label="Oficina"
-                :rules="[v => !!v || 'Oficina es requerida']"
-                required
-                outlined
-                prepend-inner-icon="mdi-office-building"
-              ></v-select>
-            </v-col>
-
-            <!-- Cliente BSALE para facturación -->
-            <v-col cols="12">
-              <v-alert 
-                :type="formulario.tipo_documento == 1 ? 'success' : 'info'" 
-                variant="tonal" 
-                class="mb-3"
-              >
-                <div class="d-flex align-center">
-                  <v-icon class="mr-2">mdi-information</v-icon>
-                  <div v-if="formulario.tipo_documento == 1">
-                    <strong>Boleta Electrónica:</strong> Para boletas no es necesario seleccionar un cliente específico.
-                    <br>
-                    <small>Si no seleccionas un cliente, se usará "Consumidor Final".</small>
-                  </div>
-                  <div v-else>
-                    <strong>Cliente de facturación:</strong> Selecciona el cliente que aparecerá en la factura de Bsale.
-                    <br>
-                    <small>Solo se muestran clientes sincronizados con Bsale. <strong>Campo obligatorio para facturas.</strong></small>
-                  </div>
-                </div>
-              </v-alert>
-              
-              <v-autocomplete
-                v-model="formulario.cliente_facturacion_id"
-                :items="clientesSincronizados"
-                item-value="id"
-                :item-title="item => `${item.razon_social} (${item.identification || 'Sin RUT'})`"
-                :label="formulario.tipo_documento == 1 ? 'Cliente para facturación (Opcional)' : 'Cliente para facturación'"
-                :loading="cargandoClientesSincronizados"
-                :rules="formulario.tipo_documento == 1 ? [] : [v => !!v || 'Cliente de facturación es requerido para facturas']"
-                :required="formulario.tipo_documento != 1"
-                outlined
-                prepend-inner-icon="mdi-account-cash"
-                clearable
-                :hint="formulario.tipo_documento == 1 ? 'Opcional: Deja en blanco para usar Consumidor Final' : 'Selecciona el cliente que recibirá la factura'"
-                persistent-hint
-              >
-                <template v-slot:item="{ props, item }">
-                  <v-list-item v-bind="props">
-                    <template v-slot:title>
-                      {{ item.raw.razon_social }}
-                    </template>
-                    <template v-slot:subtitle>
-                      RUT: {{ item.raw.identification || 'Sin RUT' }} | Bsale ID: {{ item.raw.bsale_id }}
-                    </template>
-                  </v-list-item>
-                </template>
-                <template v-slot:no-data>
-                  <v-list-item>
-                    <v-list-item-content>
-                      <v-list-item-title>
-                        No hay clientes sincronizados
-                      </v-list-item-title>
-                      <v-list-item-subtitle>
-                        Ejecuta el comando de sincronización en el servidor
-                      </v-list-item-subtitle>
-                    </v-list-item-content>
-                  </v-list-item>
-                </template>
-              </v-autocomplete>
-            </v-col>
-
-            <!-- Cliente BSALE (oculto, ya no se usa el antiguo campo) -->
-            <v-col cols="12" v-if="false">
-              <v-autocomplete
-                v-model="formulario.cliente_bsale_id"
-                :items="clientesBsale"
-                item-value="id"
-                item-title="displayName"
-                label="Cliente en BSALE"
-                :search-input.sync="busquedaCliente"
-                :loading="cargandoClientes"
-                :rules="[v => !!v || 'Cliente BSALE es requerido']"
-                required
-                outlined
-                prepend-inner-icon="mdi-account"
-                clearable
-                @update:search="buscarClientes"
-              >
-                <template v-slot:no-data>
-                  <v-list-item>
-                    <v-list-item-content>
-                      <v-list-item-title>
-                        No se encontraron clientes
-                      </v-list-item-title>
-                      <v-list-item-subtitle>
-                        <v-btn
-                          color="primary"
-                          text
-                          small
-                          @click="abrirCrearCliente"
-                        >
-                          Crear cliente nuevo
-                        </v-btn>
-                      </v-list-item-subtitle>
-                    </v-list-item-content>
-                  </v-list-item>
-                </template>
-              </v-autocomplete>
-            </v-col>
-
-            <!-- Método de pago -->
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formulario.metodo_pago"
-                :items="metodosPago"
-                item-title="text"
-                item-value="value"
-                label="Método de pago"
-                outlined
-                prepend-inner-icon="mdi-credit-card"
-              ></v-select>
-            </v-col>
-
-            <!-- Condiciones de pago -->
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="formulario.condiciones_pago"
-                label="Condiciones de pago"
-                outlined
-                prepend-inner-icon="mdi-calendar-clock"
-                placeholder="Ej: 30 días"
-              ></v-text-field>
-            </v-col>
-
-            <!-- Fecha de vencimiento -->
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="formulario.fecha_vencimiento"
-                label="Fecha de vencimiento"
-                type="date"
-                outlined
-                prepend-inner-icon="mdi-calendar"
-              ></v-text-field>
-            </v-col>
-
-            <!-- Observaciones -->
-            <v-col cols="12">
-              <v-textarea
-                v-model="formulario.observaciones"
-                label="Observaciones"
-                outlined
-                rows="3"
-                prepend-inner-icon="mdi-note-text"
-                placeholder="Observaciones adicionales para el documento..."
-              ></v-textarea>
-            </v-col>
-          </v-row>
-        </v-form>
+        <!-- Error -->
+        <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mt-3">
+          {{ error }}
+        </v-alert>
       </v-card-text>
 
-      <v-divider></v-divider>
+      <v-divider />
 
       <v-card-actions class="pa-4">
-        <v-spacer></v-spacer>
-        <v-btn
-          color="grey"
-          text
-          @click="cerrar"
-          :disabled="generandoDocumento"
-        >
-          Cancelar
-        </v-btn>
+        <v-btn variant="text" @click="cerrar" :disabled="generando">Cancelar</v-btn>
+        <v-spacer />
         <v-btn
           color="success"
-          @click="generarDocumento"
-          :loading="generandoDocumento"
-          :disabled="!formValid"
+          variant="flat"
+          :loading="generando"
+          :disabled="!form.tipo_documento || porcentaje < 1 || porcentaje > 100"
+          @click="generar"
         >
-          <v-icon left>mdi-receipt</v-icon>
-          Generar Documento
+          <v-icon start>mdi-receipt</v-icon>
+          Generar {{ clp(montoCalculado) }}
         </v-btn>
       </v-card-actions>
     </v-card>
-
-    <!-- Modal para crear cliente -->
-    <ModalCrearClienteBsale
-      v-model="dialogCrearCliente"
-      :cotizacion="cotizacion"
-      @cliente-creado="onClienteCreado"
-    />
   </v-dialog>
-
-  <!-- Snackbar de notificaciones -->
-  <v-snackbar
-    v-model="snackbar.show"
-    :color="snackbar.color"
-    :timeout="snackbar.timeout"
-    location="top right"
-    multi-line
-  >
-    {{ snackbar.text }}
-    <template #actions>
-      <v-btn variant="text" @click="snackbar.show = false">Cerrar</v-btn>
-    </template>
-  </v-snackbar>
 </template>
 
-<script>
+<script setup>
+import { ref, computed, watch } from 'vue'
 import api from '@/axiosInstance'
-import ModalCrearClienteBsale from './ModalCrearClienteBsale.vue'
 
-export default {
-  name: 'ModalBsale',
-  components: {
-    ModalCrearClienteBsale
-  },
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false
-    },
-    cotizacion: {
-      type: Object,
-      default: null
+const props = defineProps({
+  modelValue: { type: Boolean, default: false },
+  cotizacion: { type: Object, default: null },
+})
+const emit = defineEmits(['update:modelValue', 'documento-generado'])
+
+const dialog = computed({
+  get: () => props.modelValue,
+  set: (v) => emit('update:modelValue', v),
+})
+
+// ── Estado ───────────────────────────────────────────────────────────
+const cargando          = ref(false)
+const cargandoClientes  = ref(false)
+const generando         = ref(false)
+const error             = ref('')
+const personalizado     = ref(false)
+const porcentaje        = ref(100)
+const tiposDocumento    = ref([])
+const clientesSincronizados = ref([])
+
+const form = ref({
+  tipo_documento: null,
+  metodo_pago: 'transferencia',
+  cliente_facturacion_id: null,
+})
+
+// opciones base — se filtran/adaptan según saldo disponible
+const OPCIONES_BASE = [
+  { label: 'Total (100%)', value: 100 },
+  { label: 'Anticipo 50%', value: 50 },
+  { label: 'Anticipo 30%', value: 30 },
+]
+
+const metodosPago = [
+  { text: 'Transferencia', value: 'transferencia' },
+  { text: 'Efectivo',      value: 'efectivo' },
+  { text: 'Cheque',        value: 'cheque' },
+  { text: 'Tarjeta débito', value: 'tarjeta_debito' },
+  { text: 'Tarjeta crédito', value: 'tarjeta_credito' },
+]
+
+// ── Computed ─────────────────────────────────────────────────────────
+const yaEmitido = computed(() => {
+  const docs = props.cotizacion?.documentos_facturacion || []
+  return docs.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto), 0)
+})
+
+const pctYaEmitido = computed(() => {
+  const total = props.cotizacion?.total || 0
+  return total > 0 ? Math.round((yaEmitido.value / total) * 100) : 0
+})
+
+const pctSaldo = computed(() => 100 - pctYaEmitido.value)
+
+// Opciones contextuales: si hay saldo, mostrar "Saldo (X%)" primero
+const opcionesDisponibles = computed(() => {
+  if (pctYaEmitido.value > 0) {
+    // Ya hay algo emitido — ofrecer el saldo exacto + opciones menores
+    const opciones = [{ label: `Saldo (${pctSaldo.value}%)`, value: pctSaldo.value }]
+    OPCIONES_BASE.forEach(opt => {
+      if (opt.value < pctSaldo.value) opciones.push(opt)
+    })
+    return opciones
+  }
+  return OPCIONES_BASE
+})
+
+const montoCalculado = computed(() =>
+  Math.round((props.cotizacion?.total || 0) * (porcentaje.value || 0) / 100)
+)
+
+const nombreCliente = computed(() => {
+  const c = props.cotizacion?.cliente
+  if (!c) return 'Sin cliente'
+  return c.razon_social || `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Sin nombre'
+})
+
+// ── Watcher: cargar datos al abrir ───────────────────────────────────
+watch(() => props.modelValue, (val) => {
+  if (val) inicializar()
+})
+
+async function inicializar() {
+  error.value = ''
+  personalizado.value = false
+  form.value = { tipo_documento: null, metodo_pago: 'transferencia', cliente_facturacion_id: null }
+  // Pre-seleccionar saldo si ya hay documentos emitidos
+  porcentaje.value = pctSaldo.value > 0 && pctSaldo.value < 100 ? pctSaldo.value : 100
+
+  cargando.value = true
+  cargandoClientes.value = true
+  try {
+    const [tipos, clientes] = await Promise.all([
+      api.get('/api/bsale-tipos-documento'),
+      api.get('/api/bsale/clientes-sincronizados'),
+    ])
+    tiposDocumento.value = tipos.data.items?.map(t => ({ id: t.id, name: t.name })) || []
+    clientesSincronizados.value = clientes.data.clientes || []
+
+    // Preseleccionar cliente si la cotización ya tiene uno asignado
+    if (props.cotizacion?.cliente_facturacion_id) {
+      const found = clientesSincronizados.value.find(c => c.id === props.cotizacion.cliente_facturacion_id)
+      if (found) form.value.cliente_facturacion_id = found.id
+    } else if (props.cotizacion?.cliente_id) {
+      const found = clientesSincronizados.value.find(c => c.id === props.cotizacion.cliente_id)
+      if (found) form.value.cliente_facturacion_id = found.id
     }
-  },
-  emits: ['update:modelValue', 'documento-generado'],
-  data() {
-    return {
-      formValid: false,
-      generandoDocumento: false,
-      cargandoClientes: false,
-      cargandoClientesSincronizados: false,
-      busquedaCliente: '',
-      dialogCrearCliente: false,
-      tiposDocumento: [
-        { id: 3, name: 'Nota de Venta', codeSii: '', description: 'Documento de preventa' },
-        { id: 5, name: 'Factura Electrónica', codeSii: '33', description: 'Documento tributario electrónico' },
-        { id: 1, name: 'Boleta Electrónica', codeSii: '39', description: 'Boleta electrónica para consumidor final' }
-      ],
-      oficinas: [],
-      clientesBsale: [],
-      clientesSincronizados: [],
-      metodosPago: [
-        { text: 'Efectivo', value: 'efectivo' },
-        { text: 'Transferencia Bancaria', value: 'transferencia' },
-        { text: 'Tarjeta de Crédito', value: 'tarjeta_credito' },
-        { text: 'Tarjeta de Débito', value: 'tarjeta_debito' },
-        { text: 'Cheque', value: 'cheque' },
-        { text: 'WebPay', value: 'webpay' },
-      ],
-      snackbar: {
-        show: false,
-        text: '',
-        color: 'success',
-        timeout: 6000
-      },
-      formulario: {
-        tipo_documento: null,
-        oficina_id: null,
-        cliente_bsale_id: null,
-        cliente_facturacion_id: null,
-        metodo_pago: 'transferencia',
-        condiciones_pago: '30 días',
-        fecha_vencimiento: this.getFechaVencimiento(),
-        observaciones: ''
-      }
-    }
-  },
-  computed: {
-    dialog: {
-      get() {
-        return this.modelValue
-      },
-      set(value) {
-        this.$emit('update:modelValue', value)
-      }
-    }
-  },
-  watch: {
-    dialog(newVal) {
-      if (newVal) {
-        this.cargarDatosIniciales()
-      }
-    }
-  },
-  methods: {
-    mostrarNotificacion(text, color = 'success', timeout = 5000) {
-      this.snackbar.text = text
-      this.snackbar.color = color
-      this.snackbar.timeout = timeout
-      this.snackbar.show = true
-    },
-
-    async cargarDatosIniciales() {
-      console.log('🔄 Cargando datos iniciales BSALE...')
-      
-      try {
-        // Cargar oficinas desde Bsale
-        await this.cargarOficinas()
-        
-        // Cargar tipos de documento desde Bsale
-        await this.cargarTiposDocumento()
-        
-        // Cargar clientes sincronizados
-        await this.cargarClientesSincronizados()
-        
-        // Si la cotización tiene un cliente con bsale_id, seleccionarlo automáticamente
-        if (this.cotizacion?.cliente?.id) {
-          const clienteSincronizado = this.clientesSincronizados.find(
-            c => c.id === this.cotizacion.cliente.id
-          )
-          if (clienteSincronizado) {
-            this.formulario.cliente_facturacion_id = clienteSincronizado.id
-          }
-        }
-
-        console.log('✅ Datos iniciales cargados correctamente')
-
-      } catch (error) {
-        console.error('❌ Error cargando datos iniciales:', error)
-        console.error('Response:', error.response?.data)
-        console.error('Status:', error.response?.status)
-        console.error('URL:', error.config?.url)
-        this.mostrarNotificacion('Error al cargar datos de BSALE', 'error')
-      }
-    },
-
-    async cargarOficinas() {
-      try {
-        const response = await api.get('/api/bsale-oficinas')
-        this.oficinas = response.data.items.map(oficina => ({
-          id: oficina.id,
-          name: oficina.name,
-          description: oficina.description,
-          address: oficina.address
-        }))
-        console.log('✅ Oficinas cargadas:', this.oficinas.length)
-      } catch (error) {
-        console.error('❌ Error cargando oficinas:', error)
-        // Fallback con datos básicos
-        this.oficinas = [
-          { id: 1, name: 'Oficina Principal' }
-        ]
-      }
-    },
-
-    async cargarTiposDocumento() {
-      try {
-        const response = await api.get('/api/bsale-tipos-documento')
-        this.tiposDocumento = response.data.items.map(tipo => ({
-          id: tipo.id,
-          name: tipo.name,
-          codeSii: tipo.codeSii,
-          description: tipo.description
-        }))
-        console.log('✅ Tipos de documento cargados:', this.tiposDocumento.length)
-      } catch (error) {
-        console.error('❌ Error cargando tipos de documento:', error)
-        // Mantener los tipos estáticos como fallback
-        console.log('Usando tipos de documento estáticos como fallback')
-      }
-    },
-
-    async cargarClientesSincronizados() {
-      this.cargandoClientesSincronizados = true
-      try {
-        const response = await api.get('/api/bsale/clientes-sincronizados')
-        
-        if (response.data.success) {
-          this.clientesSincronizados = response.data.clientes
-          console.log('✅ Clientes sincronizados cargados:', this.clientesSincronizados.length)
-        }
-      } catch (error) {
-        console.error('❌ Error cargando clientes sincronizados:', error)
-        this.mostrarNotificacion('Error al cargar clientes sincronizados', 'error')
-      } finally {
-        this.cargandoClientesSincronizados = false
-      }
-    },
-
-    async buscarClientes(busqueda) {
-      if (!busqueda || busqueda.length < 2) return
-      
-      this.cargandoClientes = true
-      try {
-        const response = await api.get('/api/bsale/clientes', {
-          params: { search: busqueda }
-        })
-        
-        if (response.data.success) {
-          this.clientesBsale = response.data.clientes.items?.map(cliente => ({
-            ...cliente,
-            displayName: `${cliente.company || `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim() || 'Sin nombre'} - ${cliente.code}`
-          })) || []
-        }
-      } catch (error) {
-        console.error('Error buscando clientes:', error)
-      } finally {
-        this.cargandoClientes = false
-      }
-    },
-
-    async buscarClientesPorRut(rut) {
-      this.cargandoClientes = true
-      try {
-        const response = await api.get('/api/bsale/clientes', {
-          params: { search: rut }
-        })
-        
-        if (response.data.success) {
-          const clientes = response.data.clientes.items || []
-          this.clientesBsale = clientes.map(cliente => ({
-            ...cliente,
-            displayName: `${cliente.company || `${cliente.firstName || ''} ${cliente.lastName || ''}`.trim() || 'Sin nombre'} - ${cliente.code}`
-          }))
-
-          // Si encontramos el cliente, seleccionarlo automáticamente
-          const clienteEncontrado = clientes.find(c => c.code === rut)
-          if (clienteEncontrado) {
-            this.formulario.cliente_bsale_id = clienteEncontrado.id
-          }
-        }
-      } catch (error) {
-        console.error('Error buscando cliente por RUT:', error)
-      } finally {
-        this.cargandoClientes = false
-      }
-    },
-
-    abrirCrearCliente() {
-      this.dialogCrearCliente = true
-    },
-
-    onClienteCreado(nuevoCliente) {
-      // Agregar el nuevo cliente a la lista
-      this.clientesBsale.unshift({
-        ...nuevoCliente,
-        displayName: `${nuevoCliente.company || `${nuevoCliente.firstName || ''} ${nuevoCliente.lastName || ''}`.trim() || 'Sin nombre'} - ${nuevoCliente.code}`
-      })
-      
-      // Seleccionarlo automáticamente
-      this.formulario.cliente_bsale_id = nuevoCliente.id
-      
-      this.mostrarNotificacion('Cliente creado exitosamente', 'success')
-    },
-
-    async generarDocumento() {
-      if (!this.formValid) return
-
-      this.generandoDocumento = true
-      
-      try {
-        const payload = {
-          cotizacion_id: this.cotizacion.id,
-          tipo_documento: this.formulario.tipo_documento,
-          cliente_facturacion_id: this.formulario.cliente_facturacion_id,
-          metodo_pago: this.formulario.metodo_pago,
-          condiciones_pago: this.formulario.condiciones_pago,
-          fecha_vencimiento: this.formulario.fecha_vencimiento,
-          observaciones: this.formulario.observaciones
-        }
-
-        console.log('📤 Enviando documento a Bsale:', payload)
-
-        const response = await api.post('/api/bsale/documento', payload)
-
-        if (response.data && response.data.success) {
-          const documento = response.data.documento  // Cambiado de response.data.data
-          const tipoDoc = this.tiposDocumento.find(t => t.id === this.formulario.tipo_documento)
-          
-          const tipoNombre = tipoDoc?.name || 'Documento'
-          this.mostrarNotificacion(
-            `${tipoNombre} #${documento.number} generado — $${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(documento.totalAmount || 0)}`,
-            'success',
-            8000
-          )
-
-          if (documento.urlPdf) {
-            window.open(documento.urlPdf, '_blank')
-          }
-          
-          this.$emit('documento-generado', documento)
-          this.cerrar()
-        } else {
-          throw new Error(response.data?.error || response.data?.message || 'Error desconocido')
-        }
-
-      } catch (error) {
-        console.error('Error generando documento:', error)
-        const mensaje = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al generar documento'
-        this.mostrarNotificacion(mensaje, 'error')
-      } finally {
-        this.generandoDocumento = false
-      }
-    },
-
-    cerrar() {
-      this.dialog = false
-      this.resetearFormulario()
-    },
-
-    resetearFormulario() {
-      this.formulario = {
-        tipo_documento: null,
-        oficina_id: null,
-        cliente_bsale_id: null,
-        metodo_pago: 'transferencia',
-        condiciones_pago: '30 días',
-        fecha_vencimiento: this.getFechaVencimiento(),
-        observaciones: ''
-      }
-      this.$refs.form?.resetValidation()
-    },
-
-    getFechaVencimiento() {
-      const fecha = new Date()
-      fecha.setDate(fecha.getDate() + 30) // 30 días a partir de hoy
-      return fecha.toISOString().split('T')[0]
-    },
-
-    formatearPrecio(precio) {
-      return new Intl.NumberFormat('es-CL').format(precio)
-    },
-
-    formatearFecha(fecha) {
-      if (!fecha) return 'N/A'
-      return new Date(fecha).toLocaleDateString('es-CL')
-    }
+  } catch {
+    // tipos de documento fallback
+    tiposDocumento.value = [
+      { id: 1,  name: 'Boleta Electrónica' },
+      { id: 5,  name: 'Factura Electrónica' },
+      { id: 3,  name: 'Nota de Venta' },
+      { id: 24, name: 'Cotización' },
+    ]
+  } finally {
+    cargando.value = false
+    cargandoClientes.value = false
   }
 }
-</script>
 
-<style scoped>
-.v-card {
-  overflow-y: auto;
+// ── Acciones ─────────────────────────────────────────────────────────
+function seleccionarPorcentaje(val) {
+  porcentaje.value = val
+  personalizado.value = false
 }
-</style>
+
+async function generar() {
+  error.value = ''
+  if (!form.value.tipo_documento) { error.value = 'Selecciona el tipo de documento'; return }
+  if (form.value.tipo_documento != 1 && !form.value.cliente_facturacion_id) {
+    error.value = 'Para facturas debes seleccionar un cliente con RUT en Bsale'; return
+  }
+
+  generando.value = true
+  try {
+    const { data } = await api.post('/api/bsale/documento', {
+      cotizacion_id:          props.cotizacion.id,
+      tipo_documento:         form.value.tipo_documento,
+      cliente_facturacion_id: form.value.cliente_facturacion_id,
+      metodo_pago:            form.value.metodo_pago,
+      porcentaje:             porcentaje.value,
+    })
+
+    if (data.success) {
+      emit('documento-generado', data)
+      if (data.documento?.urlPdf) window.open(data.documento.urlPdf, '_blank')
+      cerrar()
+    } else {
+      error.value = data.error || 'Error al generar documento'
+    }
+  } catch (e) {
+    error.value = e.response?.data?.error || e.response?.data?.message || 'Error al generar documento'
+  } finally {
+    generando.value = false
+  }
+}
+
+function cerrar() {
+  dialog.value = false
+}
+
+const clp = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(n) || 0)
+</script>

@@ -94,6 +94,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Operaciones',
+    to: { name: 'operaciones' },
+    icon: { icon: 'mdi-view-column' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Producción',
     to: { name: 'produccion' },
     icon: { icon: 'mdi-scissors-cutting' },

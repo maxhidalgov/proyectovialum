@@ -77,6 +77,11 @@ class CalculoVentanaService
             return self::calcularVentanaUniversal($ventana);
         }
 
+        // Ventana compuesta flexible
+        if ($tipoVentanaId == 54) {
+            return self::calcularCompuestaFlexible($ventana);
+        }
+
         return [
             'materiales' => [],
             'costo_total' => 0,
@@ -164,12 +169,13 @@ class CalculoVentanaService
 
         // 🔧 Función helper para agregar perfiles (igual que calcularCorrederaSliding)
         $addLinea = function ($id, $cantidad, $largoMm) use (&$materiales, $productos, $colorId) {
+            $largoMm = max(0, $largoMm); // Guard: negative lengths produce negative costs
             $producto = $productos[$id];
             $largoMt = $largoMm / 1000;
             $costoBarra = self::buscarCostoPorColor($producto, $colorId);
             $costoPorMetro = $producto->largo_total > 0 ? $costoBarra / $producto->largo_total : 0;
             $costoTotal = $cantidad * $largoMt * $costoPorMetro;
-            
+
             $materiales[] = [
                 'producto_id' => $producto->id,
                 'nombre' => $producto->nombre,
@@ -214,8 +220,8 @@ class CalculoVentanaService
         // ✅ Cálculo vidrio AL42 - Dimensiones específicas
         // X = ancho - 45.6
         // Y = alto - 65.6
-        $anchoVidrio = $ancho - 45.6;
-        $altoVidrio = $alto - 65.6;
+        $anchoVidrio = max(0, $ancho - 45.6);
+        $altoVidrio  = max(0, $alto - 65.6);
         $areaM2 = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
         
         $productoVidrio = $productos[$productoVidrioId];
@@ -371,12 +377,13 @@ class CalculoVentanaService
 
         // 🔧 Función helper para agregar perfiles (igual que calcularCorrederaSliding)
         $addLinea = function ($id, $cantidad, $largoMm) use (&$materiales, $productos, $colorId) {
+            $largoMm = max(0, $largoMm); // Guard: negative lengths produce negative costs
             $producto = $productos[$id];
             $largoMt = $largoMm / 1000;
             $costoBarra = self::buscarCostoPorColor($producto, $colorId);
             $costoPorMetro = $producto->largo_total > 0 ? $costoBarra / $producto->largo_total : 0;
             $costoTotal = $cantidad * $largoMt * $costoPorMetro;
-            
+
             $materiales[] = [
                 'producto_id' => $producto->id,
                 'nombre' => $producto->nombre,
@@ -439,8 +446,8 @@ class CalculoVentanaService
         $addBurlete($idBurleteRedondo, 2); // (4*ancho + 4*alto) metros
 
         // ✅ Calcular vidrio con dimensiones: X-93, Y-113
-        $anchoVidrio = $ancho - 93;
-        $altoVidrio = $alto - 113;
+        $anchoVidrio = max(0, $ancho - 93);
+        $altoVidrio  = max(0, $alto - 113);
         $areaM2 = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
 
         $productoVidrio = $productos[$productoVidrioId] ?? null;
@@ -670,12 +677,13 @@ class CalculoVentanaService
 
         // 🔧 Función helper para agregar perfiles (igual que calcularCorrederaSliding)
         $addLinea = function ($id, $cantidad, $largoMm) use (&$materiales, $productos, $colorId) {
+            $largoMm = max(0, $largoMm); // Guard: negative lengths produce negative costs
             $producto = $productos[$id];
             $largoMt = $largoMm / 1000;
             $costoBarra = self::buscarCostoPorColor($producto, $colorId);
             $costoPorMetro = $producto->largo_total > 0 ? $costoBarra / $producto->largo_total : 0;
             $costoTotal = $cantidad * $largoMt * $costoPorMetro;
-            
+
             $materiales[] = [
                 'producto_id' => $producto->id,
                 'nombre' => $producto->nombre,
@@ -896,7 +904,9 @@ class CalculoVentanaService
         $materiales[] = self::crearHerraje($productos[$idTapaTornillo], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[$idSilicona], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
 
-        $areaM2 = ($ancho / 1000) * ($alto / 1000);
+        $anchoVidrio = max(0, $ancho - 104);
+        $altoVidrio  = max(0, $alto - 104);
+        $areaM2 = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
         $productoVidrio = $productos[$productoVidrioId];
         // Verifica si existe la combinación exacta
         $vidrioMatch = $productoVidrio->coloresPorProveedor->first(function ($cpp) use ($colorId, $proveedorVidrio) {
@@ -943,7 +953,17 @@ class CalculoVentanaService
         $hojasMoviles = $ventana['hojas_moviles'] ?? 2;
         $cantidad = $ventana['cantidad'] ?? 1;
 
-        $productoIds = [46, 47, 48, 49, 50, 51, 52, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, $productoVidrioId];
+        $productoIds = [
+            46, 47, 48, 49, 50, 51, 52,
+            55, 56, 57, 58, 59, 60, 61, 62, 63, 64, // cremonas
+            65, 66, 67,                               // carros
+            68,                                       // manilla
+            // Herrajes adicionales
+            201, 43, 42, 44,                          // con color
+            207, 206, 203, 209, 210,                  // sin color
+            37, 38, 39, 200, 242, 40,                 // sin color
+            $productoVidrioId,
+        ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
             ->whereIn('id', $productoIds)
@@ -969,24 +989,28 @@ class CalculoVentanaService
             ];
         };
 
+        // Dimensiones de hoja y vidrio
+        $anchoHoja   = ($ancho - 92) / 2 + 45;            // ancho de la hoja
+        $anchoVidrio = max(0, $anchoHoja - 62 - 62 - 5 - 8);      // ancho del vidrio
+        $altoHoja    = $alto - 54 - 54 + 16 + 5;           // altura de la hoja (para cremona)
+        $altoVidrio  = max(0, $altoHoja - 62 - 62 - 5 - 8);        // altura del vidrio
+        $areaHoja    = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+
         // Cálculo perfiles
         $addLinea(46, 2 * $cantidad, $alto + 5);
         $addLinea(46, 2 * $cantidad, $ancho + 5);
         $addLinea(47, 2 * $cantidad, $alto - 80);
         $addLinea(47, 2 * $cantidad, $ancho - 80);
-        $addLinea(48, $hojasTotales * 2 * $cantidad, $alto - 54 - 54 + 16 + 5);
-        $addLinea(48, $hojasTotales * 2 * $cantidad, ((($ancho - 92) / 2) + 45));
-        $addLinea(49, $hojasTotales * 2 * $cantidad, $alto - 54 - 54 + 16 + 5 - 62 - 20);
-        $addLinea(49, $hojasTotales * 2 * $cantidad, ((((($ancho - 92) / 2) + 45) - 62 - 25)));
+        $addLinea(48, $hojasTotales * 2 * $cantidad, $altoHoja);
+        $addLinea(48, $hojasTotales * 2 * $cantidad, $anchoHoja);
+        $addLinea(49, $hojasTotales * 2 * $cantidad, $altoHoja - 62 - 62 - 20);
+        $addLinea(49, $hojasTotales * 2 * $cantidad, $anchoHoja - 62 - 62 - 25);
         $addLinea(50, $hojasTotales * $cantidad, $alto - 54 - 54 + 16 + 5 - 7);
         $addLinea(51, 2 * $cantidad, $ancho - 54 - 54 - 1);
         $addLinea(52, $hojasTotales * 2 * $cantidad, ((($ancho - 92) / 2) + 45 - 62 - 62 - 5));
         $addLinea(52, $hojasTotales * 2 * $cantidad, $alto - 54 - 54 + 16 + 5 - 62 - 62 - 5);
 
         // Calcular vidrio por hoja (aplica a todas las hojas)
-        $anchoHoja = ((($ancho - 92) / 2) + 45 - 62 - 62 - 5 - 8);
-        $altoHoja = ($alto - 54 - 54 + 16 + 5 - 62 - 62 - 5);
-        $areaHoja = ($anchoHoja / 1000) * ($altoHoja / 1000);
 
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
@@ -1003,8 +1027,8 @@ class CalculoVentanaService
 
         // Carros por hoja móvil
         $pesoVidrioM2 = $productoVidrio->peso_por_metro ?? 0.2;
-        $pesoPerfil = $productos[48]->peso_por_metro * ($altoHoja / 1000);
-        $pesoRefuerzo = $productos[49]->peso_por_metro * ($altoHoja / 1000);
+        $pesoPerfil = $productos[48]->peso_por_metro * ($altoVidrio / 1000);
+        $pesoRefuerzo = $productos[49]->peso_por_metro * ($altoVidrio / 1000);
         $pesoVidrio = $pesoVidrioM2 * $areaHoja;
         $pesoHoja = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
 
@@ -1023,14 +1047,15 @@ class CalculoVentanaService
 
         // Cremona por hoja móvil
         $cremonaId = 55;
-        if ($altoHoja >= 540) $cremonaId = 56;
-        if ($altoHoja >= 740) $cremonaId = 57;
-        if ($altoHoja >= 1000) $cremonaId = 58;
-        if ($altoHoja >= 1200) $cremonaId = 59;
-        if ($altoHoja >= 1400) $cremonaId = 60;
-        if ($altoHoja >= 1600) $cremonaId = 61;
-        if ($altoHoja >= 1800) $cremonaId = 62;
-        if ($altoHoja >= 2000) $cremonaId = 63;
+        if ($altoHoja >= 400) $cremonaId = 56;
+        if ($altoHoja >= 540) $cremonaId = 57;
+        if ($altoHoja >= 740) $cremonaId = 58;
+        if ($altoHoja >= 1000) $cremonaId = 59;
+        if ($altoHoja >= 1200) $cremonaId = 60;
+        if ($altoHoja >= 1400) $cremonaId = 61;
+        if ($altoHoja >= 1600) $cremonaId = 62;
+        if ($altoHoja >= 1800) $cremonaId = 63;
+        if ($altoHoja >= 2000) $cremonaId = 64;
 
         $cremona = $productos[$cremonaId];
         $costoCremona = self::buscarCostoPorColor($cremona, $colorId);
@@ -1056,6 +1081,88 @@ class CalculoVentanaService
             'costo_total' => round($costoManilla * $hojasMoviles * $cantidad),
             'proveedor' => $manilla->coloresPorProveedor->first()?->proveedor?->nombre ?? 'N/A',
         ];
+
+        // ─── Herrajes adicionales ────────────────────────────────────────────────
+        $addAcc = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $colorId, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, $colorId);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, $colorId),
+            ];
+        };
+
+        $addAccNC = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, null);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, null),
+            ];
+        };
+
+        // ── Con color ──────────────────────────────────────────────────────────
+        // Tope Estanco Corredera S70 (id=201): 2 por ventana
+        $addAcc(201, 2);
+
+        // Tapa Desague (id=43): 2 si ancho≤800, 3 si ≤1500, 4 si >1500
+        $qtdTapaDesague = $ancho <= 800 ? 2 : ($ancho <= 1500 ? 3 : 4);
+        $addAcc(43, $qtdTapaDesague);
+
+        // Silicona Neutra (id=44): (((ancho*alto)/10000)*2*0.7)/300
+        $qtdSilicona = ((($ancho * $alto) / 10000) * 2 * 0.7) / 300;
+        $addAcc(44, $qtdSilicona);
+
+        // ── Sin color ──────────────────────────────────────────────────────────
+        // Tornillos AMO III 80 (id=206): ((alto*2)/500) + ((ancho*2)/500)
+        $qtdTornillosAmo = round(($alto * 2 / 500) + ($ancho * 2 / 500));
+        $addAccNC(206, $qtdTornillosAmo);
+
+        // Tapa Tornillo AMO III (id=42): misma cantidad que Tornillos AMO III — con color
+        $addAcc(42, $qtdTornillosAmo);
+
+        // Seguro antielevación (id=207): 1 por hoja móvil
+        $qtdSeguroAnti = $hojasMoviles;
+        $addAccNC(207, $qtdSeguroAnti);
+
+        // Tope Amortiguador 13mm (id=203): 2 por hoja móvil
+        $addAccNC(203, $hojasMoviles * 2);
+
+        // Felpa 7x6 (id=209): ((alto*6)+(ancho*8))/1000 metros
+        $qtdFelpa = (($alto * 6) + ($ancho * 8)) / 1000;
+        $addAccNC(209, $qtdFelpa, 'm');
+
+        // Puente de acristalar corredera (id=210): 12
+        $addAccNC(210, 12);
+
+        // Calzos (ids 37/38/39): 12 cada uno
+        $addAccNC(37, 12);
+        $addAccNC(38, 12);
+        $addAccNC(39, 12);
+
+        // Cerradero Corredera (id=200): 2/3/4 cerraderos por hoja móvil según cremona
+        $cerraderosPorHoja = in_array($cremonaId, [55, 56, 57, 58]) ? 2
+            : (in_array($cremonaId, [59, 60, 61, 62]) ? 3 : 4);
+        $qtdCerraderos = $cerraderosPorHoja * $hojasMoviles;
+        $addAccNC(200, $qtdCerraderos);
+
+        // Tornillo para cerradero (id=242): (cerraderos*2) + (seguros antielevación*2)
+        $qtdTornillosCerradero = ($qtdCerraderos * 2) + ($qtdSeguroAnti * 2);
+        $addAccNC(242, $qtdTornillosCerradero);
+
+        // Tornillo autoperforante 3,9x25 (id=40)
+        $qtdAutoPerf = round(($alto / 250) * 2 + ($ancho / 250) * 2 + ($ancho / 250) * 4 + ($alto / 250) * 2);
+        $addAccNC(40, $qtdAutoPerf);
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
 
@@ -1093,21 +1200,19 @@ class CalculoVentanaService
         $junquilloId = $tipoVidrioId == 1 ? 45 : 35; // Monolítico (45) o Termopanel (35)
         
         $productoIds = [
-            46,  // Marco doble riel corredera (igual que original)
-            47,  // Refuerzo marco corredera 1,2 MM (igual que original)
-            146, // ✅ NUEVO: Hoja corredera 98 (en lugar de ID 48)
-            145, // ✅ NUEVO: Refuerzo hoja corredera 98 2 MM (en lugar de ID 49)
-            50,  // Hoja corredera 98 (igual que original) 
-            51,  // Riel de aluminio (igual que original)
-            147, // ✅ NUEVO: Traslapo corredera 98 (en lugar de ID 52)
-            $junquilloId, // Junquillo según tipo vidrio
-            $productoVidrioId, // Vidrio
-            // Hardware (igual que original)
-            55, 56, 57, 58, 59, 60, 61, 62, 63, // Cremonas
-            65, 66, 67, // Carros
-            68, // Manilla
-            // Herrajes universales (agregar si faltan)
-            40, 41, 42, 43, 44, // tornillos, silicona, tapas
+            46, 47,                                   // marco doble riel, refuerzo marco
+            146, 145, 147,                            // hoja 98, refuerzo hoja 98, traslapo 98
+            50, 51,                                   // riel, hoja inferior
+            $junquilloId,                             // junquillo mono/termo
+            55, 56, 57, 58, 59, 60, 61, 62, 63, 64,  // cremonas
+            65, 66, 67,                               // carros
+            68,                                       // manilla
+            // Herrajes con color
+            201, 43, 42, 44,
+            // Herrajes sin color
+            207, 206, 203, 209, 210,
+            37, 38, 39, 200, 242, 40,
+            $productoVidrioId,
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -1135,49 +1240,45 @@ class CalculoVentanaService
             ];
         };
 
+        // Dimensiones de hoja y vidrio
+        $anchoHoja   = ($ancho - 108 + 16) / 2 + 54;          // ancho de la hoja
+        $anchoVidrio = max(0, $anchoHoja - 80 - 80 - 5 - 8);   // ancho del vidrio
+        $altoHoja    = $alto - 54 - 54 + 16 + 5;               // altura de la hoja (para cremona)
+        $altoVidrio  = max(0, $altoHoja - 80 - 80 - 5 - 8);    // altura del vidrio
+        $areaHoja    = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+
         // ✅ Cálculo perfiles según tabla - MISMAS FÓRMULAS pero con IDs nuevos
-        
+
         // Marco doble riel corredera (ID 46) - igual que original
         $addLinea(46, 2 * $cantidad, $ancho + 5);
         $addLinea(46, 2 * $cantidad, $alto + 5);
-        
-        // Refuerzo marco corredera (ID 47) - igual que original  
+
+        // Refuerzo marco corredera (ID 47) - igual que original
         $addLinea(47, 2 * $cantidad, $ancho + 5 - 85);
         $addLinea(47, 2 * $cantidad, $alto + 5 - 85);
-        
-        // ✅ NUEVO: Hoja corredera 98 (ID 146) - fórmulas según tabla
-        $addLinea(146, 4 * $cantidad, (($ancho - 108 + 16) / 2) + 54);
-        $addLinea(146, 4 * $cantidad, $alto - 54 - 54 + 16 + 5);
-        
-        // ✅ NUEVO: Refuerzo hoja corredera 98 (ID 145) - fórmulas según tabla
-        $addLinea(145, 4 * $cantidad, (($ancho - 108 + 16) / 2) + 54 - 80 - 80 - 25);
-        $addLinea(145, 4 * $cantidad, $alto - 54 - 54 + 16 + 5 - 80 - 80 - 25);
-        
-        // Hoja corredera 98 (ID 50) - igual que original
-        $addLinea(50, $hojasTotales * $cantidad, $alto - 54 - 54 + 16 + 5 - 7);
-        
-        // Riel de aluminio (ID 51) - igual que original
+
+        // ✅ NUEVO: Hoja corredera 98 (ID 146)
+        $addLinea(146, 4 * $cantidad, $anchoHoja);
+        $addLinea(146, 4 * $cantidad, $altoHoja);
+
+        // ✅ NUEVO: Refuerzo hoja corredera 98 (ID 145)
+        $addLinea(145, 4 * $cantidad, $anchoHoja - 80 - 80 - 25);
+        $addLinea(145, 4 * $cantidad, $altoHoja - 80 - 80 - 25);
+
+        // Hoja corredera 98 (ID 50)
+        $addLinea(50, $hojasTotales * $cantidad, $altoHoja - 7);
+
+        // Riel de aluminio (ID 51)
         $addLinea(51, 2 * $cantidad, $ancho - 54 - 54 - 1);
-        
-        // ✅ NUEVO: Traslapo corredera 98 (ID 147) - fórmulas según tabla
+
+        // ✅ NUEVO: Traslapo corredera 98 (ID 147)
         $addLinea(147, 2 * $cantidad, $ancho - 54 - 54 + 16 + 5);
-        
-        // Junquillo según tipo vidrio - fórmulas según tabla
-        $addLinea($junquilloId, 4 * $cantidad, (($ancho - 108 + 16) / 2) + 54 - 80 - 80 - 5);
-        $addLinea($junquilloId, 4 * $cantidad, $alto - 54 - 54 + 16 + 5 - 80 - 80 - 5);
+
+        // Junquillo según tipo vidrio
+        $addLinea($junquilloId, 4 * $cantidad, $anchoHoja - 80 - 80 - 5);
+        $addLinea($junquilloId, 4 * $cantidad, $altoHoja - 80 - 80 - 5);
 
         // ✅ Calcular vidrio por hoja - FÓRMULA ESPECÍFICA según tabla
-        $anchoHoja = (($ancho - 108 + 16) / 2) + 54 - 80 - 80 - 5 - 8; // ✅ Fórmula tabla
-        $altoHoja = ($alto - 54 - 54 + 16 + 5 - 80 - 80 - 5) - 8; // ✅ Fórmula tabla  
-        $areaHoja = ($anchoHoja / 1000) * ($altoHoja / 1000);
-
-        Log::info("🔍 Cálculo vidrio Corredera 98", [
-            'ancho_hoja' => $anchoHoja,
-            'alto_hoja' => $altoHoja,
-            'area_hoja' => $areaHoja,
-            'hojas_totales' => $hojasTotales
-        ]);
-
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
 
@@ -1185,7 +1286,7 @@ class CalculoVentanaService
             'producto_id' => $productoVidrio->id,
             'nombre' => $productoVidrio->nombre,
             'unidad' => 'm2',
-            'cantidad' => round($areaHoja * $hojasTotales, 3) * $cantidad, // ✅ 2 cristales por ventana
+            'cantidad' => round($areaHoja * $hojasTotales, 3) * $cantidad,
             'costo_unitario' => round($costoVidrio),
             'costo_total' => round($costoVidrio * $areaHoja * $hojasTotales) * $cantidad,
             'proveedor' => self::buscarNombreProveedor($productoVidrio, null, $proveedorVidrioId),
@@ -1195,10 +1296,10 @@ class CalculoVentanaService
 
         // Carros por hoja móvil (según peso)
         $pesoVidrioM2 = $productoVidrio->peso_por_metro ?? 0.2;
-        $pesoPerfil = $productos[146]->peso_por_metro * ($altoHoja / 1000); // ✅ Usar ID 146
-        $pesoRefuerzo = $productos[145]->peso_por_metro * ($altoHoja / 1000); // ✅ Usar ID 145
-        $pesoVidrio = $pesoVidrioM2 * $areaHoja;
-        $pesoHoja = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
+        $pesoPerfil   = $productos[146]->peso_por_metro * ($altoVidrio / 1000);
+        $pesoRefuerzo = $productos[145]->peso_por_metro * ($altoVidrio / 1000);
+        $pesoVidrio   = $pesoVidrioM2 * $areaHoja;
+        $pesoHoja     = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
 
         $carroId = $pesoHoja <= 30 ? 65 : ($pesoHoja <= 60 ? 66 : 67);
         $carro = $productos[$carroId];
@@ -1213,16 +1314,17 @@ class CalculoVentanaService
             'proveedor' => self::buscarNombreProveedor($carro, $colorId),
         ];
 
-        // Cremona por hoja móvil (según alto)
+        // Cremona por hoja móvil (según alto de hoja)
         $cremonaId = 55;
-        if ($altoHoja >= 540) $cremonaId = 56;
-        if ($altoHoja >= 740) $cremonaId = 57;
-        if ($altoHoja >= 1000) $cremonaId = 58;
-        if ($altoHoja >= 1200) $cremonaId = 59;
-        if ($altoHoja >= 1400) $cremonaId = 60;
-        if ($altoHoja >= 1600) $cremonaId = 61;
-        if ($altoHoja >= 1800) $cremonaId = 62;
-        if ($altoHoja >= 2000) $cremonaId = 63;
+        if ($altoHoja >= 400)  $cremonaId = 56;
+        if ($altoHoja >= 540)  $cremonaId = 57;
+        if ($altoHoja >= 740)  $cremonaId = 58;
+        if ($altoHoja >= 1000) $cremonaId = 59;
+        if ($altoHoja >= 1200) $cremonaId = 60;
+        if ($altoHoja >= 1400) $cremonaId = 61;
+        if ($altoHoja >= 1600) $cremonaId = 62;
+        if ($altoHoja >= 1800) $cremonaId = 63;
+        if ($altoHoja >= 2000) $cremonaId = 64;
 
         $cremona = $productos[$cremonaId];
         $costoCremona = self::buscarCostoPorColor($cremona, $colorId);
@@ -1249,12 +1351,68 @@ class CalculoVentanaService
             'proveedor' => self::buscarNombreProveedor($manilla, $colorId),
         ];
 
-        // ✅ Herrajes universales (agregar si faltan en la original)
-        $materiales[] = self::crearHerraje($productos[44], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[41], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
-        $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
+        // ─── Herrajes adicionales ────────────────────────────────────────────────
+        $addAcc = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $colorId, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, $colorId);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, $colorId),
+            ];
+        };
+
+        $addAccNC = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, null);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, null),
+            ];
+        };
+
+        // ── Con color ──────────────────────────────────────────────────────────
+        $addAcc(201, 2);
+        $qtdTapaDesague = $ancho <= 800 ? 2 : ($ancho <= 1500 ? 3 : 4);
+        $addAcc(43, $qtdTapaDesague);
+        $qtdSilicona = ((($ancho * $alto) / 10000) * 2 * 0.7) / 300;
+        $addAcc(44, $qtdSilicona);
+
+        // ── Sin color ──────────────────────────────────────────────────────────
+        $qtdTornillosAmo = round(($alto * 2 / 500) + ($ancho * 2 / 500));
+        $addAccNC(206, $qtdTornillosAmo);
+        $addAcc(42, $qtdTornillosAmo);
+
+        $qtdSeguroAnti = $hojasMoviles;
+        $addAccNC(207, $qtdSeguroAnti);
+        $addAccNC(203, $hojasMoviles * 2);
+
+        $qtdFelpa = (($alto * 6) + ($ancho * 8)) / 1000;
+        $addAccNC(209, $qtdFelpa, 'm');
+
+        $addAccNC(210, 12);
+        $addAccNC(37, 12);
+        $addAccNC(38, 12);
+        $addAccNC(39, 12);
+
+        $cerraderosPorHoja = in_array($cremonaId, [55, 56, 57, 58]) ? 2
+            : (in_array($cremonaId, [59, 60, 61, 62]) ? 3 : 4);
+        $qtdCerraderos = $cerraderosPorHoja * $hojasMoviles;
+        $addAccNC(200, $qtdCerraderos);
+
+        $addAccNC(242, ($qtdCerraderos * 2) + ($qtdSeguroAnti * 2));
+
+        $qtdAutoPerf = round(($alto / 250) * 2 + ($ancho / 250) * 2 + ($ancho / 250) * 4 + ($alto / 250) * 2);
+        $addAccNC(40, $qtdAutoPerf);
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
         $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
@@ -1332,20 +1490,15 @@ class CalculoVentanaService
             135, // Hoja puerta exterior
             34,  // Ref. box marco fijo
             137, // Ref. puerta 1,5
-            // Junquillo según tipo vidrio
-            $tipoVidrioId == 1 ? 45 : 35, // Monolítico (45) o Termopanel (35)
+            $tipoVidrioId == 1 ? 45 : 35, // Junquillo dinámico
             $productoVidrioId, // vidrio
-            // Hardware específico puerta
             141, // Manilla
             140, // Bisagras
-            138,
-            139, // Cremonas
-            144,// cilindro
-            40,
-            41,
-            42,
-            43,
-            44, // tornillos, silicona, tapas
+            138, 139, // Cremonas
+            144, // Cilindro
+            40, 41, 42, 43, 44, // tornillos, silicona, tapas
+            248, 242, 249, // cerraderos y tornillo cerradero
+            36, 37, 38, 39, // puente abatible y calzos
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -1379,10 +1532,10 @@ class CalculoVentanaService
         $materiales[] = self::crearLinea($productos[$junquilloId], 2 * $cantidad, $ancho - 48 - 48 + 16 - 93.75 - 93.75, $colorId);
         $materiales[] = self::crearLinea($productos[$junquilloId], 2 * $cantidad, $alto - 48 - 48 + 16 - 93.75 - 93.75, $colorId); // Alto siempre 2
 
-        // ✅ Cálculo vidrio (igual)
-        $anchoVidrio = $ancho - 48 - 48 + 16 - 93.75 - 93.75 - 8;
-        $altoVidrio = $alto - 48 - 48 + 16 - 93.75 - 93.75 - 8;
-        $areaVidrio = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+        // Cálculo vidrio exterior (descuento según paso libre)
+        $anchoVidrio = max(0, $ancho - 276);
+        $altoVidrio  = max(0, $pasoLibre ? $alto - 238 : $alto - 276);
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
 
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
@@ -1439,22 +1592,86 @@ class CalculoVentanaService
             'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
         ];
 
-         // ✅ AGREGAR: Cilindro (ID 144) - Faltaba en puerta 1 hoja
+        // Cilindro (ID 144)
         $cilindro = $productos[144];
         $costoCilindro = self::buscarCostoPorColor($cilindro, $colorId);
         $materiales[] = [
             'producto_id' => $cilindro->id,
             'nombre' => $cilindro->nombre,
             'unidad' => 'unidad',
-            'cantidad' => $cantidad, // ✅ 1 cilindro por puerta
+            'cantidad' => $cantidad,
             'costo_unitario' => round($costoCilindro),
             'costo_total' => round($costoCilindro * $cantidad),
             'proveedor' => self::buscarNombreProveedor($cilindro, $colorId),
         ];
 
-        // ✅ Herrajes universales (iguales)
+        // Cerradero 13mm (id=248): 4 por puerta
+        $qtdCerraderos = 4 * $cantidad;
+        $costoCerradero = self::buscarCostoPorColor($productos[248], null);
+        $materiales[] = [
+            'producto_id'    => $productos[248]->id,
+            'nombre'         => $productos[248]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdCerraderos,
+            'costo_unitario' => round($costoCerradero),
+            'costo_total'    => round($costoCerradero * $qtdCerraderos),
+            'proveedor'      => self::buscarNombreProveedor($productos[248], null),
+        ];
+
+        // Cerradero central (id=249): 1 por puerta
+        $costoCerraderoCentral = self::buscarCostoPorColor($productos[249], null);
+        $materiales[] = [
+            'producto_id'    => $productos[249]->id,
+            'nombre'         => $productos[249]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $cantidad,
+            'costo_unitario' => round($costoCerraderoCentral),
+            'costo_total'    => round($costoCerraderoCentral * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[249], null),
+        ];
+
+        // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero (4 cerraderos + 1 central = 5 × 2 = 10)
+        $qtdTornillosCerradero = (4 + 1) * 2 * $cantidad;
+        $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+        $materiales[] = [
+            'producto_id'    => $productos[242]->id,
+            'nombre'         => $productos[242]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdTornillosCerradero,
+            'costo_unitario' => round($costoTornilloCerradero),
+            'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+            'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+        ];
+
+        // Puente de acristalar abatible (ID 36): 6 unidades
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 unidades cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
+
+        // ✅ Herrajes universales
         $materiales[] = self::crearHerraje($productos[44], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 125) * 2 + ($ancho / 125) * 2) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[41], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
@@ -1495,24 +1712,19 @@ class CalculoVentanaService
 
         // ✅ IDs según la tabla para APERTURA INTERIOR
         $perfilIds = [
-            32,  // Marco FIJO S60 (igual que exterior)
-            136, // ✅ Hoja puerta interior (diferente del exterior que usa 135)
-            34,  // Ref. box marco fijo (igual que exterior)
-            137, // Ref. puerta 1,5 (igual que exterior)
-            // Junquillo según tipo vidrio (igual que exterior)
-            $tipoVidrioId == 1 ? 45 : 35, // Monolítico (45) o Termopanel (35)
+            32,  // Marco FIJO S60
+            136, // Hoja puerta interior
+            34,  // Ref. box marco fijo
+            137, // Ref. puerta 1,5
+            $tipoVidrioId == 1 ? 45 : 35, // Junquillo dinámico
             $productoVidrioId, // vidrio
-            // Hardware específico puerta (igual que exterior)
-            141, // Manilla (igual que exterior)
-            140, // Bisagras (igual que exterior)
-            138,
-            139, // Cremonas (igual que exterior)
-            144, // Cilindro (igual que exterior)
-            40,
-            41,
-            42,
-            43,
-            44, // tornillos, silicona, tapas
+            141, // Manilla
+            140, // Bisagras
+            138, 139, // Cremonas
+            144, // Cilindro
+            40, 41, 42, 43, 44, // tornillos, silicona, tapas
+            248, 242, 249, // cerraderos y tornillo cerradero
+            36, 37, 38, 39, // puente abatible y calzos
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -1546,10 +1758,10 @@ class CalculoVentanaService
         $materiales[] = self::crearLinea($productos[$junquilloId], 2 * $cantidad, $ancho - 48 - 48 + 16 - 93.75 - 93.75, $colorId);
         $materiales[] = self::crearLinea($productos[$junquilloId], 2 * $cantidad, $alto - 48 - 48 + 16 - 93.75 - 93.75, $colorId); // Alto siempre 2
 
-        // ✅ Cálculo vidrio (igual que exterior)
-        $anchoVidrio = $ancho - 48 - 48 + 16 - 93.75 - 93.75 - 8;
-        $altoVidrio = $alto - 48 - 48 + 16 - 93.75 - 93.75 - 8;
-        $areaVidrio = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+        // Cálculo vidrio interior (descuento según paso libre)
+        $anchoVidrio = max(0, $pasoLibre ? $ancho - 279 : $ancho - 277);
+        $altoVidrio  = max(0, $pasoLibre ? $alto - 242  : $alto - 277);
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
 
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
@@ -1606,23 +1818,86 @@ class CalculoVentanaService
             'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
         ];
 
-        
-        // ✅ AGREGAR: Cilindro (ID 144) - Faltaba en puerta 1 hoja
+        // Cilindro (ID 144)
         $cilindro = $productos[144];
         $costoCilindro = self::buscarCostoPorColor($cilindro, $colorId);
         $materiales[] = [
             'producto_id' => $cilindro->id,
             'nombre' => $cilindro->nombre,
             'unidad' => 'unidad',
-            'cantidad' => $cantidad, // ✅ 1 cilindro por puerta
+            'cantidad' => $cantidad,
             'costo_unitario' => round($costoCilindro),
             'costo_total' => round($costoCilindro * $cantidad),
             'proveedor' => self::buscarNombreProveedor($cilindro, $colorId),
         ];
 
-        // ✅ Herrajes universales (iguales que exterior)
+        // Cerradero 13mm (id=248): 4 por puerta
+        $qtdCerraderos = 4 * $cantidad;
+        $costoCerradero = self::buscarCostoPorColor($productos[248], null);
+        $materiales[] = [
+            'producto_id'    => $productos[248]->id,
+            'nombre'         => $productos[248]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdCerraderos,
+            'costo_unitario' => round($costoCerradero),
+            'costo_total'    => round($costoCerradero * $qtdCerraderos),
+            'proveedor'      => self::buscarNombreProveedor($productos[248], null),
+        ];
+
+        // Cerradero central (id=249): 1 por puerta
+        $costoCerraderoCentral = self::buscarCostoPorColor($productos[249], null);
+        $materiales[] = [
+            'producto_id'    => $productos[249]->id,
+            'nombre'         => $productos[249]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $cantidad,
+            'costo_unitario' => round($costoCerraderoCentral),
+            'costo_total'    => round($costoCerraderoCentral * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[249], null),
+        ];
+
+        // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero (4 + 1 central = 5 × 2 = 10)
+        $qtdTornillosCerradero = (4 + 1) * 2 * $cantidad;
+        $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+        $materiales[] = [
+            'producto_id'    => $productos[242]->id,
+            'nombre'         => $productos[242]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdTornillosCerradero,
+            'costo_unitario' => round($costoTornilloCerradero),
+            'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+            'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+        ];
+
+        // Puente de acristalar abatible (ID 36): 6 unidades
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 unidades cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
+
+        // ✅ Herrajes universales
         $materiales[] = self::crearHerraje($productos[44], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 125) * 2 + ($ancho / 125) * 2) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[41], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
@@ -1705,23 +1980,17 @@ class CalculoVentanaService
             135, // Hoja puerta exterior
             34,  // Ref. box marco fijo
             137, // Ref. puerta 1,5
-            142, // ✅ NUEVO: Perfil inversor/poste (entre las 2 hojas)
-            // Junquillo según tipo vidrio
-            $tipoVidrioId == 1 ? 45 : 35, // Monolítico (45) o Termopanel (35)
+            142, // Perfil inversor/poste (entre las 2 hojas)
+            $tipoVidrioId == 1 ? 45 : 35, // Junquillo dinámico
             $productoVidrioId, // vidrio
-            // Hardware específico puerta 2 hojas
-            141, // Manilla (1 sola para hoja activa)
-            140, // Bisagras (8 total = 4 por hoja)
-            138,
-            139, // Cremonas
-            143, // ✅ NUEVO: Picaporte (2 unidades)
-            144, // ✅ NUEVO: Cilindro (1 unidad)
-            // Herrajes universales
-            40,
-            41,
-            42,
-            43,
-            44, // tornillos, silicona, tapas
+            141, // Manilla (hoja activa)
+            140, // Bisagras
+            138, 139, // Cremonas
+            143, // Picaporte
+            144, // Cilindro
+            40, 41, 42, 43, 44, // tornillos, silicona, tapas
+            260, 261, 242, // cerradero caluga, cerradero central, tornillo cerradero
+            36, 37, 38, 39, // puente abatible y calzos
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -1758,11 +2027,11 @@ class CalculoVentanaService
         $materiales[] = self::crearLinea($productos[$junquilloId], 4 * $cantidad, ($ancho / 2) - 48 + 16 - 93.75 - 93.75, $colorId);
         $materiales[] = self::crearLinea($productos[$junquilloId], 4 * $cantidad, $alto - 48 - 48 + 16 - 93.75 - 93.75, $colorId);
 
-        // Cálculo vidrio - DOBLE área por 2 hojas
-        $anchoVidrioPorHoja = ($ancho / 2) - 48 + 16 - 93.75 - 93.75 - 8;
-        $altoVidrio = $alto - 48 - 48 + 16 - 93.75 - 93.75 - 8;
-        $areaVidrioPorHoja = ($anchoVidrioPorHoja / 1000) * ($altoVidrio / 1000);
-        $areaVidrioTotal = $areaVidrioPorHoja * 2;
+        // Cálculo vidrio exterior 2 hojas
+        $anchoVidrioPorHoja = max(0, ($ancho / 2) - 241);
+        $altoVidrio         = max(0, $pasoLibre ? $alto - 241 : $alto - 277);
+        $areaVidrioPorHoja  = ($anchoVidrioPorHoja / 1000) * ($altoVidrio / 1000);
+        $areaVidrioTotal    = $areaVidrioPorHoja * 2;
 
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
@@ -1846,9 +2115,73 @@ class CalculoVentanaService
             'proveedor' => self::buscarNombreProveedor($cilindro, $colorId),
         ];
 
-        // Herrajes universales (proporcionales al área total)
+        // Cerradero caluga (id=260): 4 por puerta
+        $qtdCerraderos = 4 * $cantidad;
+        $costoCerradero = self::buscarCostoPorColor($productos[260], null);
+        $materiales[] = [
+            'producto_id'    => $productos[260]->id,
+            'nombre'         => $productos[260]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdCerraderos,
+            'costo_unitario' => round($costoCerradero),
+            'costo_total'    => round($costoCerradero * $qtdCerraderos),
+            'proveedor'      => self::buscarNombreProveedor($productos[260], null),
+        ];
+
+        // Cerradero central puerta batiente (id=261): 1 por puerta
+        $costoCerraderoCentral = self::buscarCostoPorColor($productos[261], null);
+        $materiales[] = [
+            'producto_id'    => $productos[261]->id,
+            'nombre'         => $productos[261]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $cantidad,
+            'costo_unitario' => round($costoCerraderoCentral),
+            'costo_total'    => round($costoCerraderoCentral * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[261], null),
+        ];
+
+        // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero (4 + 1 central = 5 × 2 = 10)
+        $qtdTornillosCerradero = (4 + 1) * 2 * $cantidad;
+        $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+        $materiales[] = [
+            'producto_id'    => $productos[242]->id,
+            'nombre'         => $productos[242]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdTornillosCerradero,
+            'costo_unitario' => round($costoTornilloCerradero),
+            'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+            'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+        ];
+
+        // Puente de acristalar abatible (ID 36): 6 unidades por hoja × 2 hojas = 12... confirmado 6?
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * 2 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * 2 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 unidades por hoja × 2 hojas = 24 cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * 2 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * 2 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
+
+        // Herrajes universales
         $materiales[] = self::crearHerraje($productos[44], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 125) * 2 + ($ancho / 125) * 2) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[41], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
@@ -1895,27 +2228,21 @@ class CalculoVentanaService
 
         // ✅ IDs para APERTURA INTERIOR 2 HOJAS
         $perfilIds = [
-            32,  // Marco FIJO S60 (igual que exterior)
-            136, // ✅ Hoja puerta interior (diferente del exterior que usa 135)
-            34,  // Ref. box marco fijo (igual que exterior)
-            137, // Ref. puerta 1,5 (igual que exterior)
-            142, // ✅ Perfil inversor/poste (igual que exterior)
-            // Junquillo según tipo vidrio (igual que exterior)
-            $tipoVidrioId == 1 ? 45 : 35, // Monolítico (45) o Termopanel (35)
+            32,  // Marco FIJO S60
+            136, // Hoja puerta interior
+            34,  // Ref. box marco fijo
+            137, // Ref. puerta 1,5
+            142, // Perfil inversor/poste
+            $tipoVidrioId == 1 ? 45 : 35, // Junquillo dinámico
             $productoVidrioId, // vidrio
-            // Hardware específico puerta 2 hojas (igual que exterior)
             141, // Manilla
             140, // Bisagras
-            138,
-            139, // Cremonas
+            138, 139, // Cremonas
             143, // Picaporte
             144, // Cilindro
-            // Herrajes universales (igual que exterior)
-            40,
-            41,
-            42,
-            43,
-            44,
+            40, 41, 42, 43, 44, // tornillos, silicona, tapas
+            260, 261, 242, // cerradero caluga, cerradero central, tornillo cerradero
+            36, 37, 38, 39, // puente abatible y calzos
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -1953,9 +2280,9 @@ class CalculoVentanaService
         $materiales[] = self::crearLinea($productos[$junquilloId], 4 * $cantidad, $alto - 48 - 48 + 16 - 93.75 - 93.75, $colorId);
 
         // Cálculo vidrio - igual que exterior
-        $anchoVidrioPorHoja = ($ancho / 2) - 48 + 16 - 93.75 - 93.75 - 8;
-        $altoVidrio = $alto - 48 - 48 + 16 - 93.75 - 93.75 - 8;
-        $areaVidrioPorHoja = ($anchoVidrioPorHoja / 1000) * ($altoVidrio / 1000);
+        $anchoVidrioPorHoja = max(0, ($ancho / 2) - 48 + 16 - 93.75 - 93.75 - 8);
+        $altoVidrio         = max(0, $alto - 48 - 48 + 16 - 93.75 - 93.75 - 8);
+        $areaVidrioPorHoja  = ($anchoVidrioPorHoja / 1000) * ($altoVidrio / 1000);
         $areaVidrioTotal = $areaVidrioPorHoja * 2;
 
         $productoVidrio = $productos[$productoVidrioId];
@@ -2038,9 +2365,73 @@ class CalculoVentanaService
             'proveedor' => self::buscarNombreProveedor($cilindro, $colorId),
         ];
 
-        // Herrajes universales (iguales que exterior)
+        // Cerradero caluga (id=260): 4 por puerta
+        $qtdCerraderos = 4 * $cantidad;
+        $costoCerradero = self::buscarCostoPorColor($productos[260], null);
+        $materiales[] = [
+            'producto_id'    => $productos[260]->id,
+            'nombre'         => $productos[260]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdCerraderos,
+            'costo_unitario' => round($costoCerradero),
+            'costo_total'    => round($costoCerradero * $qtdCerraderos),
+            'proveedor'      => self::buscarNombreProveedor($productos[260], null),
+        ];
+
+        // Cerradero central puerta batiente (id=261): 1 por puerta
+        $costoCerraderoCentral = self::buscarCostoPorColor($productos[261], null);
+        $materiales[] = [
+            'producto_id'    => $productos[261]->id,
+            'nombre'         => $productos[261]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $cantidad,
+            'costo_unitario' => round($costoCerraderoCentral),
+            'costo_total'    => round($costoCerraderoCentral * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[261], null),
+        ];
+
+        // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero (4 + 1 central = 5 × 2 = 10)
+        $qtdTornillosCerradero = (4 + 1) * 2 * $cantidad;
+        $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+        $materiales[] = [
+            'producto_id'    => $productos[242]->id,
+            'nombre'         => $productos[242]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $qtdTornillosCerradero,
+            'costo_unitario' => round($costoTornilloCerradero),
+            'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+            'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+        ];
+
+        // Puente de acristalar abatible (ID 36): 6 × 2 hojas = 12
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * 2 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * 2 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 × 2 hojas = 24 cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * 2 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * 2 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
+
+        // Herrajes universales
         $materiales[] = self::crearHerraje($productos[44], $alto, $ancho, ceil((((($alto * $ancho) / 10000) * 2) * 0.7) / 300 + 1) * $cantidad, $colorId);
-        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 250) * 2 + ($ancho / 250) * 2) * $cantidad), $colorId);
+        $materiales[] = self::crearHerraje($productos[40], $alto, $ancho, ceil((($alto / 125) * 2 + ($ancho / 125) * 2) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[41], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
@@ -2076,46 +2467,18 @@ class CalculoVentanaService
 
 
 
+        $idJunquillo = $tipoVidrioId == 1 ? 45 : 35; // Monolítico (45) o Termopanel (35)
+
         // IDs de productos
         $perfilIds = [
-            32,
-            72,
-            34,
-            49,
-            35, // perfiles y junquillos
-            $productoVidrioId, // vidrio
-            40,
-            41,
-            42,
-            43,
-            44, // tornillos, silicona, tapas
-            77,
-            78,
-            79,
-            80,
-            81,
-            82,
-            83,
-            84,
-            85,
-            86, // cremona
-            87,
-            88,
-            89,
-            90,
-            91,
-            92, // brazos
+            32, 72, 34, 49, $idJunquillo,              // perfiles y junquillos
+            77, 78, 79, 80, 81, 82, 83, 84, 85, 86,    // cremonas
+            87, 88, 89, 90, 91, 92,                     // brazos
+            40, 41, 42, 43, 44,                         // tornillos, tapas, silicona
+            36, 37, 38, 39,                             // puente abatible y calzos
+            248, 242,                                   // cerradero y tornillo cerradero
+            $productoVidrioId,
         ];
-
-        $idPuente = 36;
-        $idCalzoAmarillo = 37;
-        $idCalzoCeleste = 38;
-        $idCalzoRojo = 39;
-        $idTornilloAuto = 40;
-        $idTornilloAmo = 41;
-        $idTapaDesague = 43;
-        $idTapaTornillo = 42;
-        $idSilicona = 44;
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
             ->whereIn('id', $perfilIds)
@@ -2133,22 +2496,25 @@ class CalculoVentanaService
         $materiales[] = self::crearLinea($productos[34], 2 * $cantidad, $alto - 48 - 48 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[49], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[49], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25 - 20, $colorId);
-        $materiales[] = self::crearLinea($productos[35], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
-        $materiales[] = self::crearLinea($productos[35], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
+        $materiales[] = self::crearLinea($productos[$idJunquillo], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
+        $materiales[] = self::crearLinea($productos[$idJunquillo], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
 
         // Cálculo vidrio
-        $anchoHoja = $ancho - 48 - 48 + 21;
-        $altoHoja = $alto - 48 - 48 + 16 + 5;
-        $areaHoja = ($anchoHoja / 1000) * ($altoHoja / 1000);
+        $anchoHoja   = $ancho - 48 - 48 + 21;
+        $altoHoja    = $alto - 48 - 48 + 16 + 5;
+        $anchoVidrio = max(0, $ancho - 202);
+        $altoVidrio  = max(0, $alto - 202);
+        $areaHoja    = ($anchoHoja / 1000) * ($altoHoja / 1000);   // para peso brazo
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
         $materiales[] = [
             'producto_id' => $productoVidrio->id,
             'nombre' => $productoVidrio->nombre,
             'unidad' => 'm2',
-            'cantidad' => round($areaHoja * $cantidad, 3),
+            'cantidad' => round($areaVidrio * $cantidad, 3),
             'costo_unitario' => round($costoVidrio),
-            'costo_total' => round($costoVidrio * $areaHoja * $cantidad),
+            'costo_total' => round($costoVidrio * $areaVidrio * $cantidad),
             'proveedor' => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
         ];
 
@@ -2179,40 +2545,57 @@ class CalculoVentanaService
                 'costo_total' => round($costoCremona * $cantidad),
                 'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
             ];
+
+            // Cerradero 13mm (id=248): 2/3/4 según tamaño cremona
+            $cerraderosPorHoja = in_array($cremonaId, [83, 84, 85]) ? 2
+                : (in_array($cremonaId, [86, 77, 78, 79]) ? 3 : 4);
+            $qtdCerraderos = $cerraderosPorHoja * $cantidad;
+            $costoCerradero = self::buscarCostoPorColor($productos[248], null);
+            $materiales[] = [
+                'producto_id'    => $productos[248]->id,
+                'nombre'         => $productos[248]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $qtdCerraderos,
+                'costo_unitario' => round($costoCerradero),
+                'costo_total'    => round($costoCerradero * $qtdCerraderos),
+                'proveedor'      => self::buscarNombreProveedor($productos[248], null),
+            ];
+
+            // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero
+            $qtdTornillosCerradero = $qtdCerraderos * 2;
+            $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+            $materiales[] = [
+                'producto_id'    => $productos[242]->id,
+                'nombre'         => $productos[242]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $qtdTornillosCerradero,
+                'costo_unitario' => round($costoTornilloCerradero),
+                'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+                'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+            ];
         }
 
-        // Cálculo peso hoja para brazo
-        $pesoPerfil = $productos[72]->peso_por_metro * ($altoHoja / 1000);
-        $pesoRefuerzo = $productos[49]->peso_por_metro * ($altoHoja / 1000);
-        $pesoVidrio = $productoVidrio->peso_por_metro * $areaHoja;
-        $pesoHoja = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
+        // Cálculo peso hoja para brazo (4 barras perfil + 4 barras refuerzo + vidrio)
+        $anchoRefuerzo = $ancho - 48 - 48 + 16 - 57.25 - 57.25 - 20;
+        $altoRefuerzo  = $alto  - 48 - 48 + 16 - 57.25 - 57.25 - 20;
+        $pesoPerfil   = $productos[72]->peso_por_metro * (2 * $anchoHoja + 2 * $altoHoja) / 1000;
+        $pesoRefuerzo = $productos[49]->peso_por_metro * (2 * $anchoRefuerzo + 2 * $altoRefuerzo) / 1000;
+        $pesoVidrio   = $productoVidrio->peso_por_metro * $areaVidrio;
+        $pesoHoja     = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
 
-        // Buscar brazo según alto y peso
+        // Buscar brazo según $altoVidrio y peso (tabla fabricante: alto max y peso max)
         $brazoId = null;
         $brazoReglas = [
-            ['id' => 92, 'a_min' => 296, 'a_max' => 400, 'p_min' => 0, 'p_max' => 10],
-            ['id' => 87, 'a_min' => 296, 'a_max' => 400, 'p_min' => 10.1, 'p_max' => 16],
-            ['id' => 88, 'a_min' => 396, 'a_max' => 400, 'p_min' => 16.1, 'p_max' => 22.2],
-            ['id' => 87, 'a_min' => 401, 'a_max' => 500, 'p_min' => 0, 'p_max' => 16],
-            ['id' => 88, 'a_min' => 401, 'a_max' => 500, 'p_min' => 16.1, 'p_max' => 21],
-            ['id' => 89, 'a_min' => 496, 'a_max' => 500, 'p_min' => 16.1, 'p_max' => 22],
-            ['id' => 88, 'a_min' => 501, 'a_max' => 600, 'p_min' => 0, 'p_max' => 21.1],
-            ['id' => 89, 'a_min' => 501, 'a_max' => 600, 'p_min' => 21.1, 'p_max' => 22],
-            ['id' => 90, 'a_min' => 596, 'a_max' => 600, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 89, 'a_min' => 601, 'a_max' => 700, 'p_min' => 0, 'p_max' => 22],
-            ['id' => 90, 'a_min' => 601, 'a_max' => 700, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 91, 'a_min' => 696, 'a_max' => 700, 'p_min' => 24.1, 'p_max' => 32],
-            ['id' => 90, 'a_min' => 701, 'a_max' => 800, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 89, 'a_min' => 701, 'a_max' => 800, 'p_min' => 0, 'p_max' => 22],
-            ['id' => 91, 'a_min' => 701, 'a_max' => 800, 'p_min' => 24.1, 'p_max' => 32],
-            ['id' => 91, 'a_min' => 901, 'a_max' => 1400, 'p_min' => 0, 'p_max' => 32],
+            ['id' => 92, 'alto_max' => 350,  'peso_max' => 12],  // 8"
+            ['id' => 87, 'alto_max' => 400,  'peso_max' => 16],  // 10"
+            ['id' => 88, 'alto_max' => 550,  'peso_max' => 20],  // 12"
+            ['id' => 89, 'alto_max' => 750,  'peso_max' => 24],  // 16"
+            ['id' => 90, 'alto_max' => 1000, 'peso_max' => 28],  // 20"
+            ['id' => 91, 'alto_max' => 1100, 'peso_max' => 35],  // 24"
         ];
 
         foreach ($brazoReglas as $regla) {
-            if (
-                $altoHoja >= $regla['a_min'] && $altoHoja <= $regla['a_max'] &&
-                $pesoHoja >= $regla['p_min'] && $pesoHoja <= $regla['p_max']
-            ) {
+            if ($altoVidrio <= $regla['alto_max'] && $pesoHoja <= $regla['peso_max']) {
                 $brazoId = $regla['id'];
                 break;
             }
@@ -2267,6 +2650,31 @@ class CalculoVentanaService
         // Tapa desagüe (ID 43)
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
 
+        // Puente de acristalar abatible (ID 36): 6 unidades
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 unidades cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
         $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
@@ -2318,13 +2726,15 @@ class CalculoVentanaService
         $tipoVidrioId = $ventana['tipoVidrio'] ?? null;
         $cantidad = $ventana['cantidad'] ?? 1;
 
+        $idJunquillo = $tipoVidrioId == 1 ? 45 : 35; // Monolítico (45) o Termopanel (35)
+
         // ✅ MISMOS IDs que proyectante PERO brazos van en ANCHO
         $perfilIds = [
             32,
             72,
             34,
             49,
-            35, // perfiles y junquillos (iguales)
+            $idJunquillo, // perfiles y junquillos (iguales)
             $productoVidrioId, // vidrio
             40,
             41,
@@ -2347,6 +2757,8 @@ class CalculoVentanaService
             90,
             91,
             92, // brazos
+            36, 37, 38, 39, // puente abatible y calzos
+            248, 242,       // cerradero y tornillo cerradero
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -2365,22 +2777,25 @@ class CalculoVentanaService
         $materiales[] = self::crearLinea($productos[34], 2 * $cantidad, $alto - 48 - 48 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[49], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[49], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25 - 20, $colorId);
-        $materiales[] = self::crearLinea($productos[35], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
-        $materiales[] = self::crearLinea($productos[35], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
+        $materiales[] = self::crearLinea($productos[$idJunquillo], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
+        $materiales[] = self::crearLinea($productos[$idJunquillo], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
 
-        // ✅ Vidrio (igual)
-        $anchoHoja = $ancho - 48 - 48 + 21;
-        $altoHoja = $alto - 48 - 48 + 16 + 5;
-        $areaHoja = ($anchoHoja / 1000) * ($altoHoja / 1000);
+        // ✅ Vidrio exterior
+        $anchoHoja   = $ancho - 48 - 48 + 21;
+        $altoHoja    = $alto - 48 - 48 + 16 + 5;
+        $anchoVidrio = max(0, $ancho - 202);
+        $altoVidrio  = max(0, $alto - 202);
+        $areaHoja    = ($anchoHoja / 1000) * ($altoHoja / 1000);   // para peso brazo
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
         $materiales[] = [
             'producto_id' => $productoVidrio->id,
             'nombre' => $productoVidrio->nombre,
             'unidad' => 'm2',
-            'cantidad' => round($areaHoja * $cantidad, 3),
+            'cantidad' => round($areaVidrio * $cantidad, 3),
             'costo_unitario' => round($costoVidrio),
-            'costo_total' => round($costoVidrio * $areaHoja * $cantidad),
+            'costo_total' => round($costoVidrio * $areaVidrio * $cantidad),
             'proveedor' => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
         ];
 
@@ -2411,41 +2826,57 @@ class CalculoVentanaService
                 'costo_total' => round($costoCremona * $cantidad),
                 'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
             ];
+
+            // Cerradero 13mm (id=248): 2/3/4 según tamaño cremona
+            $cerraderosPorHoja = in_array($cremonaId, [83, 84, 85]) ? 2
+                : (in_array($cremonaId, [86, 77, 78, 79]) ? 3 : 4);
+            $qtdCerraderos = $cerraderosPorHoja * $cantidad;
+            $costoCerradero = self::buscarCostoPorColor($productos[248], null);
+            $materiales[] = [
+                'producto_id'    => $productos[248]->id,
+                'nombre'         => $productos[248]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $qtdCerraderos,
+                'costo_unitario' => round($costoCerradero),
+                'costo_total'    => round($costoCerradero * $qtdCerraderos),
+                'proveedor'      => self::buscarNombreProveedor($productos[248], null),
+            ];
+
+            // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero
+            $qtdTornillosCerradero = $qtdCerraderos * 2;
+            $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+            $materiales[] = [
+                'producto_id'    => $productos[242]->id,
+                'nombre'         => $productos[242]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $qtdTornillosCerradero,
+                'costo_unitario' => round($costoTornilloCerradero),
+                'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+                'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+            ];
         }
 
-        // ✅ DIFERENCIA CLAVE: Brazos van en ANCHO (no alto como proyectante)
-        $pesoPerfil = $productos[72]->peso_por_metro * ($anchoHoja / 1000); // ✅ ANCHO
-        $pesoRefuerzo = $productos[49]->peso_por_metro * ($anchoHoja / 1000); // ✅ ANCHO
-        $pesoVidrio = $productoVidrio->peso_por_metro * $areaHoja;
-        $pesoHoja = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
+        // Brazos van en ANCHO para abatir (usa anchoVidrio como dimensión determinante)
+        $anchoRefuerzo = $ancho - 48 - 48 + 16 - 57.25 - 57.25 - 20;
+        $altoRefuerzo  = $alto  - 48 - 48 + 16 - 57.25 - 57.25 - 20;
+        $pesoPerfil   = $productos[72]->peso_por_metro * (2 * $anchoHoja + 2 * $altoHoja) / 1000;
+        $pesoRefuerzo = $productos[49]->peso_por_metro * (2 * $anchoRefuerzo + 2 * $altoRefuerzo) / 1000;
+        $pesoVidrio   = $productoVidrio->peso_por_metro * $areaVidrio;
+        $pesoHoja     = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
 
-        // ✅ Buscar brazo según ANCHO y peso (no alto)
+        // Buscar brazo según anchoVidrio y peso (catálogo Cotswold S60)
         $brazoId = null;
         $brazoReglas = [
-            ['id' => 92, 'a_min' => 296, 'a_max' => 400, 'p_min' => 0, 'p_max' => 10],
-            ['id' => 87, 'a_min' => 296, 'a_max' => 400, 'p_min' => 10.1, 'p_max' => 16],
-            ['id' => 88, 'a_min' => 396, 'a_max' => 400, 'p_min' => 16.1, 'p_max' => 22.2],
-            ['id' => 87, 'a_min' => 401, 'a_max' => 500, 'p_min' => 0, 'p_max' => 16],
-            ['id' => 88, 'a_min' => 401, 'a_max' => 500, 'p_min' => 16.1, 'p_max' => 21],
-            ['id' => 89, 'a_min' => 496, 'a_max' => 500, 'p_min' => 16.1, 'p_max' => 22],
-            ['id' => 88, 'a_min' => 501, 'a_max' => 600, 'p_min' => 0, 'p_max' => 21.1],
-            ['id' => 89, 'a_min' => 501, 'a_max' => 600, 'p_min' => 21.1, 'p_max' => 22],
-            ['id' => 90, 'a_min' => 596, 'a_max' => 600, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 89, 'a_min' => 601, 'a_max' => 700, 'p_min' => 0, 'p_max' => 22],
-            ['id' => 90, 'a_min' => 601, 'a_max' => 700, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 91, 'a_min' => 696, 'a_max' => 700, 'p_min' => 24.1, 'p_max' => 32],
-            ['id' => 90, 'a_min' => 701, 'a_max' => 800, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 89, 'a_min' => 701, 'a_max' => 800, 'p_min' => 0, 'p_max' => 22],
-            ['id' => 91, 'a_min' => 701, 'a_max' => 800, 'p_min' => 24.1, 'p_max' => 32],
-            ['id' => 91, 'a_min' => 901, 'a_max' => 1400, 'p_min' => 0, 'p_max' => 32],
+            ['id' => 92, 'alto_max' => 350,  'peso_max' => 12],  // 8"
+            ['id' => 87, 'alto_max' => 400,  'peso_max' => 16],  // 10"
+            ['id' => 88, 'alto_max' => 550,  'peso_max' => 20],  // 12"
+            ['id' => 89, 'alto_max' => 750,  'peso_max' => 24],  // 16"
+            ['id' => 90, 'alto_max' => 1000, 'peso_max' => 28],  // 20"
+            ['id' => 91, 'alto_max' => 1100, 'peso_max' => 35],  // 24"
         ];
 
         foreach ($brazoReglas as $regla) {
-            // ✅ USA ANCHO en lugar de alto
-            if (
-                $anchoHoja >= $regla['a_min'] && $anchoHoja <= $regla['a_max'] &&
-                $pesoHoja >= $regla['p_min'] && $pesoHoja <= $regla['p_max']
-            ) {
+            if ($anchoVidrio <= $regla['alto_max'] && $pesoHoja <= $regla['peso_max']) {
                 $brazoId = $regla['id'];
                 break;
             }
@@ -2487,6 +2918,32 @@ class CalculoVentanaService
         $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
 
+        // Puente de acristalar abatible (ID 36): 6 unidades
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 unidades cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
+
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
         $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
 
@@ -2508,13 +2965,15 @@ class CalculoVentanaService
         $tipoVidrioId = $ventana['tipoVidrio'] ?? null;
         $cantidad = $ventana['cantidad'] ?? 1;
 
+        $idJunquillo = $tipoVidrioId == 1 ? 45 : 35; // Monolítico (45) o Termopanel (35)
+
         // ✅ IDs ESPECÍFICOS PARA APERTURA INTERIOR
         $perfilIds = [
             32, // Marco (igual)
             134, // ✅ Perfil hoja abatir interior (en lugar de 72)
             34, // Refuerzo marco (igual)
-            49, // Refuerzo hoja (igual) 
-            35, // Junquillo termopanel (igual)
+            49, // Refuerzo hoja (igual)
+            $idJunquillo, // Junquillo dinámico
             $productoVidrioId, // vidrio
             40,
             41,
@@ -2537,6 +2996,8 @@ class CalculoVentanaService
             90,
             91,
             92, // brazos (iguales)
+            36, 37, 38, 39, // puente abatible y calzos
+            248, 242,       // cerradero y tornillo cerradero
         ];
 
         $productos = Producto::with(['coloresPorProveedor.proveedor'])
@@ -2546,31 +3007,34 @@ class CalculoVentanaService
 
         $materiales = [];
 
-        // ✅ Perfiles - MISMAS FÓRMULAS pero con ID 71
+        // ✅ Perfiles - MISMAS FÓRMULAS pero con ID 134
         $materiales[] = self::crearLinea($productos[32], 2 * $cantidad, $ancho + 5, $colorId);
         $materiales[] = self::crearLinea($productos[32], 2 * $cantidad, $alto + 5, $colorId);
-        $materiales[] = self::crearLinea($productos[134], 2 * $cantidad, $ancho - 48 - 48 + 21, $colorId); // ✅ 71
-        $materiales[] = self::crearLinea($productos[134], 2 * $cantidad, $alto - 48 - 48 + 16 + 5, $colorId); // ✅ 71
+        $materiales[] = self::crearLinea($productos[134], 2 * $cantidad, $ancho - 48 - 48 + 21, $colorId);
+        $materiales[] = self::crearLinea($productos[134], 2 * $cantidad, $alto - 48 - 48 + 16 + 5, $colorId);
         $materiales[] = self::crearLinea($productos[34], 2 * $cantidad, $ancho - 48 - 48 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[34], 2 * $cantidad, $alto - 48 - 48 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[49], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25 - 20, $colorId);
         $materiales[] = self::crearLinea($productos[49], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25 - 20, $colorId);
-        $materiales[] = self::crearLinea($productos[35], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
-        $materiales[] = self::crearLinea($productos[35], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
+        $materiales[] = self::crearLinea($productos[$idJunquillo], 2 * $cantidad, $ancho - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
+        $materiales[] = self::crearLinea($productos[$idJunquillo], 2 * $cantidad, $alto - 48 - 48 + 16 - 57.25 - 57.25, $colorId);
 
-        // ✅ Vidrio (igual)
-        $anchoHoja = $ancho - 48 - 48 + 21;
-        $altoHoja = $alto - 48 - 48 + 16 + 5;
-        $areaHoja = ($anchoHoja / 1000) * ($altoHoja / 1000);
+        // ✅ Vidrio interior
+        $anchoHoja   = $ancho - 48 - 48 + 21;
+        $altoHoja    = $alto - 48 - 48 + 16 + 5;
+        $anchoVidrio = max(0, $ancho - 204);
+        $altoVidrio  = max(0, $alto - 204);
+        $areaHoja    = ($anchoHoja / 1000) * ($altoHoja / 1000);   // para peso brazo
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
         $materiales[] = [
             'producto_id' => $productoVidrio->id,
             'nombre' => $productoVidrio->nombre,
             'unidad' => 'm2',
-            'cantidad' => round($areaHoja * $cantidad, 3),
+            'cantidad' => round($areaVidrio * $cantidad, 3),
             'costo_unitario' => round($costoVidrio),
-            'costo_total' => round($costoVidrio * $areaHoja * $cantidad),
+            'costo_total' => round($costoVidrio * $areaVidrio * $cantidad),
             'proveedor' => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
         ];
 
@@ -2601,41 +3065,57 @@ class CalculoVentanaService
                 'costo_total' => round($costoCremona * $cantidad),
                 'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
             ];
+
+            // Cerradero 13mm (id=248): 2/3/4 según tamaño cremona
+            $cerraderosPorHoja = in_array($cremonaId, [83, 84, 85]) ? 2
+                : (in_array($cremonaId, [86, 77, 78, 79]) ? 3 : 4);
+            $qtdCerraderos = $cerraderosPorHoja * $cantidad;
+            $costoCerradero = self::buscarCostoPorColor($productos[248], null);
+            $materiales[] = [
+                'producto_id'    => $productos[248]->id,
+                'nombre'         => $productos[248]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $qtdCerraderos,
+                'costo_unitario' => round($costoCerradero),
+                'costo_total'    => round($costoCerradero * $qtdCerraderos),
+                'proveedor'      => self::buscarNombreProveedor($productos[248], null),
+            ];
+
+            // Tornillo cerradero 4,2x45 (id=242): 2 por cerradero
+            $qtdTornillosCerradero = $qtdCerraderos * 2;
+            $costoTornilloCerradero = self::buscarCostoPorColor($productos[242], null);
+            $materiales[] = [
+                'producto_id'    => $productos[242]->id,
+                'nombre'         => $productos[242]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => $qtdTornillosCerradero,
+                'costo_unitario' => round($costoTornilloCerradero),
+                'costo_total'    => round($costoTornilloCerradero * $qtdTornillosCerradero),
+                'proveedor'      => self::buscarNombreProveedor($productos[242], null),
+            ];
         }
 
-        // ✅ DIFERENCIA: Peso usando ID 71 + brazos en ANCHO
-        $pesoPerfil = $productos[134]->peso_por_metro * ($anchoHoja / 1000); // ✅ ID 71 + ANCHO
-        $pesoRefuerzo = $productos[49]->peso_por_metro * ($anchoHoja / 1000); // ✅ ANCHO
-        $pesoVidrio = $productoVidrio->peso_por_metro * $areaHoja;
-        $pesoHoja = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
+        // Brazos van en ANCHO para abatir interior (usa anchoVidrio como dimensión determinante)
+        $anchoRefuerzo = $ancho - 48 - 48 + 16 - 57.25 - 57.25 - 20;
+        $altoRefuerzo  = $alto  - 48 - 48 + 16 - 57.25 - 57.25 - 20;
+        $pesoPerfil   = $productos[134]->peso_por_metro * (2 * $anchoHoja + 2 * $altoHoja) / 1000;
+        $pesoRefuerzo = $productos[49]->peso_por_metro * (2 * $anchoRefuerzo + 2 * $altoRefuerzo) / 1000;
+        $pesoVidrio   = $productoVidrio->peso_por_metro * $areaVidrio;
+        $pesoHoja     = $pesoPerfil + $pesoRefuerzo + $pesoVidrio;
 
-        // ✅ Brazos según ANCHO
+        // Buscar brazo según anchoVidrio y peso (catálogo Cotswold S60)
         $brazoId = null;
         $brazoReglas = [
-            ['id' => 92, 'a_min' => 296, 'a_max' => 400, 'p_min' => 0, 'p_max' => 10],
-            ['id' => 87, 'a_min' => 296, 'a_max' => 400, 'p_min' => 10.1, 'p_max' => 16],
-            ['id' => 88, 'a_min' => 396, 'a_max' => 400, 'p_min' => 16.1, 'p_max' => 22.2],
-            ['id' => 87, 'a_min' => 401, 'a_max' => 500, 'p_min' => 0, 'p_max' => 16],
-            ['id' => 88, 'a_min' => 401, 'a_max' => 500, 'p_min' => 16.1, 'p_max' => 21],
-            ['id' => 89, 'a_min' => 496, 'a_max' => 500, 'p_min' => 16.1, 'p_max' => 22],
-            ['id' => 88, 'a_min' => 501, 'a_max' => 600, 'p_min' => 0, 'p_max' => 21.1],
-            ['id' => 89, 'a_min' => 501, 'a_max' => 600, 'p_min' => 21.1, 'p_max' => 22],
-            ['id' => 90, 'a_min' => 596, 'a_max' => 600, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 89, 'a_min' => 601, 'a_max' => 700, 'p_min' => 0, 'p_max' => 22],
-            ['id' => 90, 'a_min' => 601, 'a_max' => 700, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 91, 'a_min' => 696, 'a_max' => 700, 'p_min' => 24.1, 'p_max' => 32],
-            ['id' => 90, 'a_min' => 701, 'a_max' => 800, 'p_min' => 22.1, 'p_max' => 24],
-            ['id' => 89, 'a_min' => 701, 'a_max' => 800, 'p_min' => 0, 'p_max' => 22],
-            ['id' => 91, 'a_min' => 701, 'a_max' => 800, 'p_min' => 24.1, 'p_max' => 32],
-            ['id' => 91, 'a_min' => 901, 'a_max' => 1400, 'p_min' => 0, 'p_max' => 32],
+            ['id' => 92, 'alto_max' => 350,  'peso_max' => 12],  // 8"
+            ['id' => 87, 'alto_max' => 400,  'peso_max' => 16],  // 10"
+            ['id' => 88, 'alto_max' => 550,  'peso_max' => 20],  // 12"
+            ['id' => 89, 'alto_max' => 750,  'peso_max' => 24],  // 16"
+            ['id' => 90, 'alto_max' => 1000, 'peso_max' => 28],  // 20"
+            ['id' => 91, 'alto_max' => 1100, 'peso_max' => 35],  // 24"
         ];
 
         foreach ($brazoReglas as $regla) {
-            // ✅ USA ANCHO
-            if (
-                $anchoHoja >= $regla['a_min'] && $anchoHoja <= $regla['a_max'] &&
-                $pesoHoja >= $regla['p_min'] && $pesoHoja <= $regla['p_max']
-            ) {
+            if ($anchoVidrio <= $regla['alto_max'] && $pesoHoja <= $regla['peso_max']) {
                 $brazoId = $regla['id'];
                 break;
             }
@@ -2675,6 +3155,32 @@ class CalculoVentanaService
         $materiales[] = self::crearHerraje($productos[41], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[42], $alto, $ancho, ceil((($alto * 2) / 500 + ($ancho * 2) / 500) * $cantidad), $colorId);
         $materiales[] = self::crearHerraje($productos[43], $alto, $ancho, self::calcularCantidadTapaDesague($ancho) * $cantidad, $colorId);
+
+        // Puente de acristalar abatible (ID 36): 6 unidades
+        $costoPuente = self::buscarCostoPorColor($productos[36], null);
+        $materiales[] = [
+            'producto_id'    => $productos[36]->id,
+            'nombre'         => $productos[36]->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => 6 * $cantidad,
+            'costo_unitario' => round($costoPuente),
+            'costo_total'    => round($costoPuente * 6 * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productos[36], null),
+        ];
+
+        // Calzos (IDs 37/38/39): 12 unidades cada uno
+        foreach ([37, 38, 39] as $idCalzo) {
+            $costoCalzo = self::buscarCostoPorColor($productos[$idCalzo], null);
+            $materiales[] = [
+                'producto_id'    => $productos[$idCalzo]->id,
+                'nombre'         => $productos[$idCalzo]->nombre,
+                'unidad'         => 'unidad',
+                'cantidad'       => 12 * $cantidad,
+                'costo_unitario' => round($costoCalzo),
+                'costo_total'    => round($costoCalzo * 12 * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productos[$idCalzo], null),
+            ];
+        }
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
         $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
@@ -2766,12 +3272,58 @@ protected static function calcularBayWindow(array $ventana): array
         }
     }
     
+    // === ESQUINEROS ===
+    // Forma U (frontal + 2 laterales) → 2 esquineros
+    // Forma L (frontal + 1 lateral) → 1 esquinero
+    $tieneIzquierda = $anchoIzquierda > 0 && !empty($tipoVentanaIzquierda);
+    $tieneDerecha   = $anchoDerecha   > 0 && !empty($tipoVentanaDerecha);
+    $numEsquineros  = ($tieneIzquierda ? 1 : 0) + ($tieneDerecha ? 1 : 0);
+
+    if ($numEsquineros > 0) {
+        // Si el frontal (centro) es corredera → esquinero 70 mm CORREDERA
+        // En caso contrario → esquinero 60 mm S60
+        $centroEsCorredera = isset($tipoVentanaCentro['tipo']) && (int)$tipoVentanaCentro['tipo'] === 3;
+
+        $idEsquinero = $centroEsCorredera ? 255 : 253; // 70mm CORREDERA : 60mm S60
+        $idRefuerzo  = $centroEsCorredera ? 257 : 256; // Refuerzo interior corredera : S60
+
+        $productosEsquineros = Producto::with('coloresPorProveedor.proveedor')
+            ->whereIn('id', [$idEsquinero, $idRefuerzo])
+            ->get()
+            ->keyBy('id');
+
+        $cantTotal = $numEsquineros * $cantidad;
+
+        Log::info("📐 Bay Window - Esquineros", [
+            'forma'             => $numEsquineros === 2 ? 'U' : 'L',
+            'num_esquineros'    => $numEsquineros,
+            'centro_corredera'  => $centroEsCorredera,
+            'id_esquinero'      => $idEsquinero,
+            'id_refuerzo'       => $idRefuerzo,
+            'cantidad_total'    => $cantTotal,
+        ]);
+
+        if (isset($productosEsquineros[$idEsquinero])) {
+            $matEsquinero = self::crearHerraje($productosEsquineros[$idEsquinero], $alto, $anchoCentro, $cantTotal, $colorId);
+            $matEsquinero['nombre'] = '[Esquineros] ' . $matEsquinero['nombre'];
+            $materialesTotal[] = $matEsquinero;
+            $costoTotal += $matEsquinero['costo_total'];
+        }
+
+        if (isset($productosEsquineros[$idRefuerzo])) {
+            $matRefuerzo = self::crearHerraje($productosEsquineros[$idRefuerzo], $alto, $anchoCentro, $cantTotal, $colorId);
+            $matRefuerzo['nombre'] = '[Esquineros] ' . $matRefuerzo['nombre'];
+            $materialesTotal[] = $matRefuerzo;
+            $costoTotal += $matRefuerzo['costo_total'];
+        }
+    }
+
     Log::info("💰 Bay Window calculada - TOTAL", [
         'costo_total' => $costoTotal,
         'secciones_calculadas' => count(array_filter($secciones, fn($s) => $s['ancho'] > 0)),
         'materiales_count_total' => count($materialesTotal)
     ]);
-    
+
     return [
         'materiales' => $materialesTotal,
         'costo_total' => round($costoTotal),
@@ -2837,16 +3389,22 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
 {
     $config = $seccion['config'];
     $partes = $config['partes'] ?? [];
-    
+    $numPartes = max(1, count($partes));
+
     $materialesTotal = [];
     $costoTotal = 0;
-    
+
     foreach ($partes as $index => $parte) {
         $nombreParte = $index === 0 ? 'Superior' : 'Inferior';
-        
+
+        // Si la parte no tiene alto definido, dividir el alto total en partes iguales
+        $altoParte = (isset($parte['alto']) && (float)$parte['alto'] > 0)
+            ? (float)$parte['alto']
+            : $alto / $numPartes;
+
         $ventanaParte = [
             'tipo' => $parte['tipo'],
-            'alto' => $parte['alto'],
+            'alto' => $altoParte,
             'ancho' => $seccion['ancho'],
             'color' => $ventanaOriginal['color'],
             'productoVidrio' => $ventanaOriginal['productoVidrio'],
@@ -2888,7 +3446,7 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
     ];
 }
 
-    protected static function calcularCorrederaAndes(array $ventana): array //revisar manillas si estan o no..
+    protected static function calcularCorrederaAndes(array $ventana): array
     {
         $alto = $ventana['alto'];
         $ancho = $ventana['ancho'];
@@ -2907,25 +3465,17 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         };
 
         $ids = [
-            98,
-            94,
-            101,
-            103,
-            104,
-            51,
-            105,
-            106,
-            107,
-            108,
-            109,
-            110,
-            111,
-            112,
-            113,
-            114,
-            115,
+            98, 94, 101, 103, 104, 51,
+            105, 106, 107, 108, 109, 110, 111, 112, 113, // cremonas
+            114, 115,                                      // carros
+            68,                                            // manilla
             $idJunquillo,
-            $productoVidrioId
+            // Herrajes con color
+            247, 43, 42, 44,
+            // Herrajes sin color
+            207, 206, 203, 209, 210,
+            37, 38, 39, 200, 242, 246,
+            $productoVidrioId,
         ];
 
         $productos = Producto::with('coloresPorProveedor.proveedor')
@@ -2964,9 +3514,9 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         $addLinea(104, 2 * $cantidad, $alto + 5 - 84);
         $addLinea(51, 2 * $cantidad, $ancho - 44 - 44 - 1);
 
-        $anchoVidrio = ($ancho / 2) - 88 + 16 + 33 + 5 - 109 - 6;
-        $altoVidrio = ($alto - 44 - 44 + 20 + 5) - 109 - 6;
-        $areaVidrio = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+        $anchoVidrio = max(0, ($ancho / 2) - 88 + 16 + 33 + 5 - 109 - 6);
+        $altoVidrio  = max(0, ($alto - 44 - 44 + 20 + 5) - 109 - 6);
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
 
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
@@ -2975,9 +3525,9 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
             'producto_id' => $productoVidrio->id,
             'nombre' => $productoVidrio->nombre,
             'unidad' => 'm2',
-            'cantidad' => round($areaVidrio * $cantidad * 2, 3),
+            'cantidad' => round($areaVidrio * $hojasTotales * $cantidad, 3),
             'costo_unitario' => round($costoVidrio),
-            'costo_total' => round($costoVidrio * $areaVidrio * 2 * $cantidad),
+            'costo_total' => round($costoVidrio * $areaVidrio * $hojasTotales * $cantidad),
             'proveedor' => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
         ];
 
@@ -2995,21 +3545,22 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
             'unidad' => 'unidad',
             'cantidad' => $hojasMoviles * 2 * $cantidad,
             'costo_unitario' => round($costoCarro),
-            'costo_total' => round($costoCarro * ($hojasMoviles == 1 ? 2 : 4) * $cantidad),
+            'costo_total' => round($costoCarro * $hojasMoviles * 2 * $cantidad),
             'proveedor' => self::buscarNombreProveedor($carro, $colorId),
         ];
 
+        // Cremona según altoVidrio = alto - 178 (cremona debe cubrir el panel)
         $cremonaId = null;
         $ranges = [
-            [400, 716, 111],
-            [717, 916, 112],
-            [917, 1116, 113],
-            [1117, 1316, 105],
-            [1317, 1516, 106],
-            [1517, 1716, 107],
-            [1717, 1916, 108],
-            [1917, 2116, 109],
-            [2117, 2316, 110]
+            [400,  578,  111], // altoVidrio ≤ 400mm
+            [579,  778,  112], // altoVidrio ≤ 600mm
+            [779,  978,  113], // altoVidrio ≤ 800mm
+            [979,  1178, 105], // altoVidrio ≤ 1000mm
+            [1179, 1378, 106], // altoVidrio ≤ 1200mm
+            [1379, 1578, 107], // altoVidrio ≤ 1400mm
+            [1579, 1778, 108], // altoVidrio ≤ 1600mm
+            [1779, 1978, 109], // altoVidrio ≤ 1800mm
+            [1979, 2500, 110], // altoVidrio ≤ 2000mm
         ];
         foreach ($ranges as [$min, $max, $id]) {
             if ($alto >= $min && $alto <= $max) {
@@ -3027,10 +3578,85 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
                 'unidad' => 'unidad',
                 'cantidad' => $hojasMoviles * $cantidad,
                 'costo_unitario' => round($costoCremona),
-                'costo_total' => round($costoCremona * ($hojasMoviles == 1 ? 1 : 2) * $cantidad),
+                'costo_total' => round($costoCremona * $hojasMoviles * $cantidad),
                 'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
             ];
         }
+
+        // Manilla (id=68): 1 por hoja móvil
+        $manilla = $productos[68];
+        $costoManilla = self::buscarCostoPorColor($manilla, $colorId);
+        $materiales[] = [
+            'producto_id'    => $manilla->id,
+            'nombre'         => $manilla->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $hojasMoviles * $cantidad,
+            'costo_unitario' => round($costoManilla),
+            'costo_total'    => round($costoManilla * $hojasMoviles * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($manilla, $colorId),
+        ];
+
+        // ─── Herrajes adicionales ────────────────────────────────────────────────
+        $addAcc = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $colorId, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, $colorId);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, $colorId),
+            ];
+        };
+
+        $addAccNC = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, null);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, null),
+            ];
+        };
+
+        // ── Con color ──────────────────────────────────────────────────────────
+        $addAcc(247, 2); // Tope Estanco Marco Doble Riel
+        $qtdTapaDesague = $ancho <= 800 ? 2 : ($ancho <= 1500 ? 3 : 4);
+        $addAcc(43, $qtdTapaDesague);
+        $qtdSilicona = ((($ancho * $alto) / 10000) * 2 * 0.7) / 300;
+        $addAcc(44, $qtdSilicona);
+
+        // ── Sin color ──────────────────────────────────────────────────────────
+        $qtdTornillosAmo = round(($alto * 2 / 500) + ($ancho * 2 / 500));
+        $addAccNC(206, $qtdTornillosAmo);
+        $addAcc(42, $qtdTornillosAmo);
+
+        $qtdSeguroAnti = $hojasMoviles;
+        $addAccNC(207, $qtdSeguroAnti);
+        $addAccNC(203, $hojasMoviles * 2);
+
+        $qtdFelpa = (($alto * 6) + ($ancho * 8)) / 1000;
+        $addAccNC(209, $qtdFelpa, 'm');
+
+        $addAccNC(210, 12);
+        $addAccNC(37, 12);
+        $addAccNC(38, 12);
+        $addAccNC(39, 12);
+
+        $cerraderosPorHoja = in_array($cremonaId, [111, 112, 113]) ? 2
+            : (in_array($cremonaId, [105, 106, 107, 108]) ? 3 : 4);
+        $qtdCerraderos = $cerraderosPorHoja * $hojasMoviles;
+        $addAccNC(200, $qtdCerraderos);
+        $addAccNC(242, ($qtdCerraderos * 2) + ($qtdSeguroAnti * 2));
+
+        $qtdAutoPerf = round(($alto / 250) * 2 + ($ancho / 250) * 2 + ($ancho / 250) * 4 + ($alto / 250) * 2);
+        $addAccNC(246, $qtdAutoPerf); // Tornillo Autoperforante 3,9x13
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
         return [
@@ -3040,7 +3666,7 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         ];
     }
 
-    protected static function calcularCorrederaMonorriel(array $ventana): array //revisar manillas si estan o no..
+    protected static function calcularCorrederaMonorriel(array $ventana): array
     {
         $alto = $ventana['alto'];
         $ancho = $ventana['ancho'];
@@ -3049,7 +3675,7 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         $proveedorVidrioId = $ventana['proveedorVidrio'];
         $tipoVidrioId = $ventana['tipoVidrio'] ?? 2;
         $hojasTotales = $ventana['hojas_totales'] ?? 2;
-        $hojasMoviles = $ventana['hojas_moviles'] ?? 2;
+        $hojasMoviles = 1; // Monorriel: siempre 1 hoja móvil
         $cantidad = $ventana['cantidad'] ?? 1;
 
         $idJunquillo = match ($tipoVidrioId) {
@@ -3059,26 +3685,16 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         };
 
         $ids = [
-            99,
-            94,
-            100,
-            101,
-            103,
-            104,
-            51,
-            105,
-            106,
-            107,
-            108,
-            109,
-            110,
-            111,
-            112,
-            113,
-            114,
-            115,
+            99, 94, 100, 101, 103, 104, 51,
+            105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
+            68,                                       // manilla
             $idJunquillo,
-            $productoVidrioId
+            // Herrajes con color
+            243, 245, 43, 42, 44,
+            // Herrajes sin color
+            207, 206, 203, 209, 244,
+            37, 38, 39, 200, 242, 246,
+            $productoVidrioId,
         ];
 
         $productos = Producto::with('coloresPorProveedor.proveedor')
@@ -3108,7 +3724,7 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         $addLinea(99, 2 * $cantidad, $alto + 5);
         $addLinea(94, 2 * $cantidad, (($ancho / 2) - 44 + 8 + 33 + 5));
         $addLinea(94, 2 * $cantidad, $alto - 44 - 44 + 20 + 5);
-        $addLinea(94, 1 * $cantidad, $alto - 36 - 36 + 4);
+        $addLinea(94, 1 * $cantidad, $alto - 36 - 36 + 4); //hoja que se usa para dividir el marco de la ventana entre hoja fija y móvil
         $addLinea($idJunquillo, 2 * $cantidad, ((($ancho / 2) - 44 + 8 + 33 + 5)) - 109);
         $addLinea($idJunquillo, 2 * $cantidad, ($alto - 44 - 44 + 20 + 5 - 109));
         $addLinea($idJunquillo, 2 * $cantidad, (($ancho / 2) - 36 - 19));
@@ -3124,22 +3740,44 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
         $addLinea(100, 1 * $cantidad, $alto - 36 - 36); // tapa
 
 
-        $anchoVidrio = (($ancho - 88 + 16) / 2 + 33 + 5) - 109 - 6;
-        $altoVidrio = ($alto - 44 - 44 + 20 + 5) - 109 - 6;
-        $areaVidrio = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+        // Vidrio hoja móvil (va dentro del perfil hoja)
+        $anchoVidrio = max(0, (($ancho - 88 + 16) / 2 + 33 + 5) - 109 - 6);
+        $altoVidrio  = max(0, ($alto - 44 - 44 + 20 + 5) - 109 - 6);
+        $areaVidrio  = ($anchoVidrio / 1000) * ($altoVidrio / 1000);
+
+        // Vidrio hoja fija (directo al marco con junquillo)
+        $anchoVidrioFijo = max(0, ($ancho / 2) - 36 - 19 - 6);
+        $altoVidrioFijo  = max(0, ($alto - 37 - 37) - 6);
+        $areaVidrioFijo  = ($anchoVidrioFijo / 1000) * ($altoVidrioFijo / 1000);
+
+        $hojasFijas = $hojasTotales - $hojasMoviles;
 
         $productoVidrio = $productos[$productoVidrioId];
         $costoVidrio = self::buscarCostoPorColor($productoVidrio, $colorId, $proveedorVidrioId);
 
+        // Hoja(s) móvil(es)
         $materiales[] = [
-            'producto_id' => $productoVidrio->id,
-            'nombre' => $productoVidrio->nombre,
-            'unidad' => 'm2',
-            'cantidad' => round($areaVidrio * $cantidad * 2, 3),
+            'producto_id'    => $productoVidrio->id,
+            'nombre'         => $productoVidrio->nombre . ' (hoja móvil)',
+            'unidad'         => 'm2',
+            'cantidad'       => round($areaVidrio * $hojasMoviles * $cantidad, 3),
             'costo_unitario' => round($costoVidrio),
-            'costo_total' => round($costoVidrio * $areaVidrio * 2 * $cantidad),
-            'proveedor' => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
+            'costo_total'    => round($costoVidrio * $areaVidrio * $hojasMoviles * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
         ];
+
+        // Hoja(s) fija(s)
+        if ($hojasFijas > 0) {
+            $materiales[] = [
+                'producto_id'    => $productoVidrio->id,
+                'nombre'         => $productoVidrio->nombre . ' (hoja fija)',
+                'unidad'         => 'm2',
+                'cantidad'       => round($areaVidrioFijo * $hojasFijas * $cantidad, 3),
+                'costo_unitario' => round($costoVidrio),
+                'costo_total'    => round($costoVidrio * $areaVidrioFijo * $hojasFijas * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($productoVidrio, $colorId, $proveedorVidrioId),
+            ];
+        }
 
         $pesoHoja = $productos[94]->peso_por_metro * ($altoVidrio / 1000)
             + $productos[$idJunquillo]->peso_por_metro * ($altoVidrio / 1000)
@@ -3153,23 +3791,24 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
             'producto_id' => $carro->id,
             'nombre' => $carro->nombre,
             'unidad' => 'unidad',
-            'cantidad' => 2 * $cantidad,
+            'cantidad' => $hojasMoviles * 2 * $cantidad,
             'costo_unitario' => round($costoCarro),
-            'costo_total' => round($costoCarro * 2 * $cantidad),
+            'costo_total' => round($costoCarro * $hojasMoviles * 2 * $cantidad),
             'proveedor' => self::buscarNombreProveedor($carro, $colorId),
         ];
 
+        // Cremona según altoVidrio = alto - 178 (cremona debe cubrir el panel)
         $cremonaId = null;
         $ranges = [
-            [400, 716, 111],
-            [717, 916, 112],
-            [917, 1116, 113],
-            [1117, 1316, 105],
-            [1317, 1516, 106],
-            [1517, 1716, 107],
-            [1717, 1916, 108],
-            [1917, 2116, 109],
-            [2117, 2316, 110]
+            [400,  578,  111], // altoVidrio ≤ 400mm
+            [579,  778,  112], // altoVidrio ≤ 600mm
+            [779,  978,  113], // altoVidrio ≤ 800mm
+            [979,  1178, 105], // altoVidrio ≤ 1000mm
+            [1179, 1378, 106], // altoVidrio ≤ 1200mm
+            [1379, 1578, 107], // altoVidrio ≤ 1400mm
+            [1579, 1778, 108], // altoVidrio ≤ 1600mm
+            [1779, 1978, 109], // altoVidrio ≤ 1800mm
+            [1979, 2500, 110], // altoVidrio ≤ 2000mm
         ];
         foreach ($ranges as [$min, $max, $id]) {
             if ($alto >= $min && $alto <= $max) {
@@ -3187,10 +3826,87 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
                 'unidad' => 'unidad',
                 'cantidad' => $hojasMoviles * $cantidad,
                 'costo_unitario' => round($costoCremona),
-                'costo_total' => round($costoCremona * ($hojasMoviles == 1 ? 1 : 2) * $cantidad),
+                'costo_total' => round($costoCremona * $hojasMoviles * $cantidad),
                 'proveedor' => self::buscarNombreProveedor($cremona, $colorId),
             ];
         }
+
+        // Manilla (id=68): 1 por hoja móvil
+        $manilla = $productos[68];
+        $costoManilla = self::buscarCostoPorColor($manilla, $colorId);
+        $materiales[] = [
+            'producto_id'    => $manilla->id,
+            'nombre'         => $manilla->nombre,
+            'unidad'         => 'unidad',
+            'cantidad'       => $hojasMoviles * $cantidad,
+            'costo_unitario' => round($costoManilla),
+            'costo_total'    => round($costoManilla * $hojasMoviles * $cantidad),
+            'proveedor'      => self::buscarNombreProveedor($manilla, $colorId),
+        ];
+
+        // ─── Herrajes adicionales ────────────────────────────────────────────────
+        $addAcc = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $colorId, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, $colorId);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, $colorId),
+            ];
+        };
+
+        $addAccNC = function (int $id, float $qtd, string $unidad = 'unidad') use (&$materiales, $productos, $cantidad) {
+            $prod  = $productos[$id];
+            $costo = self::buscarCostoPorColor($prod, null);
+            $materiales[] = [
+                'producto_id'    => $prod->id,
+                'nombre'         => $prod->nombre,
+                'unidad'         => $unidad,
+                'cantidad'       => round($qtd * $cantidad, 3),
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qtd * $cantidad),
+                'proveedor'      => self::buscarNombreProveedor($prod, null),
+            ];
+        };
+
+        // ── Con color ──────────────────────────────────────────────────────────
+        $addAcc(243, 2);  // Tope Estanco Monorriel
+        $addAcc(245, 2);  // Conector Poste Vertical Andes 66
+        $qtdTapaDesague = $ancho <= 800 ? 2 : ($ancho <= 1500 ? 3 : 4);
+        $addAcc(43, $qtdTapaDesague);
+        $qtdSilicona = ((($ancho * $alto) / 10000) * 2 * 0.7) / 300;
+        $addAcc(44, $qtdSilicona);
+
+        // ── Sin color ──────────────────────────────────────────────────────────
+        $qtdTornillosAmo = round(($alto * 2 / 500) + ($ancho * 2 / 500));
+        $addAccNC(206, $qtdTornillosAmo);
+        $addAcc(42, $qtdTornillosAmo);
+
+        $qtdSeguroAnti = $hojasMoviles;
+        $addAccNC(207, $qtdSeguroAnti);
+        $addAccNC(203, $hojasMoviles * 2);
+
+        $qtdFelpa = (($alto * 6) + ($ancho * 8)) / 1000;
+        $addAccNC(209, $qtdFelpa, 'm');
+
+        $addAccNC(244, 12); // Puente Acristalar Monorriel
+        $addAccNC(37, 12);
+        $addAccNC(38, 12);
+        $addAccNC(39, 12);
+
+        // Cerradero: cremonas 111-113 (cortas) → 2, 105-108 (medias) → 3, 109-110 (altas) → 4
+        $cerraderosPorHoja = in_array($cremonaId, [111, 112, 113]) ? 2
+            : (in_array($cremonaId, [105, 106, 107, 108]) ? 3 : 4);
+        $qtdCerraderos = $cerraderosPorHoja * $hojasMoviles;
+        $addAccNC(200, $qtdCerraderos);
+        $addAccNC(242, ($qtdCerraderos * 2) + ($qtdSeguroAnti * 2));
+
+        $qtdAutoPerf = round(($alto / 250) * 2 + ($ancho / 250) * 2 + ($ancho / 250) * 4 + ($alto / 250) * 2);
+        $addAccNC(246, $qtdAutoPerf); // Tornillo Autoperforante 3,9x13
 
         $costoTotal = array_sum(array_column($materiales, 'costo_total'));
         return [
@@ -3219,6 +3935,7 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
 
     protected static function crearLinea($producto, $cantidad, $largoMm, $colorId)
     {
+        $largoMm = max(0, $largoMm); // Guard: negative lengths produce negative costs
         $largoMt = $largoMm / 1000;
         $costoBarra = self::buscarCostoPorColor($producto, $colorId);
         $costoPorMetro = $producto->largo_total > 0 ? $costoBarra / $producto->largo_total : 0;
@@ -3383,6 +4100,111 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
     protected static function calcularCantidadTapaTornillo($alto, $ancho)
     {
         return (($alto * 2) / 500 + ($ancho * 2) / 500);
+    }
+
+    // VENTANA COMPUESTA FLEXIBLE (tipo 54)
+    protected static function calcularCompuestaFlexible(array $ventana): array
+    {
+        $alto        = $ventana['alto'];
+        $ancho       = $ventana['ancho'];
+        $orientacion = $ventana['orientacionComp'] ?? 'horizontal';
+        $itemsComp   = $ventana['itemsComp'] ?? [];
+        $colorId     = $ventana['color'];
+        $cantidad    = $ventana['cantidad'] ?? 1;
+
+        if (empty($itemsComp)) {
+            return ['materiales' => [], 'costo_total' => 0, 'costo_unitario' => 0];
+        }
+
+        // Normalizar porcentajes (si no suman 100, repartir igual)
+        $totalPct = array_sum(array_column($itemsComp, 'sizePercent'));
+        if ($totalPct <= 0) {
+            $pctIgual = 100 / count($itemsComp);
+            foreach ($itemsComp as &$it) {
+                $it['sizePercent'] = $pctIgual;
+            }
+            unset($it);
+            $totalPct = 100;
+        }
+
+        // Cargar acople mini (id=252) con color
+        $acopleProduct = Producto::with(['coloresPorProveedor.proveedor'])->find(252);
+
+        $materialesAgregados = [];
+        $costoTotal = 0;
+
+        foreach ($itemsComp as $item) {
+            $pct = ($item['sizePercent'] ?? (100 / count($itemsComp))) / $totalPct;
+
+            // Dimensiones según orientación
+            if ($orientacion === 'horizontal') {
+                $anchoSeccion = round($ancho * $pct);
+                $altoSeccion  = $alto;
+            } else {
+                $anchoSeccion = $ancho;
+                $altoSeccion  = round($alto * $pct);
+            }
+
+            // Sección compuesta anidada (generada al usar botones de borde con cambio de orientación)
+            if (($item['tipo'] ?? null) === 'compuesta') {
+                $ventanaAnidada = array_merge($ventana, [
+                    'tipo'            => 54,
+                    'ancho'           => $anchoSeccion,
+                    'alto'            => $altoSeccion,
+                    'cantidad'        => $cantidad,
+                    'orientacionComp' => $item['orientacion'] ?? 'horizontal',
+                    'itemsComp'       => $item['items'] ?? [],
+                ]);
+                $resultado = self::calcularCompuestaFlexible($ventanaAnidada);
+            } else {
+                // Sección simple
+                $ventanaSeccion = array_merge($ventana, [
+                    'tipo'              => $item['tipo'] ?? 2,
+                    'ancho'             => $anchoSeccion,
+                    'alto'              => $altoSeccion,
+                    'cantidad'          => $cantidad,
+                    'direccionApertura' => $item['direccionApertura'] ?? ($ventana['direccionApertura'] ?? 'exterior'),
+                    'ladoApertura'      => $item['ladoApertura']      ?? ($ventana['ladoApertura']      ?? 'derecha'),
+                ]);
+                $resultado = self::calcularMateriales($ventanaSeccion);
+            }
+
+            // Agregar materiales fusionando por producto_id
+            foreach ($resultado['materiales'] as $mat) {
+                $pid = $mat['producto_id'];
+                if (isset($materialesAgregados[$pid])) {
+                    $materialesAgregados[$pid]['cantidad']    += $mat['cantidad'];
+                    $materialesAgregados[$pid]['costo_total'] += $mat['costo_total'];
+                } else {
+                    $materialesAgregados[$pid] = $mat;
+                }
+            }
+
+            $costoTotal += $resultado['costo_total'];
+        }
+
+        // Acople mini (id=252): (n-1) uniones × longitud según orientación
+        $nJoints = count($itemsComp) - 1;
+        if ($nJoints > 0 && $acopleProduct) {
+            $longitudAcople = $orientacion === 'horizontal' ? $alto : $ancho;
+            $lineaAcople    = self::crearLinea($acopleProduct, $nJoints * $cantidad, $longitudAcople, $colorId);
+            $pid = $acopleProduct->id;
+            if (isset($materialesAgregados[$pid])) {
+                $materialesAgregados[$pid]['cantidad']    += $lineaAcople['cantidad'];
+                $materialesAgregados[$pid]['costo_total'] += $lineaAcople['costo_total'];
+            } else {
+                $materialesAgregados[$pid] = $lineaAcople;
+            }
+            $costoTotal += $lineaAcople['costo_total'];
+        }
+
+        $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
+
+        return [
+            'materiales'     => array_values($materialesAgregados),
+            'costo_total'    => round($costoTotal),
+            'costo_unitario' => round($costoUnitario),
+        ];
     }
 
     // ✅ VENTANA COMPUESTA AL42 - ALUMINIO CON PALILLOS DIVISORES

@@ -1,9 +1,10 @@
 <template>
-  <v-stage :config="{ width: canvasWidth, height: canvasHeight }">
-    <v-layer>
+  <v-stage ref="stageRef" :config="{ width: canvasWidth, height: canvasHeight }">
+    <v-layer ref="layerRef">
       <!-- IZQUIERDA -->
-      <template v-if="tipoVentanaIzquierda?.compuesta">
+      <template v-if="num(anchoIzquierda) > 0">
         <VentanaCompuesta
+          v-if="tipoVentanaIzquierda?.compuesta"
           :x="posXIzquierda"
           :y="posYGlobal"
           :ancho="num(anchoIzquierda)"
@@ -17,9 +18,8 @@
           :direccion-apertura-superior="tipoVentanaIzquierda?.partes?.[0]?.direccionApertura || 'interior'"
           :direccion-apertura-inferior="tipoVentanaIzquierda?.partes?.[1]?.direccionApertura || 'interior'"
         />
-      </template>
-      <template v-else>
         <VentanaSimple
+          v-else
           :x="posXIzquierda"
           :y="posYGlobal"
           :ancho="num(anchoIzquierda)"
@@ -30,42 +30,61 @@
           :lado-apertura="tipoVentanaIzquierda?.ladoApertura || tipoVentanaIzquierda?.partes?.[0]?.ladoApertura || 'izquierda'"
           :direccion-apertura="tipoVentanaIzquierda?.direccionApertura || tipoVentanaIzquierda?.partes?.[0]?.direccionApertura || 'interior'"
         />
+        <!-- Esquinero izq–centro -->
+        <v-rect
+          :x="posXEsquineroIzq"
+          :y="posYGlobal"
+          :width="ESQUINERO_PX"
+          :height="altoRenderizado"
+          :fill="colorHex"
+          :stroke="'#00000033'"
+          :stroke-width="1"
+        />
       </template>
 
       <!-- CENTRO -->
-      <template v-if="tipoVentanaCentro?.compuesta">
-        <VentanaCompuesta
-          :x="posXCentro"
-          :y="posYGlobal"
-          :ancho="num(anchoCentro)"
-          :alto="alto"
-          :escala="escalaGlobal"
-          :color-marco="colorMarco"
-          :parte-superior="parteSuperiorCentro"
-          :parte-inferior="parteInferiorCentro"
-          :lado-apertura-superior="tipoVentanaCentro?.partes?.[0]?.ladoApertura || 'izquierda'"
-          :lado-apertura-inferior="tipoVentanaCentro?.partes?.[1]?.ladoApertura || 'izquierda'"
-          :direccion-apertura-superior="tipoVentanaCentro?.partes?.[0]?.direccionApertura || 'interior'"
-          :direccion-apertura-inferior="tipoVentanaCentro?.partes?.[1]?.direccionApertura || 'interior'"
-        />
-      </template>
-      <template v-else>
-        <VentanaSimple
-          :x="posXCentro"
-          :y="posYGlobal"
-          :ancho="num(anchoCentro)"
-          :alto="alto"
-          :escala="escalaGlobal"
-          :color-marco="colorMarco"
-          :tipo="tipoVentanaCentro?.partes?.[0]?.tipo || tipoVentanaCentro?.tipo"
-          :lado-apertura="tipoVentanaCentro?.ladoApertura || tipoVentanaCentro?.partes?.[0]?.ladoApertura || 'izquierda'"
-          :direccion-apertura="tipoVentanaCentro?.direccionApertura || tipoVentanaCentro?.partes?.[0]?.direccionApertura || 'interior'"
-        />
-      </template>
+      <VentanaCompuesta
+        v-if="tipoVentanaCentro?.compuesta"
+        :x="posXCentro"
+        :y="posYGlobal"
+        :ancho="num(anchoCentro)"
+        :alto="alto"
+        :escala="escalaGlobal"
+        :color-marco="colorMarco"
+        :parte-superior="parteSuperiorCentro"
+        :parte-inferior="parteInferiorCentro"
+        :lado-apertura-superior="tipoVentanaCentro?.partes?.[0]?.ladoApertura || 'izquierda'"
+        :lado-apertura-inferior="tipoVentanaCentro?.partes?.[1]?.ladoApertura || 'izquierda'"
+        :direccion-apertura-superior="tipoVentanaCentro?.partes?.[0]?.direccionApertura || 'interior'"
+        :direccion-apertura-inferior="tipoVentanaCentro?.partes?.[1]?.direccionApertura || 'interior'"
+      />
+      <VentanaSimple
+        v-else
+        :x="posXCentro"
+        :y="posYGlobal"
+        :ancho="num(anchoCentro)"
+        :alto="alto"
+        :escala="escalaGlobal"
+        :color-marco="colorMarco"
+        :tipo="tipoVentanaCentro?.partes?.[0]?.tipo || tipoVentanaCentro?.tipo"
+        :lado-apertura="tipoVentanaCentro?.ladoApertura || tipoVentanaCentro?.partes?.[0]?.ladoApertura || 'izquierda'"
+        :direccion-apertura="tipoVentanaCentro?.direccionApertura || tipoVentanaCentro?.partes?.[0]?.direccionApertura || 'interior'"
+      />
 
       <!-- DERECHA -->
-      <template v-if="tipoVentanaDerecha?.compuesta">
+      <template v-if="num(anchoDerecha) > 0">
+        <!-- Esquinero centro–der -->
+        <v-rect
+          :x="posXEsquineroDer"
+          :y="posYGlobal"
+          :width="ESQUINERO_PX"
+          :height="altoRenderizado"
+          :fill="colorHex"
+          :stroke="'#00000033'"
+          :stroke-width="1"
+        />
         <VentanaCompuesta
+          v-if="tipoVentanaDerecha?.compuesta"
           :x="posXDerecha"
           :y="posYGlobal"
           :ancho="num(anchoDerecha)"
@@ -79,9 +98,8 @@
           :direccion-apertura-superior="tipoVentanaDerecha?.partes?.[0]?.direccionApertura || 'interior'"
           :direccion-apertura-inferior="tipoVentanaDerecha?.partes?.[1]?.direccionApertura || 'interior'"
         />
-      </template>
-      <template v-else>
         <VentanaSimple
+          v-else
           :x="posXDerecha"
           :y="posYGlobal"
           :ancho="num(anchoDerecha)"
@@ -98,11 +116,30 @@
 </template>
 
 <script setup>
-import { computed,watch } from 'vue'
+import { computed, watch, ref, nextTick } from 'vue'
 import VentanaSimple from './VentanaSimple.vue'
 import VentanaCompuesta from './VentanaCompuesta.vue'
 
+const stageRef = ref(null)
+const layerRef = ref(null)
 
+async function exportarImagen() {
+  await nextTick()
+  const layer = layerRef.value?.getNode?.()
+  if (layer) layer.draw()
+  await new Promise(resolve => setTimeout(resolve, 150))
+  const stage = stageRef.value?.getStage?.()
+  if (!stage) return null
+  return stage.toDataURL({ pixelRatio: 1, quality: 0.9 })
+}
+
+defineExpose({ exportarImagen })
+
+const ESQUINERO_PX = 12   // ancho visual del esquinero en px (fijo, no escalado)
+const MARGIN = 10         // margen izquierdo
+const canvasWidth = 900
+const canvasHeight = 400
+const posYGlobal = 50
 
 const props = defineProps({
   ancho: { type: Number, required: true },
@@ -118,57 +155,100 @@ const props = defineProps({
 
 const num = (v) => Number(v) || 0
 
-// 🔹 Función para actualizar la parte contraria
+// ── Color del esquinero ──────────────────────────────────────────────────────
+const colorHexMap = {
+  blanco: '#ffffff',
+  negro: '#0a0a0a',
+  gris: '#808080',
+  grafito: '#2f2f2f',
+  nogal: '#8b5a2b',
+  roble: '#b8864e',
+  mate: '#c0beba',
+  titanio: '#7a7672',
+}
+
+const colorHex = computed(() => {
+  let nombre = ''
+  if (typeof props.colorMarco === 'object' && props.colorMarco?.nombre) {
+    nombre = String(props.colorMarco.nombre).toLowerCase()
+  } else if (typeof props.colorMarco === 'string') {
+    nombre = props.colorMarco.toLowerCase()
+  }
+  return colorHexMap[nombre] || '#ffffff'
+})
+
+// ── Derivados de forma ───────────────────────────────────────────────────────
+const tieneIzquierda = computed(() => num(props.anchoIzquierda) > 0)
+const tieneDerecha   = computed(() => num(props.anchoDerecha) > 0)
+
+const numEsquineros  = computed(() =>
+  (tieneIzquierda.value ? 1 : 0) + (tieneDerecha.value ? 1 : 0)
+)
+
+// ── Escala global ────────────────────────────────────────────────────────────
+// Los esquineros son px fijos → se restan del espacio disponible antes de escalar
+const anchoTotal = computed(() =>
+  num(props.anchoIzquierda) + num(props.anchoCentro) + num(props.anchoDerecha)
+)
+
+const escalaGlobal = computed(() => {
+  const espDisponibleAncho = canvasWidth - MARGIN * 2 - numEsquineros.value * ESQUINERO_PX
+  const eA = espDisponibleAncho / anchoTotal.value
+  const eB = (canvasHeight - posYGlobal - 20) / props.alto
+  return Math.min(eA, eB)
+})
+
+const altoRenderizado = computed(() => props.alto * escalaGlobal.value)
+
+// ── Posiciones X ─────────────────────────────────────────────────────────────
+const posXIzquierda = computed(() => MARGIN)
+
+const posXEsquineroIzq = computed(() =>
+  MARGIN + num(props.anchoIzquierda) * escalaGlobal.value
+)
+
+const posXCentro = computed(() =>
+  tieneIzquierda.value
+    ? posXEsquineroIzq.value + ESQUINERO_PX
+    : MARGIN
+)
+
+const posXEsquineroDer = computed(() =>
+  posXCentro.value + num(props.anchoCentro) * escalaGlobal.value
+)
+
+const posXDerecha = computed(() =>
+  posXEsquineroDer.value + ESQUINERO_PX
+)
+
+// ── Ajuste de partes compuestas ───────────────────────────────────────────────
 function actualizarParteContraria(tipoVentana, parte, nuevoValor) {
   if (!tipoVentana?.partes) return
   const altoParte = num(nuevoValor)
   const restante = props.alto - altoParte
   if (restante < 0) return
-
-  if (parte === 'superior') {
-    tipoVentana.partes[1].alto = restante
-  } else if (parte === 'inferior') {
-    tipoVentana.partes[0].alto = restante
-  }
+  if (parte === 'superior') tipoVentana.partes[1].alto = restante
+  else if (parte === 'inferior') tipoVentana.partes[0].alto = restante
 }
 
-// 🔹 Watchers para cada ventana (bidireccional)
-watch(
-  () => props.tipoVentanaIzquierda?.partes?.[0]?.alto,
-  (nuevo) => actualizarParteContraria(props.tipoVentanaIzquierda, 'superior', nuevo)
-)
-watch(
-  () => props.tipoVentanaIzquierda?.partes?.[1]?.alto,
-  (nuevo) => actualizarParteContraria(props.tipoVentanaIzquierda, 'inferior', nuevo)
-)
+watch(() => props.tipoVentanaIzquierda?.partes?.[0]?.alto,
+  (v) => actualizarParteContraria(props.tipoVentanaIzquierda, 'superior', v))
+watch(() => props.tipoVentanaIzquierda?.partes?.[1]?.alto,
+  (v) => actualizarParteContraria(props.tipoVentanaIzquierda, 'inferior', v))
+watch(() => props.tipoVentanaCentro?.partes?.[0]?.alto,
+  (v) => actualizarParteContraria(props.tipoVentanaCentro, 'superior', v))
+watch(() => props.tipoVentanaCentro?.partes?.[1]?.alto,
+  (v) => actualizarParteContraria(props.tipoVentanaCentro, 'inferior', v))
+watch(() => props.tipoVentanaDerecha?.partes?.[0]?.alto,
+  (v) => actualizarParteContraria(props.tipoVentanaDerecha, 'superior', v))
+watch(() => props.tipoVentanaDerecha?.partes?.[1]?.alto,
+  (v) => actualizarParteContraria(props.tipoVentanaDerecha, 'inferior', v))
 
-watch(
-  () => props.tipoVentanaCentro?.partes?.[0]?.alto,
-  (nuevo) => actualizarParteContraria(props.tipoVentanaCentro, 'superior', nuevo)
-)
-watch(
-  () => props.tipoVentanaCentro?.partes?.[1]?.alto,
-  (nuevo) => actualizarParteContraria(props.tipoVentanaCentro, 'inferior', nuevo)
-)
-
-watch(
-  () => props.tipoVentanaDerecha?.partes?.[0]?.alto,
-  (nuevo) => actualizarParteContraria(props.tipoVentanaDerecha, 'superior', nuevo)
-)
-watch(
-  () => props.tipoVentanaDerecha?.partes?.[1]?.alto,
-  (nuevo) => actualizarParteContraria(props.tipoVentanaDerecha, 'inferior', nuevo)
-)
-
-
-
-// 🔹 Función para ajustar automáticamente las partes
 function ajustarPartes(tipoVentana) {
   const sup = tipoVentana?.partes?.[0] || {}
   const inf = tipoVentana?.partes?.[1] || {}
   const altoSup = num(sup.alto)
   const altoInf = num(inf.alto)
-
   if (altoSup + altoInf === 0) {
     return {
       parteSuperior: { ...sup, alto: props.alto / 2 },
@@ -185,33 +265,10 @@ function ajustarPartes(tipoVentana) {
   return { parteSuperior: sup, parteInferior: inf }
 }
 
-// 🔹 Computed para cada sección
 const parteSuperiorIzquierda = computed(() => ajustarPartes(props.tipoVentanaIzquierda).parteSuperior)
-const parteInferiorIzquierda = computed(() => ajustarPartes(props.tipoVentanaIzquierda).parteInferior)
-
-const parteSuperiorCentro = computed(() => ajustarPartes(props.tipoVentanaCentro).parteSuperior)
-const parteInferiorCentro = computed(() => ajustarPartes(props.tipoVentanaCentro).parteInferior)
-
-const parteSuperiorDerecha = computed(() => ajustarPartes(props.tipoVentanaDerecha).parteSuperior)
-const parteInferiorDerecha = computed(() => ajustarPartes(props.tipoVentanaDerecha).parteInferior)
-
-// 🔹 Configuración general de canvas
-const canvasWidth = 900
-const canvasHeight = 400
-const separacion = 20
-const posYGlobal = 50
-
-const anchoTotal = computed(() =>
-  num(props.anchoIzquierda) + num(props.anchoCentro) + num(props.anchoDerecha)
-)
-
-const escalaGlobal = computed(() => {
-  const eA = (canvasWidth - separacion * 2) / anchoTotal.value
-  const eB = (canvasHeight - 100) / props.alto
-  return Math.min(eA, eB)
-})
-
-const posXIzquierda = computed(() => 0)
-const posXCentro = computed(() => num(props.anchoIzquierda) * escalaGlobal.value + separacion)
-const posXDerecha = computed(() => (num(props.anchoIzquierda) + num(props.anchoCentro)) * escalaGlobal.value + separacion * 2)
+const parteInferiorIzquierda  = computed(() => ajustarPartes(props.tipoVentanaIzquierda).parteInferior)
+const parteSuperiorCentro     = computed(() => ajustarPartes(props.tipoVentanaCentro).parteSuperior)
+const parteInferiorCentro     = computed(() => ajustarPartes(props.tipoVentanaCentro).parteInferior)
+const parteSuperiorDerecha    = computed(() => ajustarPartes(props.tipoVentanaDerecha).parteSuperior)
+const parteInferiorDerecha    = computed(() => ajustarPartes(props.tipoVentanaDerecha).parteInferior)
 </script>

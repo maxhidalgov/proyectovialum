@@ -23,40 +23,41 @@
           style="cursor:pointer"
         />
         
-        <!-- ✅ 3. ÚLTIMO: Botones (encima de todo) -->
-        <!-- Botón de editar -->
-        <v-circle
-          :x="seg.props.x + seg.props.ancho * seg.props.escala - 15"
-          :y="seg.props.y + 10"
-          :radius="8"
-          fill="#2196f3" opacity="0.8"
-          @click="(e) => handleEditarClick(e, seg.path)"
-          style="cursor:pointer"
-        />
-        <v-text
-          :x="seg.props.x + seg.props.ancho * seg.props.escala - 18"
-          :y="seg.props.y + 6"
-          text="✏" fontSize="10" fill="white"
-          @click="(e) => handleEditarClick(e, seg.path)"
-          style="cursor:pointer"
-        />
-        
-        <!-- Botón de eliminar -->
-        <v-circle
-          :x="seg.props.x + seg.props.ancho * seg.props.escala - 35"
-          :y="seg.props.y + 10"
-          :radius="8"
-          fill="#f44336" opacity="0.8"
-          @click="(e) => handleEliminarClick(e, seg.path)"
-          style="cursor:pointer"
-        />
-        <v-text
-          :x="seg.props.x + seg.props.ancho * seg.props.escala - 38"
-          :y="seg.props.y + 6"
-          text="✖" fontSize="10" fill="white"
-          @click="(e) => handleEliminarClick(e, seg.path)"
-          style="cursor:pointer"
-        />
+        <!-- Botones de control (ocultos en modo exportar) -->
+        <template v-if="!modoExportar">
+          <!-- Botón de editar -->
+          <v-circle
+            :x="seg.props.x + seg.props.ancho * seg.props.escala - 15"
+            :y="seg.props.y + 10"
+            :radius="8"
+            fill="#2196f3" opacity="0.8"
+            @click="(e) => handleEditarClick(e, seg.path)"
+            style="cursor:pointer"
+          />
+          <v-text
+            :x="seg.props.x + seg.props.ancho * seg.props.escala - 18"
+            :y="seg.props.y + 6"
+            text="✏" fontSize="10" fill="white"
+            @click="(e) => handleEditarClick(e, seg.path)"
+            style="cursor:pointer"
+          />
+          <!-- Botón de eliminar -->
+          <v-circle
+            :x="seg.props.x + seg.props.ancho * seg.props.escala - 35"
+            :y="seg.props.y + 10"
+            :radius="8"
+            fill="#f44336" opacity="0.8"
+            @click="(e) => handleEliminarClick(e, seg.path)"
+            style="cursor:pointer"
+          />
+          <v-text
+            :x="seg.props.x + seg.props.ancho * seg.props.escala - 38"
+            :y="seg.props.y + 6"
+            text="✖" fontSize="10" fill="white"
+            @click="(e) => handleEliminarClick(e, seg.path)"
+            style="cursor:pointer"
+          />
+        </template>
       </v-group>
       
       <!-- Ventana compuesta recursiva -->
@@ -64,15 +65,15 @@
         v-else
         v-bind="seg.props"
         :path-prefix="seg.path"
-        @agregar="(idx) => emit('agregar', idx)"
-        @agregar-borde="(pos) => emit('agregar-borde', pos)"
+        :modo-exportar="modoExportar"
+        @agregar="(payload) => emit('agregar', payload)"
         @editar-ventana="(path) => emit('editar-ventana', path)"
         @eliminar-ventana="(path) => emit('eliminar-ventana', path)"
       />
     </template>
 
-    <!-- Botones "+" entre secciones (azules) -->
-    <template v-for="i in validItems.length + 1" :key="'plus-'+i">
+    <!-- Botones "+" entre secciones (azules, ocultos en modo exportar) -->
+    <template v-if="!modoExportar" v-for="i in validItems.length + 1" :key="'plus-'+i">
       <v-group @click="emitirAgregar(i-1)" style="cursor:pointer">
         <v-circle
           :x="plusX(i-1)" :y="plusY(i-1)" :radius="14"
@@ -95,7 +96,7 @@ defineOptions({
   name: 'VistaVentanaCompuestaInterna'
 })
 
-const emit = defineEmits(['agregar', 'agregar-borde', 'editar-ventana', 'eliminar-ventana'])
+const emit = defineEmits(['agregar', 'editar-ventana', 'eliminar-ventana'])
 
 // ✅ NUEVO: Variables para detectar doble click por ventana específica
 const clickTimers = ref(new Map()) // Map para manejar timers por path
@@ -110,11 +111,12 @@ const props = defineProps({
   escala: { type: Number, default: 1 },
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
-  pathPrefix: { type: String, default: '' }
+  pathPrefix: { type: String, default: '' },
+  modoExportar: { type: Boolean, default: false }
 })
 
 function emitirAgregar(idx) {
-  emit('agregar', idx)
+  emit('agregar', { pathPrefix: props.pathPrefix, idx })
 }
 
 function editarVentana(path) {

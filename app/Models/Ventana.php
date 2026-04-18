@@ -21,18 +21,32 @@ class Ventana extends Model
         'precio',
         'hojas_totales',
         'hojas_moviles',
+        'hoja_movil_seleccionada',
+        'hoja1_al_frente',
         'cantidad',
         'costo_unitario',
         'precio_unitario',
         'config',
+        // Bay Window
+        'ancho_izquierda',
+        'ancho_centro',
+        'ancho_derecha',
+        'tipo_ventana_izquierda',
+        'tipo_ventana_centro',
+        'tipo_ventana_derecha',
     ];
 
     protected $casts = [
-        'costo' => 'decimal:2',
-        'precio' => 'decimal:2',
-        'costo_unitario' => 'decimal:2',
-        'precio_unitario' => 'decimal:2',
-        'config' => 'array',
+        'costo'                   => 'decimal:2',
+        'precio'                  => 'decimal:2',
+        'costo_unitario'          => 'decimal:2',
+        'precio_unitario'         => 'decimal:2',
+        'config'                  => 'array',
+        'hoja1_al_frente'         => 'boolean',
+        // Bay Window JSON columns — auto-decoded to arrays on read
+        'tipo_ventana_izquierda'  => 'array',
+        'tipo_ventana_centro'     => 'array',
+        'tipo_ventana_derecha'    => 'array',
     ];
 
     // ✅ Relación con TipoVentana

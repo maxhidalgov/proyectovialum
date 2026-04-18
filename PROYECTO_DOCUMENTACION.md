@@ -1,6 +1,6 @@
 # Documentación Completa — Proyecto Vialum
 
-> Última actualización: 10 Abril 2026
+> Última actualización: 17 Abril 2026
 
 ---
 
@@ -93,8 +93,8 @@ proyectovialum/
 
 ### `Ventana`
 - **Tabla:** `ventanas`
-- **Fillable:** `cotizacion_id`, `tipo_ventana_id`, `ancho`, `alto`, `color_id`, `producto_vidrio_proveedor_id`, `imagen`, `costo`, `precio`, `hojas_totales`, `hojas_moviles`, `cantidad`, `costo_unitario`, `precio_unitario`, `config`
-- **Casts:** `costo`, `precio`, `costo_unitario`, `precio_unitario` → decimal:2 · `config` → array
+- **Fillable:** `cotizacion_id`, `tipo_ventana_id`, `ancho`, `alto`, `color_id`, `producto_vidrio_proveedor_id`, `imagen`, `costo`, `precio`, `hojas_totales`, `hojas_moviles`, `hoja_movil_seleccionada`, `hoja1_al_frente`, `cantidad`, `costo_unitario`, `precio_unitario`, `config`, `ancho_izquierda`, `ancho_centro`, `ancho_derecha`, `tipo_ventana_izquierda`, `tipo_ventana_centro`, `tipo_ventana_derecha`
+- **Casts:** `costo`, `precio`, `costo_unitario`, `precio_unitario` → decimal:2 · `config` → array · `hoja1_al_frente` → boolean · `tipo_ventana_izquierda`, `tipo_ventana_centro`, `tipo_ventana_derecha` → array (auto-decode JSON)
 - **Relaciones:**
   - `tipoVentana()` / `tipo_ventana()` belongsTo `TipoVentana`
   - `cotizacion()` belongsTo `Cotizacion`
@@ -740,6 +740,22 @@ Route::middleware(['auth:api', 'permission:gestionar_productos'])
 
 > Cantidad burlete: `(4 × anchoHoja + 4 × altoHoja) / 1000` metros (donde `anchoHoja = ancho/2 + 3`, `altoHoja = alto - 58`)
 
+### Esquineros Bay Window (tipo 47)
+| ID | Nombre | Uso |
+|---|---|---|
+| 253 | ESQUINERO 90° 60mm S60 | Frontal NO corredera (Fija / Proyectante) |
+| 255 | ESQUINERO 90° 70mm CORREDERA | Frontal es Corredera Sliding (tipo=3) |
+| 256 | Refuerzo interior S60 | Acompañante de ID 253 |
+| 257 | Refuerzo interior CORREDERA | Acompañante de ID 255 |
+
+**Lógica de cantidad:**
+- Bay Window forma U (`ancho_izquierda > 0` **y** `ancho_derecha > 0`): 2 esquineros
+- Bay Window forma L (solo uno de los dos > 0): 1 esquinero
+- Cantidad final = `numEsquineros × cantidad` de la ventana
+- Afectados por color (pasan por `crearHerraje()` con `$colorId`)
+- Aparecen en lista de materiales como `[Esquineros] nombre_producto`
+- Detección corredera: `$tipoVentanaCentro['tipo'] === 3`
+
 ---
 
 ## 17. Configuración de Ventana (`config` JSON)
@@ -812,6 +828,7 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 | `2026_04_06` | Columna `config` (JSON) en `ventanas` |
 | `2026_04_10` | Columna `adjunto_winperfil` VARCHAR(500) en `cotizaciones` |
 | `2026_04_10` | ENUM `tipo_item` en `cotizacion_detalles` ampliado a `'winperfil'` |
+| `2026_04_17` | Columnas Bay Window en `ventanas`: `hoja_movil_seleccionada`, `hoja1_al_frente`, `ancho_izquierda`, `ancho_centro`, `ancho_derecha`, `tipo_ventana_izquierda` (JSON), `tipo_ventana_centro` (JSON), `tipo_ventana_derecha` (JSON) |
 
 ---
 
@@ -864,6 +881,33 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 | `database/migrations/2025_10_08_...` | ENUM `tipo_item` + `'winperfil'` |
 | `vuexy-frontend/src/pages/cotizaciones/importar-pvc.vue` | NUEVO — importar + editar cotizaciones WINPERFIL |
 | `vuexy-frontend/src/pages/cotizaciones/index.vue` | +botón importar WINPERFIL, +ícono PDF adjunto, editar detecta winperfil |
+
+### Sesión 2026-04-17 — Bay Window completo (cálculo + visual + persistencia + PDF)
+
+| Archivo | Cambio |
+|---|---|
+| `app/Services/CalculoVentanaService.php` | `calcularVentanaCompuestaBay()`: fallback `alto / numPartes` cuando `parte.alto` es null. `calcularBayWindow()`: esquineros U/L con IDs 253/255/256/257 según tipo del frontal |
+| `app/Models/Ventana.php` | +`hoja_movil_seleccionada`, `hoja1_al_frente`, `ancho_izquierda`, `ancho_centro`, `ancho_derecha`, `tipo_ventana_izquierda`, `tipo_ventana_centro`, `tipo_ventana_derecha` en `$fillable`; casts boolean + array (JSON auto-decode) |
+| `app/Http/Controllers/CotizacionController.php` | `store()`, `update()` (ventana existente) y `update()` (ventana nueva): eliminado `json_encode()` manual; agregados 6 campos Bay Window en los 3 lugares |
+| `database/migrations/2026_04_17_000001_add_bay_window_fields_to_ventanas_table.php` | NUEVO — agrega las 8 columnas Bay Window a la tabla `ventanas` |
+| `vuexy-frontend/src/components/VistaBayWindow.vue` | `exportarImagen()` vía Konva (`stageRef`/`layerRef`); sin separación entre secciones; esquinero visual (rect 12px coloreado); sección derecha oculta si `ancho_derecha === 0`; `escalaGlobal` descuenta espacio de esquineros |
+| `vuexy-frontend/src/pages/AgregarVentanaModal2.vue` | Campo `ancho` readonly + auto-calculado como suma de secciones (watch); todos los `v-select` tipo Bay Window con `:rules` y `hide-details="auto"`; regla derecha condicional; `onGuardar` → async con `formRef.validate()` |
+| `resources/views/cotizaciones/pdf.blade.php` | Imagen de ventana: `max-height: 220px; width: auto; height: auto; margin: 0 auto` para que Bay Window no se vea aplastado |
+
+**SQL para ejecutar en producción:**
+```sql
+ALTER TABLE ventanas
+  ADD COLUMN hoja_movil_seleccionada INT NULL AFTER hojas_moviles,
+  ADD COLUMN hoja1_al_frente TINYINT(1) NULL AFTER hoja_movil_seleccionada,
+  ADD COLUMN ancho_izquierda INT NULL AFTER hoja1_al_frente,
+  ADD COLUMN ancho_centro INT NULL AFTER ancho_izquierda,
+  ADD COLUMN ancho_derecha INT NULL AFTER ancho_centro,
+  ADD COLUMN tipo_ventana_izquierda JSON NULL AFTER ancho_derecha,
+  ADD COLUMN tipo_ventana_centro JSON NULL AFTER tipo_ventana_izquierda,
+  ADD COLUMN tipo_ventana_derecha JSON NULL AFTER tipo_ventana_centro;
+```
+
+---
 
 ### Sesión anterior — Producción y CortesService
 

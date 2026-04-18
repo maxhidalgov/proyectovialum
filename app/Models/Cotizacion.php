@@ -23,6 +23,14 @@ class Cotizacion extends Model
         'url_pdf_bsale',
         'token_bsale',
         'adjunto_winperfil',
+        'pedido_proveedor',
+        'estado_produccion',
+        'fecha_entrega',
+        'notas_operaciones',
+    ];
+
+    protected $casts = [
+        'pedido_proveedor' => 'boolean',
     ];
 
     public function cliente()
@@ -57,5 +65,15 @@ class Cotizacion extends Model
     public function detalles()
     {
         return $this->hasMany(CotizacionDetalle::class);
+    }
+
+    public function abonos()
+    {
+        return $this->hasMany(Abono::class);
+    }
+
+    public function documentosFacturacion()
+    {
+        return $this->hasMany(DocumentoFacturacion::class);
     }
 }

@@ -447,6 +447,15 @@
                   :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
                   :lado-apertura="ventana.ladoApertura"
                 />
+                <VistaVentanaCompuestaDinamica
+                  v-else-if="ventana.tipo === 54"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :orientacion="ventana.orientacionComp || 'horizontal'"
+                  :items="ventana.itemsComp || []"
+                />
                 <VentanaAbatir
                   v-else-if="ventana.tipo === 49"  
                   :ref="el => { if (el) ventanaRefs[index] = el }"
@@ -1750,18 +1759,9 @@ const exportarImagenesVentanas = async () => {
           const base64 = canvas.toDataURL('image/png')
           console.log(`✅ IMAGEN ${i} CAPTURADA VIA CANVAS:`, base64.substring(0, 50))
           imagenes.push(base64)
-        } else if (todosLosCanvas.length > 0) {
-          // ✅ USAR PRIMER CANVAS AUNQUE ESTÉ VACÍO
-          console.log(`🔧 Usando primer canvas aunque esté vacío...`)
-          try {
-            const base64 = todosLosCanvas[0].toDataURL('image/png')
-            imagenes.push(base64)
-          } catch (toDataError) {
-            console.error(`❌ Error en toDataURL:`, toDataError)
-            imagenes.push(null)
-          }
         } else {
-          console.warn(`⚠️ No se encontraron canvas en componente ${i}`)
+          // No canvas with content found — preserve existing image (send null so backend keeps old)
+          console.warn(`⚠️ Ningún canvas con contenido en componente ${i}, preservando imagen existente`)
           imagenes.push(null)
         }
       } else {
@@ -1770,23 +1770,9 @@ const exportarImagenesVentanas = async () => {
         console.log(`🔍 ¿Es Element?:`, componente?.$el instanceof Element)
         console.log(`🔍 ¿Tiene querySelectorAll?:`, typeof componente?.$el?.querySelectorAll)
         
-        // ✅ ÚLTIMO RECURSO: BUSCAR EN DOCUMENT
-        console.log(`🔧 Último recurso: buscando canvas globalmente...`)
-        const canvasGlobales = document.querySelectorAll('canvas')
-        console.log(`🔍 Canvas globales encontrados:`, canvasGlobales.length)
-        
-        if (canvasGlobales.length > i) {
-          try {
-            const base64 = canvasGlobales[i].toDataURL('image/png')
-            console.log(`✅ IMAGEN ${i} CAPTURADA VIA BÚSQUEDA GLOBAL`)
-            imagenes.push(base64)
-          } catch (globalError) {
-            console.error(`❌ Error en canvas global:`, globalError)
-            imagenes.push(null)
-          }
-        } else {
-          imagenes.push(null)
-        }
+        // Component has no valid $el — can't capture, preserve existing image
+        console.warn(`⚠️ Componente ${i} sin $el válido, preservando imagen existente`)
+        imagenes.push(null)
       }
     } catch (error) {
       console.error(`❌ ERROR GENERAL capturando imagen ${i}:`, error)

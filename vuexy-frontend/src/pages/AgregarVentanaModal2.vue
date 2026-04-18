@@ -47,6 +47,10 @@
               type="number"
               min="1"
               :rules="[v => !!v || 'Requerido']"
+              :readonly="ventana.tipo === 47"
+              :bg-color="ventana.tipo === 47 ? 'surface-variant' : undefined"
+              :hint="ventana.tipo === 47 ? 'Suma de secciones' : ''"
+              persistent-hint
               variant="outlined"
               density="compact"
               hide-details="auto"
@@ -395,8 +399,10 @@
             item-title="nombre"
             item-value="id"
             label="Tipo"
-            outlined
-            dense
+            :rules="[v => !!v || 'Tipo requerido']"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
           />
           <v-text-field
             v-model.number="ventana.tipoVentanaIzquierda.partes[0].alto"
@@ -427,8 +433,10 @@
             item-title="nombre"
             item-value="id"
             label="Tipo"
-            outlined
-            dense
+            :rules="[v => !!v || 'Tipo requerido']"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
           />
           <v-text-field
             v-model.number="ventana.tipoVentanaIzquierda.partes[1].alto"
@@ -460,7 +468,10 @@
             item-title="nombre"
             item-value="id"
             label="Tipo de ventana izquierda"
-            outlined
+            :rules="[v => !!v || 'Tipo requerido']"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
           />
         </v-col>
         <!-- Selectores solo si Abatir -->
@@ -489,7 +500,10 @@
           item-title="nombre"
           item-value="id"
           label="Tipo de ventana centro"
-          outlined
+          :rules="[v => !!v || 'Tipo requerido']"
+          variant="outlined"
+          density="compact"
+          hide-details="auto"
           color="primary"
         />
       </v-col>
@@ -542,8 +556,10 @@
             item-title="nombre"
             item-value="id"
             label="Tipo"
-            outlined
-            dense
+            :rules="Number(ventana.ancho_derecha) > 0 ? [v => !!v || 'Tipo requerido'] : []"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
           />
           <v-text-field
             v-model.number="ventana.tipoVentanaDerecha.partes[0].alto"
@@ -574,8 +590,10 @@
             item-title="nombre"
             item-value="id"
             label="Tipo"
-            outlined
-            dense
+            :rules="Number(ventana.ancho_derecha) > 0 ? [v => !!v || 'Tipo requerido'] : []"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
           />
           <v-text-field
             v-model.number="ventana.tipoVentanaDerecha.partes[1].alto"
@@ -607,7 +625,10 @@
             item-title="nombre"
             item-value="id"
             label="Tipo de ventana derecha"
-            outlined
+            :rules="Number(ventana.ancho_derecha) > 0 ? [v => !!v || 'Tipo requerido'] : []"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
           />
         </v-col>
         <!-- Selectores solo si Abatir -->
@@ -1107,22 +1128,26 @@
         <v-row>
           <v-col cols="12" sm="6">
             <v-text-field
-              v-model.number="ventanaEditando.ancho"
+              :model-value="ventanaEditando.ancho"
               label="Ancho (mm)"
-              type="number"
               variant="outlined"
-            ></v-text-field>
+              readonly
+              hint="Calculado según porcentaje"
+              persistent-hint
+            />
           </v-col>
           <v-col cols="12" sm="6">
             <v-text-field
-              v-model.number="ventanaEditando.alto"
+              :model-value="ventanaEditando.alto"
               label="Alto (mm)"
-              type="number"
               variant="outlined"
-            ></v-text-field>
+              readonly
+              hint="Calculado según porcentaje"
+              persistent-hint
+            />
           </v-col>
         </v-row>
-        
+
         <v-row>
           <v-col cols="12" sm="6">
             <v-text-field
@@ -1130,9 +1155,11 @@
               label="Porcentaje del espacio (%)"
               type="number"
               min="10"
-              max="80"
+              max="90"
               variant="outlined"
-            ></v-text-field>
+              hint="Define el tamaño relativo de esta sección"
+              persistent-hint
+            />
           </v-col>
           <v-col cols="12" sm="6">
             <v-select
@@ -1142,11 +1169,10 @@
               item-value="id"
               label="Tipo de ventana"
               variant="outlined"
-            ></v-select>
+            />
           </v-col>
         </v-row>
-        
-        <!-- ✅ Configuración específica para Abatibles -->
+
         <v-row v-if="isAbatir(ventanaEditando.tipo)">
           <v-col cols="12" sm="6">
             <v-radio-group v-model="ventanaEditando.ladoApertura" row density="compact" label="Lado apertura">
@@ -1159,20 +1185,6 @@
               <v-radio label="Interior" value="interior" />
               <v-radio label="Exterior" value="exterior" />
             </v-radio-group>
-          </v-col>
-        </v-row>
-        
-        <!-- ✅ Muestra información de costo -->
-        <v-row>
-          <v-col cols="12">
-            <v-alert color="info" variant="tonal">
-              <div class="text-h6">Costo estimado: ${{ costoVentanaIndividual.toLocaleString() }}</div>
-              <div class="text-caption">
-                ID Tipo: {{ ventanaEditando.tipo }} | 
-                Área: {{ areaVentanaIndividual.toFixed(2) }} m² | 
-                Tipo: {{ getTipoVentanaNombre(ventanaEditando.tipo) }}
-              </div>
-            </v-alert>
           </v-col>
         </v-row>
       </v-container>
@@ -1606,6 +1618,12 @@ async function recalcularCostos() {
           configuracionArmador: ventana.value.configuracionArmador,
         }),
 
+        // Ventana compuesta flexible (tipo 54)
+        ...(ventana.value.tipo === 54 && {
+          orientacionComp: ventana.value.orientacionComp ?? 'horizontal',
+          itemsComp: ventana.value.itemsComp ?? [],
+        }),
+
         ...(ventana.value.tipo === 47 && {
           ancho_izquierda: ventana.value.ancho_izquierda,
           ancho_centro: ventana.value.ancho_centro,
@@ -1644,22 +1662,22 @@ async function recalcularCostos() {
   }
 }
 
-const onGuardar = () => {
+const onGuardar = async () => {
   console.log('💾 MODAL - Guardando ventana')
-  console.log('💾 MODAL - ventana.value completo:', ventana.value)
-  console.log('💾 MODAL - tipoVidrio antes de guardar:', ventana.value.tipoVidrio)
-  console.log('💾 MODAL - productoVidrioProveedor antes de guardar:', ventana.value.productoVidrioProveedor)
-  console.log('💾 MODAL - color antes de guardar:', ventana.value.color)
-  
-  // Validación básica
+
+  // Validar formulario (incluye reglas de tipos de Bay Window)
+  const { valid } = await (formRef.value?.validate() ?? Promise.resolve({ valid: true }))
+  if (!valid) return
+
+  // Validación básica de campos principales
   if (!ventana.value.tipo || !ventana.value.ancho || !ventana.value.alto || !ventana.value.cantidad) {
     alert('Completa todos los campos obligatorios')
     return
   }
-  
+
   const ventanaAGuardar = { ...ventana.value, index: props.ventana?.index }
   console.log('💾 MODAL - Enviando ventana al componente padre:', ventanaAGuardar)
-  
+
   emit('guardar', ventanaAGuardar)
   cerrarModal()
 }
@@ -1667,6 +1685,18 @@ const onGuardar = () => {
 watch(() => ventana.value.material, () => {
   ventana.value.tipo = null
 })
+
+// Auto-calcular ancho total cuando cambia algún ancho de Bay Window
+watch(
+  () => [ventana.value.ancho_izquierda, ventana.value.ancho_centro, ventana.value.ancho_derecha, ventana.value.tipo],
+  () => {
+    if (ventana.value.tipo === 47) {
+      ventana.value.ancho = (Number(ventana.value.ancho_izquierda) || 0) +
+                            (Number(ventana.value.ancho_centro) || 0) +
+                            (Number(ventana.value.ancho_derecha) || 0)
+    }
+  }
+)
 
 watch(
   () => [
@@ -1801,10 +1831,19 @@ const setVentanaRef = (idx, el) => {
   ventanaRefs.value[idx] = el || null
 }
 
-// si cambia la cantidad, limpia refs para evitar huecos
+// Si cambia el número de secciones: limpia refs y recalcula (acoples cambian)
 watch(() => ventana.value?.itemsComp?.length, () => {
   ventanaRefs.value = []
+  if (ventana.value?.tipo === 54) recalcularCostos()
 })
+
+// Si cambia tipo o sizePercent dentro de una sección: recalcula
+watch(
+  () => ventana.value?.itemsComp?.map(it => `${it.tipo}-${it.sizePercent}`).join(','),
+  (newVal, oldVal) => {
+    if (newVal !== oldVal && ventana.value?.tipo === 54) recalcularCostos()
+  }
+)
 
 // Inicializa cuando el usuario seleccione tipo 54 (si entra desde otro tipo)
 watch(() => ventana.value.tipo, (val) => {
@@ -1890,75 +1929,61 @@ function actualizarGridSecciones() {
 const showAgregarMenu = ref(false)
 const agregarIdx = ref(null)
 
-function handleAgregar(idx) {
+const agregarPath = ref('')
+
+function handleAgregar({ pathPrefix, idx }) {
+  agregarPath.value = pathPrefix ?? ''
   agregarIdx.value = idx
   showAgregarMenu.value = true
 }
 
-function handleAgregarBorde(posicion) {
-  console.log('=== AGREGAR BORDE ===')
-  console.log('Posición:', posicion)
-  console.log('Orientación actual:', ventana.value.orientacionComp)
-  console.log('Items ANTES:', JSON.stringify(ventana.value.itemsComp, null, 2))
-  
-  const nuevaOrientacion = ['arriba', 'abajo'].includes(posicion) ? 'vertical' : 'horizontal'
-  console.log('Nueva orientación necesaria:', nuevaOrientacion)
-  
-  // ✅ Si la orientación CAMBIA, envuelve los items existentes
-  if (ventana.value.orientacionComp !== nuevaOrientacion) {
-    console.log('Orientación cambió, envolviendo items existentes...')
-    
-    // Envuelve los items actuales en una compuesta con la orientación vieja
-    const itemsActuales = [...ventana.value.itemsComp]
-    const compuestaExistente = {
-      tipo: 'compuesta',
-      orientacion: ventana.value.orientacionComp, // orientación vieja
-      items: itemsActuales
+// Navega al array correcto según el path y devuelve la referencia
+function getArrayEnPath(pathPrefix) {
+  if (!pathPrefix) return ventana.value.itemsComp
+  const indices = pathPrefix.split('.').map(Number)
+  let current = ventana.value.itemsComp
+  for (const i of indices) {
+    if (current[i]?.tipo === 'compuesta') {
+      current = current[i].items
+    } else {
+      return null
     }
-    
-    // Reemplaza el array con la compuesta envuelta
-    ventana.value.itemsComp = [compuestaExistente]
-    
-    // Cambia a la nueva orientación
-    ventana.value.orientacionComp = nuevaOrientacion
-    
-    console.log('Items después de envolver:', JSON.stringify(ventana.value.itemsComp, null, 2))
-  } else {
-    console.log('Orientación NO cambió, no envolviendo')
   }
-  
-  // Define índice para insertar
-  switch(posicion) {
-    case 'arriba':
-    case 'izquierda':
-      agregarIdx.value = 0
-      break
-    case 'abajo':
-    case 'derecha':
-      agregarIdx.value = ventana.value.itemsComp.length
-      break
+  return current
+}
+
+function handleAgregarBorde(posicion) {
+  // Naranja: opera sobre TODO el objeto como raíz.
+  // arriba/abajo → orientación vertical
+  // izquierda/derecha → orientación horizontal
+  // Si la orientación raíz actual es distinta, envuelve los ítems existentes
+  // en una compuesta anidada (el backend soporta recursividad).
+  const orientacionNecesaria = ['arriba', 'abajo'].includes(posicion) ? 'vertical' : 'horizontal'
+
+  if (ventana.value.orientacionComp !== orientacionNecesaria) {
+    const itemsActuales = [...ventana.value.itemsComp]
+    ventana.value.itemsComp = [{
+      tipo: 'compuesta',
+      orientacion: ventana.value.orientacionComp,
+      items: itemsActuales,
+    }]
+    ventana.value.orientacionComp = orientacionNecesaria
   }
-  
-  console.log('Índice para insertar:', agregarIdx.value)
-  console.log('Orientación final:', ventana.value.orientacionComp)
-  console.log('=== FIN DEBUG ===')
-  
+
+  agregarIdx.value = ['arriba', 'izquierda'].includes(posicion) ? 0 : ventana.value.itemsComp.length
   showAgregarMenu.value = true
 }
 
-// ✅ También fuerza re-render cuando se agregan ventanas:
+// También fuerza re-render cuando se agregan ventanas:
 function agregarVentanaSimple(tipoId) {
   const nuevoItem = baseItemComp()
   nuevoItem.tipo = tipoId || 2
-  ventana.value.itemsComp.splice(agregarIdx.value, 0, nuevoItem)
-  
-  // Fuerza reactividad
-  ventana.value.itemsComp = [...ventana.value.itemsComp]
-  
-  // ✅ AGREGA ESTO:
+  const arr = getArrayEnPath(agregarPath.value)
+  if (arr) {
+    arr.splice(agregarIdx.value, 0, nuevoItem)
+    ventana.value.itemsComp = JSON.parse(JSON.stringify(ventana.value.itemsComp))
+  }
   forceReRenderKey.value++
-  
-  console.log('Items después de agregar:', ventana.value.itemsComp)
   showAgregarMenu.value = false
 }
 
@@ -1971,11 +1996,12 @@ function agregarVentanaCompuesta() {
       { tipo: 2, ladoApertura: 'izquierda', direccionApertura: 'interior' }
     ]
   }
-  ventana.value.itemsComp.splice(agregarIdx.value, 0, nuevoItem)
-  
-  // ✅ AGREGA ESTO:
+  const arr = getArrayEnPath(agregarPath.value)
+  if (arr) {
+    arr.splice(agregarIdx.value, 0, nuevoItem)
+    ventana.value.itemsComp = JSON.parse(JSON.stringify(ventana.value.itemsComp))
+  }
   forceReRenderKey.value++
-  
   showAgregarMenu.value = false
 }
 
@@ -2175,16 +2201,16 @@ function updateVentanaByPath(path, newData) {
   
   const finalIndex = indices[indices.length - 1]
   if (current[finalIndex]) {
-    // ✅ IMPORTANTE: Actualiza TODAS las propiedades que cambiaron
     const itemActualizado = {
       ...current[finalIndex],
       tipo: newData.tipo,
-      ancho: newData.ancho,           // ✅ Dimensión específica
-      alto: newData.alto,             // ✅ Dimensión específica  
-      sizePercent: newData.sizePercent,
+      sizePercent: newData.sizePercent ?? null,
       ladoApertura: newData.ladoApertura,
-      direccionApertura: newData.direccionApertura
+      direccionApertura: newData.direccionApertura,
     }
+    // Eliminar dimensiones explícitas para que sizePercent sea el que controle el render
+    delete itemActualizado.ancho
+    delete itemActualizado.alto
     
     // ✅ REEMPLAZA el item completo (no solo assign)
     current[finalIndex] = itemActualizado
@@ -2217,9 +2243,7 @@ function guardarCambiosVentana() {
   
   const success = updateVentanaByPath(pathEditando.value, {
     tipo: ventanaEditando.value.tipo,
-    ancho: ventanaEditando.value.ancho,
-    alto: ventanaEditando.value.alto,
-    sizePercent: ventanaEditando.value.sizePercent,
+    sizePercent: ventanaEditando.value.sizePercent || null,
     ladoApertura: ventanaEditando.value.ladoApertura,
     direccionApertura: ventanaEditando.value.direccionApertura
   })

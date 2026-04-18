@@ -65,13 +65,15 @@ class BsaleController extends Controller
             Log::info("🎯 INICIO: Petición recibida en crearDocumentoDesdeCotzacion");
             Log::info("📦 Request data", $request->all());
             
-            $cotizacionId = $request->input('cotizacion_id');
-            $tipoDocumento = $request->input('tipo_documento'); // 1=factura, 8=boleta, etc.
-            $clienteFacturacionId = $request->input('cliente_facturacion_id'); // ID del cliente que facturará
-            $metodoPago = $request->input('metodo_pago');
-            $condicionesPago = $request->input('condiciones_pago');
-            $fechaVencimiento = $request->input('fecha_vencimiento');
-            $observaciones = $request->input('observaciones', '');
+            $cotizacionId         = $request->input('cotizacion_id');
+            $tipoDocumento        = $request->input('tipo_documento');
+            $clienteFacturacionId = $request->input('cliente_facturacion_id');
+            $metodoPago           = $request->input('metodo_pago');
+            $condicionesPago      = $request->input('condiciones_pago');
+            $fechaVencimiento     = $request->input('fecha_vencimiento');
+            $observaciones        = $request->input('observaciones', '');
+            $porcentaje           = (float) $request->input('porcentaje', 100); // 100 = total completo
+            $tipoEmision          = $porcentaje == 100 ? 'total' : ($porcentaje <= 50 ? 'anticipo' : 'saldo');
             
             // Buscar cotización
             $cotizacion = Cotizacion::with([
@@ -156,13 +158,14 @@ class BsaleController extends Controller
             // Construir payload para BSALE
             try {
                 $payload = $this->construirPayloadBsale(
-                    $cotizacion, 
-                    $tipoDocumento, 
+                    $cotizacion,
+                    $tipoDocumento,
                     $clienteBsaleId,
                     $metodoPago,
                     $condicionesPago,
                     $fechaVencimiento,
-                    $observaciones
+                    $observaciones,
+                    $porcentaje
                 );
                 Log::info("✅ Payload construido exitosamente");
             } catch (\Exception $e) {
@@ -172,38 +175,51 @@ class BsaleController extends Controller
                 ]);
                 throw $e;
             }
-            
+
             Log::info("📤 Payload BSALE:", $payload);
 
             // Enviar a BSALE API
-            Log::info("🚀 Enviando a BSALE API...");
             $response = $this->enviarDocumentoBsale($payload);
             Log::info("📥 Respuesta de BSALE:", $response);
 
             if ($response['success']) {
-                // Actualizar cotización con datos del documento
-                $cotizacion->update([
+                $monto = round($cotizacion->total * $porcentaje / 100);
+
+                // Guardar documento de facturación
+                $docFact = \App\Models\DocumentoFacturacion::create([
+                    'cotizacion_id'          => $cotizacion->id,
+                    'tipo'                   => $tipoEmision,
+                    'porcentaje'             => $porcentaje,
+                    'monto'                  => $monto,
+                    'estado'                 => 'emitido',
+                    'id_documento_bsale'     => $response['data']['id'] ?? null,
                     'numero_documento_bsale' => $response['data']['number'] ?? null,
-                    'id_documento_bsale' => $response['data']['id'] ?? null,
-                    'fecha_documento_bsale' => now(),
-                    'estado_facturacion' => 'facturada',
-                    'estado_cotizacion_id' => 6, // Cambiar a "Facturada" (ID 6)
-                    'url_pdf_bsale' => $response['data']['urlPdf'] ?? null,
-                    'token_bsale' => $response['data']['token'] ?? null
+                    'url_pdf_bsale'          => $response['data']['urlPdf'] ?? null,
+                    'fecha_emision'          => now()->toDateString(),
                 ]);
 
-                Log::info("✅ Documento BSALE creado", [
-                    'bsale_id' => $response['data']['id'],
-                    'numero' => $response['data']['number'],
-                    'pdf_url' => $response['data']['urlPdf'] ?? 'No disponible',
-                    'token' => $response['data']['token'] ?? 'No disponible'
+                // Calcular total emitido para decidir si cambiar estado
+                $totalEmitido = \App\Models\DocumentoFacturacion::where('cotizacion_id', $cotizacion->id)
+                    ->where('estado', 'emitido')
+                    ->sum('monto');
+                $estaCompleto = $totalEmitido >= $cotizacion->total;
+
+                $cotizacion->update([
+                    'numero_documento_bsale' => $response['data']['number'] ?? null,
+                    'id_documento_bsale'     => $response['data']['id'] ?? null,
+                    'fecha_documento_bsale'  => now(),
+                    'url_pdf_bsale'          => $response['data']['urlPdf'] ?? null,
+                    'token_bsale'            => $response['data']['token'] ?? null,
+                    // Solo marcar como Facturada si se emitió el 100%
+                    ...($estaCompleto ? ['estado_cotizacion_id' => 6] : []),
                 ]);
 
                 return response()->json([
-                    'success' => true,
-                    'message' => 'Documento creado exitosamente',
+                    'success'   => true,
+                    'message'   => 'Documento creado exitosamente',
                     'documento' => $response['data'],
-                    'cotizacion' => $cotizacion->fresh()
+                    'doc_fact'  => $docFact,
+                    'cotizacion' => $cotizacion->fresh(['documentosFacturacion']),
                 ]);
             } else {
                 Log::error("❌ Error BSALE:", $response);
@@ -238,16 +254,19 @@ class BsaleController extends Controller
      * Construir payload según especificaciones BSALE
      */
     private function construirPayloadBsale(
-        $cotizacion, 
-        $tipoDocumento, 
-        $clienteBsaleId, 
+        $cotizacion,
+        $tipoDocumento,
+        $clienteBsaleId,
         $metodoPago,
         $condicionesPago,
         $fechaVencimiento,
-        $observaciones
+        $observaciones,
+        $porcentaje = 100
     ) {
         $detalles = [];
         $totalNeto = 0;
+        // Descuento inverso: si cobro 30%, aplico 70% de descuento en cada línea
+        $descuentoLinea = $porcentaje < 100 ? round(100 - $porcentaje, 4) : 0;
 
         Log::info("🏗️ Construyendo payload", [
             'ventanas_count' => $cotizacion->ventanas->count(),
@@ -265,7 +284,7 @@ class BsaleController extends Controller
                 'quantity'     => $cantidad,
                 'taxId'        => '[1]',
                 'comment'      => $this->generarDescripcionVentana($ventana),
-                'discount'     => 0,
+                'discount'     => $descuentoLinea,
             ];
 
             $totalNeto += $netoUnitario * $cantidad;
@@ -335,22 +354,48 @@ class BsaleController extends Controller
                 'quantity'     => $cantidad,
                 'taxId'        => '[1]',
                 'comment'      => $descripcion,
-                'discount'     => 0,
+                'discount'     => $descuentoLinea,
             ];
 
             $totalNeto += $netoUnitario * $cantidad;
         }
 
+        $label = $porcentaje <= 50 ? 'Anticipo' : 'Saldo';
+        $nota  = $porcentaje < 100
+            ? "{$label} {$porcentaje}% sobre cotización #{$cotizacion->id}. Total cotización: $" . number_format($cotizacion->total, 0, ',', '.')
+            : null;
+
+        // Opción B: Boleta no tiene dynamicAttribute "Nota" → prefixar primer item
+        if ($tipoDocumento == 1 && $nota !== null && !empty($detalles)) {
+            $detalles[0]['comment'] = "[{$label} {$porcentaje}%] " . $detalles[0]['comment'];
+        }
+
         // Formato correcto según documentación BSALE
         $payload = [
             "documentTypeId" => (int)$tipoDocumento,
-            "officeId" => 1, // ID de sucursal por defecto
-            "emissionDate" => time(), // Timestamp Unix
-            "expirationDate" => time(), // Fecha de vencimiento por defecto (mismo día)
-            "declareSii" => 1,
-            "clientId" => (int)$clienteBsaleId, // Usar clientId en lugar de client object
-            "details" => $detalles
+            "officeId"       => 1,
+            "emissionDate"   => time(),
+            "expirationDate" => time(),
+            "declareSii"     => 1,
+            "clientId"       => (int)$clienteBsaleId,
+            "details"        => $detalles,
         ];
+
+        if ($nota) {
+            // El dynamicAttributeId de "Nota" varía por tipo de documento en esta cuenta:
+            // Cotización (24) → 25 | Nota de Venta (3) → 7 | Factura Electrónica (5) → 6 | Boleta (1) → sin atributo
+            $notaAttrMap = [24 => 25, 3 => 7, 5 => 6];
+            $notaAttrId  = $notaAttrMap[$tipoDocumento] ?? null;
+
+            if ($notaAttrId) {
+                $payload['dynamicAttributes'] = [
+                    [
+                        'description'        => $nota,
+                        'dynamicAttributeId' => $notaAttrId,
+                    ]
+                ];
+            }
+        }
 
         // Agregar fecha de vencimiento específica si aplica
         if ($condicionesPago !== 'contado' && $fechaVencimiento) {
@@ -359,12 +404,15 @@ class BsaleController extends Controller
 
         // Agregar método de pago
         if ($metodoPago) {
-            $totalConIva = $totalNeto * 1.19;
+            // El monto del pago es el total del documento (ya con descuento aplicado)
+            $montoDocumento = $porcentaje < 100
+                ? (int)round($cotizacion->total * $porcentaje / 100)
+                : (int)round($totalNeto * 1.19);
             $payload['payments'] = [
                 [
                     "paymentTypeId" => $this->getPaymentTypeId($metodoPago),
-                    "amount" => (int)round($totalConIva),
-                    "recordDate" => time()
+                    "amount"        => $montoDocumento,
+                    "recordDate"    => time(),
                 ]
             ];
         }
@@ -860,6 +908,16 @@ class BsaleController extends Controller
         } else {
             return 'Documento físico';
         }
+    }
+
+    /**
+     * Listar atributos dinámicos de la cuenta Bsale (para encontrar el ID de Observaciones)
+     */
+    public function getDynamicAttributes()
+    {
+        $response = Http::withHeaders($this->getBsaleHeaders())
+            ->get($this->baseUrl . 'dynamic_attributes.json');
+        return response()->json($response->json());
     }
 
     /**

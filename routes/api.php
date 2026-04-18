@@ -19,6 +19,8 @@ use App\Http\Controllers\EstadoCotizacionController;
 use App\Http\Controllers\ListaPrecioController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProduccionController;
+use App\Http\Controllers\OperacionesController;
+use App\Http\Controllers\DocumentoFacturacionController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -103,6 +105,7 @@ Route::middleware('auth:api')->group(function () {
     // Rutas BSALE
     Route::prefix('bsale')->group(function () {
         Route::get('/test-conexion', [\App\Http\Controllers\BsaleController::class, 'testConexion']);
+        Route::get('/dynamic-attributes', [\App\Http\Controllers\BsaleController::class, 'getDynamicAttributes']);
         Route::get('/tipos-documento', [\App\Http\Controllers\BsaleController::class, 'getTiposDocumento']);
         Route::get('/oficinas', [\App\Http\Controllers\BsaleController::class, 'getOficinas']);
         Route::get('/clientes', [\App\Http\Controllers\BsaleController::class, 'getClientes']);
@@ -113,6 +116,18 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/documento/{id}/pdf', [\App\Http\Controllers\BsaleController::class, 'descargarPdf']);
         Route::post('/documento/{id}/enviar-email', [\App\Http\Controllers\BsaleController::class, 'enviarEmail']);
     });
+
+    // Documentos de facturación
+    Route::get('/cotizaciones/{id}/documentos-facturacion', [DocumentoFacturacionController::class, 'index']);
+    Route::post('/cotizaciones/{id}/documentos-facturacion', [DocumentoFacturacionController::class, 'store']);
+    Route::patch('/documentos-facturacion/{id}/emitir', [DocumentoFacturacionController::class, 'marcarEmitido']);
+    Route::delete('/documentos-facturacion/{id}', [DocumentoFacturacionController::class, 'destroy']);
+
+    // Operaciones
+    Route::get('/operaciones', [OperacionesController::class, 'index']);
+    Route::patch('/operaciones/{id}', [OperacionesController::class, 'update']);
+    Route::post('/operaciones/{id}/abonos', [OperacionesController::class, 'storeAbono']);
+    Route::delete('/operaciones/abonos/{abonoId}', [OperacionesController::class, 'destroyAbono']);
 
     // routes/api.php
     Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);
