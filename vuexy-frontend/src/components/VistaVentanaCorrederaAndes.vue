@@ -218,7 +218,7 @@ const colorHexMap = {
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
 const colorMarcoHex = computed(() => {

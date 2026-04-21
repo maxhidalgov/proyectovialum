@@ -88,8 +88,6 @@
         <!-- Etiquetas -->
         <v-text v-bind="widthLabel" />
         <v-text v-bind="heightLabel" />
-        <v-text v-bind="indicador1" />
-        <v-text v-bind="indicador2" />
         
         <!-- Indicadores de hojas móviles/fijas -->
         <v-text v-bind="indicadorHoja1" />
@@ -115,7 +113,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, reactive, onMounted } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 
 const stageRef = ref(null)
@@ -167,23 +165,47 @@ watch(() => props.hoja1AlFrente, (val) => {
   hoja1Adelante.value = val
 })
 
+const texturas = reactive({ roble: null, nogal: null })
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturas[key] = img }
+  }
+  cargar('roble', new URL('@/assets/images/roble.png', import.meta.url).href)
+  cargar('nogal', new URL('@/assets/images/nogal.png', import.meta.url).href)
+})
+
 const colorHexMap = {
   blanco: '#ffffff',
   negro: '#0a0a0a',
   gris: '#808080',
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
+  roble: '#c9a36b',
   bronce: '#CD7F32',
   'negro mate': '#1A1A1A',
   inox: '#C0C0C0',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
-const colorMarcoHex = computed(() => {
-  const c = props.colorMarco?.toLowerCase?.()
-  return colorHexMap[c] || '#ffffff'
+const colorNombre = computed(() => {
+  const c = props.colorMarco
+  if (typeof c === 'string') return c.toLowerCase()
+  if (c?.nombre) return String(c.nombre).toLowerCase()
+  return 'blanco'
 })
+
+const colorMarcoHex = computed(() => colorHexMap[colorNombre.value] || '#ffffff')
+
+function getColorAttrs() {
+  const nombre = colorNombre.value
+  if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
+    return { fill: null, fillPatternImage: texturas[nombre], fillPatternRepeat: 'repeat', fillPatternScale: { x: 0.2, y: 0.2 } }
+  }
+  return { fill: colorMarcoHex.value, fillPatternImage: null }
+}
 
 const maxCanvasSize = 300
 const escala = computed(() => {
@@ -206,7 +228,7 @@ const marcoTop = computed(() => ({
   y: offset,
   width: screenWidth.value,
   height: marcoAncho.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -216,7 +238,7 @@ const marcoRight = computed(() => ({
   y: offset,
   width: marcoAncho.value,
   height: screenHeight.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -226,7 +248,7 @@ const marcoBottom = computed(() => ({
   y: offset + screenHeight.value - marcoAncho.value,
   width: screenWidth.value,
   height: marcoAncho.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -236,7 +258,7 @@ const marcoLeft = computed(() => ({
   y: offset,
   width: marcoAncho.value,
   height: screenHeight.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -259,7 +281,7 @@ const hoja1Top = computed(() => ({
   y: hoja1Y.value,
   width: hojaAncho.value,
   height: hojaMarcoAncho.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -269,7 +291,7 @@ const hoja1Right = computed(() => ({
   y: hoja1Y.value,
   width: hojaMarcoAncho.value,
   height: hojaAlto.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -279,7 +301,7 @@ const hoja1Bottom = computed(() => ({
   y: hoja1Y.value + hojaAlto.value - hojaMarcoAncho.value,
   width: hojaAncho.value,
   height: hojaMarcoAncho.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -289,7 +311,7 @@ const hoja1Left = computed(() => ({
   y: hoja1Y.value,
   width: hojaMarcoAncho.value,
   height: hojaAlto.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -299,7 +321,7 @@ const hoja2Top = computed(() => ({
   y: hoja2Y.value,
   width: hojaAncho.value,
   height: hojaMarcoAncho.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -309,7 +331,7 @@ const hoja2Right = computed(() => ({
   y: hoja2Y.value,
   width: hojaMarcoAncho.value,
   height: hojaAlto.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -319,7 +341,7 @@ const hoja2Bottom = computed(() => ({
   y: hoja2Y.value + hojaAlto.value - hojaMarcoAncho.value,
   width: hojaAncho.value,
   height: hojaMarcoAncho.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -329,7 +351,7 @@ const hoja2Left = computed(() => ({
   y: hoja2Y.value,
   width: hojaMarcoAncho.value,
   height: hojaAlto.value,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 1,
 }))
@@ -414,22 +436,6 @@ const indicadorHoja2 = computed(() => ({
   fill: 'black',
 }))
 
-const indicador1 = computed(() => ({
-  x: offset - 30,
-  y: offset + screenHeight.value / 4 - 10,
-  text: 'AL25',
-  fontSize: 12,
-  fill: '#666',
-  fontStyle: 'bold'
-}))
-
-const indicador2 = computed(() => ({
-  x: offset - 30,
-  y: offset + screenHeight.value / 4 + 5,
-  text: 'Corredera',
-  fontSize: 10,
-  fill: '#999'
-}))
 
 // === ETIQUETAS
 const fontSize = computed(() => {

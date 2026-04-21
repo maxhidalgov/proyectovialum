@@ -21,7 +21,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 
 const colorHexMap = {
   blanco: '#ffffff',
@@ -30,16 +30,20 @@ const colorHexMap = {
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
-const texturas = {
-  roble: new Image(),
-  nogal: new Image(),
-}
+const texturas = reactive({ roble: null, nogal: null })
 
-texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
-texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturas[key] = img }
+  }
+  cargar('roble', new URL('@/assets/images/roble.png', import.meta.url).href)
+  cargar('nogal', new URL('@/assets/images/nogal.png', import.meta.url).href)
+})
 
 const colorMarcoHex = computed(() => {
   let nombre = ''
@@ -63,6 +67,7 @@ function getMitraMarco(points, usoHoja = false) {
     return {
       points,
       closed: true,
+      fill: null,
       fillPatternImage: texturas[nombre],
       fillPatternRepeat: 'repeat',
       fillPatternScale: { x: usoHoja ? 0.15 : 0.2, y: usoHoja ? 0.15 : 0.2 },
@@ -74,6 +79,7 @@ function getMitraMarco(points, usoHoja = false) {
     points,
     closed: true,
     fill: colorMarcoHex.value,
+    fillPatternImage: null,
     stroke: 'black',
   }
 }

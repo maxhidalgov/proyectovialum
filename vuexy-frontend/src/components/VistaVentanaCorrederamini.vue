@@ -1,9 +1,4 @@
 <template>
-  <v-switch
-    v-model="hoja1Adelante"
-    label="Hoja 1 adelante"
-  />
-
     <v-group :x="props.config?.x || 0" :y="props.config?.y || 0">
       <!-- Marco con mitras -->
       <v-line v-bind="topMitra" />
@@ -84,7 +79,7 @@
 
       <!-- Etiquetas -->
       <v-text v-bind="widthLabel" />
-      <v-text v-bind="heightLabel" />
+      <v-text v-if="showHeightLabel" v-bind="heightLabel" />
       <v-text v-bind="indicador1" />
       <v-text v-bind="indicador2" />
       <Manilla
@@ -110,9 +105,7 @@
 
 
 <script setup>
-import { computed, onMounted } from 'vue'
-import { watchEffect } from 'vue'
-import { ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 import robleUrl from '@/assets/images/roble.png'
 import nogalUrl from '@/assets/images/nogal.png'
@@ -131,10 +124,7 @@ const exportarImagen = () => {
 defineExpose({ exportarImagen }) // esto permite usar el método desde el padree
 
 
-const texturas = {
-  roble: null,
-  nogal: null,
-}
+const texturas = reactive({ roble: null, nogal: null })
 
 onMounted(() => {
   const cargarTextura = (url, key) => {
@@ -154,25 +144,32 @@ onMounted(() => {
 const props = defineProps({
   ancho: Number,
   alto: Number,
-  colorMarco: { type: String, default: 'blanco' },
-  hojasMoviles: { type: Number, default: '2' },     // cuántas hojas se mueven
-  hojaMovilSeleccionada: { type: Number, default: 1 }, // cuál hoja se mueve (1 o 2)
+  colorMarco: { type: [String, Object], default: 'blanco' },
+  hojasMoviles: { type: Number, default: null },
+  hojaMovilSeleccionada: { type: Number, default: 1 },
   ordenHoja1AlFrente: { type: Boolean, default: true },
-  color: Object, // o puede ser 'color: { type: Object, required: true }'
-  config: { type: Object, default: () => ({ x: 0, y: 0 }) }
+  color: Object,
+  config: { type: Object, default: () => ({ x: 0, y: 0 }) },
+  escala: { type: Number, default: null },   // cuando viene de Bay Window / VentanaSimple
+  showHeightLabel: { type: Boolean, default: true }
 })
 
-const colorNombre = computed(() => props.colorMarco.toLowerCase())
+const colorNombre = computed(() => {
+  const c = props.colorMarco
+  if (typeof c === 'string') return c.toLowerCase()
+  if (c?.nombre) return String(c.nombre).toLowerCase()
+  return 'blanco'
+})
 
 
 function getMitraProps(points) {
   const color = colorNombre.value.toLowerCase()
 
-  // Si hay textura para ese color
   if (['roble', 'nogal'].includes(color) && texturas[color]) {
     return {
       points,
       closed: true,
+      fill: null,
       fillPatternImage: texturas[color],
       fillPatternRepeat: 'repeat',
       fillPatternScale: { x: 0.2, y: 0.2 },
@@ -180,11 +177,11 @@ function getMitraProps(points) {
     }
   }
 
-  // Si es color plano normal
   return {
     points,
     closed: true,
     fill: colorMarcoHex.value,
+    fillPatternImage: null,
     stroke: 'black',
   }
 }
@@ -219,7 +216,7 @@ const colorHexMap = {
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
 const colorMarcoHex = computed(() => {
@@ -228,11 +225,13 @@ const colorMarcoHex = computed(() => {
 })
 
 const maxCanvasSize = 300
-const escala = computed(() => {
+const escalaLocal = computed(() => {
   const escalaAncho = maxCanvasSize / props.ancho
   const escalaAlto = maxCanvasSize / props.alto
   return Math.min(escalaAncho, escalaAlto, 1) * 0.9
 })
+// Usa la escala del padre (Bay Window) si viene; si no, calcula la propia
+const escala = computed(() => props.escala ?? escalaLocal.value)
 
 const marcoAncho = computed(() => marcoAnchoOriginal * escala.value)
 const hojaMarcoAncho = computed(() => hojaMarcoAnchoOriginal * escala.value)
@@ -240,20 +239,17 @@ const hojaMarcoAncho = computed(() => hojaMarcoAnchoOriginal * escala.value)
 const screenWidth = computed(() => props.ancho * escala.value)
 const screenHeight = computed(() => props.alto * escala.value)
 
-const stageConfig = {
-  width: 400,
-  height: 400,
-}
 
 const traslapeEscalado = computed(() => traslape * escala.value)
 
 function getMitraMarco(points) {
-  const nombre = props.colorMarco.toLowerCase()
+  const nombre = colorNombre.value  // ya normalizado por colorNombre computed
 
   if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
     return {
       points,
       closed: true,
+      fill: null,
       fillPatternImage: texturas[nombre],
       fillPatternRepeat: 'repeat',
       fillPatternScale: { x: 0.2, y: 0.2 },
@@ -265,6 +261,7 @@ function getMitraMarco(points) {
     points,
     closed: true,
     fill: colorMarcoHex.value,
+    fillPatternImage: null,
     stroke: 'black',
   }
 }
@@ -618,13 +615,13 @@ const vidrio2 = computed(() => {
 // })
 
   const textoIndicador1 = computed(() => {
-    if (props.hojasMoviles === 2) return '→'
+    if (props.hojasMoviles == null || props.hojasMoviles === 2) return '→'
     if (props.hojasMoviles === 1 && props.hojaMovilSeleccionada === 1) return '→'
     return '+'
   })
 
   const textoIndicador2 = computed(() => {
-    if (props.hojasMoviles === 2) return '←'
+    if (props.hojasMoviles == null || props.hojasMoviles === 2) return '←'
     if (props.hojasMoviles === 1 && props.hojaMovilSeleccionada === 2) return '←'
     return '+'
   })

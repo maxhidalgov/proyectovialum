@@ -99,14 +99,153 @@
         <!-- Vista previa -->
         <v-row>
           <v-col cols="12">
-            <VentanaEditor
-              v-if="ventanaLocal.tipo === 2"
+            <VentanaFijaAL42
+              v-if="ventanaLocal.tipo === 1"
               :ancho="ventanaLocal.ancho"
               :alto="ventanaLocal.alto"
               :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
               :material="ventanaLocal.material"
               :tipoVidrio="ventanaLocal.tipoVidrio"
               :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+            />
+            <VentanaEditor
+              v-else-if="ventanaLocal.tipo === 2"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+            />
+            <VentanaCorredera
+              v-else-if="ventanaLocal.tipo === 3"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+              :hojas-totales="ventanaLocal.hojas_totales"
+              :hojas-moviles="ventanaLocal.hojas_moviles"
+              :hoja-movil-seleccionada="ventanaLocal.hojaMovilSeleccionada"
+              :orden-hoja1-al-frente="ventanaLocal.hoja1AlFrente"
+            />
+            <VentanaProyectante
+              v-else-if="ventanaLocal.tipo === 45"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+            />
+            <VistaVentanaCorrederaAndes
+              v-else-if="ventanaLocal.tipo === 46"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+              :hojas-totales="ventanaLocal.hojas_totales"
+              :hojas-moviles="ventanaLocal.hojas_moviles"
+              :hoja-movil-seleccionada="ventanaLocal.hojaMovilSeleccionada"
+              :orden-hoja1-al-frente="ventanaLocal.hoja1AlFrente"
+            />
+            <BayWindow
+              v-else-if="ventanaLocal.tipo === 47"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+              :ancho-izquierda="ventanaLocal.ancho_izquierda"
+              :ancho-centro="ventanaLocal.ancho_centro"
+              :ancho-derecha="ventanaLocal.ancho_derecha"
+              :tipo-ventana-izquierda="ventanaLocal.tipoVentanaIzquierda"
+              :tipo-ventana-centro="ventanaLocal.tipoVentanaCentro"
+              :tipo-ventana-derecha="ventanaLocal.tipoVentanaDerecha"
+            />
+            <VentanaAbatir
+              v-else-if="ventanaLocal.tipo === 49"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+              :lado-inicial="ventanaLocal.ladoApertura || 'izquierda'"
+            />
+            <PuertaS60
+              v-else-if="ventanaLocal.tipo === 50"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+              :lado-apertura="ventanaLocal.ladoApertura"
+              :direccion-apertura="ventanaLocal.direccionApertura"
+              :paso-libre="ventanaLocal.pasoLibre"
+            />
+            <VistaMamparaS60
+              v-else-if="ventanaLocal.tipo === 51"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :hoja-activa="ventanaLocal.hojaActiva"
+              :direccion-apertura="ventanaLocal.direccionApertura"
+              :paso-libre="ventanaLocal.pasoLibre"
+            />
+            <VentanaCorredera98
+              v-else-if="ventanaLocal.tipo === 52"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+              :hojas-totales="ventanaLocal.hojas_totales"
+              :hojas-moviles="ventanaLocal.hojas_moviles"
+              :hoja-movil-seleccionada="ventanaLocal.hojaMovilSeleccionada"
+              :orden-hoja1-al-frente="ventanaLocal.hoja1AlFrente"
+            />
+            <VistaVentanaMonorriel
+              v-else-if="ventanaLocal.tipo === 53"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :lado-apertura="ventanaLocal.ladoApertura"
+            />
+            <VentanaCorrederaAL25
+              v-else-if="ventanaLocal.tipo === 55"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :hoja1AlFrente="ventanaLocal.hoja1AlFrente"
+              :hojas-moviles="ventanaLocal.hojas_moviles || 2"
+              :hoja-movil-seleccionada="ventanaLocal.hojaMovilSeleccionada || 1"
+            />
+            <VentanaProyectanteAL42
+              v-else-if="ventanaLocal.tipo === 56"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :material="ventanaLocal.material"
+              :tipoVidrio="ventanaLocal.tipoVidrio"
+              :productoVidrioProveedor="ventanaLocal.productoVidrioProveedor"
+            />
+            <VistaVentanaCompuestaAL42
+              v-else-if="ventanaLocal.tipo === 57"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :color-marco="colores.find(c => c.id === ventanaLocal.color)?.nombre || 'blanco'"
+              :filas="ventanaLocal.filas"
+              :columnas="ventanaLocal.columnas"
+              :altos-filas="ventanaLocal.altosFilas"
+              :anchos-columnas="ventanaLocal.anchosColumnas"
+              :secciones="ventanaLocal.secciones"
             />
           </v-col>
         </v-row>
@@ -184,7 +323,20 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
+import VentanaFijaAL42 from '@/components/VistaVentanaFijaAL42.vue'
 import VentanaEditor from '@/components/VistaVentanaFijaS60.vue'
+import VentanaProyectante from '@/components/VistaVentanaProyectanteS60.vue'
+import VentanaProyectanteAL42 from '@/components/VistaVentanaProyectanteAL42.vue'
+import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
+import VentanaCorredera98 from '@/components/VistaVentanaCorredera98.vue'
+import VentanaCorrederaAL25 from '@/components/VistaVentanaCorrederaAL25.vue'
+import VistaVentanaCompuestaAL42 from '@/components/VistaVentanaCompuestaAL42.vue'
+import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
+import BayWindow from '@/components/VistaBayWindow.vue'
+import VentanaAbatir from '@/components/VistaVentanaAbatirS60.vue'
+import PuertaS60 from '@/components/VistaPuertaS60.vue'
+import VistaMamparaS60 from '@/components/VistaMamparaS60.vue'
+import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
 import api from '@/axiosInstance'
 
 const props = defineProps({
@@ -205,9 +357,9 @@ const ventanaLocal = ref({})
 watch(() => props.mostrar, (val) => {
   localMostrar.value = val
   if (val && props.ventana) {
-    // Simplemente clonar - datos YA vienen completos
     ventanaLocal.value = { ...props.ventana }
     console.log('✅ EDITAR MODAL - Ventana recibida:', ventanaLocal.value)
+    recalcularCostos()
   }
 })
 
@@ -240,7 +392,10 @@ const onGuardar = () => {
   cerrar()
 }
 
-const margenVenta = 0.45
+const margenVenta = computed(() => {
+  const mat = props.materiales?.find(m => m.id === ventanaLocal.value.material)
+  return mat?.margen ?? 0.50
+})
 
 async function recalcularCostos() {
   if (
@@ -290,6 +445,29 @@ async function recalcularCostos() {
         productoVidrio: relacion.producto_id,
         proveedorVidrio: relacion.proveedor_id,
         tipoVidrio: ventanaLocal.value.tipoVidrio,
+        hojas_totales: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_totales : undefined,
+        hojas_moviles: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_moviles : undefined,
+        hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojaMovilSeleccionada : undefined,
+        hoja1AlFrente: [3, 46, 52].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hoja1AlFrente : undefined,
+        direccionApertura: ventanaLocal.value.direccionApertura,
+        ladoApertura: ventanaLocal.value.ladoApertura,
+        pasoLibre: [50, 51].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.pasoLibre : undefined,
+        hojaActiva: ventanaLocal.value.tipo === 51 ? ventanaLocal.value.hojaActiva : undefined,
+        ...(ventanaLocal.value.tipo === 57 && {
+          filas: ventanaLocal.value.filas,
+          columnas: ventanaLocal.value.columnas,
+          altos_filas: ventanaLocal.value.altosFilas,
+          anchos_columnas: ventanaLocal.value.anchosColumnas,
+          secciones: ventanaLocal.value.secciones,
+        }),
+        ...(ventanaLocal.value.tipo === 47 && {
+          ancho_izquierda: ventanaLocal.value.ancho_izquierda,
+          ancho_centro: ventanaLocal.value.ancho_centro,
+          ancho_derecha: ventanaLocal.value.ancho_derecha,
+          tipoVentanaIzquierda: ventanaLocal.value.tipoVentanaIzquierda,
+          tipoVentanaCentro: ventanaLocal.value.tipoVentanaCentro,
+          tipoVentanaDerecha: ventanaLocal.value.tipoVentanaDerecha,
+        }),
       }
 
       console.log('💰 EDITAR MODAL - Recalculando costos:', payload)
@@ -300,7 +478,7 @@ async function recalcularCostos() {
       
       ventanaLocal.value.costo_total_unitario = data.costo_unitario
       ventanaLocal.value.costo_total = data.costo_unitario * ventanaLocal.value.cantidad
-      ventanaLocal.value.precio = Math.ceil(ventanaLocal.value.costo_total / (1 - margenVenta))
+      ventanaLocal.value.precio = Math.ceil(ventanaLocal.value.costo_total / (1 - margenVenta.value))
       ventanaLocal.value.materiales = data.materiales
 
       console.log('💵 EDITAR MODAL - Costos actualizados:')

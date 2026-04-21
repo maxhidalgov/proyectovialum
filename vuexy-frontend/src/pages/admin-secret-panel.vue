@@ -60,7 +60,27 @@ onMounted(async () => {
   await loadUsers()
   await loadRoles()
   await loadPermissions()
+  await loadMateriales()
 })
+
+// ── Márgenes por material ─────────────────────────────────────────
+const materiales = ref([])
+const savingMargen = ref(null)
+
+const loadMateriales = async () => {
+  const { data } = await api.get('/api/tipos_material')
+  materiales.value = data.map(m => ({ ...m, margenInput: Math.round((m.margen ?? 0.50) * 100) }))
+}
+
+const guardarMargen = async (mat) => {
+  savingMargen.value = mat.id
+  try {
+    await api.put(`/api/tipos_material/${mat.id}/margen`, { margen: mat.margenInput / 100 })
+    success.value = `Margen de ${mat.nombre} actualizado`
+  } finally {
+    savingMargen.value = null
+  }
+}
 
 const loadPermissions = async () => {
   try {
@@ -258,11 +278,12 @@ const getRoleBadgeColor = roleName => {
               Usuarios
             </VTab>
             <VTab value="roles">
-              <VIcon
-                start
-                icon="tabler-shield-lock"
-              />
+              <VIcon start icon="tabler-shield-lock" />
               Roles y Permisos
+            </VTab>
+            <VTab value="margenes">
+              <VIcon start icon="tabler-percentage" />
+              Márgenes
             </VTab>
           </VTabs>
 
@@ -440,6 +461,38 @@ const getRoleBadgeColor = roleName => {
         </VCard>
       </VCol>
     </VRow>
+
+    <!-- Tab Márgenes por material -->
+    <VCardText v-show="activeTab === 'margenes'">
+      <VRow>
+        <VCol v-for="mat in materiales" :key="mat.id" cols="12" md="4">
+          <VCard variant="outlined">
+            <VCardTitle>{{ mat.nombre }}</VCardTitle>
+            <VCardText>
+              <VTextField
+                v-model.number="mat.margenInput"
+                label="Margen de venta (%)"
+                type="number"
+                min="1"
+                max="99"
+                suffix="%"
+                hint="Ej: 50 = precio = costo / (1 - 0.50)"
+                persistent-hint
+              />
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="primary"
+                :loading="savingMargen === mat.id"
+                @click="guardarMargen(mat)"
+              >
+                Guardar
+              </VBtn>
+            </VCardActions>
+          </VCard>
+        </VCol>
+      </VRow>
+    </VCardText>
 
     <!-- Dialog crear/editar usuario -->
     <VDialog

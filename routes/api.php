@@ -79,6 +79,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/colores', [ColorController::class, 'store']);
     Route::get('/unidades', [UnidadController::class, 'index']);
     Route::get('/tipos_material', [CotizadorController::class, 'tiposMaterial']);
+    Route::put('/tipos_material/{id}/margen', [CotizadorController::class, 'updateMargenMaterial']);
     Route::get('/tipos_producto', [CotizadorController::class, 'tiposProducto']);
     Route::get('/tipos_ventana', [TipoVentanaController::class, 'index']);
     Route::post('/cotizador/calcular-materiales', [App\Http\Controllers\CotizadorController::class, 'calcularMateriales']);

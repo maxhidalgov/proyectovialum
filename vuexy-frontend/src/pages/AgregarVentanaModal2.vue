@@ -998,7 +998,7 @@
         <!-- Costos — siempre visible -->
         <v-row dense class="mb-2">
           <v-col cols="4">
-            <div class="rounded-lg pa-3 bg-surface-variant text-center">
+            <div class="rounded-lg pa-3 text-center" style="background: rgba(var(--v-theme-on-surface), 0.06)">
               <div class="text-caption text-medium-emphasis mb-1">Costo unitario</div>
               <div v-if="calculando"><v-progress-linear indeterminate color="warning" height="2" rounded /></div>
               <div v-else class="text-body-2 font-weight-bold">
@@ -1007,7 +1007,7 @@
             </div>
           </v-col>
           <v-col cols="4">
-            <div class="rounded-lg pa-3 bg-surface-variant text-center">
+            <div class="rounded-lg pa-3 text-center" style="background: rgba(var(--v-theme-on-surface), 0.06)">
               <div class="text-caption text-medium-emphasis mb-1">Costo total</div>
               <div v-if="calculando"><v-progress-linear indeterminate color="warning" height="2" rounded /></div>
               <div v-else class="text-body-2 font-weight-bold">
@@ -1027,45 +1027,55 @@
         </v-row>
 
         <!-- Detalle de materiales usados -->
-        <v-row v-if="ventana.materiales && ventana.materiales.length">
+        <v-row v-if="ventana.materiales && ventana.materiales.length" class="mt-1">
           <v-col cols="12">
-            <v-card variant="outlined">
-              <v-card-title class="d-flex align-center">
-                <span>Detalle de materiales</span>
-                <v-spacer />
-                <v-btn 
-                  color="success" 
-                  variant="tonal" 
-                  size="small"
-                  @click="descargarMateriales"
-                >
-                  <v-icon start>mdi-download</v-icon>
-                  Descargar Excel
-                </v-btn>
-              </v-card-title>
-              <v-data-table
-                :headers="[
-                  { title: 'Material', key: 'nombre' },
-                  { title: 'Proveedor', key: 'proveedor' },
-                  { title: 'Cantidad', key: 'cantidad' },
-                  { title: 'Unidad', key: 'unidad' },
-                  { title: 'Costo unitario', key: 'costo_unitario' },
-                  { title: 'Costo total', key: 'costo_total' }
-                ]"
-                :items="ventana.materiales"
-                class="mt-2"
-                dense
-                :items-per-page="10"
-                :items-per-page-options="[5, 10, 25, 50, { value: -1, title: 'Todos' }]"
+            <div class="d-flex align-center">
+              <v-btn
+                variant="text"
+                size="small"
+                :color="mostrarDetalleMateriales ? 'primary' : 'default'"
+                :prepend-icon="mostrarDetalleMateriales ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                @click="mostrarDetalleMateriales = !mostrarDetalleMateriales"
               >
-                <template #item.costo_unitario="{ item }">
-                  ${{ item.costo_unitario }}
-                </template>
-                <template #item.costo_total="{ item }">
-                  ${{ item.costo_total }}
-                </template>
-              </v-data-table>
-            </v-card>
+                Ver detalle de materiales ({{ ventana.materiales.length }})
+              </v-btn>
+              <v-spacer />
+              <v-btn
+                v-if="mostrarDetalleMateriales"
+                color="success"
+                variant="tonal"
+                size="small"
+                @click="descargarMateriales"
+              >
+                <v-icon start>mdi-download</v-icon>
+                Descargar Excel
+              </v-btn>
+            </div>
+            <v-expand-transition>
+              <v-card v-if="mostrarDetalleMateriales" variant="outlined" class="mt-2">
+                <v-data-table
+                  :headers="[
+                    { title: 'Material', key: 'nombre' },
+                    { title: 'Proveedor', key: 'proveedor' },
+                    { title: 'Cantidad', key: 'cantidad' },
+                    { title: 'Unidad', key: 'unidad' },
+                    { title: 'Costo unitario', key: 'costo_unitario' },
+                    { title: 'Costo total', key: 'costo_total' }
+                  ]"
+                  :items="ventana.materiales"
+                  dense
+                  :items-per-page="10"
+                  :items-per-page-options="[5, 10, 25, 50, { value: -1, title: 'Todos' }]"
+                >
+                  <template #item.costo_unitario="{ item }">
+                    ${{ item.costo_unitario }}
+                  </template>
+                  <template #item.costo_total="{ item }">
+                    ${{ item.costo_total }}
+                  </template>
+                </v-data-table>
+              </v-card>
+            </v-expand-transition>
           </v-col>
         </v-row>
 
@@ -1539,12 +1549,17 @@ const tiposVentanaFiltrados = computed(() => {
 })
 
 const formRef = ref(null)
+const mostrarDetalleMateriales = ref(false)
 
 const cerrarModal = () => {
   localMostrar.value = false
 }
 
-const margenVenta = 0.45
+const margenVenta = computed(() => {
+  const materialId = ventana.value.material ?? props.materialDefault
+  const mat = props.materiales?.find(m => m.id === materialId)
+  return mat?.margen ?? 0.50
+})
 
 async function recalcularCostos() {
   // Para tipo 58, validar que tenga configuración del armador en lugar de ancho/alto
@@ -1643,7 +1658,7 @@ async function recalcularCostos() {
       
       ventana.value.costo_total_unitario = data.costo_unitario
       ventana.value.costo_total = data.costo_unitario * ventana.value.cantidad
-      ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta))
+      ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta.value))
       ventana.value.materiales = data.materiales
     } catch (e) {
       console.error('❌ Error en recalcularCostos:', e)

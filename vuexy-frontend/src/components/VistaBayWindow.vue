@@ -29,6 +29,9 @@
           :tipo="tipoVentanaIzquierda?.partes?.[0]?.tipo || tipoVentanaIzquierda?.tipo"
           :lado-apertura="tipoVentanaIzquierda?.ladoApertura || tipoVentanaIzquierda?.partes?.[0]?.ladoApertura || 'izquierda'"
           :direccion-apertura="tipoVentanaIzquierda?.direccionApertura || tipoVentanaIzquierda?.partes?.[0]?.direccionApertura || 'interior'"
+          :hojas-moviles="tipoVentanaIzquierda?.hojas_moviles ?? null"
+          :hoja-movil-seleccionada="tipoVentanaIzquierda?.hojaMovilSeleccionada ?? null"
+          :orden-hoja1-al-frente="tipoVentanaIzquierda?.hoja1AlFrente ?? true"
         />
         <!-- Esquinero izq–centro -->
         <v-rect
@@ -36,7 +39,7 @@
           :y="posYGlobal"
           :width="ESQUINERO_PX"
           :height="altoRenderizado"
-          :fill="colorHex"
+          v-bind="esquineroFill"
           :stroke="'#00000033'"
           :stroke-width="1"
         />
@@ -69,6 +72,10 @@
         :tipo="tipoVentanaCentro?.partes?.[0]?.tipo || tipoVentanaCentro?.tipo"
         :lado-apertura="tipoVentanaCentro?.ladoApertura || tipoVentanaCentro?.partes?.[0]?.ladoApertura || 'izquierda'"
         :direccion-apertura="tipoVentanaCentro?.direccionApertura || tipoVentanaCentro?.partes?.[0]?.direccionApertura || 'interior'"
+        :hojas-moviles="tipoVentanaCentro?.hojas_moviles ?? null"
+        :hoja-movil-seleccionada="tipoVentanaCentro?.hojaMovilSeleccionada ?? null"
+        :orden-hoja1-al-frente="tipoVentanaCentro?.hoja1AlFrente ?? true"
+        :show-height-label="false"
       />
 
       <!-- DERECHA -->
@@ -79,7 +86,7 @@
           :y="posYGlobal"
           :width="ESQUINERO_PX"
           :height="altoRenderizado"
-          :fill="colorHex"
+          v-bind="esquineroFill"
           :stroke="'#00000033'"
           :stroke-width="1"
         />
@@ -109,6 +116,10 @@
           :tipo="tipoVentanaDerecha?.partes?.[0]?.tipo || tipoVentanaDerecha?.tipo"
           :lado-apertura="tipoVentanaDerecha?.ladoApertura || tipoVentanaDerecha?.partes?.[0]?.ladoApertura || 'izquierda'"
           :direccion-apertura="tipoVentanaDerecha?.direccionApertura || tipoVentanaDerecha?.partes?.[0]?.direccionApertura || 'interior'"
+          :hojas-moviles="tipoVentanaDerecha?.hojas_moviles ?? null"
+          :hoja-movil-seleccionada="tipoVentanaDerecha?.hojaMovilSeleccionada ?? null"
+          :orden-hoja1-al-frente="tipoVentanaDerecha?.hoja1AlFrente ?? true"
+          :show-height-label="false"
         />
       </template>
     </v-layer>
@@ -116,9 +127,11 @@
 </template>
 
 <script setup>
-import { computed, watch, ref, nextTick } from 'vue'
+import { computed, watch, ref, nextTick, reactive, onMounted } from 'vue'
 import VentanaSimple from './VentanaSimple.vue'
 import VentanaCompuesta from './VentanaCompuesta.vue'
+import robleUrl from '@/assets/images/roble.png'
+import nogalUrl from '@/assets/images/nogal.png'
 
 const stageRef = ref(null)
 const layerRef = ref(null)
@@ -135,11 +148,23 @@ async function exportarImagen() {
 
 defineExpose({ exportarImagen })
 
+// ── Texturas para esquineros ─────────────────────────────────────────────────
+const texturasEsq = reactive({ roble: null, nogal: null })
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturasEsq[key] = img }
+  }
+  cargar('roble', robleUrl)
+  cargar('nogal', nogalUrl)
+})
+
 const ESQUINERO_PX = 12   // ancho visual del esquinero en px (fijo, no escalado)
-const MARGIN = 10         // margen izquierdo
-const canvasWidth = 900
-const canvasHeight = 400
-const posYGlobal = 50
+const MARGIN = 45         // margen izquierdo (heightLabel en x=MARGIN-25=20)
+const MAX_CANVAS_WIDTH = 870
+const canvasHeight = 490
+const posYGlobal = 55
 
 const props = defineProps({
   ancho: { type: Number, required: true },
@@ -164,17 +189,31 @@ const colorHexMap = {
   nogal: '#8b5a2b',
   roble: '#b8864e',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
-const colorHex = computed(() => {
-  let nombre = ''
-  if (typeof props.colorMarco === 'object' && props.colorMarco?.nombre) {
-    nombre = String(props.colorMarco.nombre).toLowerCase()
-  } else if (typeof props.colorMarco === 'string') {
-    nombre = props.colorMarco.toLowerCase()
+const nombreColor = computed(() => {
+  if (typeof props.colorMarco === 'object' && props.colorMarco?.nombre)
+    return String(props.colorMarco.nombre).toLowerCase()
+  if (typeof props.colorMarco === 'string')
+    return props.colorMarco.toLowerCase()
+  return 'blanco'
+})
+
+const colorHex = computed(() => colorHexMap[nombreColor.value] || '#ffffff')
+
+// Fill para los v-rect de esquinero: textura si roble/nogal, sólido si no
+const esquineroFill = computed(() => {
+  const n = nombreColor.value
+  if (['roble', 'nogal'].includes(n) && texturasEsq[n]) {
+    return {
+      fill: null,
+      fillPatternImage: texturasEsq[n],
+      fillPatternRepeat: 'repeat',
+      fillPatternScale: { x: 0.2, y: 0.2 },
+    }
   }
-  return colorHexMap[nombre] || '#ffffff'
+  return { fill: colorHex.value, fillPatternImage: null }
 })
 
 // ── Derivados de forma ───────────────────────────────────────────────────────
@@ -192,10 +231,15 @@ const anchoTotal = computed(() =>
 )
 
 const escalaGlobal = computed(() => {
-  const espDisponibleAncho = canvasWidth - MARGIN * 2 - numEsquineros.value * ESQUINERO_PX
+  const espDisponibleAncho = MAX_CANVAS_WIDTH - MARGIN * 2 - numEsquineros.value * ESQUINERO_PX
   const eA = espDisponibleAncho / anchoTotal.value
-  const eB = (canvasHeight - posYGlobal - 20) / props.alto
+  const eB = (canvasHeight - posYGlobal - 50) / props.alto
   return Math.min(eA, eB)
+})
+
+const canvasWidth = computed(() => {
+  const contentWidth = anchoTotal.value * escalaGlobal.value + numEsquineros.value * ESQUINERO_PX
+  return Math.round(MARGIN + contentWidth + MARGIN)
 })
 
 const altoRenderizado = computed(() => props.alto * escalaGlobal.value)

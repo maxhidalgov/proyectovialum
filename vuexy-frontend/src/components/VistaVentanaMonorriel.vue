@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 import robleUrl from '@/assets/images/roble.png'
 import nogalUrl from '@/assets/images/nogal.png'
@@ -45,19 +45,19 @@ const props = defineProps({
 })
 
 /* Texturas y color */
-const texturas = { roble: null, nogal: null }
+const texturas = reactive({ roble: null, nogal: null })
 onMounted(() => {
   const load = (url, key) => { const img = new Image(); img.src = url; img.onload = () => (texturas[key] = img) }
   load(robleUrl, 'roble'); load(nogalUrl, 'nogal')
 })
-const colorHexMap = { blanco:'#ffffff', negro:'#0a0a0a', gris:'#808080', grafito:'#2f2f2f', nogal:'#8b5a2b', roble:'#c9a36b', mate:'#c0beba', titanio:'#7a7672' }
+const colorHexMap = { blanco:'#ffffff', negro:'#0a0a0a', gris:'#808080', grafito:'#2f2f2f', nogal:'#8b5a2b', roble:'#c9a36b', mate:'#c0beba', titanio:'#998F77' }
 const colorMarcoHex = computed(() => colorHexMap[props.colorMarco?.toLowerCase?.()] || '#ffffff')
 function getMitraProps(points) {
   const nombre = props.colorMarco?.toLowerCase?.()
   if (['roble','nogal'].includes(nombre) && texturas[nombre]) {
-    return { points, closed:true, fillPatternImage:texturas[nombre], fillPatternRepeat:'repeat', fillPatternScale:{ x:0.2, y:0.2 }, stroke:'black' }
+    return { points, closed:true, fill: null, fillPatternImage:texturas[nombre], fillPatternRepeat:'repeat', fillPatternScale:{ x:0.2, y:0.2 }, stroke:'black' }
   }
-  return { points, closed:true, fill: colorMarcoHex.value, stroke:'black' }
+  return { points, closed:true, fill: colorMarcoHex.value, fillPatternImage: null, stroke:'black' }
 }
 
 /* Geometría y escala */

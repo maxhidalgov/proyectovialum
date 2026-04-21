@@ -11,12 +11,12 @@
 
     <!-- Etiquetas de medida -->
     <v-text v-bind="widthLabel" />
-    <v-text v-bind="heightLabel" />
+    <v-text v-if="showHeightLabel" v-bind="heightLabel" />
   </v-group>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 
 // Props
 const props = defineProps({
@@ -24,7 +24,8 @@ const props = defineProps({
   alto: { type: Number, required: true },
   colorMarco: { type: [String, Object], default: 'blanco' },
   config: { type: Object, default: () => ({ x: 0, y: 0 }) },
-  escala: { type: Number, default: null } // si no se envía, se calcula
+  escala: { type: Number, default: null }, // si no se envía, se calcula
+  showHeightLabel: { type: Boolean, default: true }
 })
 
 // Colores
@@ -35,16 +36,21 @@ const colorHexMap = {
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
-// Texturas
-const texturas = {
-  roble: new Image(),
-  nogal: new Image(),
-}
-texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
-texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href
+// Texturas — reactive para que los computeds re-ejecuten cuando cargan
+const texturas = reactive({ roble: null, nogal: null })
+
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturas[key] = img }
+  }
+  cargar('roble', new URL('@/assets/images/roble.png', import.meta.url).href)
+  cargar('nogal', new URL('@/assets/images/nogal.png', import.meta.url).href)
+})
 
 // Escala automática
 const maxCanvasSize = 300
@@ -83,6 +89,7 @@ function getMitraMarco(points) {
     return {
       points,
       closed: true,
+      fill: null,
       fillPatternImage: texturas[nombre],
       fillPatternRepeat: 'repeat',
       fillPatternScale: { x: 0.2, y: 0.2 },
@@ -94,6 +101,7 @@ function getMitraMarco(points) {
     points,
     closed: true,
     fill: colorMarcoHex.value,
+    fillPatternImage: null,
     stroke: 'black',
   }
 }

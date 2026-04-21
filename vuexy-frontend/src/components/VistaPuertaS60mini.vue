@@ -32,13 +32,13 @@
 
     <!-- Etiquetas (como Abatir mini) -->
     <v-text :config="widthLabel" />
-    <v-text :config="heightLabel" />
+    <v-text v-if="showHeightLabel" :config="heightLabel" />
     <v-text :config="direccionLabel" />
   </v-group>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 
 const props = defineProps({
@@ -49,14 +49,23 @@ const props = defineProps({
   config: { type: Object, default: () => ({ x: 0, y: 0 }) },
   ladoApertura: { type: String, default: 'izquierda' },
   direccionApertura: { type: String, default: 'interior' },
-  pasoLibre: { type: Boolean, default: false }
+  pasoLibre: { type: Boolean, default: false },
+  showHeightLabel: { type: Boolean, default: true }
 })
 
 // Colores/texturas igual que Abatir mini
-const colorHexMap = { blanco: '#ffffff', negro: '#0a0a0a', gris: '#808080', grafito: '#2f2f2f', nogal: '#8b5a2b', mate: '#c0beba', titanio: '#7a7672' }
-const texturas = { roble: new Image(), nogal: new Image() }
-texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
-texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href
+const colorHexMap = { blanco: '#ffffff', negro: '#0a0a0a', gris: '#808080', grafito: '#2f2f2f', nogal: '#8b5a2b', mate: '#c0beba', titanio: '#998F77' }
+const texturas = reactive({ roble: null, nogal: null })
+
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturas[key] = img }
+  }
+  cargar('roble', new URL('@/assets/images/roble.png', import.meta.url).href)
+  cargar('nogal', new URL('@/assets/images/nogal.png', import.meta.url).href)
+})
 
 const colorMarcoHex = computed(() => {
   const nombre = typeof props.colorMarco === 'object' ? props.colorMarco?.nombre?.toLowerCase() : props.colorMarco?.toLowerCase()
@@ -68,13 +77,14 @@ function getMitraMarco(points, usoHoja = false) {
   if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
     return {
       points, closed: true,
+      fill: null,
       fillPatternImage: texturas[nombre],
       fillPatternRepeat: 'repeat',
       fillPatternScale: { x: usoHoja ? 0.15 : 0.2, y: usoHoja ? 0.15 : 0.2 },
       stroke: 'black'
     }
   }
-  return { points, closed: true, fill: colorMarcoHex.value, stroke: 'black' }
+  return { points, closed: true, fill: colorMarcoHex.value, stroke: 'black' , fillPatternImage: null }
 }
 
 // Medidas y escala (como Abatir mini)

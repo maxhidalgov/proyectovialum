@@ -585,7 +585,20 @@ public function store(Request $request)
             }
         }
 
-        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64'));
+        $logoBase64 = null;
+        try {
+            $logoUrl = env('LOGO_URL', 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png');
+            $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+            $logoData = @file_get_contents($logoUrl, false, $ctx);
+            if ($logoData !== false) {
+                $logoBase64 = 'data:image/png;base64,' . base64_encode($logoData);
+            }
+        } catch (\Exception $e) {
+            Log::warning('PDF: no se pudo cargar logo: ' . $e->getMessage());
+        }
+
+        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64', 'logoBase64'))
+            ->setOptions(['isPhpEnabled' => true]);
 
         return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');
     }

@@ -40,7 +40,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, reactive, onMounted } from 'vue'
 
 const stageRef = ref(null)
 const forceRenderKey = ref(0)
@@ -152,7 +152,7 @@ const seccionesRenderizadas = computed(() => {
             hojaX + hojaAncho, hojaY + hojaAncho,
           ],
           closed: true,
-          fill: colorMarcoHex.value,
+          ...getColorAttrs(),
           stroke: 'black',
           strokeWidth: 0.4,
         }
@@ -165,7 +165,7 @@ const seccionesRenderizadas = computed(() => {
             hojaX + hojaW - hojaAncho, hojaY + hojaAncho,
           ],
           closed: true,
-          fill: colorMarcoHex.value,
+          ...getColorAttrs(),
           stroke: 'black',
           strokeWidth: 0.4,
         }
@@ -178,7 +178,7 @@ const seccionesRenderizadas = computed(() => {
             hojaX + hojaW - hojaAncho, hojaY + hojaH - hojaAncho,
           ],
           closed: true,
-          fill: colorMarcoHex.value,
+          ...getColorAttrs(),
           stroke: 'black',
           strokeWidth: 0.4,
         }
@@ -191,7 +191,7 @@ const seccionesRenderizadas = computed(() => {
             hojaX + hojaAncho, hojaY + hojaH - hojaAncho,
           ],
           closed: true,
-          fill: colorMarcoHex.value,
+          ...getColorAttrs(),
           stroke: 'black',
           strokeWidth: 0.4,
         }
@@ -228,23 +228,50 @@ const seccionesRenderizadas = computed(() => {
   return secciones
 })
 
-const colorMarcoHex = computed(() => {
-  const colores = {
-    blanco: '#FFFFFF',
-    mate: '#D8D8D8',
-    negro: '#2C2C2C',
-    bronce: '#CD7F32',
-    champagne: '#F7E7CE',
-    grafito: '#4A4A4A',
-    cafe: '#8B4513',
-    café: '#8B4513',
+const texturas = reactive({ roble: null, nogal: null })
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturas[key] = img }
   }
-  // Soportar objeto color o string
-  const nombreColor = typeof props.colorMarco === 'object' 
-    ? props.colorMarco?.nombre?.toLowerCase() 
-    : props.colorMarco?.toLowerCase()
-  return colores[nombreColor] || colores.blanco
+  cargar('roble', new URL('@/assets/images/roble.png', import.meta.url).href)
+  cargar('nogal', new URL('@/assets/images/nogal.png', import.meta.url).href)
 })
+
+const colorNombre = computed(() => {
+  const c = props.colorMarco
+  if (typeof c === 'string') return c.toLowerCase()
+  if (c?.nombre) return String(c.nombre).toLowerCase()
+  return 'blanco'
+})
+
+const colorHexMap = {
+  blanco: '#FFFFFF',
+  mate: '#D8D8D8',
+  negro: '#2C2C2C',
+  gris: '#808080',
+  grafito: '#4A4A4A',
+  bronce: '#CD7F32',
+  champagne: '#F7E7CE',
+  cafe: '#8B4513',
+  café: '#8B4513',
+  nogal: '#8b5a2b',
+  roble: '#c9a36b',
+  titanio: '#998F77',
+  inox: '#C0C0C0',
+  'negro mate': '#1A1A1A',
+}
+
+const colorMarcoHex = computed(() => colorHexMap[colorNombre.value] || '#FFFFFF')
+
+function getColorAttrs() {
+  const nombre = colorNombre.value
+  if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
+    return { fill: null, fillPatternImage: texturas[nombre], fillPatternRepeat: 'repeat', fillPatternScale: { x: 0.2, y: 0.2 } }
+  }
+  return { fill: colorMarcoHex.value, fillPatternImage: null }
+}
 
 // Marco exterior con mitras
 const marcoTopMitra = computed(() => ({
@@ -255,7 +282,7 @@ const marcoTopMitra = computed(() => ({
     offset + marcoAncho.value, offset + marcoAncho.value,
   ],
   closed: true,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 0.8,
 }))
@@ -268,7 +295,7 @@ const marcoRightMitra = computed(() => ({
     offset + screenWidth.value - marcoAncho.value, offset + marcoAncho.value,
   ],
   closed: true,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 0.8,
 }))
@@ -281,7 +308,7 @@ const marcoBottomMitra = computed(() => ({
     offset + screenWidth.value - marcoAncho.value, offset + screenHeight.value - marcoAncho.value,
   ],
   closed: true,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 0.8,
 }))
@@ -294,7 +321,7 @@ const marcoLeftMitra = computed(() => ({
     offset + marcoAncho.value, offset + screenHeight.value - marcoAncho.value,
   ],
   closed: true,
-  fill: colorMarcoHex.value,
+  ...getColorAttrs(),
   stroke: 'black',
   strokeWidth: 0.8,
 }))
@@ -319,7 +346,7 @@ const palillosHorizontales = computed(() => {
       y: yPos,
       width: screenWidth.value - marcoAncho.value * 2,
       height: palilloAncho.value,
-      fill: colorMarcoHex.value,
+      ...getColorAttrs(),
       stroke: 'black',
       strokeWidth: 0.8,
     })
@@ -347,7 +374,7 @@ const palillosVerticales = computed(() => {
       y: offset + marcoAncho.value,
       width: palilloAncho.value,
       height: screenHeight.value - marcoAncho.value * 2,
-      fill: colorMarcoHex.value,
+      ...getColorAttrs(),
       stroke: 'black',
       strokeWidth: 0.8,
     })
@@ -445,7 +472,7 @@ function getSeccionMarcoTop(fila, col) {
       pos.x + marcoInterno, pos.y + marcoInterno,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.3,
   }
@@ -462,7 +489,7 @@ function getSeccionMarcoRight(fila, col) {
       pos.x + pos.width - marcoInterno, pos.y + marcoInterno,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.3,
   }
@@ -479,7 +506,7 @@ function getSeccionMarcoBottom(fila, col) {
       pos.x + pos.width - marcoInterno, pos.y + pos.height - marcoInterno,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.3,
   }
@@ -496,7 +523,7 @@ function getSeccionMarcoLeft(fila, col) {
       pos.x + marcoInterno, pos.y + pos.height - marcoInterno,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.3,
   }
@@ -518,7 +545,7 @@ function getSeccionHojaTop(fila, col) {
       hojaX + hojaAncho, hojaY + hojaAncho,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.4,
   }
@@ -540,7 +567,7 @@ function getSeccionHojaRight(fila, col) {
       hojaX + hojaW - hojaAncho, hojaY + hojaAncho,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.4,
   }
@@ -562,7 +589,7 @@ function getSeccionHojaBottom(fila, col) {
       hojaX + hojaW - hojaAncho, hojaY + hojaH - hojaAncho,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.4,
   }
@@ -583,7 +610,7 @@ function getSeccionHojaLeft(fila, col) {
       hojaX + hojaAncho, hojaY + hojaH - hojaAncho,
     ],
     closed: true,
-    fill: colorMarcoHex.value,
+    ...getColorAttrs(),
     stroke: 'black',
     strokeWidth: 0.4,
   }

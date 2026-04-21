@@ -68,7 +68,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 
 // Props
@@ -119,15 +119,20 @@ const colorHexMap = {
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
-const texturas = {
-  roble: new Image(),
-  nogal: new Image(),
-}
-texturas.roble.src = new URL('@/assets/images/roble.png', import.meta.url).href
-texturas.nogal.src = new URL('@/assets/images/nogal.png', import.meta.url).href
+const texturas = reactive({ roble: null, nogal: null })
+
+onMounted(() => {
+  const cargar = (key, url) => {
+    const img = new Image()
+    img.src = url
+    img.onload = () => { texturas[key] = img }
+  }
+  cargar('roble', new URL('@/assets/images/roble.png', import.meta.url).href)
+  cargar('nogal', new URL('@/assets/images/nogal.png', import.meta.url).href)
+})
 
 const colorMarcoHex = computed(() => {
   const nombre = typeof props.colorMarco === 'object' ? props.colorMarco?.nombre?.toLowerCase() : props.colorMarco?.toLowerCase()
@@ -141,6 +146,7 @@ function getMitraMarco(points, usoHoja = false) {
     return {
       points,
       closed: true,
+      fill: null,
       fillPatternImage: texturas[nombre],
       fillPatternRepeat: 'repeat',
       fillPatternScale: { x: usoHoja ? 0.15 : 0.2, y: usoHoja ? 0.15 : 0.2 },
@@ -152,6 +158,7 @@ function getMitraMarco(points, usoHoja = false) {
     points,
     closed: true,
     fill: colorMarcoHex.value,
+    fillPatternImage: null,
     stroke: 'black',
   }
 }

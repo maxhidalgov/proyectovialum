@@ -116,9 +116,7 @@
 
 
 <script setup>
-import { computed, onMounted } from 'vue'
-import { watchEffect } from 'vue'
-import { ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Manilla from '@/components/Manilla.vue'
 import robleUrl from '@/assets/images/roble.png'
 import nogalUrl from '@/assets/images/nogal.png'
@@ -153,10 +151,7 @@ const exportarImagen = () => {
 defineExpose({ exportarImagen })
 
 
-const texturas = {
-  roble: null,
-  nogal: null,
-}
+const texturas = reactive({ roble: null, nogal: null })
 
 onMounted(() => {
   const cargarTextura = (url, key) => {
@@ -191,23 +186,9 @@ function getMitraProps(points) {
 
   // Si hay textura para ese color
   if (['roble', 'nogal'].includes(color) && texturas[color]) {
-    return {
-      points,
-      closed: true,
-      fillPatternImage: texturas[color],
-      fillPatternRepeat: 'repeat',
-      fillPatternScale: { x: 0.2, y: 0.2 },
-      stroke: 'black',
-    }
+    return { points, closed: true, fill: null, fillPatternImage: texturas[color], fillPatternRepeat: 'repeat', fillPatternScale: { x: 0.2, y: 0.2 }, stroke: 'black' }
   }
-
-  // Si es color plano normal
-  return {
-    points,
-    closed: true,
-    fill: colorMarcoHex.value,
-    stroke: 'black',
-  }
+  return { points, closed: true, fill: colorMarcoHex.value, fillPatternImage: null, stroke: 'black' }
 }
 
 
@@ -240,7 +221,7 @@ const colorHexMap = {
   grafito: '#2f2f2f',
   nogal: '#8b5a2b',
   mate: '#c0beba',
-  titanio: '#7a7672',
+  titanio: '#998F77',
 }
 
 const colorMarcoHex = computed(() => {
@@ -269,25 +250,11 @@ const stageConfig = {
 const traslapeEscalado = computed(() => traslape * escala.value)
 
 function getMitraMarco(points) {
-  const nombre = props.colorMarco.toLowerCase()
-
+  const nombre = props.colorMarco?.toLowerCase?.() ?? 'blanco'
   if (['roble', 'nogal'].includes(nombre) && texturas[nombre]) {
-    return {
-      points,
-      closed: true,
-      fillPatternImage: texturas[nombre],
-      fillPatternRepeat: 'repeat',
-      fillPatternScale: { x: 0.2, y: 0.2 },
-      stroke: 'black',
-    }
+    return { points, closed: true, fill: null, fillPatternImage: texturas[nombre], fillPatternRepeat: 'repeat', fillPatternScale: { x: 0.2, y: 0.2 }, stroke: 'black' }
   }
-
-  return {
-    points,
-    closed: true,
-    fill: colorMarcoHex.value,
-    stroke: 'black',
-  }
+  return { points, closed: true, fill: colorMarcoHex.value, fillPatternImage: null, stroke: 'black' }
 }
 
 

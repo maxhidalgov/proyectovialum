@@ -1,6 +1,6 @@
 # Documentación Completa — Proyecto Vialum
 
-> Última actualización: 17 Abril 2026
+> Última actualización: 21 Abril 2026
 
 ---
 
@@ -147,8 +147,14 @@ proyectovialum/
 ### `EstadoCotizacion`
 - **Tabla:** `estados_cotizacion` · **Fillable:** `nombre`
 
+### `TipoMaterial`
+- **Tabla:** `tipos_material`
+- **Fillable:** `nombre`, `margen`
+- **Columna `margen`:** DECIMAL(5,4) — fracción entre 0 y 0.99 (ej: `0.50` = 50%). Usada en la fórmula `precio = costo / (1 - margen)`. Gestionable desde el panel admin (tab Márgenes).
+- **IDs conocidos:** 1 = Aluminio, 2 = PVC
+
 ### Modelos secundarios
-`TipoProducto` · `Unidad` · `Material` · `TipoMaterial` · `AccesorioDependiente` · `VentanaAccesorio` · `VentanaMaterial` · `VentanaTipoApertura` (esqueletos, sin lógica activa)
+`TipoProducto` · `Unidad` · `Material` · `AccesorioDependiente` · `VentanaAccesorio` · `VentanaMaterial` · `VentanaTipoApertura` (esqueletos, sin lógica activa)
 
 ---
 
@@ -402,8 +408,20 @@ cotizacion->update(['total' => $total])
 ### `VentanaController`
 - `update(Request, $id)` — Actualiza ventana individual
 
+### `OperacionesController`
+- `index()` — Lista operaciones (cotizaciones aprobadas/facturadas/pagadas con abonos)
+- `update(Request, $id)` — Actualiza campos de operación (estado de cobro, notas)
+- `storeAbono(Request, $id)` — Registra abono a una operación
+- `destroyAbono($abonoId)` — Elimina abono
+
+### `DocumentoFacturacionController`
+- `index($id)` — Lista documentos de facturación de una cotización
+- `store(Request, $id)` — Crea documento (factura, boleta, nota de crédito)
+- `marcarEmitido($id)` — Marca documento como emitido en Bsale
+- `destroy($id)` — Elimina documento
+
 ### Controladores menores (CRUD básico)
-`ColorController` (index, store) · `UnidadController` (index) · `TipoVentanaController` (index) · `EstadoCotizacionController` (index) · `CotizadorController` (tiposMaterial, tiposProducto, calcularMateriales)
+`ColorController` (index, store) · `UnidadController` (index) · `TipoVentanaController` (index) · `EstadoCotizacionController` (index) · `CotizadorController` (tiposMaterial, tiposProducto, tiposProducto, calcularMateriales, updateMargenMaterial)
 
 ### Controladores esqueleto (sin implementación activa)
 `MaterialController` · `VentanaAccesorioController` · `VentanaMaterialController` · `VentanaTipoAperturaController` · `CotizacionDetalleController`
@@ -461,6 +479,7 @@ POST   /api/colores
 GET    /api/unidades
 GET    /api/tipos_ventana
 GET    /api/tipos_material
+PUT    /api/tipos_material/{id}/margen          ← actualizar margen de venta por material
 GET    /api/tipos_producto
 
 // Cotizador
@@ -507,6 +526,18 @@ GET    /api/lista-precios/exportar
 // Importación
 POST   /api/importar-productos
 POST   /api/importar-pcp
+
+// Operaciones
+GET    /api/operaciones
+PATCH  /api/operaciones/{id}
+POST   /api/operaciones/{id}/abonos
+DELETE /api/operaciones/abonos/{abonoId}
+
+// Documentos de Facturación
+GET    /api/cotizaciones/{id}/documentos-facturacion
+POST   /api/cotizaciones/{id}/documentos-facturacion
+PATCH  /api/documentos-facturacion/{id}/emitir
+DELETE /api/documentos-facturacion/{id}
 
 // Dashboard
 GET    /api/dashboard/ventas-mensuales?mes=&anio=
@@ -585,7 +616,9 @@ Route::middleware(['auth:api', 'permission:gestionar_productos'])
 | `pages/comprasmensuales/index.vue` | `/comprasmensuales` | Compras mensuales |
 | `pages/importador/index.vue` | `/importador` | Importación CSV |
 | `pages/visor3d/index.vue` | `/visor3d` | Visor 3D (Konva) |
-| `pages/admin-secret-panel.vue` | `/admin-secret-panel` | Panel administración |
+| `pages/admin-secret-panel.vue` | `/admin-secret-panel` | Panel administración (usuarios, roles/permisos, márgenes por material) |
+| `pages/operaciones/index.vue` | `/operaciones` | Módulo operaciones/cobros |
+| `pages/facturacion/index.vue` | `/facturacion` | Facturación Bsale + documentos por cotización |
 
 ---
 
@@ -829,6 +862,7 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 | `2026_04_10` | Columna `adjunto_winperfil` VARCHAR(500) en `cotizaciones` |
 | `2026_04_10` | ENUM `tipo_item` en `cotizacion_detalles` ampliado a `'winperfil'` |
 | `2026_04_17` | Columnas Bay Window en `ventanas`: `hoja_movil_seleccionada`, `hoja1_al_frente`, `ancho_izquierda`, `ancho_centro`, `ancho_derecha`, `tipo_ventana_izquierda` (JSON), `tipo_ventana_centro` (JSON), `tipo_ventana_derecha` (JSON) |
+| `2026_04_21` | Columna `margen` DECIMAL(5,4) en `tipos_material` (SQL manual, ver §23) |
 
 ---
 
@@ -850,6 +884,7 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 
 ## 22. Pendientes / Trabajo Futuro
 
+- [ ] **SQL en producción:** Ejecutar `ALTER TABLE tipos_material ADD COLUMN margen DECIMAL(5,4) NOT NULL DEFAULT 0.50;`
 - [ ] **CortesService:** Agregar soporte de hoja de cortes para tipos: 45 (Proyectante S60), 46 (Corredera Andes), 47 (Bay Window), 49 (Abatir S60), 50 (Puerta S60), 51 (Puerta 2 Hojas), 52 (Sliding 98), 53 (Monorriel), 57 (Compuesta AL42), 58 (Universal)
 - [ ] **produccion/[id].vue:** Verificar si se debe quitar la tabla inline de "Resumen de Materiales" (ya existe página separada)
 - [ ] **Roles producción/bodega:** Definir permisos específicos
@@ -857,12 +892,13 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 - [ ] **Integración Bsale:** Revisar flujo completo de facturación
 - [ ] **Token Bsale:** Regenerar en Railway (token fue expuesto en git history)
 - [ ] **CotizacionController:** Sin validación de request en `store()` / `update()`
-- [ ] **Performance:** 44 `Log::info` de debug en `CotizacionController` (remover o bajar a nivel debug)
+- [ ] **Performance:** `Log::info` de debug en `CotizacionController` (remover o bajar a nivel debug)
 - [ ] **Imágenes:** Base64 dentro del JSON de cotización (payloads gigantes — migrar a storage)
 - [ ] **Menú nav:** No reactivo post-login (permisos leídos una vez al cargar módulo)
 - [ ] **Modelos:** Sin SoftDeletes en modelos principales
 - [ ] **Comandos:** Implementar `ActualizarRazonSocialClientes` y `MigrarClientesLocalesABsale`
 - [ ] **Archivos muertos:** `cotizacion-editarELIMINARPARECE.vue`, `routereliminarparece/`, `cotizador2.vue`
+- [ ] **EditarVentanaModal:** tipos 54 (Compuesta Dinámica) y 58 (Universal/Armador) no tienen render en el modal de edición (requieren lógica especial — omitidos intencionalmente)
 
 ---
 
@@ -905,6 +941,33 @@ ALTER TABLE ventanas
   ADD COLUMN tipo_ventana_izquierda JSON NULL AFTER ancho_derecha,
   ADD COLUMN tipo_ventana_centro JSON NULL AFTER tipo_ventana_izquierda,
   ADD COLUMN tipo_ventana_derecha JSON NULL AFTER tipo_ventana_centro;
+```
+
+---
+
+### Sesión 2026-04-21 — PDF layout, márgenes por material, EditarVentanaModal
+
+| Archivo | Cambio |
+|---|---|
+| `resources/views/cotizaciones/pdf.blade.php` | Rewrite completo: CSS global `table/th/td` movido a clase `.dt` (evitaba que dompdf calculara anchos de columnas); detección Bay Window corregida a `!is_null($ventana->ancho_centro)` (antes usaba `tipo_ventana_izquierda` que es JSON y era truthy en todas las ventanas); layout unificado imagen-izquierda / tabla-derecha para TODAS las ventanas incluyendo Bay Window |
+| `app/Http/Controllers/CotizacionController.php` | GD image resize pre-embedding en base64: normal→220px, Bay Window→480px (dompdf ignora atributo `width=` en imágenes grandes); +`generarPDFHtml()` método debug que retorna HTML crudo sin convertir a PDF |
+| `routes/web.php` | +ruta debug `GET /cotizaciones/{id}/pdf-html` → `generarPDFHtml()` (solo dev) |
+| `app/Http/Controllers/Api/CotizadorController.php` | `tiposMaterial()`: agrega campo `margen` al select; +`updateMargenMaterial(Request, $id)`: valida `0–0.99`, guarda en BD |
+| `routes/api.php` | +`PUT /api/tipos_material/{id}/margen` |
+| `vuexy-frontend/src/components/VistaBayWindow.vue` | +etiquetas de dimensión en canvas Konva: ancho total debajo, alto rotado a la izquierda; +computed `anchoTotalRenderizado`; ajuste `canvasHeight=490`, `posYGlobal=55` para dar espacio a las etiquetas |
+| `vuexy-frontend/src/pages/AgregarVentanaModal2.vue` | `margenVenta` cambiado de constante `0.45` a `computed` que lee `props.materiales.find(m => m.id === materialId)?.margen ?? 0.50`; precio usa `margenVenta.value` |
+| `vuexy-frontend/src/pages/admin-secret-panel.vue` | +tab "Márgenes": muestra `VTextField` por material con margen en %, botón guardar llama `PUT /api/tipos_material/{id}/margen`; +`loadMateriales()` llamado en `onMounted` |
+| `vuexy-frontend/src/pages/EditarVentanaModal.vue` | **Fix renders:** importados todos los Vista components (14 tipos); template reemplazado con v-if/v-else-if para tipos 1,2,3,45,46,47,49,50,51,52,53,55,56,57. **Fix costos al abrir:** `recalcularCostos()` llamado directamente tras `ventanaLocal.value = { ...props.ventana }`. **Fix margen:** `const margenVenta = 0.45` → `computed` por material. **Fix Bay Window payload:** agrega `ancho_izquierda/centro/derecha` y `tipoVentanaIzquierda/Centro/Derecha` al payload; también agrega `hojas_*`, `direccionApertura`, etc. para otros tipos |
+
+**SQL para ejecutar en producción:**
+```sql
+ALTER TABLE tipos_material ADD COLUMN margen DECIMAL(5,4) NOT NULL DEFAULT 0.50;
+```
+
+**Fórmula de precio de venta:**
+```
+precio = ceil(costo_total / (1 - margen))
+// Ejemplo: margen=0.50 → precio = costo / 0.50 (markup 2×)
 ```
 
 ---

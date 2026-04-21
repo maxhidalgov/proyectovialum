@@ -11,6 +11,7 @@
     :orden-hoja1-al-frente="ordenHoja1AlFrente"
     :lado-apertura="ladoApertura"
     :direccion-apertura="direccionApertura"
+  :show-height-label="showHeightLabel"
   />
 </template>
 
@@ -34,7 +35,8 @@ const props = defineProps({
   hojaMovilSeleccionada: { type: Number, default: null },
   ordenHoja1AlFrente: { type: Boolean, default: null },
   ladoApertura: { type: String, default: 'izquierda' },
-  direccionApertura: { type: String, default: 'interior' }
+  direccionApertura: { type: String, default: 'interior' },
+  showHeightLabel: { type: Boolean, default: true }
 })
 
 // Normaliza el “tipo” a un id numérico conocido
