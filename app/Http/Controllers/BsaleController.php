@@ -286,9 +286,9 @@ class BsaleController extends Controller
         // No-vidrios: agrupar por nombre sumando cantidad
         $grupos = [];
         foreach ($cotizacion->detalles as $detalle) {
-            $nombreProducto = $detalle->listaPrecio?->producto?->nombre
+            $nombreProducto = $detalle->descripcion
+                ?? $detalle->listaPrecio?->producto?->nombre
                 ?? $detalle->producto?->nombre
-                ?? $detalle->descripcion
                 ?? 'Producto';
 
             $esVidrio = (bool)($detalle->es_vidrio ?? $detalle->esVidrio ?? false);

@@ -416,8 +416,13 @@ function abrirModalBsale(item) {
   mostrarModalBsale.value = true
 }
 
-function verDetalleCompleto(item) {
-  cotizacionSeleccionada.value = item
+async function verDetalleCompleto(item) {
+  try {
+    const { data } = await api.get(`/api/cotizaciones/${item.id}`)
+    cotizacionSeleccionada.value = data
+  } catch {
+    cotizacionSeleccionada.value = item
+  }
   mostrarModalDetalle.value = true
 }
 
