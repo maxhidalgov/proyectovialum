@@ -268,7 +268,7 @@ class BsaleController extends Controller
         foreach ($cotizacion->ventanas as $ventana) {
             $precioUnitario = $ventana->precio ?? 0;
             $cantidad = (int)($ventana->cantidad ?? 1);
-            $netoUnitario = $precioUnitario / 1.19;
+            $netoUnitario = (float)$precioUnitario; // precio ya es neto
 
             $detalles[] = [
                 'netUnitValue' => round((float)$netoUnitario, 4),
@@ -331,11 +331,11 @@ class BsaleController extends Controller
                 $precioPorM2 = $grupo['muestras'] > 0
                     ? $grupo['precio_por_m2'] / $grupo['muestras']
                     : 0;
-                $netoUnitario = $precioPorM2 / 1.19;
+                $netoUnitario = (float)$precioPorM2; // precio ya es neto
                 $cantidad     = round($grupo['m2_total'], 4);
                 $descripcion  = $grupo['descripcion'] . ' (m²)';
             } else {
-                $netoUnitario = (float)$grupo['precio_unitario'] / 1.19;
+                $netoUnitario = (float)$grupo['precio_unitario']; // precio ya es neto
                 $cantidad     = $grupo['cantidad'];
                 $descripcion  = $grupo['descripcion'];
             }
