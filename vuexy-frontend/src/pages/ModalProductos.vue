@@ -314,7 +314,7 @@ const productosFiltrados = computed(() => {
     if (listasActivas.length > 0) {
       listasActivas.forEach(lp => {
         // Obtener color directo o desde productoColorProveedor (compatibilidad)
-        const color = lp.color || lp.productoColorProveedor?.color
+        const color = lp.color || lp.producto_color_proveedor?.color || lp.productoColorProveedor?.color
         
         productosExpandidos.push({
           ...producto,
@@ -411,7 +411,7 @@ const seleccionarProducto = (productoFila) => {
     return
   }
   
-  const pcp = listaPrecioActiva.productoColorProveedor || listaPrecioActiva.producto_color_proveedor
+  const pcp = listaPrecioActiva.producto_color_proveedor || listaPrecioActiva.productoColorProveedor
   const color = listaPrecioActiva.color || pcp?.color
   const precioCosto = parseFloat(listaPrecioActiva.precio_costo) || 0
   const margenDefault = parseFloat(listaPrecioActiva.margen) || 30
