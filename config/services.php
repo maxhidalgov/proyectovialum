@@ -35,6 +35,10 @@ return [
         ],
     ],
 
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+    ],
+
     'bsale' => [
         'base_url' => env('BSALE_BASE_URL', 'https://api.bsale.cl/v1/'),
         'access_token' => env('BSALE_ACCESS_TOKEN'),

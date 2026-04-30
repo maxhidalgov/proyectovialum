@@ -109,7 +109,7 @@
 
 {{-- Footer fijo en todas las páginas --}}
 <div id="pdf-footer">
-  Cotización #{{ $cotizacion->id }} &nbsp;·&nbsp; {{ $cotizacion->cliente->razon_social ?? '-' }} &nbsp;·&nbsp; Válida 5 días
+  Cotización #{{ $cotizacion->id }} &nbsp;·&nbsp; {{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }} &nbsp;·&nbsp; Válida 5 días
 </div>
 
 {{-- Barra de marca --}}
@@ -123,7 +123,7 @@
       <table style="border-collapse: collapse;">
         <tr class="info-row">
           <td class="info-label">Cliente:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->cliente->razon_social ?? '-' }}</td>
+          <td style="border:none; padding: 2px 0;">{{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }}</td>
         </tr>
         @if($cotizacion->cliente->rut ?? null)
         <tr class="info-row">

@@ -250,71 +250,100 @@
           </v-col>
         </v-row>
 
-        <!-- Mostrar costos -->
-        <v-row>
-          <v-col cols="12" md="4">
-            <v-alert v-if="ventanaLocal.costo_total_unitario" type="info" variant="outlined">
-              <strong>Costo unitario:</strong> ${{ ventanaLocal.costo_total_unitario }}
-            </v-alert>
+        <!-- Costos -->
+        <v-row dense class="mb-2 mt-2">
+          <v-col cols="4">
+            <div class="rounded-lg pa-3 text-center" style="background: rgba(var(--v-theme-on-surface), 0.06)">
+              <div class="text-caption text-medium-emphasis mb-1">Costo unitario</div>
+              <div v-if="calculando"><v-progress-linear indeterminate color="warning" height="2" rounded /></div>
+              <div v-else class="text-body-2 font-weight-bold">
+                {{ ventanaLocal.costo_total_unitario ? '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(ventanaLocal.costo_total_unitario) : '—' }}
+              </div>
+            </div>
           </v-col>
-          <v-col cols="12" md="4">
-            <v-alert v-if="ventanaLocal.costo_total" type="info" variant="tonal">
-              <strong>Costo total:</strong> ${{ ventanaLocal.costo_total }}
-            </v-alert>
+          <v-col cols="4">
+            <div class="rounded-lg pa-3 text-center" style="background: rgba(var(--v-theme-on-surface), 0.06)">
+              <div class="text-caption text-medium-emphasis mb-1">Costo total</div>
+              <div v-if="calculando"><v-progress-linear indeterminate color="warning" height="2" rounded /></div>
+              <div v-else class="text-body-2 font-weight-bold">
+                {{ ventanaLocal.costo_total ? '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(ventanaLocal.costo_total) : '—' }}
+              </div>
+            </div>
           </v-col>
-          <v-col cols="12" md="4">
-            <v-alert v-if="ventanaLocal.precio" type="success" variant="tonal">
-              <strong>Precio de venta:</strong> ${{ ventanaLocal.precio }}
-            </v-alert>
+          <v-col cols="4">
+            <div class="rounded-lg pa-3 text-center" style="background: rgba(var(--v-theme-success), 0.1)">
+              <div class="text-caption text-medium-emphasis mb-1">Precio de venta (Neto)</div>
+              <div v-if="calculando"><v-progress-linear indeterminate color="success" height="2" rounded /></div>
+              <div v-else class="text-body-1 font-weight-bold text-success">
+                {{ ventanaLocal.precio ? '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(ventanaLocal.precio) : '—' }}
+              </div>
+            </div>
           </v-col>
         </v-row>
 
-        <!-- Detalle de materiales -->
-        <v-row v-if="ventanaLocal.materiales && ventanaLocal.materiales.length">
+        <!-- Detalle de materiales colapsable -->
+        <v-row v-if="ventanaLocal.materiales && ventanaLocal.materiales.length" class="mt-1">
           <v-col cols="12">
-            <v-card variant="outlined">
-              <v-card-title class="d-flex align-center">
-                <span>Detalle de materiales</span>
-                <v-spacer />
-                <v-btn 
-                  color="success" 
-                  variant="tonal" 
-                  size="small"
-                  @click="descargarMateriales"
-                >
-                  <v-icon left>mdi-download</v-icon>
-                  Descargar Excel
-                </v-btn>
-              </v-card-title>
-              <v-data-table
-                :headers="[
-                  { title: 'Material', key: 'nombre' },
-                  { title: 'Proveedor', key: 'proveedor' },
-                  { title: 'Cantidad', key: 'cantidad' },
-                  { title: 'Unidad', key: 'unidad' },
-                  { title: 'Costo unitario', key: 'costo_unitario' },
-                  { title: 'Costo total', key: 'costo_total' }
-                ]"
-                :items="ventanaLocal.materiales"
-                class="mt-2"
-                dense
-                :items-per-page="10"
-                :items-per-page-options="[5, 10, 25, 50, { value: -1, title: 'Todos' }]"
+            <div class="d-flex align-center">
+              <v-btn
+                variant="text"
+                size="small"
+                :color="mostrarDetalleMateriales ? 'primary' : 'default'"
+                :prepend-icon="mostrarDetalleMateriales ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                @click="mostrarDetalleMateriales = !mostrarDetalleMateriales"
               >
-                <template #item.costo_unitario="{ item }">
-                  ${{ item.costo_unitario }}
-                </template>
-                <template #item.costo_total="{ item }">
-                  ${{ item.costo_total }}
-                </template>
-              </v-data-table>
-            </v-card>
+                Ver detalle de materiales ({{ ventanaLocal.materiales.length }})
+              </v-btn>
+              <v-spacer />
+              <v-btn
+                v-if="mostrarDetalleMateriales"
+                color="success"
+                variant="tonal"
+                size="small"
+                @click="descargarMateriales"
+              >
+                <v-icon start>mdi-download</v-icon>
+                Descargar Excel
+              </v-btn>
+            </div>
+            <v-expand-transition>
+              <v-card v-if="mostrarDetalleMateriales" variant="outlined" class="mt-2">
+                <v-data-table
+                  :headers="[
+                    { title: 'Material', key: 'nombre' },
+                    { title: 'Proveedor', key: 'proveedor' },
+                    { title: 'Cantidad', key: 'cantidad' },
+                    { title: 'Unidad', key: 'unidad' },
+                    { title: 'Costo unitario', key: 'costo_unitario' },
+                    { title: 'Costo total', key: 'costo_total' }
+                  ]"
+                  :items="ventanaLocal.materiales"
+                  dense
+                  :items-per-page="10"
+                  :items-per-page-options="[5, 10, 25, 50, { value: -1, title: 'Todos' }]"
+                >
+                  <template #item.costo_unitario="{ item }">
+                    ${{ item.costo_unitario }}
+                  </template>
+                  <template #item.costo_total="{ item }">
+                    ${{ item.costo_total }}
+                  </template>
+                </v-data-table>
+              </v-card>
+            </v-expand-transition>
           </v-col>
         </v-row>
 
         <v-card-actions class="justify-end mt-4">
           <v-btn color="secondary" variant="text" @click="cerrar">Cancelar</v-btn>
-          <v-btn color="primary" type="submit">Guardar cambios</v-btn>
+          <v-btn
+            color="primary"
+            type="submit"
+            :disabled="calculando || !precioActualizado"
+            :loading="calculando"
+          >
+            Guardar cambios
+          </v-btn>
         </v-card-actions>
       </v-form>
     </v-card>
@@ -353,12 +382,16 @@ const emit = defineEmits(['update:mostrar', 'guardar'])
 
 const localMostrar = ref(props.mostrar)
 const ventanaLocal = ref({})
+const calculando = ref(false)
+const precioActualizado = ref(false)
+const mostrarDetalleMateriales = ref(false)
 
 watch(() => props.mostrar, (val) => {
   localMostrar.value = val
   if (val && props.ventana) {
     ventanaLocal.value = { ...props.ventana }
-    console.log('✅ EDITAR MODAL - Ventana recibida:', ventanaLocal.value)
+    precioActualizado.value = false
+    mostrarDetalleMateriales.value = false
     recalcularCostos()
   }
 })
@@ -388,6 +421,7 @@ const cerrar = () => {
 }
 
 const onGuardar = () => {
+  if (calculando.value || !precioActualizado.value) return
   emit('guardar', ventanaLocal.value)
   cerrar()
 }
@@ -397,101 +431,99 @@ const margenVenta = computed(() => {
   return mat?.margen ?? 0.50
 })
 
+let debounceCalculo = null
+let requestIdCalculo = 0
+
 async function recalcularCostos() {
-  if (
-    ventanaLocal.value.tipo &&
-    ventanaLocal.value.ancho &&
-    ventanaLocal.value.alto &&
-    ventanaLocal.value.cantidad &&
-    ventanaLocal.value.color &&
-    ventanaLocal.value.productoVidrioProveedor
-  ) {
-    try {
-      console.log('🔍 EDITAR MODAL - Buscando relación para ID:', ventanaLocal.value.productoVidrioProveedor)
-      console.log('🔍 EDITAR MODAL - productosVidrio disponibles:', props.productosVidrio?.length || 0)
-      
-      const todasRelaciones = props.productosVidrio
-        .filter(p => p.colores_por_proveedor && Array.isArray(p.colores_por_proveedor))
-        .flatMap(p => p.colores_por_proveedor.map(cpp => ({
-          id: cpp.id,
-          producto_id: p.id,
-          proveedor_id: cpp.proveedor_id
-        })))
-      
-      console.log('🔍 EDITAR MODAL - Total relaciones encontradas:', todasRelaciones.length)
-      console.log('🔍 EDITAR MODAL - IDs disponibles:', todasRelaciones.map(r => r.id))
-      
-      const relacion = todasRelaciones.find(p => parseInt(p.id) === parseInt(ventanaLocal.value.productoVidrioProveedor))
+  const miRequestId = ++requestIdCalculo
+  calculando.value = true
+  precioActualizado.value = false
 
-      if (!relacion) {
-        console.error('❌ No se encontró la relación producto-proveedor para ID:', ventanaLocal.value.productoVidrioProveedor)
-        console.error('❌ Todas las relaciones:', todasRelaciones)
-        return
-      }
-      
-      console.log('✅ EDITAR MODAL - Relación encontrada:', relacion)
+  const condicionesMet = ventanaLocal.value.tipo && ventanaLocal.value.ancho &&
+    ventanaLocal.value.alto && ventanaLocal.value.cantidad &&
+    ventanaLocal.value.color && ventanaLocal.value.productoVidrioProveedor
 
-      const payload = {
-        tipo_ventana_id: ventanaLocal.value.tipo,
-        tipo: ventanaLocal.value.tipo,
-        ancho: ventanaLocal.value.ancho,
-        alto: ventanaLocal.value.alto,
-        cantidad: ventanaLocal.value.cantidad,
-        color_id: ventanaLocal.value.color,
-        color: ventanaLocal.value.color,
-        producto_vidrio_proveedor_id: ventanaLocal.value.productoVidrioProveedor,
-        producto_id: relacion.producto_id,
-        proveedor_id: relacion.proveedor_id,
-        productoVidrio: relacion.producto_id,
-        proveedorVidrio: relacion.proveedor_id,
-        tipoVidrio: ventanaLocal.value.tipoVidrio,
-        hojas_totales: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_totales : undefined,
-        hojas_moviles: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_moviles : undefined,
-        hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojaMovilSeleccionada : undefined,
-        hoja1AlFrente: [3, 46, 52].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hoja1AlFrente : undefined,
-        direccionApertura: ventanaLocal.value.direccionApertura,
-        ladoApertura: ventanaLocal.value.ladoApertura,
-        pasoLibre: [50, 51].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.pasoLibre : undefined,
-        hojaActiva: ventanaLocal.value.tipo === 51 ? ventanaLocal.value.hojaActiva : undefined,
-        ...(ventanaLocal.value.tipo === 57 && {
-          filas: ventanaLocal.value.filas,
-          columnas: ventanaLocal.value.columnas,
-          altos_filas: ventanaLocal.value.altosFilas,
-          anchos_columnas: ventanaLocal.value.anchosColumnas,
-          secciones: ventanaLocal.value.secciones,
-        }),
-        ...(ventanaLocal.value.tipo === 47 && {
-          ancho_izquierda: ventanaLocal.value.ancho_izquierda,
-          ancho_centro: ventanaLocal.value.ancho_centro,
-          ancho_derecha: ventanaLocal.value.ancho_derecha,
-          tipoVentanaIzquierda: ventanaLocal.value.tipoVentanaIzquierda,
-          tipoVentanaCentro: ventanaLocal.value.tipoVentanaCentro,
-          tipoVentanaDerecha: ventanaLocal.value.tipoVentanaDerecha,
-        }),
-      }
+  if (!condicionesMet) {
+    ventanaLocal.value.costo_total_unitario = 0
+    ventanaLocal.value.costo_total = 0
+    ventanaLocal.value.precio = 0
+    ventanaLocal.value.materiales = []
+    calculando.value = false
+    return
+  }
 
-      console.log('💰 EDITAR MODAL - Recalculando costos:', payload)
-      
-      const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
-      
-      console.log('✅ EDITAR MODAL - Respuesta:', data)
-      
-      ventanaLocal.value.costo_total_unitario = data.costo_unitario
-      ventanaLocal.value.costo_total = data.costo_unitario * ventanaLocal.value.cantidad
-      ventanaLocal.value.precio = Math.ceil(ventanaLocal.value.costo_total / (1 - margenVenta.value))
-      ventanaLocal.value.materiales = data.materiales
+  try {
+    const relacion = props.productosVidrio
+      .filter(p => p.colores_por_proveedor && Array.isArray(p.colores_por_proveedor))
+      .flatMap(p => p.colores_por_proveedor.map(cpp => ({
+        id: cpp.id,
+        producto_id: p.id,
+        proveedor_id: cpp.proveedor_id,
+      })))
+      .find(p => parseInt(p.id) === parseInt(ventanaLocal.value.productoVidrioProveedor))
 
-      console.log('💵 EDITAR MODAL - Costos actualizados:')
-      console.log('   - costo_total_unitario:', ventanaLocal.value.costo_total_unitario)
-      console.log('   - costo_total:', ventanaLocal.value.costo_total)
-      console.log('   - precio:', ventanaLocal.value.precio)
-    } catch (e) {
-      console.error('❌ Error en recalcularCostos:', e)
-      ventanaLocal.value.costo_total_unitario = 0
-      ventanaLocal.value.costo_total = 0
-      ventanaLocal.value.precio = 0
-      ventanaLocal.value.materiales = []
+    if (!relacion) {
+      console.error('❌ Relación producto-proveedor no encontrada para ID:', ventanaLocal.value.productoVidrioProveedor)
+      return
     }
+
+    const payload = {
+      tipo_ventana_id: ventanaLocal.value.tipo,
+      tipo: ventanaLocal.value.tipo,
+      ancho: ventanaLocal.value.ancho,
+      alto: ventanaLocal.value.alto,
+      cantidad: ventanaLocal.value.cantidad,
+      color_id: ventanaLocal.value.color,
+      color: ventanaLocal.value.color,
+      producto_vidrio_proveedor_id: ventanaLocal.value.productoVidrioProveedor,
+      producto_id: relacion.producto_id,
+      proveedor_id: relacion.proveedor_id,
+      productoVidrio: relacion.producto_id,
+      proveedorVidrio: relacion.proveedor_id,
+      tipoVidrio: ventanaLocal.value.tipoVidrio,
+      hojas_totales: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_totales : undefined,
+      hojas_moviles: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_moviles : undefined,
+      hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojaMovilSeleccionada : undefined,
+      hoja1AlFrente: [3, 46, 52].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hoja1AlFrente : undefined,
+      direccionApertura: ventanaLocal.value.direccionApertura,
+      ladoApertura: ventanaLocal.value.ladoApertura,
+      pasoLibre: [50, 51].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.pasoLibre : undefined,
+      hojaActiva: ventanaLocal.value.tipo === 51 ? ventanaLocal.value.hojaActiva : undefined,
+      ...(ventanaLocal.value.tipo === 57 && {
+        filas: ventanaLocal.value.filas,
+        columnas: ventanaLocal.value.columnas,
+        altos_filas: ventanaLocal.value.altosFilas,
+        anchos_columnas: ventanaLocal.value.anchosColumnas,
+        secciones: ventanaLocal.value.secciones,
+      }),
+      ...(ventanaLocal.value.tipo === 47 && {
+        ancho_izquierda: ventanaLocal.value.ancho_izquierda,
+        ancho_centro: ventanaLocal.value.ancho_centro,
+        ancho_derecha: ventanaLocal.value.ancho_derecha,
+        tipoVentanaIzquierda: ventanaLocal.value.tipoVentanaIzquierda,
+        tipoVentanaCentro: ventanaLocal.value.tipoVentanaCentro,
+        tipoVentanaDerecha: ventanaLocal.value.tipoVentanaDerecha,
+      }),
+    }
+
+    const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
+
+    if (miRequestId !== requestIdCalculo) return
+
+    ventanaLocal.value.costo_total_unitario = data.costo_unitario
+    ventanaLocal.value.costo_total = data.costo_unitario * ventanaLocal.value.cantidad
+    ventanaLocal.value.precio = Math.ceil(ventanaLocal.value.costo_total / (1 - margenVenta.value))
+    ventanaLocal.value.materiales = data.materiales
+    precioActualizado.value = true
+  } catch (e) {
+    if (miRequestId !== requestIdCalculo) return
+    console.error('❌ Error en recalcularCostos:', e)
+    ventanaLocal.value.costo_total_unitario = 0
+    ventanaLocal.value.costo_total = 0
+    ventanaLocal.value.precio = 0
+    ventanaLocal.value.materiales = []
+  } finally {
+    if (miRequestId === requestIdCalculo) calculando.value = false
   }
 }
 
@@ -501,9 +533,14 @@ watch(
     ventanaLocal.value.alto,
     ventanaLocal.value.cantidad,
     ventanaLocal.value.color,
-    ventanaLocal.value.productoVidrioProveedor
+    ventanaLocal.value.productoVidrioProveedor,
   ],
-  recalcularCostos,
+  () => {
+    calculando.value = true
+    precioActualizado.value = false
+    clearTimeout(debounceCalculo)
+    debounceCalculo = setTimeout(recalcularCostos, 350)
+  },
   { deep: true }
 )
 

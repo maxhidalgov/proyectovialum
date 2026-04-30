@@ -1,6 +1,6 @@
 # Documentación Completa — Proyecto Vialum
 
-> Última actualización: 21 Abril 2026
+> Última actualización: 28 Abril 2026
 
 ---
 
@@ -885,6 +885,8 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 ## 22. Pendientes / Trabajo Futuro
 
 - [ ] **SQL en producción:** Ejecutar `ALTER TABLE tipos_material ADD COLUMN margen DECIMAL(5,4) NOT NULL DEFAULT 0.50;`
+- [ ] **Agente IA — WhatsApp:** Integrar con Twilio WhatsApp Business API. Requiere: endpoint `POST /api/whatsapp/webhook`, tabla `agente_conversaciones` (telefono, messages JSON, updated_at) para persistir historial por número, cuenta Twilio (~$15 USD/mes) o Meta Business API (gratis, más burocrático).
+- [ ] **Agente IA — Gmail:** Integrar con Gmail API para que el agente lea correos entrantes y responda automáticamente. Requiere: Google Cloud Console + OAuth2, comando artisan o job que sondee inbox, lógica para detectar solicitudes de cotización vs otros correos.
 - [ ] **CortesService:** Agregar soporte de hoja de cortes para tipos: 45 (Proyectante S60), 46 (Corredera Andes), 47 (Bay Window), 49 (Abatir S60), 50 (Puerta S60), 51 (Puerta 2 Hojas), 52 (Sliding 98), 53 (Monorriel), 57 (Compuesta AL42), 58 (Universal)
 - [ ] **produccion/[id].vue:** Verificar si se debe quitar la tabla inline de "Resumen de Materiales" (ya existe página separada)
 - [ ] **Roles producción/bodega:** Definir permisos específicos
@@ -968,6 +970,55 @@ ALTER TABLE tipos_material ADD COLUMN margen DECIMAL(5,4) NOT NULL DEFAULT 0.50;
 ```
 precio = ceil(costo_total / (1 - margen))
 // Ejemplo: margen=0.50 → precio = costo / 0.50 (markup 2×)
+```
+
+---
+
+### Sesión 2026-04-28 — UserProfile real + limpieza login
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/layouts/components/UserProfile.vue` | Rewrite completo: muestra nombre real y rol desde `localStorage`; avatar con iniciales en lugar de foto genérica "John Doe"; eliminados ítems Profile, Settings, Pricing, FAQ (no implementados); logout limpia `localStorage` antes de redirigir a `/login` |
+| `vuexy-frontend/src/pages/login.vue` | Textos en español ("Bienvenido a", "Correo electrónico", "Contraseña", "Iniciar sesión"); eliminados botones OAuth (Facebook, Twitter, GitHub, Google) y `AuthProvider`; eliminado link "Forgot Password?" (sin backend de reset); eliminado `VCheckbox` "Remember me" y campo `remember` del form; eliminada importación `authV2LoginIllustrationLight` no usada |
+
+---
+
+### Sesión 2026-04-24 — Race condition cotizador + nombre cliente
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/AgregarVentanaModal2.vue` | Fix race condition precio: debounce 350ms + `requestIdCalculo` (stale requests ignoradas) + flag `precioActualizado` (false al cambiar cualquier campo, true solo cuando el request más reciente completa). Botón guardar deshabilitado hasta que `!calculando && precioActualizado`. `onGuardar` hace early return si alguno de los dos es falso |
+| `vuexy-frontend/src/pages/EditarVentanaModal.vue` | Mismo patrón debounce + requestId + `precioActualizado` que `AgregarVentanaModal2`; `watch(() => props.mostrar)` resetea `precioActualizado=false` y llama `recalcularCostos()` al abrir; tabla de materiales colapsable con `v-expand-transition` y botón toggle igual que en `AgregarVentanaModal2` |
+| `vuexy-frontend/src/pages/cotizaciones/index.vue` | Fix nombre cliente "—": fallback a `first_name + last_name` cuando `razon_social` es null (clientes tipo persona) |
+| `resources/views/cotizaciones/pdf.blade.php` | Fix nombre cliente en header y footer del PDF: mismo fallback `razon_social ?: trim(first_name . ' ' . last_name) ?: '-'` para clientes tipo persona |
+
+**Patrón race condition (aplicado en ambos modales):**
+```js
+let debounceCalculo = null
+let requestIdCalculo = 0
+
+// En el watcher de campos:
+calculando.value = true
+precioActualizado.value = false
+clearTimeout(debounceCalculo)
+debounceCalculo = setTimeout(recalcularCostos, 350)
+
+async function recalcularCostos() {
+  const miRequestId = ++requestIdCalculo
+  calculando.value = true
+  precioActualizado.value = false
+  try {
+    const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
+    if (miRequestId !== requestIdCalculo) return  // respuesta stale, ignorar
+    ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta.value))
+    precioActualizado.value = true
+  } catch (e) {
+    if (miRequestId !== requestIdCalculo) return
+    // resetear valores
+  } finally {
+    if (miRequestId === requestIdCalculo) calculando.value = false
+  }
+}
 ```
 
 ---

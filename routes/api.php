@@ -21,6 +21,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProduccionController;
 use App\Http\Controllers\OperacionesController;
 use App\Http\Controllers\DocumentoFacturacionController;
+use App\Http\Controllers\Api\AgenteController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -43,6 +44,9 @@ Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin'
 });
 
 Route::middleware('auth:api')->group(function () {
+    // Agente cotizador IA
+    Route::post('/agente/cotizar', [AgenteController::class, 'cotizar']);
+
     // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
     Route::post('/cotizaciones/parse-winperfil', [CotizacionController::class, 'parseWinperfil']);

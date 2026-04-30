@@ -22,7 +22,7 @@
         class="elevation-1"
       >
         <template #item.cliente="{ item }">
-          {{ item.cliente?.razon_social || '—' }}
+          {{ item.cliente?.razon_social || `${item.cliente?.first_name || ''} ${item.cliente?.last_name || ''}`.trim() || '—' }}
         </template>
   
         <template #item.vendedor="{ item }">

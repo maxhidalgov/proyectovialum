@@ -1093,7 +1093,14 @@
 
         <v-card-actions class="justify-end px-0">
           <v-btn color="grey" variant="text" @click="cerrarModal">Cancelar</v-btn>
-          <v-btn color="primary" variant="elevated" type="submit" prepend-icon="mdi-check">
+          <v-btn
+            color="primary"
+            variant="elevated"
+            type="submit"
+            prepend-icon="mdi-check"
+            :disabled="calculando || !precioActualizado"
+            :loading="calculando"
+          >
             {{ isEdit ? 'Guardar cambios' : 'Agregar ventana' }}
           </v-btn>
         </v-card-actions>
@@ -1254,6 +1261,7 @@ const emit = defineEmits(['update:mostrar', 'guardar'])
 const localMostrar = ref(props.mostrar)
 const datosListos = ref(false) // ⬅️ Flag para indicar que los datos están listos
 const calculando = ref(false)
+const precioActualizado = ref(false)
 watch(() => props.mostrar, val => { localMostrar.value = val })
 watch(localMostrar, val => { emit('update:mostrar', val) })
 
@@ -1561,124 +1569,120 @@ const margenVenta = computed(() => {
   return mat?.margen ?? 0.50
 })
 
+let debounceCalculo = null
+let requestIdCalculo = 0
+
 async function recalcularCostos() {
-  // Para tipo 58, validar que tenga configuración del armador en lugar de ancho/alto
-  const tienesDimensiones = ventana.value.tipo === 58 
+  const miRequestId = ++requestIdCalculo
+  calculando.value = true
+  precioActualizado.value = false
+
+  const tienesDimensiones = ventana.value.tipo === 58
     ? ventana.value.configuracionArmador?.ancho && ventana.value.configuracionArmador?.alto
     : ventana.value.ancho && ventana.value.alto
-  
-  if (
-    ventana.value.tipo &&
-    tienesDimensiones &&
-    ventana.value.cantidad &&
-    ventana.value.color &&
-    ventana.value.productoVidrioProveedor
-  ) {
-    try {
-      // Busca la relación producto-proveedor
-      const relacion = props.productosVidrio
-        .flatMap(p => p.colores_por_proveedor.map(cpp => ({
-          id: cpp.id,
-          producto_id: p.id,
-          proveedor_id: cpp.proveedor_id
-        })))
-        .find(p => p.id === ventana.value.productoVidrioProveedor)
 
-      if (!relacion) {
-        console.error('❌ No se encontró la relación producto-proveedor para ID:', ventana.value.productoVidrioProveedor)
-        return
-      }
+  const condicionesMet = ventana.value.tipo && tienesDimensiones &&
+    ventana.value.cantidad && ventana.value.color && ventana.value.productoVidrioProveedor
 
-      const payload = {
-        tipo_ventana_id: ventana.value.tipo,
-        tipo: ventana.value.tipo,
-        ancho: ventana.value.tipo === 58 && ventana.value.configuracionArmador 
-          ? ventana.value.configuracionArmador.ancho 
-          : ventana.value.ancho,
-        alto: ventana.value.tipo === 58 && ventana.value.configuracionArmador 
-          ? ventana.value.configuracionArmador.alto 
-          : ventana.value.alto,
-        cantidad: ventana.value.cantidad,
-        color_id: ventana.value.color,
-        color: ventana.value.color,
-        producto_vidrio_proveedor_id: ventana.value.productoVidrioProveedor,
-        producto_id: relacion.producto_id,
-        proveedor_id: relacion.proveedor_id,
-        productoVidrio: relacion.producto_id,
-        proveedorVidrio: relacion.proveedor_id,
-        tipoVidrio: ventana.value.tipoVidrio,
-        manillon: ventana.value.tipo === 55 ? ventana.value.manillon : undefined, // ✅ Para Corredera AL25
-        
-        // ✅ Propiedades específicas por tipo
-        hojas_totales: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojas_totales : undefined,
-        hojas_moviles: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
-        hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
-        hoja1AlFrente: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hoja1AlFrente : undefined,
-        direccionApertura: ventana.value.direccionApertura,
-        ladoApertura: ventana.value.ladoApertura,
-        pasoLibre: [50, 51].includes(ventana.value.tipo) ? ventana.value.pasoLibre : undefined,
-        hojaActiva: ventana.value.tipo === 51 ? ventana.value.hojaActiva : undefined,
-
-        // ✅ Ventana Compuesta AL42 (tipo 57)
-        ...(ventana.value.tipo === 57 && {
-          filas: ventana.value.filas,
-          columnas: ventana.value.columnas,
-          altos_filas: ventana.value.altosFilas,
-          anchos_columnas: ventana.value.anchosColumnas,
-          secciones: ventana.value.secciones,
-        }),
-
-        // ✅ Ventana Universal - Armador (tipo 58)
-        ...(ventana.value.tipo === 58 && ventana.value.configuracionArmador && {
-          configuracionArmador: ventana.value.configuracionArmador,
-        }),
-
-        // Ventana compuesta flexible (tipo 54)
-        ...(ventana.value.tipo === 54 && {
-          orientacionComp: ventana.value.orientacionComp ?? 'horizontal',
-          itemsComp: ventana.value.itemsComp ?? [],
-        }),
-
-        ...(ventana.value.tipo === 47 && {
-          ancho_izquierda: ventana.value.ancho_izquierda,
-          ancho_centro: ventana.value.ancho_centro,
-          ancho_derecha: ventana.value.ancho_derecha,
-          tipoVentanaIzquierda: ventana.value.tipoVentanaIzquierda,
-          tipoVentanaCentro: ventana.value.tipoVentanaCentro,
-          tipoVentanaDerecha: ventana.value.tipoVentanaDerecha,
-        })
-
-      }
-
-      console.log('💰 Payload a calcular-materiales:', payload)
-      console.log('📦 Tipo 58 - configuracionArmador:', ventana.value.configuracionArmador)
-      
-      calculando.value = true
-      const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
-      
-      ventana.value.costo_total_unitario = data.costo_unitario
-      ventana.value.costo_total = data.costo_unitario * ventana.value.cantidad
-      ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta.value))
-      ventana.value.materiales = data.materiales
-    } catch (e) {
-      console.error('❌ Error en recalcularCostos:', e)
-      ventana.value.costo_total_unitario = 0
-      ventana.value.costo_total = 0
-      ventana.value.precio = 0
-      ventana.value.materiales = []
-    } finally {
-      calculando.value = false
-    }
-  } else {
+  if (!condicionesMet) {
     ventana.value.costo_total_unitario = 0
     ventana.value.costo_total = 0
     ventana.value.precio = 0
     ventana.value.materiales = []
+    calculando.value = false
+    return
+  }
+
+  try {
+    const relacion = props.productosVidrio
+      .flatMap(p => p.colores_por_proveedor.map(cpp => ({
+        id: cpp.id,
+        producto_id: p.id,
+        proveedor_id: cpp.proveedor_id,
+      })))
+      .find(p => p.id === ventana.value.productoVidrioProveedor)
+
+    if (!relacion) {
+      console.error('❌ No se encontró la relación producto-proveedor para ID:', ventana.value.productoVidrioProveedor)
+      return
+    }
+
+    const payload = {
+      tipo_ventana_id: ventana.value.tipo,
+      tipo: ventana.value.tipo,
+      ancho: ventana.value.tipo === 58 && ventana.value.configuracionArmador
+        ? ventana.value.configuracionArmador.ancho
+        : ventana.value.ancho,
+      alto: ventana.value.tipo === 58 && ventana.value.configuracionArmador
+        ? ventana.value.configuracionArmador.alto
+        : ventana.value.alto,
+      cantidad: ventana.value.cantidad,
+      color_id: ventana.value.color,
+      color: ventana.value.color,
+      producto_vidrio_proveedor_id: ventana.value.productoVidrioProveedor,
+      producto_id: relacion.producto_id,
+      proveedor_id: relacion.proveedor_id,
+      productoVidrio: relacion.producto_id,
+      proveedorVidrio: relacion.proveedor_id,
+      tipoVidrio: ventana.value.tipoVidrio,
+      manillon: ventana.value.tipo === 55 ? ventana.value.manillon : undefined,
+      hojas_totales: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojas_totales : undefined,
+      hojas_moviles: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojas_moviles : undefined,
+      hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventana.value.tipo) ? ventana.value.hojaMovilSeleccionada : undefined,
+      hoja1AlFrente: [3, 46, 52].includes(ventana.value.tipo) ? ventana.value.hoja1AlFrente : undefined,
+      direccionApertura: ventana.value.direccionApertura,
+      ladoApertura: ventana.value.ladoApertura,
+      pasoLibre: [50, 51].includes(ventana.value.tipo) ? ventana.value.pasoLibre : undefined,
+      hojaActiva: ventana.value.tipo === 51 ? ventana.value.hojaActiva : undefined,
+      ...(ventana.value.tipo === 57 && {
+        filas: ventana.value.filas,
+        columnas: ventana.value.columnas,
+        altos_filas: ventana.value.altosFilas,
+        anchos_columnas: ventana.value.anchosColumnas,
+        secciones: ventana.value.secciones,
+      }),
+      ...(ventana.value.tipo === 58 && ventana.value.configuracionArmador && {
+        configuracionArmador: ventana.value.configuracionArmador,
+      }),
+      ...(ventana.value.tipo === 54 && {
+        orientacionComp: ventana.value.orientacionComp ?? 'horizontal',
+        itemsComp: ventana.value.itemsComp ?? [],
+      }),
+      ...(ventana.value.tipo === 47 && {
+        ancho_izquierda: ventana.value.ancho_izquierda,
+        ancho_centro: ventana.value.ancho_centro,
+        ancho_derecha: ventana.value.ancho_derecha,
+        tipoVentanaIzquierda: ventana.value.tipoVentanaIzquierda,
+        tipoVentanaCentro: ventana.value.tipoVentanaCentro,
+        tipoVentanaDerecha: ventana.value.tipoVentanaDerecha,
+      }),
+    }
+
+    const { data } = await api.post('/api/cotizador/calcular-materiales', payload)
+
+    if (miRequestId !== requestIdCalculo) return
+
+    ventana.value.costo_total_unitario = data.costo_unitario
+    ventana.value.costo_total = data.costo_unitario * ventana.value.cantidad
+    ventana.value.precio = Math.ceil(ventana.value.costo_total / (1 - margenVenta.value))
+    ventana.value.materiales = data.materiales
+    precioActualizado.value = true
+  } catch (e) {
+    if (miRequestId !== requestIdCalculo) return
+    console.error('❌ Error en recalcularCostos:', e)
+    ventana.value.costo_total_unitario = 0
+    ventana.value.costo_total = 0
+    ventana.value.precio = 0
+    ventana.value.materiales = []
+  } finally {
+    if (miRequestId === requestIdCalculo) calculando.value = false
   }
 }
 
 const onGuardar = async () => {
   console.log('💾 MODAL - Guardando ventana')
+
+  if (calculando.value || !precioActualizado.value) return
 
   // Validar formulario (incluye reglas de tipos de Bay Window)
   const { valid } = await (formRef.value?.validate() ?? Promise.resolve({ valid: true }))
@@ -1776,7 +1780,12 @@ watch(
     // ✅ Ventana Universal - Armador (tipo 58)
     JSON.stringify(ventana.value.configuracionArmador),
   ],
-  recalcularCostos,
+  () => {
+    calculando.value = true
+    precioActualizado.value = false
+    clearTimeout(debounceCalculo)
+    debounceCalculo = setTimeout(recalcularCostos, 350)
+  },
   { immediate: true }
 )
 

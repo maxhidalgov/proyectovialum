@@ -69,6 +69,12 @@ const allMenuItems = [
     icon: { icon: 'mdi-calculator' },
     permission: 'gestionar_cotizaciones',
   },
+  // {
+  //   title: 'Agente IA',
+  //   to: { name: 'agente' },
+  //   icon: { icon: 'tabler-robot' },
+  //   permission: 'gestionar_cotizaciones',
+  // },
   {
     title: 'Clientes',
     to: { name: 'clientes' },
