@@ -36,10 +36,12 @@ class ListaPrecioController extends Controller
                 $query->where('producto_id', $request->producto_id);
             }
 
-            if ($request->has('search')) {
-                $search = $request->search;
-                $query->whereHas('producto', function($q) use ($search) {
-                    $q->where('nombre', 'LIKE', "%{$search}%");
+            if ($request->has('search') && $request->search !== '') {
+                $palabras = array_filter(explode(' ', trim($request->search)));
+                $query->whereHas('producto', function($q) use ($palabras) {
+                    foreach ($palabras as $palabra) {
+                        $q->where('nombre', 'LIKE', "%{$palabra}%");
+                    }
                 });
             }
 
@@ -258,7 +260,7 @@ class ListaPrecioController extends Controller
 
             foreach ($productosColorProveedor as $pcp) {
                 $precioCosto = floatval($pcp->costo);
-                $precioVenta = $precioCosto * (1 + $margenDefault / 100);
+                $precioVenta = $margenDefault < 100 ? $precioCosto / (1 - $margenDefault / 100) : 0;
 
                 $listaPrecio = ListaPrecio::updateOrCreate(
                     [
