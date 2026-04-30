@@ -121,6 +121,12 @@
           </span>
         </template>
 
+        <template #item.precio_venta_iva="{ item }">
+          <span class="font-weight-bold text-warning">
+            ${{ formatearNumero(item.precio_venta * 1.19) }}
+          </span>
+        </template>
+
         <template #item.activo="{ item }">
           <v-chip
             :color="item.activo ? 'success' : 'error'"
@@ -289,6 +295,7 @@ const headers = [
   { title: 'Precio Costo (Neto)', key: 'precio_costo', sortable: true, align: 'end' },
   { title: 'Margen', key: 'margen', sortable: true, align: 'center' },
   { title: 'Precio Venta (Neto)', key: 'precio_venta', sortable: true, align: 'end' },
+  { title: 'Precio Venta (c/IVA)', key: 'precio_venta_iva', sortable: false, align: 'end' },
   { title: 'Estado', key: 'activo', sortable: true, align: 'center' },
   { title: 'Vigencia', key: 'vigencia', sortable: false },
   { title: 'Acciones', key: 'acciones', sortable: false, align: 'center' }

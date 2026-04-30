@@ -192,9 +192,9 @@
                 <!-- Fila 2: precios resultantes -->
                 <v-row dense>
                   <v-col cols="6" sm="3">
-                    <div class="rounded-lg pa-2 bg-surface-variant text-center">
+                    <div class="rounded-lg pa-2 text-center" style="background: rgba(var(--v-theme-info), 0.1)">
                       <div class="text-caption text-medium-emphasis mb-1">P. Costo/m²</div>
-                      <div class="text-body-2 font-weight-bold">${{ formatearNumero(item.precio_costo_calculado || item.precio_costo) }}</div>
+                      <div class="text-body-2 font-weight-bold text-info">${{ formatearNumero(item.precio_costo_calculado || item.precio_costo) }}</div>
                     </div>
                   </v-col>
                   <v-col cols="6" sm="3">
@@ -222,15 +222,15 @@
                     />
                   </v-col>
                   <v-col cols="6" sm="2">
-                    <div class="rounded-lg pa-2 bg-surface-variant text-center">
+                    <div class="rounded-lg pa-2 text-center" style="background: rgba(var(--v-theme-info), 0.1)">
                       <div class="text-caption text-medium-emphasis mb-1">Margen</div>
-                      <div class="text-body-2 font-weight-bold">{{ item.margen }}%</div>
+                      <div class="text-body-2 font-weight-bold text-info">{{ item.margen }}%</div>
                     </div>
                   </v-col>
                   <v-col cols="6" sm="3">
                     <div class="rounded-lg pa-2 text-center" style="background: rgba(var(--v-theme-success), 0.1)">
                       <div class="text-caption text-medium-emphasis mb-1">P. Venta</div>
-                      <div class="text-body-1 font-weight-bold text-success">${{ formatearNumero(item.precio_venta) }}</div>
+                      <div class="text-body-1 font-weight-bold text-success">${{ formatearNumero(item.precio_venta * item.cantidad) }}</div>
                     </div>
                   </v-col>
                 </v-row>
@@ -340,7 +340,9 @@ const productosFiltrados = computed(() => {
 
 const totalSeleccionados = computed(() => {
   return productosSeleccionados.value.reduce((sum, item) => {
-    const precio = item.esVidrio ? (item.precio_venta_total || 0) : (item.precio_venta || 0)
+    const precio = item.esVidrio
+      ? (item.precio_venta_total || 0)
+      : (item.precio_venta || 0) * (item.cantidad || 1)
     return sum + precio
   }, 0)
 })
@@ -450,18 +452,9 @@ const eliminarProductoSeleccionado = (index) => {
 
 const calcularPrecio = (item) => {
   const costo = parseFloat(item.precio_costo) || 0
-  const cantidad = parseFloat(item.cantidad) || 1
   const margen = parseFloat(item.margen) || 0
-  
-  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
-  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
-  if (margen >= 100) {
-    item.precio_venta = 0
-    return
-  }
-  
-  const precioUnitario = costo / (1 - margen / 100)
-  item.precio_venta = precioUnitario * cantidad
+  if (margen >= 100) { item.precio_venta = 0; return }
+  item.precio_venta = costo / (1 - margen / 100)
 }
 
 // Función para calcular m² desde dimensiones en mm

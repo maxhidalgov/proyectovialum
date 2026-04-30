@@ -1866,8 +1866,8 @@ const guardarCotizacion = async () => {
         lista_precio_id: p.lista_precio_id,
         descripcion: p.descripcion || p.nombre || '',
         cantidad: p.cantidad,
-        precio_unitario: p.precio_venta / p.cantidad, // Precio unitario
-        total: p.total || (p.precio_venta * p.cantidad),
+        precio_unitario: p.precio_venta,
+        total: p.precio_venta * p.cantidad,
         // Campos adicionales para vidrios
         esVidrio: p.esVidrio || false,
         ancho_mm: p.ancho_mm || null,

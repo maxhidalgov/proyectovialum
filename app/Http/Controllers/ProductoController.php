@@ -17,8 +17,9 @@ class ProductoController extends Controller
                 'coloresPorProveedor.color',
                 'unidad',
                 'tipoProducto',
-                'listaPrecios.productoColorProveedor.color', // ✅ Cargar relación anidada
-                'listaPrecios.productoColorProveedor.proveedor' // ✅ Cargar relación anidada
+                'listaPrecios.color',
+                'listaPrecios.productoColorProveedor.color',
+                'listaPrecios.productoColorProveedor.proveedor'
             ])->get();
 
             return response()->json($productos);
