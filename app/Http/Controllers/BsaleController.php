@@ -145,7 +145,7 @@ class BsaleController extends Controller
                 'id' => $cotizacion->id,
                 'ventanas_count' => $cotizacion->ventanas->count(),
                 'cliente_cotizacion' => $cotizacion->cliente->razon_social ?? 'Sin cliente',
-                'cliente_facturacion' => $clienteFacturacion->razon_social
+                'cliente_facturacion' => $clienteFacturacion->razon_social ?? 'Consumidor Final',
             ]);
 
             if ($cotizacion->estado_cotizacion_id != 2) { // 2 = Aprobada

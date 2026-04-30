@@ -82,29 +82,47 @@
             <v-col cols="12" md="4">
               <v-text-field
                 v-model.number="formulario.margen"
-                label="Margen % *"
+                label="Margen %"
                 type="number"
                 suffix="%"
                 variant="outlined"
                 density="compact"
+                hint="Edita margen o precio bruto"
+                persistent-hint
                 :rules="[
                   v => v !== null && v !== undefined && v !== '' || 'El margen es requerido',
                   v => v >= 0 || 'Debe ser mayor o igual a 0',
-                  v => v <= 100 || 'No puede ser mayor a 100'
+                  v => v < 100 || 'No puede ser 100% o más'
                 ]"
+                @update:model-value="onMargenChange"
               />
             </v-col>
 
-            <!-- Precio Venta (calculado) -->
+            <!-- Precio Venta Neto (calculado) -->
             <v-col cols="12" md="4">
               <v-text-field
-                :model-value="precioVentaCalculado"
+                :model-value="precioVentaNetoDisplay"
                 label="Precio Venta (Neto)"
                 prefix="$"
                 variant="outlined"
                 density="compact"
                 readonly
                 bg-color="grey-lighten-4"
+              />
+            </v-col>
+
+            <!-- Precio Venta Bruto (editable → recalcula margen) -->
+            <v-col cols="12" md="4">
+              <v-text-field
+                v-model.number="precioBrutoInput"
+                label="Precio Venta (c/IVA)"
+                type="number"
+                prefix="$"
+                variant="outlined"
+                density="compact"
+                hint="Escribe el precio final con IVA"
+                persistent-hint
+                @update:model-value="onPrecioBrutoChange"
               />
             </v-col>
 
@@ -167,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import api from '@/axiosInstance'
 
 // Props
@@ -213,19 +231,41 @@ const dialogVisible = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
-const precioVentaCalculado = computed(() => {
+const precioBrutoInput = ref(0)
+let actualizandoDesdeMargen = false
+let actualizandoDesdeBruto = false
+
+const calcularNeto = () => {
   const costo = parseFloat(formulario.value.precio_costo) || 0
   const margen = parseFloat(formulario.value.margen) || 0
-  
-  // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
-  // Despejando: PrecioVenta = Costo / (1 - Margen/100)
-  if (margen >= 100) {
-    return formatearNumero(0) // Evitar división por cero
-  }
-  
-  const venta = costo / (1 - margen / 100)
-  return formatearNumero(venta)
+  if (margen >= 100 || !costo) return 0
+  return costo / (1 - margen / 100)
+}
+
+const precioVentaNetoDisplay = computed(() => {
+  return formatearNumero(calcularNeto())
 })
+
+const onMargenChange = () => {
+  if (actualizandoDesdeBruto) return
+  actualizandoDesdeMargen = true
+  const neto = calcularNeto()
+  precioBrutoInput.value = Math.round(neto * 1.19)
+  nextTick(() => { actualizandoDesdeMargen = false })
+}
+
+const onPrecioBrutoChange = () => {
+  if (actualizandoDesdeMargen) return
+  actualizandoDesdeBruto = true
+  const bruto = parseFloat(precioBrutoInput.value) || 0
+  const costo = parseFloat(formulario.value.precio_costo) || 0
+  if (bruto > 0 && costo > 0) {
+    const neto = bruto / 1.19
+    const margen = (1 - costo / neto) * 100
+    formulario.value.margen = Math.round(margen * 100) / 100
+  }
+  nextTick(() => { actualizandoDesdeBruto = false })
+}
 
 // Watchers
 watch(() => props.modelValue, async (newVal) => {
@@ -253,9 +293,13 @@ watch(() => props.modelValue, async (newVal) => {
       if (props.precio.proveedor_sugerido) {
         proveedorHint.value = `Proveedor: ${props.precio.proveedor_sugerido.nombre}`
       }
+      // Inicializar precio bruto desde precio_venta guardado
+      const neto = parseFloat(props.precio.precio_venta) || 0
+      precioBrutoInput.value = Math.round(neto * 1.19)
     } else {
       // Modo nuevo
       resetFormulario()
+      precioBrutoInput.value = 0
     }
   }
 })
@@ -385,6 +429,7 @@ const resetFormulario = () => {
     vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     activo: true
   }
+  precioBrutoInput.value = 0
   coloresDisponibles.value = []
   proveedorHint.value = ''
 }
