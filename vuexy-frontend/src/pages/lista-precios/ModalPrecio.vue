@@ -94,7 +94,6 @@
                   v => v >= 0 || 'Debe ser mayor o igual a 0',
                   v => v < 100 || 'No puede ser 100% o más'
                 ]"
-                @update:model-value="onMargenChange"
               />
             </v-col>
 
@@ -185,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import api from '@/axiosInstance'
 
 // Props
@@ -232,8 +231,7 @@ const dialogVisible = computed({
 })
 
 const precioBrutoInput = ref(0)
-let actualizandoDesdeMargen = false
-let actualizandoDesdeBruto = false
+let ignorarWatchMargen = 0
 
 const calcularNeto = () => {
   const costo = parseFloat(formulario.value.precio_costo) || 0
@@ -246,25 +244,22 @@ const precioVentaNetoDisplay = computed(() => {
   return formatearNumero(calcularNeto())
 })
 
-const onMargenChange = () => {
-  if (actualizandoDesdeBruto) return
-  actualizandoDesdeMargen = true
-  const neto = calcularNeto()
-  precioBrutoInput.value = Math.round(neto * 1.19)
-  nextTick(() => { actualizandoDesdeMargen = false })
-}
+// Cuando el usuario cambia el margen → actualiza el precio bruto
+watch(() => formulario.value.margen, () => {
+  if (ignorarWatchMargen > 0) { ignorarWatchMargen--; return }
+  precioBrutoInput.value = Math.round(calcularNeto() * 1.19)
+})
 
+// Cuando el usuario tipea el precio bruto → back-calcula el margen
 const onPrecioBrutoChange = () => {
-  if (actualizandoDesdeMargen) return
-  actualizandoDesdeBruto = true
   const bruto = parseFloat(precioBrutoInput.value) || 0
   const costo = parseFloat(formulario.value.precio_costo) || 0
   if (bruto > 0 && costo > 0) {
+    ignorarWatchMargen++  // evitar que el watch sobreescriba lo que el usuario escribió
     const neto = bruto / 1.19
     const margen = (1 - costo / neto) * 100
-    formulario.value.margen = Math.round(margen * 100) / 100
+    formulario.value.margen = Math.round(margen * 10000) / 10000
   }
-  nextTick(() => { actualizandoDesdeBruto = false })
 }
 
 // Watchers

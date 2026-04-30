@@ -133,19 +133,10 @@ class BsaleController extends Controller
             Log::info("🧾 Creando documento BSALE", [
                 'cotizacion_id' => $cotizacionId,
                 'tipo_documento' => $tipoDocumento,
-                'tipo_documento_nombre' => $tipoDocumento == 1 ? 'Boleta' : ($tipoDocumento == 5 ? 'Factura' : 'Otro'),
-                'cliente_cotizacion' => $cotizacion->cliente->razon_social ?? 'Sin cliente',
-                'cliente_facturacion' => $clienteFacturacion ? $clienteFacturacion->razon_social : 'Consumidor Final',
+                'cliente_cotizacion' => $cotizacion->cliente?->razon_social ?? 'Sin cliente',
+                'cliente_facturacion' => $clienteFacturacion?->razon_social ?? 'Consumidor Final',
                 'cliente_bsale_id' => $clienteBsaleId,
                 'metodo_pago' => $metodoPago,
-                'condiciones_pago' => $condicionesPago
-            ]);
-
-            Log::info("🔍 Cotización encontrada", [
-                'id' => $cotizacion->id,
-                'ventanas_count' => $cotizacion->ventanas->count(),
-                'cliente_cotizacion' => $cotizacion->cliente->razon_social ?? 'Sin cliente',
-                'cliente_facturacion' => $clienteFacturacion->razon_social ?? 'Consumidor Final',
             ]);
 
             if ($cotizacion->estado_cotizacion_id != 2) { // 2 = Aprobada
