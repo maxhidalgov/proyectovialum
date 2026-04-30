@@ -87,7 +87,7 @@
                 suffix="%"
                 variant="outlined"
                 density="compact"
-                hint="Edita margen o precio bruto"
+                :hint="brutoEstimadoHint"
                 persistent-hint
                 :rules="[
                   v => v !== null && v !== undefined && v !== '' || 'El margen es requerido',
@@ -231,7 +231,6 @@ const dialogVisible = computed({
 })
 
 const precioBrutoInput = ref(0)
-let ignorarWatchMargen = 0
 
 const calcularNeto = () => {
   const costo = parseFloat(formulario.value.precio_costo) || 0
@@ -240,22 +239,21 @@ const calcularNeto = () => {
   return costo / (1 - margen / 100)
 }
 
-const precioVentaNetoDisplay = computed(() => {
-  return formatearNumero(calcularNeto())
+const precioVentaNetoDisplay = computed(() => formatearNumero(calcularNeto()))
+
+// Hint dinámico bajo el campo Margen: muestra el bruto estimado al cambiar el %
+const brutoEstimadoHint = computed(() => {
+  const neto = calcularNeto()
+  if (!neto) return 'Edita margen o precio bruto'
+  return `≈ $${formatearNumero(Math.round(neto * 1.19))} c/IVA`
 })
 
-// Cuando el usuario cambia el margen → actualiza el precio bruto
-watch(() => formulario.value.margen, () => {
-  if (ignorarWatchMargen > 0) { ignorarWatchMargen--; return }
-  precioBrutoInput.value = Math.round(calcularNeto() * 1.19)
-})
-
-// Cuando el usuario tipea el precio bruto → back-calcula el margen
+// Cuando el usuario tipea el precio bruto → back-calcula el margen exacto
+// precioBrutoInput NO se sobreescribe automáticamente (evita pérdida de precisión 5500→5499)
 const onPrecioBrutoChange = () => {
   const bruto = parseFloat(precioBrutoInput.value) || 0
   const costo = parseFloat(formulario.value.precio_costo) || 0
   if (bruto > 0 && costo > 0) {
-    ignorarWatchMargen++  // evitar que el watch sobreescriba lo que el usuario escribió
     const neto = bruto / 1.19
     const margen = (1 - costo / neto) * 100
     formulario.value.margen = Math.round(margen * 10000) / 10000
