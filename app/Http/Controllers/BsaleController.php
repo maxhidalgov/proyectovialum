@@ -189,6 +189,14 @@ class BsaleController extends Controller
                     'fecha_emision'          => now()->toDateString(),
                 ]);
 
+                // Registrar abono automático en Operaciones
+                \App\Models\Abono::create([
+                    'cotizacion_id' => $cotizacion->id,
+                    'monto'         => $monto,
+                    'fecha'         => now()->toDateString(),
+                    'nota'          => 'Doc #' . ($response['data']['number'] ?? $docFact->id) . ' — ' . ucfirst($tipoEmision) . ' vía Bsale',
+                ]);
+
                 // Calcular total emitido para decidir si cambiar estado
                 $totalEmitido = \App\Models\DocumentoFacturacion::where('cotizacion_id', $cotizacion->id)
                     ->where('estado', 'emitido')

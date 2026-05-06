@@ -94,6 +94,7 @@
                   v => v >= 0 || 'Debe ser mayor o igual a 0',
                   v => v < 100 || 'No puede ser 100% o más'
                 ]"
+                @update:model-value="onMargenChange"
               />
             </v-col>
 
@@ -219,6 +220,7 @@ const formulario = ref({
   color_id: null,
   precio_costo: 0,
   margen: 45,
+  precio_venta: null, // neto exacto cuando viene del campo bruto; null = backend calcula desde margen
   vigencia_desde: new Date().toISOString().split('T')[0],
   vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   activo: true
@@ -233,6 +235,8 @@ const dialogVisible = computed({
 const precioBrutoInput = ref(0)
 
 const calcularNeto = () => {
+  // Si hay precio_venta directo (seteado desde bruto), usarlo
+  if (formulario.value.precio_venta) return parseFloat(formulario.value.precio_venta)
   const costo = parseFloat(formulario.value.precio_costo) || 0
   const margen = parseFloat(formulario.value.margen) || 0
   if (margen >= 100 || !costo) return 0
@@ -241,23 +245,30 @@ const calcularNeto = () => {
 
 const precioVentaNetoDisplay = computed(() => formatearNumero(calcularNeto()))
 
-// Hint dinámico bajo el campo Margen: muestra el bruto estimado al cambiar el %
 const brutoEstimadoHint = computed(() => {
   const neto = calcularNeto()
   if (!neto) return 'Edita margen o precio bruto'
   return `≈ $${formatearNumero(Math.round(neto * 1.19))} c/IVA`
 })
 
-// Cuando el usuario tipea el precio bruto → back-calcula el margen exacto
-// precioBrutoInput NO se sobreescribe automáticamente (evita pérdida de precisión 5500→5499)
+// Cuando el usuario tipea el precio bruto → guardar el neto exacto en precio_venta
+// El backend lo usará directamente, sin pasar por margen (evita pérdida de precisión)
 const onPrecioBrutoChange = () => {
   const bruto = parseFloat(precioBrutoInput.value) || 0
   const costo = parseFloat(formulario.value.precio_costo) || 0
   if (bruto > 0 && costo > 0) {
     const neto = bruto / 1.19
-    const margen = (1 - costo / neto) * 100
-    formulario.value.margen = Math.round(margen * 10000) / 10000
+    formulario.value.precio_venta = neto // exacto, sin redondear
+    formulario.value.margen = Math.round((1 - costo / neto) * 100 * 10000) / 10000
+  } else {
+    formulario.value.precio_venta = null
   }
+}
+
+// Al cambiar margen manualmente → limpiar precio_venta para que el backend lo calcule desde margen
+const onMargenChange = () => {
+  formulario.value.precio_venta = null
+  precioBrutoInput.value = 0
 }
 
 // Watchers
@@ -418,6 +429,7 @@ const resetFormulario = () => {
     color_id: null,
     precio_costo: 0,
     margen: 45,
+    precio_venta: null,
     vigencia_desde: new Date().toISOString().split('T')[0],
     vigencia_hasta: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     activo: true

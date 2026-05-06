@@ -96,6 +96,56 @@
           </v-col>
         </v-row>
 
+        <!-- Controles adicionales según tipo de ventana -->
+        <v-row v-if="[3, 46, 52, 55].includes(ventanaLocal.tipo)" dense class="mb-1">
+          <!-- Hojas totales (no aplica para AL25 que siempre es 2) -->
+          <v-col v-if="[3, 46, 52].includes(ventanaLocal.tipo)" cols="6" sm="3">
+            <v-select
+              v-model="ventanaLocal.hojas_totales"
+              :items="[2, 3, 4, 6]"
+              label="Hojas totales"
+              variant="outlined"
+              density="compact"
+              color="primary"
+              @update:model-value="recalcularCostos"
+            />
+          </v-col>
+          <!-- Hojas que corren -->
+          <v-col cols="6" sm="3">
+            <v-select
+              v-model="ventanaLocal.hojas_moviles"
+              :items="ventanaLocal.tipo === 55 ? [1, 2] : [1, 2, 3, 4]"
+              label="Hojas que corren"
+              variant="outlined"
+              density="compact"
+              color="primary"
+              @update:model-value="recalcularCostos"
+            />
+          </v-col>
+          <!-- Hoja 1 al frente (no aplica AL25) -->
+          <v-col v-if="[3, 46, 52].includes(ventanaLocal.tipo)" cols="6" sm="3" class="d-flex align-center">
+            <v-switch
+              v-model="ventanaLocal.hoja1AlFrente"
+              label="Hoja 1 adelante"
+              color="primary"
+              density="compact"
+              hide-details
+              @update:model-value="recalcularCostos"
+            />
+          </v-col>
+          <!-- Manillón (AL25 y Corredera 98) -->
+          <v-col v-if="[52, 55].includes(ventanaLocal.tipo)" cols="6" sm="3" class="d-flex align-center">
+            <v-switch
+              v-model="ventanaLocal.manillon"
+              label="Manillón"
+              color="primary"
+              density="compact"
+              hide-details
+              @update:model-value="recalcularCostos"
+            />
+          </v-col>
+        </v-row>
+
         <!-- Vista previa -->
         <v-row>
           <v-col cols="12">
@@ -485,6 +535,7 @@ async function recalcularCostos() {
       hojas_moviles: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojas_moviles : undefined,
       hojaMovilSeleccionada: [3, 46, 52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hojaMovilSeleccionada : undefined,
       hoja1AlFrente: [3, 46, 52].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.hoja1AlFrente : undefined,
+      manillon: [52, 55].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.manillon : undefined,
       direccionApertura: ventanaLocal.value.direccionApertura,
       ladoApertura: ventanaLocal.value.ladoApertura,
       pasoLibre: [50, 51].includes(ventanaLocal.value.tipo) ? ventanaLocal.value.pasoLibre : undefined,

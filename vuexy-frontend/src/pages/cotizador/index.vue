@@ -268,6 +268,62 @@
 
       <v-divider class="my-4" />
 
+      <!-- Ajuste de precio prorateado -->
+      <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0" class="mb-2" justify="end">
+        <v-col cols="12" md="5">
+          <v-card variant="outlined" color="warning" rounded="lg">
+            <v-card-text class="pa-3">
+              <div class="d-flex align-center gap-1 mb-3">
+                <v-icon size="small" color="warning">mdi-tune-variant</v-icon>
+                <span class="text-caption font-weight-bold text-warning">Ajuste de precio prorateado</span>
+              </div>
+              <v-btn-toggle v-model="ajuste.modo" density="compact" variant="tonal" color="warning" mandatory class="mb-3 w-100">
+                <v-btn value="total" size="small" class="flex-grow-1">
+                  <v-icon start size="small">mdi-currency-usd</v-icon>
+                  Total final
+                </v-btn>
+                <v-btn value="porcentaje" size="small" class="flex-grow-1">
+                  <v-icon start size="small">mdi-percent</v-icon>
+                  % Ajuste
+                </v-btn>
+              </v-btn-toggle>
+              <v-text-field
+                v-model.number="ajuste.valor"
+                :label="ajuste.modo === 'total' ? 'Total neto deseado' : 'Ajuste (negativo = descuento)'"
+                :prefix="ajuste.modo === 'total' ? '$' : ''"
+                :suffix="ajuste.modo === 'porcentaje' ? '%' : ''"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+                color="warning"
+              />
+              <div v-if="tieneAjuste" class="mt-2 d-flex justify-space-between align-center gap-2">
+                <v-chip
+                  :color="factorAjuste >= 1 ? 'success' : 'error'"
+                  size="small"
+                  variant="tonal"
+                  class="flex-shrink-0"
+                >
+                  {{ factorAjuste >= 1 ? '+' : '' }}${{ formatearNumero(totalNetoAjustado - totalNeto) }} →
+                  ${{ formatearNumero(totalNetoAjustado) }}
+                </v-chip>
+                <v-btn
+                  color="warning"
+                  variant="tonal"
+                  size="small"
+                  prepend-icon="mdi-refresh"
+                  @click="aplicarAjusteAItems"
+                >
+                  Aplicar
+                </v-btn>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+
       <!-- Total en tiempo real -->
       <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0" class="mb-2" justify="end">
         <v-col cols="auto">
@@ -1002,6 +1058,9 @@ const cargarCotizacionExistente = async () => {
           precio_unitario: v.precio_unitario || 0,
           hojas_totales: v.hojas_totales,
           hojas_moviles: v.hojas_moviles,
+          hojaMovilSeleccionada: v.hoja_movil_seleccionada ?? null,
+          hoja1AlFrente: v.hoja1_al_frente ?? true,
+          manillon: v.config?.manillon ?? null,
           materiales: v.materiales || [],
           // Para ventanas compuestas
           tipoVentanaIzquierda: v.tipo_ventana_izquierda,
@@ -1241,6 +1300,30 @@ const totalProductos = computed(() =>
 const totalNeto = computed(() => totalVentanas.value + totalProductos.value)
 const totalIva = computed(() => Math.round(totalNeto.value * 0.19))
 const totalConIva = computed(() => totalNeto.value + totalIva.value)
+
+// ── Ajuste de precio prorateado ──────────────────────────────────────
+const ajuste = ref({ modo: 'total', valor: null }) // modo: 'total' | 'porcentaje'
+
+const factorAjuste = computed(() => {
+  const v = parseFloat(ajuste.value.valor)
+  if (!v || !totalNeto.value) return 1
+  if (ajuste.value.modo === 'total') return v / totalNeto.value
+  return 1 + v / 100
+})
+
+const totalNetoAjustado = computed(() => Math.round(totalNeto.value * factorAjuste.value))
+const totalIvaAjustado  = computed(() => Math.round(totalNetoAjustado.value * 0.19))
+const totalConIvaAjustado = computed(() => totalNetoAjustado.value + totalIvaAjustado.value)
+const tieneAjuste = computed(() => Math.abs(factorAjuste.value - 1) > 0.0001)
+
+// Aplica el factor a los ítems antes de guardar (modifica los precios in-place)
+const aplicarAjusteAItems = () => {
+  if (!tieneAjuste.value) return
+  const f = factorAjuste.value
+  cotizacion.ventanas.forEach(v => { v.precio = Math.round(Number(v.precio) * f) })
+  cotizacion.productos.forEach(p => { p.precio_venta = Math.round(Number(p.precio_venta) * f) })
+  ajuste.value.valor = null // resetear tras aplicar
+}
 
 const eliminarVentana = (index) => {
   cotizacion.ventanas.splice(index, 1)
@@ -1786,6 +1869,7 @@ const exportarImagenesVentanas = async () => {
 
 const guardarCotizacion = async () => {
   loading.value = true
+  aplicarAjusteAItems() // proratea el ajuste antes de guardar
   try {
     const imagenes = await exportarImagenesVentanas()
         // ✅ AGREGAR ESTOS LOGS

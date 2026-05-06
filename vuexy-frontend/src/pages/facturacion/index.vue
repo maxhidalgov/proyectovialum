@@ -193,18 +193,20 @@
                         — {{ item.cliente_facturacion?.identification }}
                       </span>
                     </div>
-                    <p class="text-caption font-weight-medium mb-2">Items ({{ item.ventanas?.length || 0 }})</p>
+                    <p class="text-caption font-weight-medium mb-2">
+                      Items ({{ (item.ventanas?.length || 0) + (item.detalles?.length || 0) }})
+                    </p>
                     <v-table density="compact">
                       <thead>
                         <tr>
                           <th>Descripción</th>
                           <th>Cant.</th>
-                          <th class="text-right">P. Unit.</th>
-                          <th class="text-right">Total</th>
+                          <th class="text-right">P. Unit. (neto)</th>
+                          <th class="text-right">Total (neto)</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="v in item.ventanas" :key="v.id">
+                        <tr v-for="v in item.ventanas" :key="`v-${v.id}`">
                           <td>
                             <span class="text-body-2">{{ v.tipo_ventana?.nombre || 'Ventana' }}</span>
                             <span class="text-caption text-medium-emphasis ml-1">{{ v.ancho }}×{{ v.alto }}mm</span>
@@ -213,12 +215,21 @@
                           <td class="text-right">{{ clp(v.precio_unitario) }}</td>
                           <td class="text-right font-weight-medium">{{ clp(v.precio_unitario * v.cantidad) }}</td>
                         </tr>
+                        <tr v-for="d in item.detalles" :key="`d-${d.id}`">
+                          <td>
+                            <span class="text-body-2">{{ d.descripcion || d.lista_precio?.producto?.nombre || 'Producto' }}</span>
+                            <span v-if="d.lista_precio?.color" class="text-caption text-medium-emphasis ml-1">— {{ d.lista_precio.color.nombre }}</span>
+                          </td>
+                          <td>{{ d.cantidad }}</td>
+                          <td class="text-right">{{ clp(d.precio_unitario) }}</td>
+                          <td class="text-right font-weight-medium">{{ clp(d.total) }}</td>
+                        </tr>
                       </tbody>
                     </v-table>
                     <div class="d-flex justify-end mt-2">
                       <div style="min-width:180px">
                         <div class="d-flex justify-space-between font-weight-bold py-1">
-                          <span>Total</span><span class="text-success">{{ clp(item.total) }}</span>
+                          <span>Total Neto</span><span class="text-success">{{ clp(item.total) }}</span>
                         </div>
                       </div>
                     </div>
@@ -341,7 +352,7 @@ const filtros = ref({ busqueda: '', estado: null, cliente: null })
 const headers = [
   { title: '#',        key: 'id',                 sortable: true,  width: '80px' },
   { title: 'Cliente',  key: 'cliente',            sortable: false },
-  { title: 'Total',    key: 'total',              sortable: true },
+  { title: 'Total Neto', key: 'total',            sortable: true },
   { title: 'Estado',   key: 'estado_facturacion', sortable: true },
   { title: 'Fecha',    key: 'fecha',              sortable: true },
   { title: 'Cobrado',  key: 'cobrado',            sortable: false, width: '120px' },
@@ -437,21 +448,9 @@ async function eliminarCotizacion(item) {
   }
 }
 
-async function onDocumentoGenerado(data) {
+async function onDocumentoGenerado() {
   mostrarSnack('Documento generado correctamente')
-  // Actualizar solo la fila afectada con los nuevos documentos
-  if (data?.cotizacion) {
-    const idx = cotizacionesAprobadas.value.findIndex(c => c.id === data.cotizacion.id)
-    if (idx !== -1) {
-      cotizacionesAprobadas.value[idx].documentos_facturacion = data.cotizacion.documentos_facturacion
-      cotizacionesAprobadas.value[idx].estado_cotizacion_id   = data.cotizacion.estado_cotizacion_id
-      // Recalcular estado_facturacion localmente
-      const estadoId = data.cotizacion.estado_cotizacion_id
-      if (estadoId === 6) cotizacionesAprobadas.value[idx].estado_facturacion = 'facturada'
-    }
-  } else {
-    await cargarCotizaciones()
-  }
+  await cargarCotizaciones()
 }
 
 function limpiarFiltros() {
@@ -463,8 +462,6 @@ const clp = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency:
 
 const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-CL') : '-'
 
-const calcularSubtotal = (item) =>
-  item.ventanas?.reduce((s, v) => s + Number(v.precio_unitario) * Number(v.cantidad), 0) || 0
 
 const colorEstado = (e) => ({ aprobada: 'warning', facturada: 'info', pagada: 'success' }[e] || 'grey')
 const textoEstado = (e) => ({ aprobada: 'Por facturar', facturada: 'Facturada', pagada: 'Pagada' }[e] || e)

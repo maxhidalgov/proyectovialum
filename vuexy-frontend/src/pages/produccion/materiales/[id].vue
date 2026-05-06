@@ -23,6 +23,15 @@
         >
           Actualizar
         </v-btn>
+        <v-btn
+          prepend-icon="mdi-microsoft-excel"
+          variant="tonal"
+          color="success"
+          :disabled="!data || data.materiales.length === 0"
+          @click="descargarExcel"
+        >
+          Descargar Excel
+        </v-btn>
         <v-btn prepend-icon="mdi-printer" variant="outlined" @click="imprimir">
           Imprimir
         </v-btn>
@@ -281,6 +290,76 @@ onMounted(fetchData)
 watch(() => route.params.id, fetchData)
 
 function imprimir() { window.print() }
+
+function descargarExcel() {
+  const cot = data.value?.cotizacion
+  const filas = []
+
+  const csvFila = (cols) => cols.map(c => {
+    const s = String(c ?? '').replace(/"/g, '""')
+    return s.includes(',') || s.includes('\n') ? `"${s}"` : s
+  }).join(',')
+
+  // Encabezado info
+  filas.push(csvFila(['Cotización', `#${cot?.id}`, cot?.cliente, cot?.fecha]))
+  filas.push('')
+
+  // Perfiles
+  if (perfiles.value.length) {
+    filas.push(csvFila(['PERFILES / BARRAS']))
+    filas.push(csvFila(['Perfil', 'Color', 'Proveedor', 'Largo barra (m)', 'Metros necesarios', 'Barras a pedir', 'Costo estimado']))
+    perfiles.value.forEach(m => filas.push(csvFila([
+      m.nombre, m.color || '', m.proveedor || '',
+      m.largo_total_m ? m.largo_total_m.toFixed(2) : '',
+      m.cantidad.toFixed(2),
+      m.barras,
+      m.costo_total
+    ])))
+    filas.push(csvFila(['', '', '', '', 'TOTAL barras', perfiles.value.reduce((s, m) => s + (m.barras || 0), 0), perfiles.value.reduce((s, m) => s + m.costo_total, 0)]))
+    filas.push('')
+  }
+
+  // Herrajes
+  if (herrajes.value.length) {
+    filas.push(csvFila(['HERRAJES']))
+    filas.push(csvFila(['Herraje', 'Proveedor', 'Cantidad', 'Unidad', 'Costo estimado']))
+    herrajes.value.forEach(m => filas.push(csvFila([
+      m.nombre, m.proveedor || '',
+      m.unidad === 'm' ? m.cantidad.toFixed(2) : m.unidad === 'm2' ? m.cantidad.toFixed(3) : Math.ceil(m.cantidad),
+      m.unidad,
+      m.costo_total
+    ])))
+    filas.push(csvFila(['', '', 'TOTAL', '', herrajes.value.reduce((s, m) => s + m.costo_total, 0)]))
+    filas.push('')
+  }
+
+  // Vidrios
+  if (vidrios.value.length) {
+    filas.push(csvFila(['VIDRIOS']))
+    filas.push(csvFila(['Vidrio', 'Proveedor', 'M²', 'Costo estimado']))
+    vidrios.value.forEach(m => filas.push(csvFila([
+      m.nombre, m.proveedor || '',
+      m.cantidad.toFixed(3),
+      m.costo_total
+    ])))
+    filas.push(csvFila(['', 'TOTAL m²', vidrios.value.reduce((s, m) => s + m.cantidad, 0).toFixed(3), vidrios.value.reduce((s, m) => s + m.costo_total, 0)]))
+    filas.push('')
+  }
+
+  // Costo total
+  filas.push(csvFila(['COSTO TOTAL ESTIMADO', '', '', costoTotal.value]))
+
+  const csv = '﻿' + filas.join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `materiales_cotizacion_${cot?.id}_${new Date().toISOString().split('T')[0]}.csv`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <style scoped>

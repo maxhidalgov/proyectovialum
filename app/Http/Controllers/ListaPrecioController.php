@@ -84,14 +84,19 @@ class ListaPrecioController extends Controller
 
             $precioCosto = $costoData['costo_maximo'];
             $margen = floatval($request->margen);
-            
-            // Fórmula: Margen = (PrecioVenta - Costo) / PrecioVenta
-            // Despejando: PrecioVenta = Costo / (1 - Margen/100)
+
             if ($margen >= 100) {
                 return response()->json(['error' => 'El margen no puede ser 100% o mayor'], 422);
             }
-            
-            $precioVenta = $precioCosto / (1 - $margen / 100);
+
+            // Si el frontend envió precio_venta directo (calculado desde precio bruto),
+            // usarlo exactamente para evitar pérdida de precisión al round-trip por margen.
+            if ($request->filled('precio_venta') && floatval($request->precio_venta) > 0) {
+                $precioVenta = floatval($request->precio_venta);
+                $margen = $precioCosto > 0 ? (1 - $precioCosto / $precioVenta) * 100 : $margen;
+            } else {
+                $precioVenta = $precioCosto / (1 - $margen / 100);
+            }
 
             $listaPrecio = ListaPrecio::create([
                 'producto_id' => $request->producto_id,
@@ -192,12 +197,19 @@ class ListaPrecioController extends Controller
                 $listaPrecio->margen = floatval($request->margen);
             }
 
-            // Recalcular precio venta con nueva fórmula
             if ($listaPrecio->margen >= 100) {
                 return response()->json(['error' => 'El margen no puede ser 100% o mayor'], 422);
             }
-            
-            $listaPrecio->precio_venta = $listaPrecio->precio_costo / (1 - $listaPrecio->margen / 100);
+
+            // Si el frontend envió precio_venta directo (desde precio bruto), usarlo exactamente.
+            if ($request->filled('precio_venta') && floatval($request->precio_venta) > 0) {
+                $listaPrecio->precio_venta = floatval($request->precio_venta);
+                if ($listaPrecio->precio_costo > 0) {
+                    $listaPrecio->margen = (1 - $listaPrecio->precio_costo / $listaPrecio->precio_venta) * 100;
+                }
+            } else {
+                $listaPrecio->precio_venta = $listaPrecio->precio_costo / (1 - $listaPrecio->margen / 100);
+            }
 
             if ($request->has('vigencia_desde')) {
                 $listaPrecio->vigencia_desde = $request->vigencia_desde;

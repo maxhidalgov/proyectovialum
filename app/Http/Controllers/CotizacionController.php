@@ -685,11 +685,17 @@ public function getAprobadas()
             'documentosFacturacion',
             'ventanas' => function($query) {
                 $query->with([
-                    'tipoVentana', // ✅ Usar camelCase
+                    'tipoVentana',
                     'color',
                     'productoVidrioProveedor' => function($q) {
                         $q->with(['producto', 'proveedor']);
                     }
+                ]);
+            },
+            'detalles' => function($query) {
+                $query->with([
+                    'listaPrecio.producto',
+                    'listaPrecio.color',
                 ]);
             },
             'estado'

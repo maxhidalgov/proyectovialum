@@ -133,7 +133,7 @@
     { title: 'Vendedor', value: 'vendedor' },
     { title: 'Fecha', value: 'fecha' },
     { title: 'Estado', value: 'estado' },
-    { title: 'Total', value: 'total' },
+    { title: 'Total Neto', value: 'total' },
     { title: 'Acciones', value: 'acciones', sortable: false },
   ]
   
@@ -156,6 +156,9 @@
     try {
       const { data } = await api.patch(`/api/cotizaciones/${item.id}/estado`, { estado: nuevoEstado })
       item.estado = data.estado
+      if (nuevoEstado === 'Aprobada') {
+        router.push('/facturacion')
+      }
     } catch (err) {
       alert(err.response?.data?.message || 'Error al cambiar el estado.')
     }
