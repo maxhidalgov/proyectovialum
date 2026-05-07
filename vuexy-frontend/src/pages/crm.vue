@@ -128,7 +128,7 @@
 
               <!-- Cliente -->
               <div class="font-weight-medium text-body-2 mb-1" style="line-height:1.3">
-                {{ item.cliente?.razon_social || '—' }}
+                {{ nombreCliente(item.cliente) }}
               </div>
               <div v-if="item.cliente?.identification" class="text-caption text-medium-emphasis mb-2">
                 {{ item.cliente.identification }}
@@ -197,7 +197,7 @@
         <v-card-text class="pa-4">
           <p class="mb-3">
             Cotización <strong>#{{ itemSeleccionado?.id }}</strong> —
-            <strong>{{ itemSeleccionado?.cliente?.razon_social }}</strong>
+            <strong>{{ nombreCliente(itemSeleccionado?.cliente) }}</strong>
           </p>
           <p class="text-body-2 mb-4">
             Estado actual: <v-chip size="small" :color="columnaSeleccionada?.color">{{ columnaSeleccionada?.estado }}</v-chip>
@@ -314,7 +314,7 @@ function limpiarFiltros() {
 
 const cotizacionesFiltradas = computed(() => {
   return cotizaciones.value.filter(c => {
-    const nombre = c.cliente?.razon_social?.toLowerCase() ?? ''
+    const nombre = nombreCliente(c.cliente).toLowerCase()
     if (filtroBusqueda.value && !nombre.includes(filtroBusqueda.value.toLowerCase())) return false
     if (filtroVendedor.value && c.vendedor?.name !== filtroVendedor.value) return false
     if (filtroAlerta.value === 'lentas' && !esLenta(c)) return false
@@ -335,6 +335,13 @@ const formatMonto = (n) =>
 const formatFecha = (fecha) => {
   if (!fecha) return '—'
   return new Date(fecha).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
+}
+
+const nombreCliente = (cliente) => {
+  if (!cliente) return '—'
+  return cliente.razon_social
+    || `${cliente.first_name || ''} ${cliente.last_name || ''}`.trim()
+    || '—'
 }
 
 const iniciales = (nombre) => {

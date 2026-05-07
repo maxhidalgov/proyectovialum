@@ -355,7 +355,7 @@ const headers = [
   { title: 'Total Neto', key: 'total',            sortable: true },
   { title: 'Estado',   key: 'estado_facturacion', sortable: true },
   { title: 'Fecha',    key: 'fecha',              sortable: true },
-  { title: 'Cobrado',  key: 'cobrado',            sortable: false, width: '120px' },
+  { title: 'Facturado', key: 'cobrado',            sortable: false, width: '120px' },
   { title: 'Acciones', key: 'acciones',           sortable: false, width: '130px' },
 ]
 

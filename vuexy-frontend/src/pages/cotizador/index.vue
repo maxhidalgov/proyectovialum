@@ -352,13 +352,30 @@
         </v-col>
       </v-row>
 
-      <div class="d-flex justify-end">
+      <div class="d-flex justify-end gap-3">
+        <!-- Botón express solo para Cliente Meson -->
+        <v-btn
+          v-if="form.cliente?.id === 1639"
+          color="success"
+          size="large"
+          variant="elevated"
+          :loading="loading"
+          :disabled="loading"
+          @click="guardarCotizacion(true)"
+        >
+          <template #loader>
+            <v-progress-circular indeterminate color="white" size="20" />
+          </template>
+          <v-icon start>mdi-receipt-text-arrow-right</v-icon>
+          Guardar y Facturar
+        </v-btn>
+
         <v-btn
           color="primary"
           size="large"
           :loading="loading"
           :disabled="loading"
-          @click="guardarCotizacion"
+          @click="guardarCotizacion()"
         >
           <template #loader>
             <v-progress-circular indeterminate color="white" size="20" />
@@ -1867,7 +1884,7 @@ const exportarImagenesVentanas = async () => {
   return imagenes
 }
 
-const guardarCotizacion = async () => {
+const guardarCotizacion = async (express = false) => {
   loading.value = true
   aplicarAjusteAItems() // proratea el ajuste antes de guardar
   try {
@@ -1966,17 +1983,25 @@ const guardarCotizacion = async () => {
     console.log('📤 PRODUCTOS ESPECÍFICOS:', payload.productos)
 
     // ✅ USAR PUT SI ESTÁ EN MODO EDICIÓN, POST SI ES NUEVA
+    let idGuardado
     if (modoEdicion.value) {
       console.log('🔄 Actualizando cotización existente ID:', cotizacionId.value)
       await api.put(`/api/cotizaciones/${cotizacionId.value}`, payload)
-      alert('Cotización actualizada correctamente')
+      idGuardado = cotizacionId.value
+      if (!express) alert('Cotización actualizada correctamente')
     } else {
       console.log('✨ Creando nueva cotización')
-      await api.post('/api/cotizaciones', payload)
-      alert('Cotización guardada correctamente')
+      const res = await api.post('/api/cotizaciones', payload)
+      idGuardado = res.data.id ?? res.data.cotizacion?.id
+      if (!express) alert('Cotización guardada correctamente')
     }
 
-    router.push({ name: 'cotizaciones' })
+    if (express && idGuardado) {
+      await api.patch(`/api/cotizaciones/${idGuardado}/estado`, { estado: 'Aprobada' })
+      router.push('/facturacion')
+    } else {
+      router.push({ name: 'cotizaciones' })
+    }
 
   } catch (error) {
     console.error('Error al guardar cotización:', error)
