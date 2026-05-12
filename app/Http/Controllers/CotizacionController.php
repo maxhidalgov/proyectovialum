@@ -151,6 +151,15 @@ public function store(Request $request)
                     'tipo_vidrio'     => $ventana['tipo_vidrio'] ?? $ventana['tipoVidrio'] ?? null,
                     'manillon'        => $ventana['manillon'] ?? null,
                     'proveedor_vidrio'=> $ventana['proveedor_vidrio'] ?? $ventana['proveedorVidrio'] ?? null,
+                    // Compuesta dinámica (tipo 54)
+                    'orientacion_comp' => $ventana['orientacion_comp'] ?? null,
+                    'items_comp'       => $ventana['items_comp'] ?? null,
+                    // Compuesta AL42 (tipo 57)
+                    'filas'            => $ventana['filas'] ?? null,
+                    'columnas'         => $ventana['columnas'] ?? null,
+                    'altos_filas'      => $ventana['altos_filas'] ?? null,
+                    'anchos_columnas'  => $ventana['anchos_columnas'] ?? null,
+                    'secciones'        => $ventana['secciones'] ?? null,
                 ], fn($v) => $v !== null),
             ]);
         }
@@ -203,15 +212,6 @@ public function store(Request $request)
                         $imageName = 'cotizacion_' . $cotizacion->id . '_ventana_' . $index . '_' . time() . '.png';
                         $localPath = 'imagenes_ventanas/' . $imageName;
                         Storage::disk('public')->put($localPath, $imageData);
-
-                        try {
-                            $ftpConfig = config('filesystems.disks.ftp_cpanel');
-                            if ($ftpConfig) {
-                                Storage::disk('ftp_cpanel')->put($imageName, $imageData);
-                            }
-                        } catch (\Exception $ftpError) {
-                            Log::error("❌ Error FTP: " . $ftpError->getMessage());
-                        }
 
                         if (isset($ventanasGuardadas[$index])) {
                             $ventanasGuardadas[$index]->update(['imagen' => $imageName]);
@@ -339,6 +339,15 @@ public function store(Request $request)
                                 'tipo_vidrio'      => $ventanaData['tipo_vidrio'] ?? $ventanaData['tipoVidrio'] ?? null,
                                 'manillon'         => $ventanaData['manillon'] ?? null,
                                 'proveedor_vidrio' => $ventanaData['proveedor_vidrio'] ?? $ventanaData['proveedorVidrio'] ?? null,
+                                // Compuesta dinámica (tipo 54)
+                                'orientacion_comp' => $ventanaData['orientacion_comp'] ?? null,
+                                'items_comp'       => $ventanaData['items_comp'] ?? null,
+                                // Compuesta AL42 (tipo 57)
+                                'filas'            => $ventanaData['filas'] ?? null,
+                                'columnas'         => $ventanaData['columnas'] ?? null,
+                                'altos_filas'      => $ventanaData['altos_filas'] ?? null,
+                                'anchos_columnas'  => $ventanaData['anchos_columnas'] ?? null,
+                                'secciones'        => $ventanaData['secciones'] ?? null,
                             ], fn($v) => $v !== null) ?: null,
                         ]);
                         $ventanasEnOrden[] = $ventana;
@@ -444,15 +453,6 @@ public function store(Request $request)
                         $localPath = 'imagenes_ventanas/' . $imageName;
 
                         Storage::disk('public')->put($localPath, $imageData);
-
-                        try {
-                            $ftpConfig = config('filesystems.disks.ftp_cpanel');
-                            if ($ftpConfig) {
-                                Storage::disk('ftp_cpanel')->put($imageName, $imageData);
-                            }
-                        } catch (\Exception $ftpError) {
-                            Log::error("❌ Error FTP: " . $ftpError->getMessage());
-                        }
 
                         if (isset($ventanasEnOrden[$index])) {
                             $ventanasEnOrden[$index]->update(['imagen' => $imageName]);
@@ -634,6 +634,47 @@ public function store(Request $request)
             'message' => "Estado actualizado a '{$nuevoNombre}'.",
             'estado'  => ['id' => $nuevoEstado->id, 'nombre' => $nuevoEstado->nombre],
         ]);
+    }
+
+    public function subirImagenes(Request $request, $id)
+    {
+        $cotizacion = Cotizacion::findOrFail($id);
+        $imagenes   = $request->input('imagenes_ventanas', []);
+
+        // Ventanas ordenadas por ID (mismo orden en que se crearon)
+        $ventanas = $cotizacion->ventanas()->orderBy('id')->get();
+
+        foreach ($imagenes as $index => $base64) {
+            try {
+                if (!$base64 || !str_starts_with($base64, 'data:image/png;base64,')) continue;
+
+                $imageData = base64_decode(
+                    str_replace([' '], ['+'], str_replace('data:image/png;base64,', '', $base64))
+                );
+                if ($imageData === false) continue;
+
+                $imageName = 'cotizacion_' . $id . '_ventana_' . $index . '_' . time() . '.png';
+
+                // Subir a FTP cPanel (almacenamiento permanente)
+                try {
+                    $ftpConfig = config('filesystems.disks.ftp_cpanel');
+                    if ($ftpConfig) {
+                        Storage::disk('ftp_cpanel')->put($imageName, $imageData);
+                    }
+                } catch (\Exception $ftpError) {
+                    Log::error("❌ FTP imagen $index: " . $ftpError->getMessage());
+                }
+
+                if (isset($ventanas[$index])) {
+                    $ventanas[$index]->update(['imagen' => $imageName]);
+                }
+
+            } catch (\Exception $e) {
+                Log::error("❌ Error imagen $index: " . $e->getMessage());
+            }
+        }
+
+        return response()->json(['message' => 'Imágenes procesadas']);
     }
 
     public function duplicar($id)

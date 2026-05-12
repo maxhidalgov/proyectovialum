@@ -1079,13 +1079,22 @@ const cargarCotizacionExistente = async () => {
           hoja1AlFrente: v.hoja1_al_frente ?? true,
           manillon: v.config?.manillon ?? null,
           materiales: v.materiales || [],
-          // Para ventanas compuestas
+          // Para ventanas compuestas (Bay Window tipo 47)
           tipoVentanaIzquierda: v.tipo_ventana_izquierda,
           tipoVentanaCentro: v.tipo_ventana_centro,
           tipoVentanaDerecha: v.tipo_ventana_derecha,
           ancho_izquierda: v.ancho_izquierda,
           ancho_centro: v.ancho_centro,
           ancho_derecha: v.ancho_derecha,
+          // Ventana Compuesta Dinámica (tipo 54)
+          orientacionComp: v.config?.orientacion_comp ?? 'horizontal',
+          itemsComp: v.config?.items_comp ?? [],
+          // Ventana Compuesta AL42 (tipo 57)
+          filas: v.config?.filas ?? 1,
+          columnas: v.config?.columnas ?? 1,
+          altosFilas: v.config?.altos_filas ?? [],
+          anchosColumnas: v.config?.anchos_columnas ?? [],
+          secciones: v.config?.secciones ?? [[{ tipo: 1 }]],
           // ID para actualización
           id: v.id
         }
@@ -1954,6 +1963,15 @@ const guardarCotizacion = async (express = false) => {
           hojas_moviles: v.hojas_moviles ?? null,
           hoja_movil_seleccionada: v.hojaMovilSeleccionada ?? null,
           hoja1_al_frente: v.hoja1AlFrente ?? null,
+          // Ventana Compuesta Dinámica (tipo 54)
+          orientacion_comp: v.orientacionComp ?? null,
+          items_comp: v.itemsComp ?? null,
+          // Ventana Compuesta AL42 (tipo 57)
+          filas: v.filas ?? null,
+          columnas: v.columnas ?? null,
+          altos_filas: v.altosFilas ?? null,
+          anchos_columnas: v.anchosColumnas ?? null,
+          secciones: v.secciones ?? null,
         }
         
         console.log(`🔍 Ventana ${index} mapeada:`, ventanaMapeada)
@@ -1983,6 +2001,10 @@ const guardarCotizacion = async (express = false) => {
     console.log('📤 PRODUCTOS ESPECÍFICOS:', payload.productos)
 
     // ✅ USAR PUT SI ESTÁ EN MODO EDICIÓN, POST SI ES NUEVA
+    // Separar imágenes del payload principal para no bloquear el guardado
+    const imagenesParaSubir = payload.imagenes_ventanas
+    delete payload.imagenes_ventanas
+
     let idGuardado
     if (modoEdicion.value) {
       console.log('🔄 Actualizando cotización existente ID:', cotizacionId.value)
@@ -1994,6 +2016,13 @@ const guardarCotizacion = async (express = false) => {
       const res = await api.post('/api/cotizaciones', payload)
       idGuardado = res.data.id ?? res.data.cotizacion?.id
       if (!express) alert('Cotización guardada correctamente')
+    }
+
+    // Subir imágenes en background (sin bloquear la navegación)
+    if (idGuardado && imagenesParaSubir?.some(img => img !== null)) {
+      api.post(`/api/cotizaciones/${idGuardado}/imagenes`, {
+        imagenes_ventanas: imagenesParaSubir
+      }).catch(err => console.warn('Error subiendo imágenes:', err))
     }
 
     if (express && idGuardado) {
