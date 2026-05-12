@@ -146,6 +146,107 @@
           </v-col>
         </v-row>
 
+        <!-- Configuración de Ventana Compuesta AL42 (tipo 57) -->
+        <v-row v-if="ventanaLocal.tipo === 57" dense class="mt-2">
+          <v-col cols="12">
+            <v-card variant="outlined" class="pa-3">
+              <div class="text-subtitle-2 font-weight-bold mb-3">🪟 Configuración de Ventana Compuesta</div>
+
+              <v-row dense>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model.number="ventanaLocal.filas"
+                    label="Número de filas"
+                    type="number"
+                    min="1"
+                    variant="outlined"
+                    density="compact"
+                    hint="Divisiones horizontales"
+                    persistent-hint
+                    @update:model-value="actualizarGridSecciones"
+                  />
+                </v-col>
+                <v-col cols="6">
+                  <v-text-field
+                    v-model.number="ventanaLocal.columnas"
+                    label="Número de columnas"
+                    type="number"
+                    min="1"
+                    variant="outlined"
+                    density="compact"
+                    hint="Divisiones verticales"
+                    persistent-hint
+                    @update:model-value="actualizarGridSecciones"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-row dense class="mt-2">
+                <v-col cols="12">
+                  <div class="text-caption mb-1">📏 Dimensiones personalizadas:</div>
+                </v-col>
+                <v-col cols="6">
+                  <div class="text-caption mb-1">Altos de filas (mm):</div>
+                  <v-text-field
+                    v-for="(alto, idx) in ventanaLocal.altosFilas"
+                    :key="'alto-' + idx"
+                    v-model.number="ventanaLocal.altosFilas[idx]"
+                    :label="`Fila ${idx + 1}`"
+                    type="number"
+                    min="1"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    class="mb-2"
+                    @update:model-value="recalcularCostos"
+                  />
+                </v-col>
+                <v-col cols="6">
+                  <div class="text-caption mb-1">Anchos de columnas (mm):</div>
+                  <v-text-field
+                    v-for="(ancho, idx) in ventanaLocal.anchosColumnas"
+                    :key="'ancho-' + idx"
+                    v-model.number="ventanaLocal.anchosColumnas[idx]"
+                    :label="`Columna ${idx + 1}`"
+                    type="number"
+                    min="1"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    class="mb-2"
+                    @update:model-value="recalcularCostos"
+                  />
+                </v-col>
+              </v-row>
+
+              <div class="mt-3">
+                <div class="text-caption mb-2">Configurar cada sección:</div>
+                <div v-for="(fila, filaIdx) in ventanaLocal.secciones" :key="'fila-' + filaIdx" class="mb-2">
+                  <v-row dense>
+                    <v-col
+                      v-for="(seccion, colIdx) in fila"
+                      :key="'sec-' + filaIdx + '-' + colIdx"
+                      :cols="Math.floor(12 / (ventanaLocal.columnas || 1))"
+                    >
+                      <v-select
+                        v-model="seccion.tipo"
+                        :items="[{ value: 1, title: 'Fija' }, { value: 56, title: 'Proyectante' }]"
+                        item-title="title"
+                        item-value="value"
+                        :label="`F${filaIdx + 1}C${colIdx + 1}`"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        @update:model-value="recalcularCostos"
+                      />
+                    </v-col>
+                  </v-row>
+                </div>
+              </div>
+            </v-card>
+          </v-col>
+        </v-row>
+
         <!-- Vista previa -->
         <v-row>
           <v-col cols="12">
@@ -442,9 +543,50 @@ watch(() => props.mostrar, (val) => {
     ventanaLocal.value = { ...props.ventana }
     precioActualizado.value = false
     mostrarDetalleMateriales.value = false
+    // Inicializar grid de compuesta si faltan arrays
+    if (ventanaLocal.value.tipo === 57) {
+      ventanaLocal.value.filas ??= 1
+      ventanaLocal.value.columnas ??= 1
+      if (!ventanaLocal.value.altosFilas?.length || !ventanaLocal.value.secciones?.length) {
+        actualizarGridSecciones()
+      }
+    }
     recalcularCostos()
   }
 })
+
+function actualizarGridSecciones() {
+  const filas = ventanaLocal.value.filas || 1
+  const columnas = ventanaLocal.value.columnas || 1
+
+  const nuevoGrid = []
+  for (let f = 0; f < filas; f++) {
+    const fila = []
+    for (let c = 0; c < columnas; c++) {
+      fila.push(ventanaLocal.value.secciones?.[f]?.[c] || { tipo: 1 })
+    }
+    nuevoGrid.push(fila)
+  }
+  ventanaLocal.value.secciones = nuevoGrid
+
+  const altoTotal = ventanaLocal.value.alto || 1000
+  const anchoTotal = ventanaLocal.value.ancho || 1000
+  if (!ventanaLocal.value.altosFilas?.length) {
+    ventanaLocal.value.altosFilas = Array(filas).fill(Math.round(altoTotal / filas))
+  } else {
+    ventanaLocal.value.altosFilas = Array.from({ length: filas }, (_, i) =>
+      ventanaLocal.value.altosFilas[i] ?? Math.round(altoTotal / filas)
+    )
+  }
+  if (!ventanaLocal.value.anchosColumnas?.length) {
+    ventanaLocal.value.anchosColumnas = Array(columnas).fill(Math.round(anchoTotal / columnas))
+  } else {
+    ventanaLocal.value.anchosColumnas = Array.from({ length: columnas }, (_, i) =>
+      ventanaLocal.value.anchosColumnas[i] ?? Math.round(anchoTotal / columnas)
+    )
+  }
+  recalcularCostos()
+}
 
 watch(localMostrar, (val) => emit('update:mostrar', val))
 
