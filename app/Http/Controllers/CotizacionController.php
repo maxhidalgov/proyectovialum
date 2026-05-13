@@ -655,6 +655,9 @@ public function store(Request $request)
 
                 $imageName = 'cotizacion_' . $id . '_ventana_' . $index . '_' . time() . '.png';
 
+                // Guardar localmente (para PDF y OT)
+                Storage::disk('public')->put('imagenes_ventanas/' . $imageName, $imageData);
+
                 // Subir a FTP cPanel (almacenamiento permanente)
                 try {
                     $ftpConfig = config('filesystems.disks.ftp_cpanel');

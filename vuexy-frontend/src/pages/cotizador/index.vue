@@ -309,14 +309,35 @@
                   {{ factorAjuste >= 1 ? '+' : '' }}${{ formatearNumero(totalNetoAjustado - totalNeto) }} →
                   ${{ formatearNumero(totalNetoAjustado) }}
                 </v-chip>
+                <div class="d-flex gap-1">
+                  <v-btn
+                    color="warning"
+                    variant="tonal"
+                    size="small"
+                    prepend-icon="mdi-refresh"
+                    @click="aplicarAjusteAItems"
+                  >
+                    Aplicar
+                  </v-btn>
+                  <v-btn
+                    color="error"
+                    variant="text"
+                    size="small"
+                    icon="mdi-close-circle"
+                    @click="quitarAjuste"
+                  />
+                </div>
+              </div>
+              <!-- Botón quitar cuando ya se aplicó (ajuste.valor = null pero hay originales guardados) -->
+              <div v-else-if="preciosOriginales" class="mt-2 d-flex justify-end">
                 <v-btn
-                  color="warning"
+                  color="error"
                   variant="tonal"
                   size="small"
-                  prepend-icon="mdi-refresh"
-                  @click="aplicarAjusteAItems"
+                  prepend-icon="mdi-close-circle"
+                  @click="quitarAjuste"
                 >
-                  Aplicar
+                  Quitar ajuste
                 </v-btn>
               </div>
             </v-card-text>
@@ -1329,6 +1350,7 @@ const totalConIva = computed(() => totalNeto.value + totalIva.value)
 
 // ── Ajuste de precio prorateado ──────────────────────────────────────
 const ajuste = ref({ modo: 'total', valor: null }) // modo: 'total' | 'porcentaje'
+const preciosOriginales = ref(null) // guardados antes de aplicar para poder revertir
 
 const factorAjuste = computed(() => {
   const v = parseFloat(ajuste.value.valor)
@@ -1346,9 +1368,29 @@ const tieneAjuste = computed(() => Math.abs(factorAjuste.value - 1) > 0.0001)
 const aplicarAjusteAItems = () => {
   if (!tieneAjuste.value) return
   const f = factorAjuste.value
+  // Guardar originales antes de modificar
+  preciosOriginales.value = {
+    ventanas: cotizacion.ventanas.map(v => ({ id: v.id ?? null, precio: v.precio })),
+    productos: cotizacion.productos.map(p => ({ id: p.id ?? null, precio_venta: p.precio_venta })),
+  }
   cotizacion.ventanas.forEach(v => { v.precio = Math.round(Number(v.precio) * f) })
   cotizacion.productos.forEach(p => { p.precio_venta = Math.round(Number(p.precio_venta) * f) })
   ajuste.value.valor = null // resetear tras aplicar
+}
+
+// Quita el ajuste: si no se aplicó borra el campo; si ya se aplicó revierte los precios
+const quitarAjuste = () => {
+  if (preciosOriginales.value) {
+    // Revertir precios modificados
+    preciosOriginales.value.ventanas.forEach((orig, i) => {
+      if (cotizacion.ventanas[i]) cotizacion.ventanas[i].precio = orig.precio
+    })
+    preciosOriginales.value.productos.forEach((orig, i) => {
+      if (cotizacion.productos[i]) cotizacion.productos[i].precio_venta = orig.precio_venta
+    })
+    preciosOriginales.value = null
+  }
+  ajuste.value.valor = null
 }
 
 const eliminarVentana = (index) => {
@@ -1896,6 +1938,7 @@ const exportarImagenesVentanas = async () => {
 const guardarCotizacion = async (express = false) => {
   loading.value = true
   aplicarAjusteAItems() // proratea el ajuste antes de guardar
+  preciosOriginales.value = null // ya guardado, no tiene sentido revertir
   try {
     const imagenes = await exportarImagenesVentanas()
         // ✅ AGREGAR ESTOS LOGS
@@ -2018,9 +2061,9 @@ const guardarCotizacion = async (express = false) => {
       if (!express) alert('Cotización guardada correctamente')
     }
 
-    // Subir imágenes en background (sin bloquear la navegación)
+    // Esperar el upload de imágenes antes de navegar para que el PDF las encuentre
     if (idGuardado && imagenesParaSubir?.some(img => img !== null)) {
-      api.post(`/api/cotizaciones/${idGuardado}/imagenes`, {
+      await api.post(`/api/cotizaciones/${idGuardado}/imagenes`, {
         imagenes_ventanas: imagenesParaSubir
       }).catch(err => console.warn('Error subiendo imágenes:', err))
     }
