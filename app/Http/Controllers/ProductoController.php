@@ -204,12 +204,33 @@ class ProductoController extends Controller
         }
     }
     public function getProveedoresPorProductoYColor($productoId, $colorId)
-{
-    $proveedores = \App\Models\ProductoColorProveedor::with('proveedor')
-        ->where('producto_id', $productoId)
-        ->where('color_id', $colorId)
-        ->get();
+    {
+        $proveedores = \App\Models\ProductoColorProveedor::with('proveedor')
+            ->where('producto_id', $productoId)
+            ->where('color_id', $colorId)
+            ->get();
 
-    return response()->json($proveedores);
-}
+        return response()->json($proveedores);
+    }
+
+    public function perfilesConstructor()
+    {
+        $perfiles = \Illuminate\Support\Facades\DB::table('producto_color_proveedor as pcp')
+            ->join('productos as p', 'p.id', '=', 'pcp.producto_id')
+            ->join('colores as c', 'c.id', '=', 'pcp.color_id')
+            ->join('proveedors as pr', 'pr.id', '=', 'pcp.proveedor_id')
+            ->where('p.tipo_producto_id', 3)
+            ->get([
+                'pcp.id',
+                'p.id as producto_id',
+                'p.nombre as producto_nombre',
+                'c.id as color_id',
+                'c.nombre as color_nombre',
+                'pr.id as proveedor_id',
+                'pr.nombre as proveedor_nombre',
+                'pcp.costo',
+            ]);
+
+        return response()->json($perfiles);
+    }
 }

@@ -236,7 +236,7 @@
           <tr><th style="{{ $labelStyle }}">Alto</th><td style="{{ $valStyle }}">{{ $ventana->alto }} mm</td></tr>
           <tr><th style="{{ $labelStyle }}">Cantidad</th><td style="{{ $valStyle }}">{{ $ventana->cantidad }}</td></tr>
           <tr>
-            <th style="{{ $labelStyle }}">Total ventana</th>
+            <th style="{{ $labelStyle }}">Total Neto</th>
             <td style="{{ $valStyle }}"><strong>${{ number_format($ventana->precio, 0, ',', '.') }}</strong></td>
           </tr>
         </table>

@@ -330,7 +330,16 @@
           </v-col>
         </v-row>
 
-          <!-- Agregar después de la primera v-row dense en AgregarVentanaModal2.vue -->
+          <!-- Constructor de Marco (tipos 59/60) -->
+        <v-row v-if="ventana.tipo === 59 || ventana.tipo === 60" dense class="mt-2">
+          <v-col cols="12">
+            <ConstructorMarcoConfig
+              :ventana="ventana"
+              :tipos-ventana="props.tiposVentana"
+              :colores="colores"
+            />
+          </v-col>
+        </v-row>
 
 <!-- Anchos específicos para Bay Window -->
 <v-row v-if="ventana.tipo === 47" dense>
@@ -1237,6 +1246,7 @@ import VistaMamparaS60 from '@/components/VistaMamparaS60.vue'
 import VentanaCorredera98 from '@/components/VistaVentanaCorredera98.vue'
 import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
 import VistaVentanaCompuestaDinamica from '@/components/VistaVentanaCompuestaDinamica.vue'
+import ConstructorMarcoConfig from '@/components/ConstructorMarcoConfig.vue'
 import ArmadorVentanasComplejas from '@/components/ArmadorVentanasComplejas.vue'
 
 import api from '@/axiosInstance'
@@ -1364,6 +1374,12 @@ const baseVentana = {
   cantidadComp: 2,
   itemsComp: [baseItemComp(), baseItemComp()],
   configuracionArmador: null, // Para ventana tipo 58 (Armador Universal)
+  // Constructor de Marco (tipos 59/60)
+  perimetroConstructor: null,
+  marcoConstructor: null,
+  divisiones_h: [],
+  divisiones_v: [],
+  espaciosConstructor: [[{ contenido: 'vidrio', tipo_ventana_id: null }]],
 }
 
 const ventana = ref({ ...baseVentana, ...(props.ventana || {}) })
@@ -1641,6 +1657,13 @@ async function recalcularCostos() {
         anchos_columnas: ventana.value.anchosColumnas,
         secciones: ventana.value.secciones,
       }),
+      ...([59, 60].includes(ventana.value.tipo) && {
+        perimetro_constructor: ventana.value.perimetroConstructor ?? null,
+        marco_constructor: ventana.value.marcoConstructor ?? null,
+        divisiones_h: ventana.value.divisiones_h ?? [],
+        divisiones_v: ventana.value.divisiones_v ?? [],
+        espacios_constructor: ventana.value.espaciosConstructor ?? [[{ contenido: 'vidrio' }]],
+      }),
       ...(ventana.value.tipo === 58 && ventana.value.configuracionArmador && {
         configuracionArmador: ventana.value.configuracionArmador,
       }),
@@ -1779,6 +1802,10 @@ watch(
     
     // ✅ Ventana Universal - Armador (tipo 58)
     JSON.stringify(ventana.value.configuracionArmador),
+
+    // ✅ Constructor de Marco (tipos 59/60)
+    JSON.stringify(ventana.value.perimetroConstructor),
+    JSON.stringify(ventana.value.marcoConstructor),
   ],
   () => {
     calculando.value = true
@@ -1884,6 +1911,7 @@ watch(() => ventana.value.tipo, (val) => {
     ventana.value.columnas ??= 1
     actualizarGridSecciones()
   }
+
 })
 
 // Watcher para actualizar grid cuando cambien filas o columnas

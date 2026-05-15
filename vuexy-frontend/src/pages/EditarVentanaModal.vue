@@ -247,6 +247,17 @@
           </v-col>
         </v-row>
 
+        <!-- Constructor de Marco (tipos 59/60) -->
+        <v-row v-if="ventanaLocal.tipo === 59 || ventanaLocal.tipo === 60" dense class="mt-2">
+          <v-col cols="12">
+            <ConstructorMarcoConfig
+              :ventana="ventanaLocal"
+              :tipos-ventana="tiposVentana"
+              :colores="colores"
+            />
+          </v-col>
+        </v-row>
+
         <!-- Vista previa -->
         <v-row>
           <v-col cols="12">
@@ -511,6 +522,7 @@ import VentanaCorredera from '@/components/VistaVentanaCorredera.vue'
 import VentanaCorredera98 from '@/components/VistaVentanaCorredera98.vue'
 import VentanaCorrederaAL25 from '@/components/VistaVentanaCorrederaAL25.vue'
 import VistaVentanaCompuestaAL42 from '@/components/VistaVentanaCompuestaAL42.vue'
+import ConstructorMarcoConfig from '@/components/ConstructorMarcoConfig.vue'
 import VistaVentanaCorrederaAndes from '@/components/VistaVentanaCorrederaAndes.vue'
 import BayWindow from '@/components/VistaBayWindow.vue'
 import VentanaAbatir from '@/components/VistaVentanaAbatirS60.vue'
@@ -626,6 +638,18 @@ const margenVenta = computed(() => {
 let debounceCalculo = null
 let requestIdCalculo = 0
 
+// Recalculate when constructor data changes (perimeter profiles, division bars, sub-windows)
+watch(
+  () => [ventanaLocal.value?.marcoConstructor, ventanaLocal.value?.perimetroConstructor],
+  () => {
+    if ([59, 60].includes(ventanaLocal.value?.tipo)) {
+      clearTimeout(debounceCalculo)
+      debounceCalculo = setTimeout(recalcularCostos, 350)
+    }
+  },
+  { deep: true }
+)
+
 async function recalcularCostos() {
   const miRequestId = ++requestIdCalculo
   calculando.value = true
@@ -688,6 +712,13 @@ async function recalcularCostos() {
         altos_filas: ventanaLocal.value.altosFilas,
         anchos_columnas: ventanaLocal.value.anchosColumnas,
         secciones: ventanaLocal.value.secciones,
+      }),
+      ...([59, 60].includes(ventanaLocal.value.tipo) && {
+        perimetro_constructor: ventanaLocal.value.perimetroConstructor ?? null,
+        marco_constructor: ventanaLocal.value.marcoConstructor ?? null,
+        divisiones_h: ventanaLocal.value.divisiones_h ?? [],
+        divisiones_v: ventanaLocal.value.divisiones_v ?? [],
+        espacios_constructor: ventanaLocal.value.espaciosConstructor ?? [[{ contenido: 'vidrio' }]],
       }),
       ...(ventanaLocal.value.tipo === 47 && {
         ancho_izquierda: ventanaLocal.value.ancho_izquierda,

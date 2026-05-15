@@ -593,6 +593,14 @@
                   :configuracion-inicial="ventana.configuracionArmador"
                   :tipos-ventana="tiposVentanaBayKonva"
                 />
+                <VistaConstructorMarco
+                  v-else-if="ventana.tipo === 59 || ventana.tipo === 60"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
+                  :marco="ventana.marcoConstructor"
+                />
               </v-col>
               <v-col cols="6">
                 <v-card variant="outlined">
@@ -780,6 +788,7 @@ import VentanaProyectanteAL42 from '@/components/VistaVentanaProyectanteAL42.vue
 import VentanaCorrederaAL25 from '@/components/VistaVentanaCorrederaAL25.vue'
 import VistaVentanaCompuestaAL42 from '@/components/VistaVentanaCompuestaAL42.vue'
 import ArmadorUniversal from '@/components/ArmadorUniversal.vue'
+import VistaConstructorMarco from '@/components/VistaConstructorMarco.vue'
 
 
 
@@ -1116,6 +1125,12 @@ const cargarCotizacionExistente = async () => {
           altosFilas: v.config?.altos_filas ?? [],
           anchosColumnas: v.config?.anchos_columnas ?? [],
           secciones: v.config?.secciones ?? [[{ tipo: 1 }]],
+          // Constructor de Marco (tipos 59/60)
+          perimetroConstructor: v.config?.perimetro_constructor ?? { top: { pcp_id: null }, right: { pcp_id: null }, bottom: { pcp_id: null }, left: { pcp_id: null } },
+          marcoConstructor: v.config?.marco_constructor ?? null,
+          divisiones_h: v.config?.divisiones_h ?? [],
+          divisiones_v: v.config?.divisiones_v ?? [],
+          espaciosConstructor: v.config?.espacios_constructor ?? [[{ contenido: 'vidrio', tipo_ventana_id: null }]],
           // ID para actualización
           id: v.id
         }
@@ -1531,7 +1546,9 @@ watch(() => cotizacion.ventanas, (ventanas) => {
       ventana.tipoVidrio,
       ventana.productoVidrioProveedor,
       ventana.hojas_totales,
-      ventana.hojas_moviles
+      ventana.hojas_moviles,
+      ventana.marcoConstructor,
+      ventana.perimetroConstructor,
     ],
     () => {
       const errores = []
@@ -1558,6 +1575,8 @@ watch(() => cotizacion.ventanas, (ventanas) => {
         productoVidrio: relacion.producto_id,
         proveedorVidrio: relacion.proveedor_id,
         hojas_moviles: ventana.tipo === 3 || ventana.tipo === 46 ? ventana.hojas_moviles : undefined,
+        marco_constructor: ventana.marcoConstructor ?? null,
+        perimetro_constructor: ventana.perimetroConstructor ?? null,
       }
 
       console.log('✅ Recalculando ventana:', payload)
@@ -2015,8 +2034,14 @@ const guardarCotizacion = async (express = false) => {
           altos_filas: v.altosFilas ?? null,
           anchos_columnas: v.anchosColumnas ?? null,
           secciones: v.secciones ?? null,
+          // Constructor de Marco (tipos 59/60)
+          perimetro_constructor: v.perimetroConstructor ?? null,
+          marco_constructor: v.marcoConstructor ?? null,
+          divisiones_h: v.divisiones_h ?? null,
+          divisiones_v: v.divisiones_v ?? null,
+          espacios_constructor: v.espaciosConstructor ?? null,
         }
-        
+
         console.log(`🔍 Ventana ${index} mapeada:`, ventanaMapeada)
         console.log(`🔍 tipo_vidrio_id en ventana mapeada:`, ventanaMapeada.tipo_vidrio_id)
         

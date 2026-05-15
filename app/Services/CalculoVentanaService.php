@@ -82,6 +82,11 @@ class CalculoVentanaService
             return self::calcularCompuestaFlexible($ventana);
         }
 
+        // Constructor de Marco (tipos 59 y 60)
+        if ($tipoVentanaId == 59 || $tipoVentanaId == 60) {
+            return self::calcularConstructorMarco($ventana);
+        }
+
         return [
             'materiales' => [],
             'costo_total' => 0,
@@ -596,44 +601,44 @@ class CalculoVentanaService
         if ($tipoVidrioId == 2 && $manillon) {
             // 📋 CASO 1: TERMOPANEL + MANILLÓN
             $perfilesConfig = [
-                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],        // Marco Superior
-                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],        // Marco Inferior
-                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],                // Jamba
-                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja (arriba+abajo × 2 hojas)
-                ['id' => 166, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // Junquillo Lateral
-                ['id' => 165, 'desc' => '(X/2)-65', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) - 65], // Junquillo Horizontal
+                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],        // 2501 Riel Superior
+                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],        // 2514 Riel Inferior Zona Lluviosa
+                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],                // 2509 Jamba E
+                ['id' => 164, 'desc' => '(X/2)-12', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) + 3], // 2516 Zocalo TP
+                ['id' => 166, 'desc' => 'Y-46', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // 2517 Pierna Abierta TP Manillon
+                ['id' => 165, 'desc' => 'Y-46', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        //2519 Traslapo TP
             ];
         } elseif ($tipoVidrioId == 2 && !$manillon) {
             // 📋 CASO 2: TERMOPANEL + PESTILLO
             $perfilesConfig = [
-                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
-                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
-                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],
-                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja (arriba+abajo × 2 hojas)
-                ['id' => 176, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // Junquillo Lateral (Pestillo)
-                ['id' => 165, 'desc' => '(X/2)-65', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) - 65],
+                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16], // 2501 Riel Superior
+                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16], //
+                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y], //    2509 Jamba E
+                ['id' => 164, 'desc' => '(X/2)+3', 'cant' => 4, 'formula' => fn($x, $y) => ($x / 2) + 3], // 2516 Zocalo TP
+                ['id' => 176, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // 2518 Pierna Cerrada TP Pestillo
+                ['id' => 165, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58], // 2519 Traslapo TP
             ];
         } elseif ($tipoVidrioId == 1 && $manillon) {
             // 📋 CASO 3: MONOLÍTICO + MANILLÓN
             $perfilesConfig = [
-                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
-                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
-                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],
-                ['id' => 155, 'desc' => '(X/2)+3', 'cant' => 1, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja Superior
-                ['id' => 156, 'desc' => '(X/2)+3', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) + 3], // Hoja Lateral
-                ['id' => 161, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // Junquillo Lateral
-                ['id' => 158, 'desc' => '(X/2)-63', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) - 63], // Junquillo Horizontal
+                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16], // 2501 Riel Superior
+                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16], // 2514 Riel Inferior Zona Lluviosa
+                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y], // 2509 Jamba E
+                ['id' => 155, 'desc' => '(X/2)-12', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) - 12], // 2504 Cabezal
+                ['id' => 156, 'desc' => '(X/2)-12', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) - 12], // 2505 Zocalo
+                ['id' => 161, 'desc' => 'Y-46', 'cant' => 2, 'formula' => fn($x, $y) => $y - 46],        // 2506 Pierna Abierta Manillon
+                ['id' => 158, 'desc' => 'Y-46', 'cant' => 2, 'formula' => fn($x, $y) => $y - 46], // TRASLAPO 2507
             ];
         } else {
             // 📋 CASO 4: MONOLÍTICO + PESTILLO
             $perfilesConfig = [
-                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
-                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16],
-                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y],
-                ['id' => 155, 'desc' => '(X/2)+3', 'cant' => 1, 'formula' => fn($x, $y) => ($x / 2) + 3],
-                ['id' => 156, 'desc' => '(X/2)+3', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) + 3],
-                ['id' => 159, 'desc' => 'Y-58', 'cant' => 2, 'formula' => fn($x, $y) => $y - 58],        // Junquillo Lateral (Pestillo)
-                ['id' => 158, 'desc' => '(X/2)-63', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) - 63],
+                ['id' => 154, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16], // 2501 Riel Superior
+                ['id' => 157, 'desc' => 'X-16', 'cant' => 1, 'formula' => fn($x, $y) => $x - 16], //2514 Riel Inferior Zona Lluviosa
+                ['id' => 160, 'desc' => 'Y', 'cant' => 2, 'formula' => fn($x, $y) => $y], // 2509 Jamba E
+                ['id' => 155, 'desc' => '(X/2)+3', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) + 3], //2504 Cabezal
+                ['id' => 156, 'desc' => '(X/2)+3', 'cant' => 2, 'formula' => fn($x, $y) => ($x / 2) + 3], //2505 Zocalo
+                ['id' => 159, 'desc' => 'Y-35', 'cant' => 2, 'formula' => fn($x, $y) => $y - 35],        // PIERNA PESTILLO 2510
+                ['id' => 158, 'desc' => 'Y-35', 'cant' => 2, 'formula' => fn($x, $y) => $y - 35], // TRASLAPO 2507
             ];
         }
 
@@ -4559,6 +4564,213 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
             if (!empty($hijos['nodo2'])) {
                 self::procesarNodoRecursivo($hijos['nodo2'], $cantidad, $addLinea, $ventana, $colorId, $materiales);
             }
+        }
+    }
+
+    // =====================================================================
+    // CONSTRUCTOR DE MARCO (tipos 59 y 60)
+    // =====================================================================
+
+    protected static function calcularConstructorMarco(array $ventana): array
+    {
+        $ancho     = $ventana['ancho'];
+        $alto      = $ventana['alto'];
+        $colorId   = $ventana['color'] ?? null;
+        $cantidad  = $ventana['cantidad'] ?? 1;
+        $perimetro = $ventana['perimetro_constructor'] ?? [];
+        $marco     = $ventana['marco_constructor'] ?? null;
+
+        // Collect all pcp_ids from perimeter and division tree
+        $pcpIds = [];
+        foreach (['top', 'right', 'bottom', 'left'] as $lado) {
+            $id = $perimetro[$lado]['pcp_id'] ?? null;
+            if ($id) $pcpIds[] = (int)$id;
+        }
+        self::recolectarPcpIdsArbol($marco, $pcpIds);
+        $pcpIds = array_values(array_unique(array_filter($pcpIds)));
+
+        // Load PCP records with product + proveedor in one query
+        $pcpMap = collect();
+        if (!empty($pcpIds)) {
+            $pcpMap = ProductoColorProveedor::with(['producto', 'proveedor'])
+                ->whereIn('id', $pcpIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        // Preload glass product (used for all glass leaves)
+        $productoVidrio = null;
+        $productoVidrioId = $ventana['productoVidrio'] ?? null;
+        if ($productoVidrioId) {
+            $productoVidrio = Producto::with('coloresPorProveedor.proveedor')->find($productoVidrioId);
+        }
+
+        $materiales = [];
+
+        // Helper: add a profile line using a direct PCP record
+        $addPcp = function ($pcpId, $cantTotal, $largoMm, $desc = '') use (&$materiales, $pcpMap) {
+            if (!$pcpId) return;
+            $pcp = $pcpMap[$pcpId] ?? null;
+            if (!$pcp || !$pcp->producto) return;
+            $largoMm  = max(0, $largoMm);
+            $largoMt  = $largoMm / 1000;
+            $largoBar = $pcp->producto->largo_total > 0 ? $pcp->producto->largo_total : 1;
+            $cpm      = $pcp->costo / $largoBar;
+            $costoTot = $cantTotal * $largoMt * $cpm;
+            $materiales[] = [
+                'producto_id'    => $pcp->producto->id,
+                'nombre'         => $pcp->producto->nombre . ($desc ? " ({$desc})" : ''),
+                'unidad'         => 'm',
+                'cantidad'       => round($cantTotal * $largoMt, 3),
+                'costo_unitario' => round($cpm),
+                'costo_total'    => round($costoTot),
+                'proveedor'      => $pcp->proveedor?->nombre ?? 'N/A',
+            ];
+        };
+
+        // === PERIMETER ===
+        $perimLengths = ['top' => $ancho, 'bottom' => $ancho, 'left' => $alto, 'right' => $alto];
+        $perimLabels  = [
+            'top'    => 'Marco superior',
+            'bottom' => 'Marco inferior',
+            'left'   => 'Marco lateral izq.',
+            'right'  => 'Marco lateral der.',
+        ];
+        foreach ($perimLengths as $lado => $mm) {
+            $addPcp($perimetro[$lado]['pcp_id'] ?? null, $cantidad, $mm, $perimLabels[$lado]);
+        }
+
+        // === DIVISION BARS + LEAVES (recursive tree) ===
+        self::calcularArbolConstructor(
+            $marco, $ancho, $alto, $cantidad,
+            $ventana, $colorId, $productoVidrio, $addPcp, $materiales
+        );
+
+        $costoTotal    = array_sum(array_column($materiales, 'costo_total'));
+        $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
+
+        return [
+            'materiales'     => $materiales,
+            'costo_total'    => round($costoTotal),
+            'costo_unitario' => round($costoUnitario),
+        ];
+    }
+
+    protected static function recolectarPcpIdsArbol(?array $node, array &$pcpIds): void
+    {
+        if (!$node || ($node['tipo'] ?? 'leaf') !== 'split') return;
+        foreach ($node['positions'] ?? [] as $pos) {
+            if (!empty($pos['pcp_id'])) $pcpIds[] = (int)$pos['pcp_id'];
+        }
+        foreach ($node['children'] ?? [] as $child) {
+            self::recolectarPcpIdsArbol($child, $pcpIds);
+        }
+    }
+
+    protected static function calcularArbolConstructor(
+        ?array $node,
+        float $mmW, float $mmH,
+        int $cantidad,
+        array $ventana,
+        $colorId,
+        ?object $productoVidrio,
+        callable $addPcp,
+        array &$materiales
+    ): void {
+        $BARRA_MM = 40;
+
+        $tipo = $node['tipo'] ?? 'leaf';
+
+        if ($tipo === 'leaf' || !$node) {
+            $contenido = $node['contenido'] ?? 'vidrio';
+
+            if ($contenido === 'ventana' && !empty($node['tipo_ventana_id'])) {
+                // Sub-window: recursively calculate its materials
+                $sub = array_merge($ventana, [
+                    'tipo'     => (int)$node['tipo_ventana_id'],
+                    'ancho'    => (int)round($mmW),
+                    'alto'     => (int)round($mmH),
+                    'cantidad' => $cantidad,
+                ]);
+                $res = self::calcularMateriales($sub);
+                foreach ($res['materiales'] ?? [] as $m) {
+                    $materiales[] = $m;
+                }
+            } else {
+                // Glass leaf
+                if ($productoVidrio) {
+                    $proveedorVidrio = $ventana['proveedorVidrio'] ?? null;
+                    $match = $productoVidrio->coloresPorProveedor->first(
+                        fn($cpp) => (int)$cpp->color_id === (int)$colorId
+                                 && (int)$cpp->proveedor_id === (int)$proveedorVidrio
+                    );
+                    $cid  = $match ? $colorId : 3;
+                    $cost = self::buscarCostoPorColor($productoVidrio, $cid, $proveedorVidrio);
+                    $mv   = $productoVidrio->coloresPorProveedor->first(
+                        fn($cpp) => $cpp->color_id == $cid && $cpp->proveedor_id == $proveedorVidrio
+                    );
+                    $area = ($mmW / 1000) * ($mmH / 1000);
+                    $materiales[] = [
+                        'producto_id'    => $productoVidrio->id,
+                        'nombre'         => $productoVidrio->nombre,
+                        'unidad'         => 'm2',
+                        'cantidad'       => round($area * $cantidad, 3),
+                        'costo_unitario' => round($cost),
+                        'costo_total'    => round($cost * $area * $cantidad),
+                        'proveedor'      => $mv?->proveedor?->nombre ?? 'N/A',
+                    ];
+                }
+            }
+            return;
+        }
+
+        // split node
+        $isV      = ($node['direction'] ?? 'v') === 'v';
+        $positions = $node['positions'] ?? [];
+        $children  = $node['children'] ?? [];
+        $n        = count($positions);
+
+        // Division bars: 'v' splits width → bars are vertical spanning full height
+        //                'h' splits height → bars are horizontal spanning full width
+        $barLengthMm = $isV ? $mmH : $mmW;
+        foreach ($positions as $pos) {
+            $addPcp(
+                $pos['pcp_id'] ?? null,
+                $cantidad,
+                $barLengthMm,
+                $isV ? 'Barra vertical' : 'Barra horizontal'
+            );
+        }
+
+        // Compute section sizes (mirrors getSections() in VistaConstructorMarco.vue)
+        $posMMs  = array_column($positions, 'posicion');
+        sort($posMMs);
+        $totalMM = $isV ? $mmW : $mmH;
+        $sections = [];
+        $prev     = 0;
+        foreach ($posMMs as $p) {
+            if ($p > $prev && $p < $totalMM) {
+                $sections[] = $p - $prev;
+                $prev = $p;
+            }
+        }
+        $sections[] = $totalMM - $prev;
+        if (empty($sections)) $sections = [$totalMM];
+
+        // Scale sections down to account for bar thickness
+        $totalSec = array_sum($sections);
+        $availMM  = $totalMM - $n * $BARRA_MM;
+        $scale    = $totalSec > 0 ? $availMM / $totalSec : 1;
+
+        for ($i = 0; $i <= $n; $i++) {
+            $secMM    = ($sections[$i] ?? end($sections)) * $scale;
+            $childMmW = $isV ? $secMM : $mmW;
+            $childMmH = $isV ? $mmH   : $secMM;
+            self::calcularArbolConstructor(
+                $children[$i] ?? null,
+                $childMmW, $childMmH, $cantidad,
+                $ventana, $colorId, $productoVidrio, $addPcp, $materiales
+            );
         }
     }
 }

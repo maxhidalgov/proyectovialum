@@ -68,6 +68,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
 
     // PRODUCTOS - Requiere permiso para crear/editar/eliminar
+    Route::get('/perfiles-constructor', [ProductoController::class, 'perfilesConstructor']);
     Route::get('/productos', [ProductoController::class, 'index']);
     Route::get('/productos/{id}', [ProductoController::class, 'show']);
     Route::middleware(['permission:gestionar_productos'])->group(function () {

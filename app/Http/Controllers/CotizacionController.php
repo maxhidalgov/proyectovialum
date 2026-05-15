@@ -160,6 +160,12 @@ public function store(Request $request)
                     'altos_filas'      => $ventana['altos_filas'] ?? null,
                     'anchos_columnas'  => $ventana['anchos_columnas'] ?? null,
                     'secciones'        => $ventana['secciones'] ?? null,
+                    // Constructor de Marco (tipos 59/60)
+                    'perimetro_constructor' => $ventana['perimetro_constructor'] ?? null,
+                    'marco_constructor'    => $ventana['marco_constructor'] ?? null,
+                    'divisiones_h'     => $ventana['divisiones_h'] ?? null,
+                    'divisiones_v'     => $ventana['divisiones_v'] ?? null,
+                    'espacios_constructor' => $ventana['espacios_constructor'] ?? null,
                 ], fn($v) => $v !== null),
             ]);
         }
@@ -227,7 +233,7 @@ public function store(Request $request)
             }
 
         DB::commit();
-        return response()->json(['message' => 'Cotización guardada correctamente'], 201);
+        return response()->json(['message' => 'Cotización guardada correctamente', 'id' => $cotizacion->id], 201);
 
     } catch (\Exception $e) {
         DB::rollBack();
@@ -348,6 +354,12 @@ public function store(Request $request)
                                 'altos_filas'      => $ventanaData['altos_filas'] ?? null,
                                 'anchos_columnas'  => $ventanaData['anchos_columnas'] ?? null,
                                 'secciones'        => $ventanaData['secciones'] ?? null,
+                                // Constructor de Marco (tipos 59/60)
+                                'perimetro_constructor' => $ventanaData['perimetro_constructor'] ?? null,
+                                'marco_constructor'    => $ventanaData['marco_constructor'] ?? null,
+                                'divisiones_h'     => $ventanaData['divisiones_h'] ?? null,
+                                'divisiones_v'     => $ventanaData['divisiones_v'] ?? null,
+                                'espacios_constructor' => $ventanaData['espacios_constructor'] ?? null,
                             ], fn($v) => $v !== null) ?: null,
                         ]);
                         $ventanasEnOrden[] = $ventana;
@@ -378,6 +390,21 @@ public function store(Request $request)
                             'tipo_vidrio'      => $ventanaData['tipo_vidrio'] ?? $ventanaData['tipoVidrio'] ?? null,
                             'manillon'         => $ventanaData['manillon'] ?? null,
                             'proveedor_vidrio' => $ventanaData['proveedor_vidrio'] ?? $ventanaData['proveedorVidrio'] ?? null,
+                            // Compuesta dinámica (tipo 54)
+                            'orientacion_comp' => $ventanaData['orientacion_comp'] ?? null,
+                            'items_comp'       => $ventanaData['items_comp'] ?? null,
+                            // Compuesta AL42 (tipo 57)
+                            'filas'            => $ventanaData['filas'] ?? null,
+                            'columnas'         => $ventanaData['columnas'] ?? null,
+                            'altos_filas'      => $ventanaData['altos_filas'] ?? null,
+                            'anchos_columnas'  => $ventanaData['anchos_columnas'] ?? null,
+                            'secciones'        => $ventanaData['secciones'] ?? null,
+                            // Constructor de Marco (tipos 59/60)
+                            'perimetro_constructor' => $ventanaData['perimetro_constructor'] ?? null,
+                            'marco_constructor'    => $ventanaData['marco_constructor'] ?? null,
+                            'divisiones_h'     => $ventanaData['divisiones_h'] ?? null,
+                            'divisiones_v'     => $ventanaData['divisiones_v'] ?? null,
+                            'espacios_constructor' => $ventanaData['espacios_constructor'] ?? null,
                         ], fn($v) => $v !== null) ?: null,
                     ]);
                     $ventanasEnOrden[] = $ventana;
