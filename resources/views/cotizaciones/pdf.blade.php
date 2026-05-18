@@ -236,6 +236,10 @@
           <tr><th style="{{ $labelStyle }}">Alto</th><td style="{{ $valStyle }}">{{ $ventana->alto }} mm</td></tr>
           <tr><th style="{{ $labelStyle }}">Cantidad</th><td style="{{ $valStyle }}">{{ $ventana->cantidad }}</td></tr>
           <tr>
+            <th style="{{ $labelStyle }}">Valor Neto</th>
+            <td style="{{ $valStyle }}">${{ number_format($ventana->cantidad > 0 ? round($ventana->precio / $ventana->cantidad) : $ventana->precio, 0, ',', '.') }}</td>
+          </tr>
+          <tr>
             <th style="{{ $labelStyle }}">Total Neto</th>
             <td style="{{ $valStyle }}"><strong>${{ number_format($ventana->precio, 0, ',', '.') }}</strong></td>
           </tr>
@@ -311,7 +315,7 @@
 
 {{-- Totales --}}
 @php
-  $totalVentanas    = $cotizacion->ventanas->sum(fn($v) => $v->precio * $v->cantidad);
+  $totalVentanas    = $cotizacion->ventanas->sum('precio');
   $totalProductos   = $cotizacion->detalles->sum('total');
   $subtotalNeto     = $totalVentanas + $totalProductos;
   $iva              = $subtotalNeto * 0.19;
