@@ -89,6 +89,8 @@ declare module 'vue' {
     VistaMamparaS60: typeof import('./src/components/VistaMamparaS60.vue')['default']
     VistaPuertaS60: typeof import('./src/components/VistaPuertaS60.vue')['default']
     VistaPuertaS60mini: typeof import('./src/components/VistaPuertaS60mini.vue')['default']
+    VistaPuertaTemplada: typeof import('./src/components/VistaPuertaTemplada.vue')['default']
+    VistaPuertaTempladamini: typeof import('./src/components/VistaPuertaTempladamini.vue')['default']
     VistaVentanaAbatirS60: typeof import('./src/components/VistaVentanaAbatirS60.vue')['default']
     VistaVentanaAbatirS60mini: typeof import('./src/components/VistaVentanaAbatirS60mini.vue')['default']
     VistaVentanaCompuestaAL42: typeof import('./src/components/VistaVentanaCompuestaAL42.vue')['default']

@@ -132,7 +132,7 @@ public function store(Request $request)
                 'ancho' => $ventana['ancho'] ?? null,
                 'alto' => $ventana['alto'] ?? null,
                 'cantidad' => $ventana['cantidad'] ?? 1,
-                'color_id' => $ventana['color_id'] ?? null,
+                'color_id' => $ventana['color_id'] ?? 3,
                 'producto_vidrio_proveedor_id' => $ventana['producto_vidrio_proveedor_id'] ?? null,
                 'costo' => $ventana['costo'] ?? 0,
                 'precio' => $ventana['precio'] ?? 0,
@@ -166,6 +166,8 @@ public function store(Request $request)
                     'divisiones_h'     => $ventana['divisiones_h'] ?? null,
                     'divisiones_v'     => $ventana['divisiones_v'] ?? null,
                     'espacios_constructor' => $ventana['espacios_constructor'] ?? null,
+                    // Puerta Templada (tipo 61)
+                    'tirador_id'       => $ventana['tirador_id'] ?? null,
                 ], fn($v) => $v !== null),
             ]);
         }
@@ -323,7 +325,7 @@ public function store(Request $request)
                             'tipo_ventana_id' => $ventanaData['tipo_ventana_id'],
                             'ancho' => $ventanaData['ancho'],
                             'alto' => $ventanaData['alto'],
-                            'color_id' => $ventanaData['color_id'],
+                            'color_id' => $ventanaData['color_id'] ?? 3,
                             'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
                             'costo' => $ventanaData['costo'],
                             'precio' => $ventanaData['precio'],
@@ -360,6 +362,8 @@ public function store(Request $request)
                                 'divisiones_h'     => $ventanaData['divisiones_h'] ?? null,
                                 'divisiones_v'     => $ventanaData['divisiones_v'] ?? null,
                                 'espacios_constructor' => $ventanaData['espacios_constructor'] ?? null,
+                                // Puerta Templada (tipo 61)
+                                'tirador_id'       => $ventanaData['tirador_id'] ?? null,
                             ], fn($v) => $v !== null) ?: null,
                         ]);
                         $ventanasEnOrden[] = $ventana;
@@ -370,7 +374,7 @@ public function store(Request $request)
                         'tipo_ventana_id' => $ventanaData['tipo_ventana_id'],
                         'ancho' => $ventanaData['ancho'],
                         'alto' => $ventanaData['alto'],
-                        'color_id' => $ventanaData['color_id'],
+                        'color_id' => $ventanaData['color_id'] ?? 3,
                         'producto_vidrio_proveedor_id' => $ventanaData['producto_vidrio_proveedor_id'],
                         'costo' => $ventanaData['costo'] ?? 0,
                         'precio' => $ventanaData['precio'] ?? 0,
@@ -405,6 +409,8 @@ public function store(Request $request)
                             'divisiones_h'     => $ventanaData['divisiones_h'] ?? null,
                             'divisiones_v'     => $ventanaData['divisiones_v'] ?? null,
                             'espacios_constructor' => $ventanaData['espacios_constructor'] ?? null,
+                            // Puerta Templada (tipo 61)
+                            'tirador_id'       => $ventanaData['tirador_id'] ?? null,
                         ], fn($v) => $v !== null) ?: null,
                     ]);
                     $ventanasEnOrden[] = $ventana;
@@ -581,7 +587,128 @@ public function store(Request $request)
             Log::warning('PDF: no se pudo cargar logo: ' . $e->getMessage());
         }
 
-        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64', 'logoBase64'))
+        // ── Detalle Constructor AL (tipos 59/60) ──────────────────────────────
+        $detallesConstructor = [];
+        $constructorVentanas = $cotizacion->ventanas->filter(fn($v) => in_array($v->tipo_ventana_id, [59, 60]));
+
+        if ($constructorVentanas->isNotEmpty()) {
+            // Phase 1: single-pass collection per ventana
+            $allPerfilPcpIds   = [];
+            $allPtPcpIds       = [];
+            $allTiradorProdIds = [];
+            $rawData = []; // ventana_id => ['perfilIds'=>[], 'junquilloIds'=>[], 'ptNodes'=>[]]
+
+            foreach ($constructorVentanas as $v) {
+                $cfg      = $v->config ?? [];
+                $perimetro = $cfg['perimetro_constructor'] ?? null;
+                $marco     = $cfg['marco_constructor'] ?? null;
+
+                $perfilIds = [];
+                foreach (['top', 'right', 'bottom', 'left'] as $side) {
+                    if (!empty($perimetro[$side]['pcp_id'])) {
+                        $id = (int)$perimetro[$side]['pcp_id'];
+                        $perfilIds[] = $id;
+                        $allPerfilPcpIds[] = $id;
+                    }
+                }
+
+                $ptNodes = [];
+                $junquilloIds = [];
+                $collect = null;
+                $collect = function (?array $node) use (&$collect, &$perfilIds, &$junquilloIds, &$ptNodes, &$allPerfilPcpIds, &$allPtPcpIds, &$allTiradorProdIds) {
+                    if (!$node) return;
+                    if (($node['tipo'] ?? 'leaf') === 'leaf') {
+                        if (($node['contenido'] ?? '') === 'ventana' && !empty($node['tipo_ventana_id']) && (int)$node['tipo_ventana_id'] === 61) {
+                            $ptNodes[] = $node;
+                            if (!empty($node['producto_vidrio_proveedor_id'])) $allPtPcpIds[] = (int)$node['producto_vidrio_proveedor_id'];
+                            if (!empty($node['tirador_id'])) $allTiradorProdIds[] = (int)$node['tirador_id'];
+                        }
+                        // Collect junquillo from vidrio leaves
+                        if (!empty($node['junquillo_pcp_id'])) {
+                            $id = (int)$node['junquillo_pcp_id'];
+                            $junquilloIds[] = $id;
+                            $allPerfilPcpIds[] = $id; // same batch load as profiles
+                        }
+                        return;
+                    }
+                    foreach ($node['positions'] ?? [] as $pos) {
+                        if (!empty($pos['pcp_id'])) {
+                            $id = (int)$pos['pcp_id'];
+                            $perfilIds[] = $id;
+                            $allPerfilPcpIds[] = $id;
+                        }
+                    }
+                    foreach ($node['children'] ?? [] as $child) {
+                        $collect($child);
+                    }
+                };
+                $collect($marco);
+
+                $rawData[$v->id] = ['perfilIds' => $perfilIds, 'junquilloIds' => $junquilloIds, 'ptNodes' => $ptNodes];
+            }
+
+            // Phase 2: batch load
+            $pcpMap = [];
+            $uniquePerfilIds = array_values(array_unique(array_filter($allPerfilPcpIds)));
+            if ($uniquePerfilIds) {
+                \App\Models\ProductoColorProveedor::with(['producto', 'color'])
+                    ->whereIn('id', $uniquePerfilIds)->get()
+                    ->each(function ($pcp) use (&$pcpMap) {
+                        $parts = array_filter([$pcp->producto->nombre ?? null, $pcp->color->nombre ?? null]);
+                        $pcpMap[$pcp->id] = implode(' · ', $parts);
+                    });
+            }
+
+            $ptPcpMap = [];
+            $uniquePtPcpIds = array_values(array_unique(array_filter($allPtPcpIds)));
+            if ($uniquePtPcpIds) {
+                \App\Models\ProductoColorProveedor::with('producto')
+                    ->whereIn('id', $uniquePtPcpIds)->get()
+                    ->each(function ($p) use (&$ptPcpMap) {
+                        $ptPcpMap[$p->id] = $p->producto->nombre ?? '?';
+                    });
+            }
+
+            $tiradorMap = [];
+            $uniqueTiradorIds = array_values(array_unique(array_filter($allTiradorProdIds)));
+            if ($uniqueTiradorIds) {
+                \App\Models\Producto::whereIn('id', $uniqueTiradorIds)->get()
+                    ->each(function ($p) use (&$tiradorMap) {
+                        $tiradorMap[$p->id] = $p->nombre ?? '?';
+                    });
+            }
+
+            // Phase 3: build per-ventana detalle strings
+            foreach ($constructorVentanas as $v) {
+                $d = $rawData[$v->id] ?? ['perfilIds' => [], 'ptNodes' => []];
+
+                $perfiles = array_values(array_unique(array_filter(
+                    array_map(fn($id) => $pcpMap[$id] ?? null, array_unique($d['perfilIds']))
+                )));
+
+                $vidriosTemplados = [];
+                $tiradores = [];
+                foreach ($d['ptNodes'] as $pt) {
+                    $pvpId = !empty($pt['producto_vidrio_proveedor_id']) ? (int)$pt['producto_vidrio_proveedor_id'] : null;
+                    $tirId = !empty($pt['tirador_id']) ? (int)$pt['tirador_id'] : null;
+                    if ($pvpId && isset($ptPcpMap[$pvpId])) $vidriosTemplados[] = $ptPcpMap[$pvpId];
+                    if ($tirId && isset($tiradorMap[$tirId])) $tiradores[] = $tiradorMap[$tirId];
+                }
+
+                $junquillos = array_values(array_unique(array_filter(
+                    array_map(fn($id) => $pcpMap[$id] ?? null, array_unique($d['junquilloIds']))
+                )));
+
+                $detallesConstructor[$v->id] = [
+                    'perfiles'          => $perfiles,
+                    'vidrios_templados' => array_values(array_unique($vidriosTemplados)),
+                    'tiradores'         => array_values(array_unique($tiradores)),
+                    'junquillos'        => $junquillos,
+                ];
+            }
+        }
+
+        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64', 'logoBase64', 'detallesConstructor'))
             ->setOptions(['isPhpEnabled' => true]);
 
         return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');

@@ -121,10 +121,53 @@
               variant="outlined" density="compact" color="primary" class="mt-2"
               @update:model-value="setSpaceTipoVentana"
             />
+
+            <!-- Opciones específicas para Puerta Templada (tipo 61) -->
+            <template v-if="currentSpaceObj.tipo_ventana_id === 61">
+              <div class="text-caption text-medium-emphasis mt-3 mb-1">Vidrio templado:</div>
+              <v-select
+                :model-value="currentSpaceObj.producto_vidrio_proveedor_id"
+                :items="productosVidrioTemplado"
+                item-title="nombre" item-value="id"
+                label="Espesor de vidrio"
+                variant="outlined" density="compact" color="primary"
+                clearable
+                @update:model-value="setSpaceProductoVidrio"
+              />
+              <div class="text-caption text-medium-emphasis mt-2 mb-1">Tirador:</div>
+              <v-select
+                :model-value="currentSpaceObj.tirador_id"
+                :items="tiradoresTemplado"
+                item-title="label" item-value="id"
+                label="Tirador Tipo H"
+                variant="outlined" density="compact" color="primary"
+                clearable
+                @update:model-value="setSpaceTirador"
+              />
+            </template>
           </template>
-          <div v-else class="text-caption text-medium-emphasis mt-1">
-            Se usará el vidrio de la ventana principal.
-          </div>
+          <template v-else>
+            <div class="text-caption text-medium-emphasis mt-1 mb-2">
+              Se usará el vidrio de la ventana principal.
+            </div>
+            <div class="text-caption text-medium-emphasis mb-1">Junquillo (opcional):</div>
+            <v-autocomplete
+              :model-value="currentSpaceObj?.junquillo_pcp_id ?? null"
+              :items="perfilesConDisplay"
+              item-title="display"
+              item-value="id"
+              label="Seleccionar junquillo..."
+              clearable variant="outlined" density="compact" color="primary"
+              :loading="loadingPerfiles"
+              no-data-text="Sin perfiles disponibles"
+              @update:model-value="setSpaceJunquillo"
+            />
+            <v-card v-if="currentSpaceJunquilloInfo" variant="tonal" color="secondary" class="pa-2">
+              <div class="text-caption font-weight-bold">{{ currentSpaceJunquilloInfo.producto_nombre }}</div>
+              <div class="text-caption">Color: {{ currentSpaceJunquilloInfo.color_nombre }}</div>
+              <div class="text-caption font-weight-bold text-success">${{ currentSpaceJunquilloInfo.costo?.toLocaleString('es-CL') }} / m</div>
+            </v-card>
+          </template>
 
           <!-- Agregar subdivisión -->
           <v-divider class="my-3" />
@@ -159,7 +202,26 @@ const props = defineProps({
   ventana: { type: Object, required: true },
   tiposVentana: { type: Array, default: () => [] },
   colores: { type: Array, default: () => [] },
+  productosVidrio: { type: Array, default: () => [] },
 })
+
+const tiradoresTemplado = [
+  { id: 266, label: 'Tirador 450mm' },
+  { id: 267, label: 'Tirador 600mm' },
+  { id: 268, label: 'Tirador 800mm' },
+  { id: 269, label: 'Tirador 1000mm' },
+  { id: 270, label: 'Tirador 1200mm' },
+  { id: 271, label: 'Tirador 1800mm' },
+]
+
+const productosVidrioTemplado = computed(() =>
+  props.productosVidrio
+    .filter(p => p.tipo_producto_id === 7)
+    .flatMap(p => (p.colores_por_proveedor ?? []).map(cpp => ({
+      id: cpp.id,
+      nombre: `${p.nombre} (${cpp.proveedor?.nombre ?? 'Proveedor'})`,
+    })))
+)
 
 const canvasRef = ref(null)
 
@@ -416,12 +478,46 @@ const currentSpaceObj = computed(() => {
 
 function setSpaceContenido(val) {
   const obj = currentSpaceObj.value
-  if (obj) { obj.contenido = val; if (val === 'vidrio') obj.tipo_ventana_id = null }
+  if (!obj) return
+  obj.contenido = val
+  if (val === 'vidrio') {
+    obj.tipo_ventana_id = null
+    delete obj.tirador_id
+    delete obj.producto_vidrio_proveedor_id
+  } else {
+    delete obj.junquillo_pcp_id
+  }
 }
 function setSpaceTipoVentana(val) {
   const obj = currentSpaceObj.value
-  if (obj) obj.tipo_ventana_id = val
+  if (!obj) return
+  obj.tipo_ventana_id = val
+  if (val !== 61) {
+    delete obj.tirador_id
+    delete obj.producto_vidrio_proveedor_id
+  } else {
+    if (obj.tirador_id === undefined) obj.tirador_id = null
+    if (obj.producto_vidrio_proveedor_id === undefined) obj.producto_vidrio_proveedor_id = null
+  }
 }
+function setSpaceTirador(val) {
+  const obj = currentSpaceObj.value
+  if (obj) obj.tirador_id = val ?? null
+}
+function setSpaceProductoVidrio(val) {
+  const obj = currentSpaceObj.value
+  if (obj) obj.producto_vidrio_proveedor_id = val ?? null
+}
+function setSpaceJunquillo(val) {
+  const obj = currentSpaceObj.value
+  if (obj) obj.junquillo_pcp_id = val ?? null
+}
+
+const currentSpaceJunquilloInfo = computed(() => {
+  const id = currentSpaceObj.value?.junquillo_pcp_id
+  if (!id) return null
+  return perfiles.value.find(p => p.id === id) ?? null
+})
 
 // Canvas event handlers
 const onClickPerimetro = (lado, isMulti) => toggleOrSet({ tipo: lado }, isMulti)

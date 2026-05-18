@@ -87,6 +87,11 @@ class CalculoVentanaService
             return self::calcularConstructorMarco($ventana);
         }
 
+        // Puerta Templada (tipo 61)
+        if ($tipoVentanaId == 61) {
+            return self::calcularPuertaTemplada($ventana);
+        }
+
         return [
             'materiales' => [],
             'costo_total' => 0,
@@ -4658,7 +4663,11 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
 
     protected static function recolectarPcpIdsArbol(?array $node, array &$pcpIds): void
     {
-        if (!$node || ($node['tipo'] ?? 'leaf') !== 'split') return;
+        if (!$node) return;
+        if (($node['tipo'] ?? 'leaf') === 'leaf') {
+            if (!empty($node['junquillo_pcp_id'])) $pcpIds[] = (int)$node['junquillo_pcp_id'];
+            return;
+        }
         foreach ($node['positions'] ?? [] as $pos) {
             if (!empty($pos['pcp_id'])) $pcpIds[] = (int)$pos['pcp_id'];
         }
@@ -4692,6 +4701,25 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
                     'alto'     => (int)round($mmH),
                     'cantidad' => $cantidad,
                 ]);
+
+                // Puerta Templada (tipo 61): override glass and tirador from leaf settings
+                if ((int)$node['tipo_ventana_id'] === 61) {
+                    if (!empty($node['tirador_id'])) {
+                        $sub['tirador_id'] = (int)$node['tirador_id'];
+                    }
+                    if (!empty($node['producto_vidrio_proveedor_id'])) {
+                        $pcp = \App\Models\ProductoColorProveedor::find((int)$node['producto_vidrio_proveedor_id']);
+                        if ($pcp) {
+                            $sub['productoVidrio']               = $pcp->producto_id;
+                            $sub['proveedorVidrio']              = $pcp->proveedor_id;
+                            $sub['producto_vidrio_proveedor_id'] = $pcp->id;
+                        }
+                    }
+                    // Inherit parent color for herraje lookup (defaults to Sin Color fallback in service)
+                    $sub['color']    = $sub['color_id'] ?? null;
+                    $sub['color_id'] = $sub['color_id'] ?? null;
+                }
+
                 $res = self::calcularMateriales($sub);
                 foreach ($res['materiales'] ?? [] as $m) {
                     $materiales[] = $m;
@@ -4719,6 +4747,11 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
                         'costo_total'    => round($cost * $area * $cantidad),
                         'proveedor'      => $mv?->proveedor?->nombre ?? 'N/A',
                     ];
+                }
+                // Junquillo (optional glazing bead around the glass perimeter)
+                if (!empty($node['junquillo_pcp_id'])) {
+                    $perimeterMm = 2 * ($mmW + $mmH);
+                    $addPcp((int)$node['junquillo_pcp_id'], $cantidad, $perimeterMm, 'Junquillo');
                 }
             }
             return;
@@ -4772,5 +4805,124 @@ protected static function calcularVentanaCompuestaBay($ventanaOriginal, $seccion
                 $ventana, $colorId, $productoVidrio, $addPcp, $materiales
             );
         }
+    }
+
+    // =====================================================================
+    // PUERTA TEMPLADA (tipo 61)
+    // =====================================================================
+
+    // IDs de herrajes puerta templada (ajustar si el INSERT no generó estos IDs exactos)
+    const ID_PIVOTE         = 261;
+    const ID_BISAGRA_SUP    = 262;
+    const ID_BISAGRA_INF    = 263;
+    const ID_CERRADURA      = 264;
+    const ID_QUICIO         = 265;
+    const TIRADORES_MM      = [
+        450  => 266,
+        600  => 267,
+        800  => 268,
+        1000 => 269,
+        1200 => 270,
+        1800 => 271,
+    ];
+
+    protected static function calcularPuertaTemplada(array $ventana): array
+    {
+        $ancho           = $ventana['ancho'];
+        $alto            = $ventana['alto'];
+        $colorId         = $ventana['color'] ?? null;
+        $cantidad        = $ventana['cantidad'] ?? 1;
+        $productoVidrioId = $ventana['productoVidrio'] ?? null;
+        $proveedorVidrio  = $ventana['proveedorVidrio'] ?? null;
+
+        // Tirador: usa el enviado desde frontend o auto-selecciona por alto de puerta
+        $tiradorId = $ventana['tirador_id'] ?? self::seleccionarTiradorTemplado($alto);
+
+        $productoIds = array_filter([
+            $productoVidrioId,
+            self::ID_PIVOTE,
+            self::ID_BISAGRA_SUP,
+            self::ID_BISAGRA_INF,
+            self::ID_CERRADURA,
+            self::ID_QUICIO,
+            $tiradorId,
+        ]);
+
+        $productos = Producto::with('coloresPorProveedor.proveedor')
+            ->whereIn('id', $productoIds)
+            ->get()
+            ->keyBy('id');
+
+        $materiales = [];
+
+        // Helper herraje: precio unitario (sin largo_total porque son unidades, no metros)
+        $addHerraje = function (int $id, int $qty) use (&$materiales, $productos, $colorId) {
+            $producto = $productos[$id] ?? null;
+            if (!$producto) return;
+            $costo = self::buscarCostoPorColor($producto, $colorId);
+            $materiales[] = [
+                'producto_id'    => $producto->id,
+                'nombre'         => $producto->nombre,
+                'unidad'         => 'un',
+                'cantidad'       => $qty,
+                'costo_unitario' => round($costo),
+                'costo_total'    => round($costo * $qty),
+                'proveedor'      => self::buscarNombreProveedor($producto, $colorId),
+            ];
+        };
+
+        // Vidrio templado (m²)
+        if ($productoVidrioId && isset($productos[$productoVidrioId])) {
+            $pv    = $productos[$productoVidrioId];
+            $match = $pv->coloresPorProveedor->first(
+                fn($cpp) => (int)$cpp->color_id === (int)$colorId
+                         && (int)$cpp->proveedor_id === (int)$proveedorVidrio
+            );
+            $cid  = $match ? $colorId : null;
+            $cost = self::buscarCostoPorColor($pv, $cid, $proveedorVidrio);
+            $mv   = $pv->coloresPorProveedor->first(
+                fn($cpp) => $cpp->color_id == $cid && $cpp->proveedor_id == $proveedorVidrio
+            );
+            $area = ($ancho / 1000) * ($alto / 1000);
+            $materiales[] = [
+                'producto_id'    => $pv->id,
+                'nombre'         => $pv->nombre,
+                'unidad'         => 'm2',
+                'cantidad'       => round($area * $cantidad, 3),
+                'costo_unitario' => round($cost),
+                'costo_total'    => round($cost * $area * $cantidad),
+                'proveedor'      => $mv?->proveedor?->nombre ?? 'N/A',
+            ];
+        }
+
+        // Herrajes fijos (1 por puerta)
+        $addHerraje(self::ID_PIVOTE,      $cantidad);
+        $addHerraje(self::ID_BISAGRA_SUP, $cantidad);
+        $addHerraje(self::ID_BISAGRA_INF, $cantidad);
+        $addHerraje(self::ID_CERRADURA,   $cantidad);
+        $addHerraje(self::ID_QUICIO,      $cantidad);
+
+        // Tirador (1 por puerta, tamaño auto-seleccionado o elegido por usuario)
+        if ($tiradorId) {
+            $addHerraje($tiradorId, $cantidad);
+        }
+
+        $costoTotal    = array_sum(array_column($materiales, 'costo_total'));
+        $costoUnitario = $cantidad > 0 ? $costoTotal / $cantidad : 0;
+
+        return [
+            'materiales'     => $materiales,
+            'costo_total'    => round($costoTotal),
+            'costo_unitario' => round($costoUnitario),
+        ];
+    }
+
+    // Selecciona el tirador más apropiado según el alto de la puerta
+    protected static function seleccionarTiradorTemplado(float $alto): int
+    {
+        foreach ([900 => 450, 1100 => 600, 1400 => 800, 1600 => 1000, 2000 => 1200] as $limiteAlto => $mmTirador) {
+            if ($alto <= $limiteAlto) return self::TIRADORES_MM[$mmTirador];
+        }
+        return self::TIRADORES_MM[1800]; // puerta mayor a 2000mm
     }
 }

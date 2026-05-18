@@ -601,6 +601,13 @@
                   :color-marco="colores.find(c => c.id === ventana.color)?.nombre || 'blanco'"
                   :marco="ventana.marcoConstructor"
                 />
+                <VistaPuertaTemplada
+                  v-else-if="ventana.tipo === 61"
+                  :ref="el => { if (el) ventanaRefs[index] = el }"
+                  :ancho="ventana.ancho"
+                  :alto="ventana.alto"
+                  :tirador-mm="tiradorMmDesdeId(ventana.tirador_id)"
+                />
               </v-col>
               <v-col cols="6">
                 <v-card variant="outlined">
@@ -789,11 +796,15 @@ import VentanaCorrederaAL25 from '@/components/VistaVentanaCorrederaAL25.vue'
 import VistaVentanaCompuestaAL42 from '@/components/VistaVentanaCompuestaAL42.vue'
 import ArmadorUniversal from '@/components/ArmadorUniversal.vue'
 import VistaConstructorMarco from '@/components/VistaConstructorMarco.vue'
+import VistaPuertaTemplada from '@/components/VistaPuertaTemplada.vue'
 
 
 
 const ventanaRefs = ref([]) // mantener referencias
 const tiposVentanaTodos = ref([])
+
+const TIRADORES_MM = { 266: 450, 267: 600, 268: 800, 269: 1000, 270: 1200, 271: 1800 }
+const tiradorMmDesdeId = (id) => TIRADORES_MM[id] ?? 1000
 
 const margenVenta = 0.45 // Margen del 45%
 const router = useRouter()
@@ -943,8 +954,8 @@ onMounted(async () => {
 
   materiales.value = materialesRes.data
   colores.value = coloresRes.data
-  tiposVidrio.value = tiposProductoRes.data.filter(tp => [1, 2].includes(tp.id))
-  productosVidrio.value = productosRes.data.filter(p => [1, 2].includes(p.tipo_producto_id))
+  tiposVidrio.value = tiposProductoRes.data.filter(tp => [1, 2, 7].includes(tp.id))
+  productosVidrio.value = productosRes.data.filter(p => [1, 2, 7].includes(p.tipo_producto_id))
   
   console.log('📦 PRODUCTOS DE VIDRIO CARGADOS:', productosVidrio.value.length)
   console.log('📦 Primer producto:', productosVidrio.value[0])
@@ -1131,6 +1142,8 @@ const cargarCotizacionExistente = async () => {
           divisiones_h: v.config?.divisiones_h ?? [],
           divisiones_v: v.config?.divisiones_v ?? [],
           espaciosConstructor: v.config?.espacios_constructor ?? [[{ contenido: 'vidrio', tipo_ventana_id: null }]],
+          // Puerta Templada (tipo 61)
+          tirador_id: v.config?.tirador_id ?? null,
           // ID para actualización
           id: v.id
         }
@@ -2040,6 +2053,8 @@ const guardarCotizacion = async (express = false) => {
           divisiones_h: v.divisiones_h ?? null,
           divisiones_v: v.divisiones_v ?? null,
           espacios_constructor: v.espaciosConstructor ?? null,
+          // Puerta Templada (tipo 61)
+          tirador_id: v.tirador_id ?? null,
         }
 
         console.log(`🔍 Ventana ${index} mapeada:`, ventanaMapeada)

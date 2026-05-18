@@ -38,6 +38,14 @@
               :config="{ x: 0, y: 0 }" :color-marco="colorNombre" :show-height-label="false"
             />
           </v-group>
+          <v-group v-else-if="leaf.cat === 'templada'" v-bind="leaf.clipGroup">
+            <VistaPuertaTempladamini
+              :ancho="leaf.mmW" :alto="leaf.mmH" :escala="leaf.esc"
+              :config="{ x: 0, y: 0 }"
+              :tirador-mm="tiradorMmFromId(leaf.node.tirador_id)"
+              :show-height-label="false"
+            />
+          </v-group>
           <!-- Label for compuesta / unknown types -->
           <v-text v-if="leaf.label" v-bind="leaf.label" />
         </template>
@@ -68,6 +76,7 @@ import VistaVentanaFijaS60mini       from './VistaVentanaFijaS60mini.vue'
 import VistaVentanaProyectanteS60mini from './VistaVentanaProyectanteS60mini.vue'
 import VistaVentanaCorrederamini      from './VistaVentanaCorrederamini.vue'
 import VistaPuertaS60mini            from './VistaPuertaS60mini.vue'
+import VistaPuertaTempladamini       from './VistaPuertaTempladamini.vue'
 
 const SEL = '#FF6B00'
 
@@ -77,7 +86,11 @@ const TIPO_CAT = {
   45: 'proyectante', 49: 'proyectante', 56: 'proyectante',
   50: 'puerta', 51: 'puerta',
   47: 'compuesta', 54: 'compuesta', 57: 'compuesta',
+  61: 'templada',
 }
+
+const TIRADORES_MM_MAP = { 266: 450, 267: 600, 268: 800, 269: 1000, 270: 1200, 271: 1800 }
+function tiradorMmFromId(id) { return TIRADORES_MM_MAP[id] ?? 1000 }
 
 const stageRef = ref(null)
 const renderKey = ref(0)

@@ -239,6 +239,26 @@
             <th style="{{ $labelStyle }}">Total Neto</th>
             <td style="{{ $valStyle }}"><strong>${{ number_format($ventana->precio, 0, ',', '.') }}</strong></td>
           </tr>
+          @if(in_array($ventana->tipo_ventana_id, [59, 60]) && !empty($detallesConstructor[$ventana->id]))
+            @php $det = $detallesConstructor[$ventana->id]; @endphp
+            <tr>
+              <th style="{{ $labelStyle }}">Detalle</th>
+              <td style="{{ $valStyle }}; font-size: 10px; line-height: 1.6;">
+                @if(!empty($det['perfiles']))
+                  <strong>Perfiles:</strong> {{ implode(', ', $det['perfiles']) }}<br>
+                @endif
+                @if(!empty($det['junquillos']))
+                  <strong>Junquillo:</strong> {{ implode(', ', $det['junquillos']) }}<br>
+                @endif
+                @if(!empty($det['vidrios_templados']))
+                  <strong>Cristal:</strong> {{ implode(', ', $det['vidrios_templados']) }}<br>
+                @endif
+                @if(!empty($det['tiradores']))
+                  <strong>Tirador:</strong> {{ implode(', ', $det['tiradores']) }}
+                @endif
+              </td>
+            </tr>
+          @endif
         </table>
       </td>
     </tr>

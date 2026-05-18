@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(grep -E '\\\\.php$')",
-      "Bash(grep '.php$')"
+      "Bash(grep '.php$')",
+      "Bash(php artisan *)",
+      "PowerShell(& \"C:\\\\xampp\\\\mysql\\\\bin\\\\mysql.exe\" -u root -e \"USE proyectovialum; SELECT id, nombre FROM colores WHERE id IN \\(1,2,3,4,5,6,7,8\\);\")"
     ]
   }
 }

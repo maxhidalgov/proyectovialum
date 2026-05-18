@@ -100,7 +100,7 @@
               prepend-inner-icon="mdi-layers-outline"
             />
           </v-col>
-          <v-col cols="6" md="3">
+          <v-col v-if="ventana.material !== 3" cols="6" md="3">
             <v-select
               v-model="ventana.color"
               :items="coloresFiltrados"
@@ -116,7 +116,7 @@
           <v-col cols="6" md="3">
             <v-select
               v-model="ventana.tipoVidrio"
-              :items="tiposVidrio"
+              :items="tiposVidrioPorMaterial"
               item-title="nombre"
               item-value="id"
               label="Tipo de vidrio"
@@ -337,6 +337,23 @@
               :ventana="ventana"
               :tipos-ventana="props.tiposVentana"
               :colores="colores"
+              :productos-vidrio="props.productosVidrio"
+            />
+          </v-col>
+        </v-row>
+
+        <!-- Puerta Templada (tipo 61): selector de tirador -->
+        <v-row v-if="ventana.tipo === 61" dense class="mt-2">
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="ventana.tirador_id"
+              :items="tiradoresTemplado"
+              item-title="label"
+              item-value="id"
+              label="Tirador Tipo H"
+              variant="outlined"
+              density="compact"
+              hide-details
             />
           </v-col>
         </v-row>
@@ -991,12 +1008,18 @@
               :perfiles-marco="perfilesMarco"
               :perfiles-divisores="perfilesDivisores"
               :color-marco="(colores.find(c => c.id === ventana.color)?.nombre || 'blanco').toLowerCase()"
-              @actualizar="(config) => { 
+              @actualizar="(config) => {
                 console.log('📦 Configuración armador actualizada:', config)
                 ventana.configuracionArmador = config
-                recalcularCostos() 
+                recalcularCostos()
               }"
               @cancelar="() => {}"
+            />
+            <VistaPuertaTemplada
+              v-else-if="ventana.tipo === 61"
+              :ancho="ventana.ancho"
+              :alto="ventana.alto"
+              :tirador-mm="tiradorMmDesdeId(ventana.tirador_id)"
             />
 
           </v-col>
@@ -1248,6 +1271,7 @@ import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
 import VistaVentanaCompuestaDinamica from '@/components/VistaVentanaCompuestaDinamica.vue'
 import ConstructorMarcoConfig from '@/components/ConstructorMarcoConfig.vue'
 import ArmadorVentanasComplejas from '@/components/ArmadorVentanasComplejas.vue'
+import VistaPuertaTemplada from '@/components/VistaPuertaTemplada.vue'
 
 import api from '@/axiosInstance'
 
@@ -1374,6 +1398,8 @@ const baseVentana = {
   cantidadComp: 2,
   itemsComp: [baseItemComp(), baseItemComp()],
   configuracionArmador: null, // Para ventana tipo 58 (Armador Universal)
+  // Puerta Templada (tipo 61)
+  tirador_id: null,
   // Constructor de Marco (tipos 59/60)
   perimetroConstructor: null,
   marcoConstructor: null,
@@ -1383,6 +1409,16 @@ const baseVentana = {
 }
 
 const ventana = ref({ ...baseVentana, ...(props.ventana || {}) })
+
+// Tiradores para Puerta Templada (tipo 61) — IDs locales 266-271
+const tiradoresTemplado = [
+  { id: 266, label: 'Tirador 450mm'  },
+  { id: 267, label: 'Tirador 600mm'  },
+  { id: 268, label: 'Tirador 800mm'  },
+  { id: 269, label: 'Tirador 1000mm' },
+  { id: 270, label: 'Tirador 1200mm' },
+  { id: 271, label: 'Tirador 1800mm' },
+]
 
 // Tipos de ventana disponibles para el armador
 const tiposVentanaBayKonvaBase = [
@@ -1431,6 +1467,17 @@ const coloresFiltrados = computed(() => {
   const ids = materialId === 1 ? idsAluminio : idsPVC
   return props.colores.filter(c => ids.includes(c.id))
 })
+
+// Tipos de vidrio filtrados según el material seleccionado
+const tiposVidrioPorMaterial = computed(() => {
+  const materialId = ventana.value.material ?? props.materialDefault
+  const idsTemplado    = [7]   // Vidrio Templado
+  const idsAluminioPVC = [1, 2] // Monolítico, Termopanel
+  const ids = materialId === 3 ? idsTemplado : idsAluminioPVC
+  return props.tiposVidrio.filter(t => ids.includes(t.id))
+})
+
+const tiradorMmDesdeId = (id) => tiradoresTemplado.find(t => t.id === id)?.mm ?? 1000
 
 const tiposVentanaCentro = [
   { id: 2, nombre: 'Fija' },
@@ -1481,11 +1528,14 @@ onMounted(async () => {
 })
 
 
+let isResettingVentana = false
+
 watch(
   () => props.mostrar,
-  (val) => {
+  async (val) => {
     if (val && !props.ventana) {
       // Modo AGREGAR - valores por defecto
+      isResettingVentana = true
       ventana.value = {
         ...baseVentana,
         material: props.materialDefault ?? null,
@@ -1511,21 +1561,26 @@ watch(
           ]
         },
       }
+      await nextTick()
+      isResettingVentana = false
     }
-    
+
     if (val && props.ventana) {
       // Modo EDITAR - los datos YA vienen completos desde index.vue
       console.log('📥 MODAL - Recibiendo ventana completa:', props.ventana)
       console.log('📥 MODAL - tipoVidrio recibido:', props.ventana.tipoVidrio)
       console.log('📥 MODAL - material recibido:', props.ventana.material)
-      
+
+      isResettingVentana = true
       // Simplemente asignar TODO - sin inferencia
-      ventana.value = { 
-        ...baseVentana, 
+      ventana.value = {
+        ...baseVentana,
         ...props.ventana
       }
-      
+
       console.log('✅ MODAL - Ventana asignada:', ventana.value)
+      await nextTick()
+      isResettingVentana = false
     }
   },
   { immediate: true }
@@ -1597,8 +1652,9 @@ async function recalcularCostos() {
     ? ventana.value.configuracionArmador?.ancho && ventana.value.configuracionArmador?.alto
     : ventana.value.ancho && ventana.value.alto
 
+  const esTemplado = ventana.value.material === 3
   const condicionesMet = ventana.value.tipo && tienesDimensiones &&
-    ventana.value.cantidad && ventana.value.color && ventana.value.productoVidrioProveedor
+    ventana.value.cantidad && (esTemplado || ventana.value.color) && ventana.value.productoVidrioProveedor
 
   if (!condicionesMet) {
     ventana.value.costo_total_unitario = 0
@@ -1667,6 +1723,9 @@ async function recalcularCostos() {
       ...(ventana.value.tipo === 58 && ventana.value.configuracionArmador && {
         configuracionArmador: ventana.value.configuracionArmador,
       }),
+      ...(ventana.value.tipo === 61 && {
+        tirador_id: ventana.value.tirador_id ?? null,
+      }),
       ...(ventana.value.tipo === 54 && {
         orientacionComp: ventana.value.orientacionComp ?? 'horizontal',
         itemsComp: ventana.value.itemsComp ?? [],
@@ -1725,7 +1784,11 @@ const onGuardar = async () => {
 }
 
 watch(() => ventana.value.material, () => {
+  if (isResettingVentana) return
   ventana.value.tipo = null
+  ventana.value.tipoVidrio = null
+  ventana.value.productoVidrioProveedor = null
+  if (ventana.value.material === 3) ventana.value.color = null
 })
 
 // Auto-calcular ancho total cuando cambia algún ancho de Bay Window
@@ -1806,6 +1869,9 @@ watch(
     // ✅ Constructor de Marco (tipos 59/60)
     JSON.stringify(ventana.value.perimetroConstructor),
     JSON.stringify(ventana.value.marcoConstructor),
+
+    // ✅ Puerta Templada (tipo 61)
+    ventana.value.tirador_id,
   ],
   () => {
     calculando.value = true

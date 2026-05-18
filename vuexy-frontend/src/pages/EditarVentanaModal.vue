@@ -247,6 +247,23 @@
           </v-col>
         </v-row>
 
+        <!-- Puerta Templada (tipo 61): selector de tirador -->
+        <v-row v-if="ventanaLocal.tipo === 61" dense class="mt-2">
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="ventanaLocal.tirador_id"
+              :items="tiradoresTemplado"
+              item-title="label"
+              item-value="id"
+              label="Tirador Tipo H"
+              variant="outlined"
+              density="compact"
+              hide-details
+              @update:model-value="recalcularCostos"
+            />
+          </v-col>
+        </v-row>
+
         <!-- Constructor de Marco (tipos 59/60) -->
         <v-row v-if="ventanaLocal.tipo === 59 || ventanaLocal.tipo === 60" dense class="mt-2">
           <v-col cols="12">
@@ -254,6 +271,7 @@
               :ventana="ventanaLocal"
               :tipos-ventana="tiposVentana"
               :colores="colores"
+              :productos-vidrio="productosVidrio"
             />
           </v-col>
         </v-row>
@@ -409,6 +427,12 @@
               :anchos-columnas="ventanaLocal.anchosColumnas"
               :secciones="ventanaLocal.secciones"
             />
+            <VistaPuertaTemplada
+              v-else-if="ventanaLocal.tipo === 61"
+              :ancho="ventanaLocal.ancho"
+              :alto="ventanaLocal.alto"
+              :tirador-mm="tiradorMmDesdeId(ventanaLocal.tirador_id)"
+            />
           </v-col>
         </v-row>
 
@@ -529,6 +553,7 @@ import VentanaAbatir from '@/components/VistaVentanaAbatirS60.vue'
 import PuertaS60 from '@/components/VistaPuertaS60.vue'
 import VistaMamparaS60 from '@/components/VistaMamparaS60.vue'
 import VistaVentanaMonorriel from '@/components/VistaVentanaMonorriel.vue'
+import VistaPuertaTemplada from '@/components/VistaPuertaTemplada.vue'
 import api from '@/axiosInstance'
 
 const props = defineProps({
@@ -635,6 +660,17 @@ const margenVenta = computed(() => {
   return mat?.margen ?? 0.50
 })
 
+const tiradoresTemplado = [
+  { id: 266, label: 'Tirador 450mm',  mm: 450  },
+  { id: 267, label: 'Tirador 600mm',  mm: 600  },
+  { id: 268, label: 'Tirador 800mm',  mm: 800  },
+  { id: 269, label: 'Tirador 1000mm', mm: 1000 },
+  { id: 270, label: 'Tirador 1200mm', mm: 1200 },
+  { id: 271, label: 'Tirador 1800mm', mm: 1800 },
+]
+
+const tiradorMmDesdeId = (id) => tiradoresTemplado.find(t => t.id === id)?.mm ?? 1000
+
 let debounceCalculo = null
 let requestIdCalculo = 0
 
@@ -655,9 +691,10 @@ async function recalcularCostos() {
   calculando.value = true
   precioActualizado.value = false
 
+  const esTemplado = ventanaLocal.value.material === 3
   const condicionesMet = ventanaLocal.value.tipo && ventanaLocal.value.ancho &&
     ventanaLocal.value.alto && ventanaLocal.value.cantidad &&
-    ventanaLocal.value.color && ventanaLocal.value.productoVidrioProveedor
+    (esTemplado || ventanaLocal.value.color) && ventanaLocal.value.productoVidrioProveedor
 
   if (!condicionesMet) {
     ventanaLocal.value.costo_total_unitario = 0
@@ -727,6 +764,9 @@ async function recalcularCostos() {
         tipoVentanaIzquierda: ventanaLocal.value.tipoVentanaIzquierda,
         tipoVentanaCentro: ventanaLocal.value.tipoVentanaCentro,
         tipoVentanaDerecha: ventanaLocal.value.tipoVentanaDerecha,
+      }),
+      ...(ventanaLocal.value.tipo === 61 && {
+        tirador_id: ventanaLocal.value.tirador_id ?? null,
       }),
     }
 
