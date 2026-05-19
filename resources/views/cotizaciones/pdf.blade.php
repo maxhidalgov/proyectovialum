@@ -235,6 +235,12 @@
           <tr><th style="{{ $labelStyle }}">Ancho</th><td style="{{ $valStyle }}">{{ $ventana->ancho }} mm</td></tr>
           <tr><th style="{{ $labelStyle }}">Alto</th><td style="{{ $valStyle }}">{{ $ventana->alto }} mm</td></tr>
           <tr><th style="{{ $labelStyle }}">Cantidad</th><td style="{{ $valStyle }}">{{ $ventana->cantidad }}</td></tr>
+          @if($ventana->tipo_ventana_id === 55)
+            <tr>
+              <th style="{{ $labelStyle }}">Herraje</th>
+              <td style="{{ $valStyle }}">{{ !empty($ventana->config['manillon']) ? 'Manillón' : 'Pestillo' }}</td>
+            </tr>
+          @endif
           <tr>
             <th style="{{ $labelStyle }}">Valor Neto</th>
             <td style="{{ $valStyle }}">${{ number_format($ventana->cantidad > 0 ? round($ventana->precio / $ventana->cantidad) : $ventana->precio, 0, ',', '.') }}</td>

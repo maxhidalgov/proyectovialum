@@ -109,6 +109,17 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/lista-precios/exportar', [ListaPrecioController::class, 'exportar']);
     Route::apiResource('lista-precios', ListaPrecioController::class);
 
+    // Rutas COMPRAS
+    Route::prefix('compras')->group(function () {
+        Route::get('/estadisticas',                 [\App\Http\Controllers\CompraController::class, 'estadisticas']);
+        Route::get('/buscar-producto',              [\App\Http\Controllers\CompraController::class, 'buscarProducto']);
+        Route::post('/sincronizar',                [\App\Http\Controllers\CompraController::class, 'sincronizar']);
+        Route::post('/cargar-xmls-pendientes',     [\App\Http\Controllers\CompraController::class, 'cargarXmlsPendientes']);
+        Route::post('/{compra}/cargar-xml',        [\App\Http\Controllers\CompraController::class, 'cargarXml']);
+        Route::get('/{compra}',                    [\App\Http\Controllers\CompraController::class, 'show']);
+        Route::get('/',                            [\App\Http\Controllers\CompraController::class, 'index']);
+    });
+
     // Rutas BSALE
     Route::prefix('bsale')->group(function () {
         Route::get('/test-conexion', [\App\Http\Controllers\BsaleController::class, 'testConexion']);

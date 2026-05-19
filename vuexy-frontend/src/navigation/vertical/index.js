@@ -34,9 +34,22 @@ const allMenuItems = [
   },
   {
     title: 'Compras',
-    to: { name: 'comprasmensuales' },
-    icon: { icon: 'mdi mdi-view-dashboard' },
+    icon: { icon: 'mdi-cart-arrow-down' },
     permission: 'ver_dashboard',
+    children: [
+      {
+        title: 'Compras Mensuales',
+        to: { name: 'comprasmensuales' },
+        icon: { icon: 'mdi-chart-bar' },
+        permission: 'ver_dashboard',
+      },
+      {
+        title: 'Facturas de Compra',
+        to: { name: 'compras' },
+        icon: { icon: 'mdi-file-document-outline' },
+        permission: 'ver_dashboard',
+      },
+    ],
   },
   {
     title: 'Productos',
