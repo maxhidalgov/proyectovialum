@@ -38,6 +38,14 @@
       </div>
     </div>
 
+    <!-- Progreso bulk sync (auto-loop) -->
+    <VAlert v-if="syncProgress" type="info" class="mb-4" variant="tonal">
+      <div class="d-flex align-center gap-3">
+        <VProgressCircular indeterminate size="20" width="2" />
+        <span>Sincronizando... <strong>{{ syncProgress.nuevas }}</strong> facturas importadas (ronda {{ syncProgress.rondas }})</span>
+      </div>
+    </VAlert>
+
     <!-- Resultado sincronización -->
     <VAlert
       v-if="syncResult"
@@ -349,6 +357,7 @@ const loadingBusqueda   = ref(false)
 const compras           = ref([])
 const totalCompras      = ref(0)
 const syncResult        = ref(null)
+const syncProgress      = ref(null)  // { nuevas, rondas } durante auto-loop
 const dialogDetalle     = ref(false)
 const facturaActiva     = ref(null)
 const resultadosProducto = ref([])
@@ -406,15 +415,39 @@ function onTableOptions({ page }) {
 async function sincronizar() {
   sincronizando.value = true
   syncResult.value    = null
+  syncProgress.value  = null
+
+  let totalNuevas    = 0
+  let totalErrores   = 0
+  let totalBsale     = 0
+  let rondas         = 0
+  const esBulk       = maxSincronizar.value === 0
+
   try {
-    const { data } = await axiosInstance.post(`${API}/sincronizar`, { max: maxSincronizar.value })
-    syncResult.value = data
+    do {
+      rondas++
+      if (esBulk) syncProgress.value = { nuevas: totalNuevas, rondas }
+
+      const { data } = await axiosInstance.post(`${API}/sincronizar`, { max: maxSincronizar.value })
+      totalNuevas  += data.nuevas  ?? 0
+      totalErrores += data.errores ?? 0
+      totalBsale    = data.total_bsale ?? totalBsale
+
+      if (!data.has_more || !esBulk) break
+    } while (true)
+
+    syncResult.value   = { nuevas: totalNuevas, errores: totalErrores, total_bsale: totalBsale }
+    syncProgress.value = null
     fetchCompras()
-    // Verificar cuántos XMLs quedaron pendientes
-    const r = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote: 0 })
-    xmlRestantes.value = r.data.restantes ?? 0
+
+    // Contar XMLs pendientes solo si no es bulk (en bulk no se traen XMLs)
+    if (!esBulk) {
+      const r = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote: 0 })
+      xmlRestantes.value = r.data.restantes ?? 0
+    }
   } catch (e) {
     console.error('Error sincronizando', e)
+    syncProgress.value = null
   } finally {
     sincronizando.value = false
   }
@@ -471,5 +504,15 @@ const buscarProducto = useDebounceFn(async () => {
   }
 }, 400)
 
-onMounted(fetchCompras)
+async function checkXmlPendientes() {
+  try {
+    const { data } = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote: 0 })
+    xmlRestantes.value = data.restantes ?? 0
+  } catch {}
+}
+
+onMounted(() => {
+  fetchCompras()
+  checkXmlPendientes()
+})
 </script>

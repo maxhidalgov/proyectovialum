@@ -115,35 +115,34 @@ class CompraController extends Controller
     // -------------------------------------------------------------------------
     public function sincronizar(Request $request)
     {
-        set_time_limit(0);
+        set_time_limit(120);
 
-        $maxDocs    = (int)($request->input('max', 0)); // 0 = sin límite
-        $fetchXml   = $maxDocs > 0; // Solo parsear XML en syncs pequeños (últimas N)
-        $nuevas     = 0;
-        $errores    = 0;
+        $maxDocs   = (int)($request->input('max', 0));   // 0 = modo bulk sin límite
+        $chunkSize = 200;                                  // máx docs por llamada (evita timeout)
+        $fetchXml  = $maxDocs > 0;                        // XML solo en syncs pequeños
+        $nuevas    = 0;
+        $errores   = 0;
         $totalBsale = 0;
-        $batchSize  = 50;
-        $years      = range(date('Y'), 2024); // más reciente primero: 2026, 2025, 2024
+        $batchSize = 50;
+        $years     = range(date('Y'), 2024);
 
         foreach ($years as $year) {
-            // Total de este año
-            $firstResp = Http::withHeaders($this->headers())
+            $firstResp = Http::timeout(15)->withHeaders($this->headers())
                 ->get("{$this->baseUrl}third_party_documents.json", ['limit' => 1, 'year' => $year]);
             if (!$firstResp->successful()) continue;
 
-            $totalYear = (int)($firstResp->json()['count'] ?? 0);
+            $totalYear   = (int)($firstResp->json()['count'] ?? 0);
             $totalBsale += $totalYear;
 
-            // Si hay límite y ya alcanzamos, parar
-            if ($maxDocs > 0 && ($nuevas + $errores) >= $maxDocs) break;
+            $limit = ($maxDocs > 0) ? $maxDocs : $chunkSize;
+            if (($nuevas + $errores) >= $limit) break;
 
-            // Con límite: solo los últimos N de este año (empezar desde el final)
             $offset = ($maxDocs > 0)
                 ? max(0, $totalYear - max(0, $maxDocs - ($nuevas + $errores)))
                 : 0;
 
             do {
-                $resp = Http::withHeaders($this->headers())
+                $resp = Http::timeout(15)->withHeaders($this->headers())
                     ->get("{$this->baseUrl}third_party_documents.json", [
                         'limit'  => $batchSize,
                         'offset' => $offset,
@@ -155,7 +154,7 @@ class CompraController extends Controller
                 $items = $resp->json()['items'] ?? [];
 
                 foreach (array_reverse($items) as $doc) {
-                    if ($maxDocs > 0 && ($nuevas + $errores) >= $maxDocs) break;
+                    if (($nuevas + $errores) >= $limit) break 2;
                     try {
                         $nuevas += $this->procesarDocumento($doc, $fetchXml);
                     } catch (\Throwable $e) {
@@ -171,8 +170,14 @@ class CompraController extends Controller
             } while (
                 $offset < $totalYear &&
                 count($items) === $batchSize &&
-                ($maxDocs === 0 || ($nuevas + $errores) < $maxDocs)
+                ($nuevas + $errores) < $limit
             );
+        }
+
+        // En modo bulk indicar si hay más docs pendientes de sincronizar
+        $hasMas = false;
+        if ($maxDocs === 0) {
+            $hasMas = Compra::count() < $totalBsale;
         }
 
         return response()->json([
@@ -180,6 +185,7 @@ class CompraController extends Controller
             'nuevas'      => $nuevas,
             'errores'     => $errores,
             'total_bsale' => $totalBsale,
+            'has_more'    => $hasMas,
         ]);
     }
 
