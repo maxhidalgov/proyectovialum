@@ -69,9 +69,15 @@ class CompraController extends Controller
             return response()->json(['data' => []]);
         }
 
+        $palabras = array_filter(explode(' ', trim($q)));
+
         $items = CompraItem::with(['compra' => fn($r) => $r->select('id', 'folio', 'nombre_emisor', 'fecha_emision', 'pdf_url')])
             ->join('compras', 'compra_items.compra_id', '=', 'compras.id')
-            ->where('compra_items.nombre', 'like', "%$q%")
+            ->where(function ($query) use ($palabras) {
+                foreach ($palabras as $palabra) {
+                    $query->where('compra_items.nombre', 'like', "%$palabra%");
+                }
+            })
             ->orderByDesc('compras.fecha_emision')
             ->select('compra_items.*')
             ->limit(200)
