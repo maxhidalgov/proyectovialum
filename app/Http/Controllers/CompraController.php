@@ -70,8 +70,10 @@ class CompraController extends Controller
         }
 
         $items = CompraItem::with(['compra' => fn($r) => $r->select('id', 'folio', 'nombre_emisor', 'fecha_emision', 'pdf_url')])
-            ->where('nombre', 'like', "%$q%")
-            ->orderByDesc('created_at')
+            ->join('compras', 'compra_items.compra_id', '=', 'compras.id')
+            ->where('compra_items.nombre', 'like', "%$q%")
+            ->orderByDesc('compras.fecha_emision')
+            ->select('compra_items.*')
             ->limit(200)
             ->get();
 
