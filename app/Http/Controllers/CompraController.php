@@ -218,7 +218,8 @@ class CompraController extends Controller
             );
         }
 
-        $hasMas = ($maxDocs === 0 && !$smart) ? Compra::count() < $totalBsale : false;
+        // Si no entró ningún doc nuevo en esta ronda, no tiene sentido seguir
+        $hasMas = ($maxDocs === 0 && !$smart && $nuevas > 0) ? Compra::count() < $totalBsale : false;
 
         return response()->json([
             'success'     => true,
