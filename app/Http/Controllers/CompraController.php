@@ -125,24 +125,64 @@ class CompraController extends Controller
     {
         set_time_limit(120);
 
-        $maxDocs   = (int)($request->input('max', 0));   // 0 = modo bulk sin límite
-        $chunkSize = 200;                                  // máx docs por llamada (evita timeout)
-        $fetchXml  = $maxDocs > 0;                        // XML solo en syncs pequeños
+        $maxDocs   = (int)($request->input('max', 0));
+        $smart     = (bool)($request->input('smart', false));
+        $chunkSize = 200;
+        $fetchXml  = $smart || $maxDocs > 0;   // bulk sin XML, el resto sí
         $nuevas    = 0;
         $errores   = 0;
         $totalBsale = 0;
         $batchSize = 50;
         $years     = range(date('Y'), 2024);
 
+        // Calcular total global ANTES de procesar para que has_more sea correcto
+        $yearTotals = [];
         foreach ($years as $year) {
-            $firstResp = Http::timeout(15)->withHeaders($this->headers())
+            $r = Http::timeout(15)->withHeaders($this->headers())
                 ->get("{$this->baseUrl}third_party_documents.json", ['limit' => 1, 'year' => $year]);
-            if (!$firstResp->successful()) continue;
+            $cnt = $r->successful() ? (int)($r->json()['count'] ?? 0) : 0;
+            $yearTotals[$year] = $cnt;
+            $totalBsale += $cnt;
+        }
 
-            $totalYear   = (int)($firstResp->json()['count'] ?? 0);
-            $totalBsale += $totalYear;
+        foreach ($years as $year) {
+            $totalYear = $yearTotals[$year] ?? 0;
+            if ($totalYear === 0) continue;
 
-            $limit = ($maxDocs > 0) ? $maxDocs : $chunkSize;
+            if ($smart) {
+                // Empezar desde el final, parar al primer doc ya existente
+                $offset = max(0, $totalYear - $batchSize);
+                do {
+                    $resp = Http::timeout(15)->withHeaders($this->headers())
+                        ->get("{$this->baseUrl}third_party_documents.json", [
+                            'limit'  => $batchSize,
+                            'offset' => $offset,
+                            'year'   => $year,
+                        ]);
+                    if (!$resp->successful()) break;
+
+                    $items = $resp->json()['items'] ?? [];
+                    $foundExisting = false;
+
+                    foreach (array_reverse($items) as $doc) {
+                        try {
+                            $resultado = $this->procesarDocumento($doc, true);
+                            if ($resultado === 0) { $foundExisting = true; break; }
+                            $nuevas++;
+                        } catch (\Throwable $e) {
+                            $errores++;
+                        }
+                    }
+
+                    if ($foundExisting || $offset === 0) break;
+                    $offset = max(0, $offset - $batchSize);
+                } while (true);
+
+                // En modo smart solo procesamos el año actual (los nuevos siempre son recientes)
+                break;
+            }
+
+            $limit  = ($maxDocs > 0) ? $maxDocs : $chunkSize;
             if (($nuevas + $errores) >= $limit) break;
 
             $offset = ($maxDocs > 0)
@@ -156,7 +196,6 @@ class CompraController extends Controller
                         'offset' => $offset,
                         'year'   => $year,
                     ]);
-
                 if (!$resp->successful()) break;
 
                 $items = $resp->json()['items'] ?? [];
@@ -167,10 +206,7 @@ class CompraController extends Controller
                         $nuevas += $this->procesarDocumento($doc, $fetchXml);
                     } catch (\Throwable $e) {
                         $errores++;
-                        Log::error('CompraController@sincronizar: error', [
-                            'bsale_id' => $doc['id'] ?? null,
-                            'error'    => $e->getMessage(),
-                        ]);
+                        Log::error('CompraController@sincronizar', ['bsale_id' => $doc['id'] ?? null, 'error' => $e->getMessage()]);
                     }
                 }
 
@@ -182,11 +218,7 @@ class CompraController extends Controller
             );
         }
 
-        // En modo bulk indicar si hay más docs pendientes de sincronizar
-        $hasMas = false;
-        if ($maxDocs === 0) {
-            $hasMas = Compra::count() < $totalBsale;
-        }
+        $hasMas = ($maxDocs === 0 && !$smart) ? Compra::count() < $totalBsale : false;
 
         return response()->json([
             'success'     => true,

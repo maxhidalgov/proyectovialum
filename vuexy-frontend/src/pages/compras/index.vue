@@ -344,12 +344,13 @@ const tab               = ref('facturas')
 const cargandoXml       = ref(false)
 const cargandoXmls      = ref(false)
 const xmlRestantes      = ref(0)
-const maxSincronizar    = ref(20)
+const maxSincronizar    = ref('smart')
 const opcionesSinc      = [
-  { label: 'Últimas 20',   value: 20  },
-  { label: 'Últimas 50',   value: 50  },
-  { label: 'Últimas 100',  value: 100 },
-  { label: 'Todas',        value: 0   },
+  { label: 'Solo nuevas',  value: 'smart' },
+  { label: 'Últimas 20',   value: 20      },
+  { label: 'Últimas 50',   value: 50      },
+  { label: 'Últimas 100',  value: 100     },
+  { label: 'Todas',        value: 0       },
 ]
 const loading           = ref(false)
 const sincronizando     = ref(false)
@@ -421,6 +422,7 @@ async function sincronizar() {
   let totalErrores   = 0
   let totalBsale     = 0
   let rondas         = 0
+  const esSmart      = maxSincronizar.value === 'smart'
   const esBulk       = maxSincronizar.value === 0
 
   try {
@@ -428,20 +430,23 @@ async function sincronizar() {
       rondas++
       if (esBulk) syncProgress.value = { nuevas: totalNuevas, rondas }
 
-      const { data } = await axiosInstance.post(`${API}/sincronizar`, { max: maxSincronizar.value })
+      const payload = esSmart
+        ? { smart: true }
+        : { max: maxSincronizar.value }
+      const { data } = await axiosInstance.post(`${API}/sincronizar`, payload)
       totalNuevas  += data.nuevas  ?? 0
       totalErrores += data.errores ?? 0
       totalBsale    = data.total_bsale ?? totalBsale
 
-      if (!data.has_more || !esBulk) break
+      if (!data.has_more || (!esBulk && !esSmart)) break
     } while (true)
 
     syncResult.value   = { nuevas: totalNuevas, errores: totalErrores, total_bsale: totalBsale }
     syncProgress.value = null
     fetchCompras()
 
-    // Contar XMLs pendientes solo si no es bulk (en bulk no se traen XMLs)
-    if (!esBulk) {
+    // Contar XMLs pendientes solo si no es bulk
+    if (!esBulk || esSmart) {
       const r = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote: 0 })
       xmlRestantes.value = r.data.restantes ?? 0
     }
