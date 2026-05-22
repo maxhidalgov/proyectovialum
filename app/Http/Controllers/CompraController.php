@@ -112,6 +112,7 @@ class CompraController extends Controller
                 'descuento'       => $item->descuento,
                 'precio_neto'     => $precioNeto,
                 'total_linea'     => $item->total_linea,
+                'codigo'          => $item->codigo,
             ];
         }
 
@@ -331,12 +332,18 @@ class CompraController extends Controller
     private function parsearLineasXml(Compra $compra, string $xmlUrl): void
     {
         try {
-            $resp = Http::withHeaders($this->headers())->get($xmlUrl);
+            $resp = Http::timeout(15)->withHeaders($this->headers())->get($xmlUrl);
 
-            if (!$resp->successful()) return;
+            if (!$resp->successful()) {
+                $compra->update(['xml_url' => null]);
+                return;
+            }
 
             $xml = @simplexml_load_string($resp->body());
-            if (!$xml) return;
+            if (!$xml) {
+                $compra->update(['xml_url' => null]);
+                return;
+            }
 
             // Registrar namespaces si los hay
             $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
@@ -355,6 +362,12 @@ class CompraController extends Controller
                         $detalles[] = $d;
                     }
                 }
+            }
+
+            // XML sin líneas de detalle → marcar como sin XML para no reintentarlo
+            if (empty($detalles)) {
+                $compra->update(['xml_url' => null]);
+                return;
             }
 
             foreach ($detalles as $det) {

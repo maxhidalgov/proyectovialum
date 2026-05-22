@@ -182,11 +182,22 @@
           :key="i"
         >
           <VExpansionPanelTitle>
-            <div class="d-flex align-center justify-space-between w-100 pr-4">
-              <span class="font-weight-medium">{{ prod.nombre }}</span>
-              <div class="d-flex gap-4 text-caption">
+            <div class="panel-title-inner w-100 pr-2">
+              <div class="panel-title-top">
+                <span class="font-weight-medium panel-title-name">{{ prod.nombre }}</span>
+                <VBtn
+                  size="x-small"
+                  color="success"
+                  variant="tonal"
+                  icon="mdi-plus"
+                  title="Agregar a Productos"
+                  class="panel-title-btn"
+                  @click.stop="abrirAgregarProducto(prod)"
+                />
+              </div>
+              <div class="panel-title-info text-caption">
                 <span>
-                  <span class="text-medium-emphasis">Último precio neto:</span>
+                  <span class="text-medium-emphasis">P. Neto:</span>
                   <strong class="text-success ml-1">${{ formatNum(prod.ultimo_precio_neto) }}</strong>
                   <span v-if="prod.ultimo_descuento > 0" class="text-warning ml-1">({{ prod.ultimo_descuento }}% desc.)</span>
                 </span>
@@ -202,7 +213,8 @@
             </div>
           </VExpansionPanelTitle>
           <VExpansionPanelText>
-            <VTable density="compact">
+            <div style="overflow-x:auto">
+            <VTable density="compact" style="min-width:600px">
               <thead>
                 <tr>
                   <th>Fecha</th>
@@ -235,10 +247,134 @@
                 </tr>
               </tbody>
             </VTable>
+            </div>
           </VExpansionPanelText>
         </VExpansionPanel>
       </VExpansionPanels>
     </div>
+
+    <!-- DIALOG AGREGAR A PRODUCTOS -->
+    <VDialog v-model="dialogAgregar" max-width="560" persistent>
+      <VCard>
+        <VCardTitle class="d-flex align-center justify-space-between pa-4">
+          <span>Agregar a Productos</span>
+          <VBtn icon="mdi-close" variant="text" size="small" @click="dialogAgregar = false" />
+        </VCardTitle>
+        <VDivider />
+        <VCardText class="pa-4">
+          <VRow dense>
+            <VCol cols="12">
+              <VTextField
+                v-model="formProducto.nombre"
+                label="Nombre del producto *"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VSelect
+                v-model="formProducto.tipo_producto_id"
+                :items="tiposProducto"
+                item-title="nombre"
+                item-value="id"
+                label="Tipo de producto"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VSelect
+                v-model="formProducto.unidad_id"
+                :items="unidades"
+                item-title="nombre"
+                item-value="id"
+                label="Unidad"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+              />
+            </VCol>
+            <VCol cols="12">
+              <VDivider class="my-1" />
+              <div class="text-caption text-medium-emphasis mb-2">Combinación Proveedor / Color / Costo</div>
+            </VCol>
+            <VCol cols="12">
+              <VAutocomplete
+                v-model="formProducto.proveedor_id"
+                :items="proveedores"
+                item-title="nombre"
+                item-value="id"
+                label="Proveedor *"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VAutocomplete
+                v-model="formProducto.color_id"
+                :items="colores"
+                item-title="nombre"
+                item-value="id"
+                label="Color *"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VTextField
+                v-model.number="formProducto.costo"
+                label="Costo (neto) *"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+                prefix="$"
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VTextField
+                v-model="formProducto.codigo_proveedor"
+                label="Código proveedor"
+                variant="outlined"
+                density="compact"
+                hide-details
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VTextField
+                v-model.number="formProducto.largo_total"
+                label="Largo total (m)"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hide-details
+              />
+            </VCol>
+          </VRow>
+          <VAlert v-if="errorAgregar" type="error" class="mt-3" density="compact">{{ errorAgregar }}</VAlert>
+        </VCardText>
+        <VCardActions class="pa-4 pt-0">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogAgregar = false">Cancelar</VBtn>
+          <VBtn
+            color="success"
+            :loading="guardandoProducto"
+            :disabled="!formProducto.nombre || !formProducto.proveedor_id || !formProducto.color_id || !formProducto.costo"
+            @click="guardarProducto"
+          >
+            Guardar producto
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
 
     <!-- DIALOG DETALLE FACTURA -->
     <VDialog v-model="dialogDetalle" max-width="800">
@@ -363,6 +499,16 @@ const dialogDetalle     = ref(false)
 const facturaActiva     = ref(null)
 const resultadosProducto = ref([])
 const busquedaProducto  = ref('')
+
+// Agregar a productos
+const dialogAgregar     = ref(false)
+const guardandoProducto = ref(false)
+const errorAgregar      = ref(null)
+const proveedores       = ref([])
+const colores           = ref([])
+const tiposProducto     = ref([])
+const unidades          = ref([])
+const formProducto      = ref({})
 
 const filtros = ref({ search: '', desde: '', hasta: '' })
 let currentPage = 1
@@ -509,6 +655,67 @@ const buscarProducto = useDebounceFn(async () => {
   }
 }, 400)
 
+async function abrirAgregarProducto(prod) {
+  errorAgregar.value = null
+  formProducto.value = {
+    nombre:           prod.nombre,
+    tipo_producto_id: null,
+    unidad_id:        null,
+    proveedor_id:     null,
+    color_id:         null,
+    costo:            prod.ultimo_precio_neto,
+    codigo_proveedor: prod.historial?.[0]?.codigo ?? '',
+    largo_total:      null,
+  }
+  dialogAgregar.value = true
+
+  // Cargar catálogos si aún no están cargados
+  if (!proveedores.value.length) {
+    const [p, c, t, u] = await Promise.all([
+      axiosInstance.get('/api/proveedores'),
+      axiosInstance.get('/api/colores'),
+      axiosInstance.get('/api/tipos_producto'),
+      axiosInstance.get('/api/unidades'),
+    ])
+    proveedores.value   = p.data
+    colores.value       = c.data
+    tiposProducto.value = t.data
+    unidades.value      = u.data
+  }
+
+  // Pre-seleccionar proveedor si el nombre coincide
+  const nombreFactura = (prod.proveedor ?? '').toLowerCase()
+  const match = proveedores.value.find(p =>
+    nombreFactura.includes(p.nombre.toLowerCase()) ||
+    p.nombre.toLowerCase().includes(nombreFactura.split(' ')[0])
+  )
+  if (match) formProducto.value.proveedor_id = match.id
+}
+
+async function guardarProducto() {
+  guardandoProducto.value = true
+  errorAgregar.value      = null
+  try {
+    await axiosInstance.post('/api/productos', {
+      nombre:           formProducto.value.nombre,
+      tipo_producto_id: formProducto.value.tipo_producto_id,
+      unidad_id:        formProducto.value.unidad_id,
+      largo_total:      formProducto.value.largo_total,
+      producto_color_proveedor: [{
+        proveedor_id:     formProducto.value.proveedor_id,
+        color_id:         formProducto.value.color_id,
+        costo:            formProducto.value.costo,
+        codigo_proveedor: formProducto.value.codigo_proveedor,
+      }],
+    })
+    dialogAgregar.value = false
+  } catch (e) {
+    errorAgregar.value = e.response?.data?.message ?? 'Error al guardar el producto'
+  } finally {
+    guardandoProducto.value = false
+  }
+}
+
 async function checkXmlPendientes() {
   try {
     const { data } = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote: 0 })
@@ -521,3 +728,20 @@ onMounted(() => {
   checkXmlPendientes()
 })
 </script>
+
+<style scoped>
+/* Desktop: nombre + info en una sola fila */
+.panel-title-inner  { display: flex; align-items: center; gap: 12px; }
+.panel-title-top    { display: contents; }
+.panel-title-name   { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-title-info   { display: flex; align-items: center; flex-shrink: 0; gap: 16px; }
+.panel-title-btn    { flex-shrink: 0; }
+
+/* Móvil: nombre arriba, info abajo wrapping */
+@media (max-width: 767px) {
+  .panel-title-inner  { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .panel-title-top    { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; }
+  .panel-title-name   { white-space: normal; overflow: visible; text-overflow: unset; }
+  .panel-title-info   { flex-wrap: wrap; gap: 4px 12px; }
+}
+</style>
