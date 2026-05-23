@@ -8,6 +8,7 @@ class CompraItem extends Model
 {
     protected $fillable = [
         'compra_id',
+        'pcp_id',
         'codigo',
         'nombre',
         'cantidad',
@@ -20,5 +21,10 @@ class CompraItem extends Model
     public function compra()
     {
         return $this->belongsTo(Compra::class);
+    }
+
+    public function pcp()
+    {
+        return $this->belongsTo(ProductoColorProveedor::class, 'pcp_id');
     }
 }

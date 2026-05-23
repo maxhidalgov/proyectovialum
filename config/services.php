@@ -39,6 +39,16 @@ return [
         'key' => env('ANTHROPIC_API_KEY'),
     ],
 
+    'bch' => [
+        'api_base'       => env('BCH_API_BASE', 'https://gw.apistore.bancochile.cl/banco-chile/sandbox/v1/movimientos-cuenta'),
+        'client_id'      => env('BCH_CLIENT_ID'),
+        'client_secret'  => env('BCH_CLIENT_SECRET'),
+        'cuenta'         => env('BCH_CUENTA'),
+        'rut_origen'     => env('BCH_RUT_ORIGEN'),
+        'producto_cuenta' => env('BCH_PRODUCTO_CUENTA', 'CTD'),
+        'rut_apoderado'  => env('BCH_RUT_APODERADO'),
+    ],
+
     'bsale' => [
         'base_url' => env('BSALE_BASE_URL', 'https://api.bsale.io/v1/'),
         'access_token' => env('BSALE_ACCESS_TOKEN'),

@@ -63,6 +63,14 @@
     <VTabs v-model="tab" class="mb-4">
       <VTab value="facturas">Facturas</VTab>
       <VTab value="buscar">Buscar Producto</VTab>
+      <VTab value="alertas">
+        Alertas de Precio
+        <VBadge v-if="alertas.length" :content="alertas.length" color="error" inline class="ml-1" />
+      </VTab>
+      <VTab value="sincodigo" @click="cargarSinCodigo">
+        Sin Código
+        <VBadge v-if="sinCodigo.length" :content="sinCodigo.length" color="warning" inline class="ml-1" />
+      </VTab>
     </VTabs>
 
     <!-- TAB: FACTURAS -->
@@ -251,6 +259,167 @@
           </VExpansionPanelText>
         </VExpansionPanel>
       </VExpansionPanels>
+    </div>
+
+    <!-- TAB: ALERTAS DE PRECIO -->
+    <div v-if="tab === 'alertas'">
+      <div class="d-flex align-center gap-3 mb-4 flex-wrap">
+        <VBtn color="primary" prepend-icon="mdi-link-variant" :loading="matcheando" @click="ejecutarMatch">
+          Ejecutar Match
+        </VBtn>
+        <VBtn color="secondary" variant="tonal" prepend-icon="mdi-refresh" :loading="loadingAlertas" @click="cargarAlertas">
+          Actualizar alertas
+        </VBtn>
+        <div class="text-caption text-medium-emphasis">
+          El match vincula automáticamente las líneas de compra con tus productos por código de proveedor.
+        </div>
+      </div>
+
+      <VAlert v-if="matchResult" type="success" class="mb-4" closable @click:close="matchResult = null">
+        Match completado: <strong>{{ matchResult.vinculados }}</strong> líneas vinculadas.
+        Total vinculadas: <strong>{{ matchResult.total_vinculados }}</strong>.
+        Sin match (sin código o código no registrado): <strong>{{ matchResult.sin_match }}</strong>.
+      </VAlert>
+
+      <div v-if="loadingAlertas" class="text-center py-8">
+        <VProgressCircular indeterminate color="primary" />
+      </div>
+
+      <template v-else-if="alertas.length">
+        <div class="text-subtitle-2 mb-2">
+          {{ alertas.length }} productos con precio de compra distinto al costo registrado (diferencia > 3%)
+        </div>
+        <VCard>
+          <VTable density="compact">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Producto</th>
+                <th>Color</th>
+                <th>Proveedor</th>
+                <th class="text-right">Precio compra</th>
+                <th class="text-right">Costo en BD</th>
+                <th class="text-right">Diferencia</th>
+                <th>Folio</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="a in alertas" :key="a.compra_item_id">
+                <td class="text-caption">{{ formatFecha(a.fecha) }}</td>
+                <td class="font-weight-medium">{{ a.producto }}</td>
+                <td>{{ a.color }}</td>
+                <td class="text-caption">{{ a.proveedor }}</td>
+                <td class="text-right text-success font-weight-medium">${{ formatNum(a.precio_compra) }}</td>
+                <td class="text-right">${{ formatNum(a.costo_bd) }}</td>
+                <td class="text-right">
+                  <VChip
+                    size="x-small"
+                    :color="a.diferencia_pct > 0 ? 'error' : 'success'"
+                    variant="tonal"
+                  >
+                    {{ a.diferencia_pct > 0 ? '+' : '' }}{{ a.diferencia_pct }}%
+                  </VChip>
+                </td>
+                <td>
+                  <a v-if="a.pdf_url" :href="a.pdf_url" target="_blank" class="text-primary" style="text-decoration:none">
+                    {{ a.folio }} <VIcon size="11">mdi-open-in-new</VIcon>
+                  </a>
+                  <span v-else>{{ a.folio }}</span>
+                </td>
+                <td>
+                  <VBtn size="x-small" color="primary" variant="tonal" @click="actualizarCosto(a)">
+                    Actualizar costo
+                  </VBtn>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCard>
+      </template>
+
+      <div v-else-if="!loadingAlertas && alertas.length === 0 && matchResult !== null" class="text-center py-8 text-medium-emphasis">
+        <VIcon size="48" class="mb-2">mdi-check-circle</VIcon>
+        <div>Sin alertas de precio. Todos los costos están actualizados.</div>
+      </div>
+
+      <div v-else class="text-center py-8 text-medium-emphasis">
+        Ejecuta el match primero para detectar cambios de precio.
+      </div>
+    </div>
+
+    <!-- TAB: SIN CÓDIGO -->
+    <div v-if="tab === 'sincodigo'">
+      <div class="d-flex align-center gap-3 mb-4">
+        <VTextField
+          v-model="filtroProd"
+          placeholder="Filtrar por producto, color o proveedor..."
+          prepend-inner-icon="mdi-magnify"
+          clearable hide-details variant="outlined" density="compact"
+          style="max-width:400px"
+        />
+        <span class="text-caption text-medium-emphasis">{{ sinCodigoFiltrado.length }} productos sin código</span>
+      </div>
+
+      <div v-if="loadingSinCodigo" class="text-center py-8">
+        <VProgressCircular indeterminate color="primary" />
+      </div>
+
+      <VCard v-else-if="sinCodigoFiltrado.length">
+        <VTable density="compact">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Color</th>
+              <th>Proveedor</th>
+              <th class="text-right">Costo</th>
+              <th style="min-width:280px">Buscar en compras</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in sinCodigoFiltrado" :key="p.pcp_id">
+              <td class="font-weight-medium">{{ p.producto }}</td>
+              <td>{{ p.color }}</td>
+              <td class="text-caption">{{ p.proveedor }}</td>
+              <td class="text-right">${{ formatNum(p.costo) }}</td>
+              <td>
+                <VAutocomplete
+                  v-model="p._itemSeleccionado"
+                  :items="p._resultados ?? []"
+                  :loading="p._buscando"
+                  item-title="_label"
+                  return-object
+                  hide-details
+                  density="compact"
+                  variant="outlined"
+                  placeholder="Buscar línea de compra..."
+                  no-filter
+                  clearable
+                  @update:search="q => buscarItemParaPcp(p, q)"
+                />
+              </td>
+              <td>
+                <VBtn
+                  size="small"
+                  color="primary"
+                  variant="tonal"
+                  :disabled="!p._itemSeleccionado"
+                  :loading="p._guardando"
+                  @click="asignarCodigo(p)"
+                >
+                  Asignar
+                </VBtn>
+              </td>
+            </tr>
+          </tbody>
+        </VTable>
+      </VCard>
+
+      <div v-else class="text-center py-8 text-medium-emphasis">
+        <VIcon size="48" class="mb-2">mdi-check-circle</VIcon>
+        <div>Todos los productos tienen código asignado.</div>
+      </div>
     </div>
 
     <!-- DIALOG AGREGAR A PRODUCTOS -->
@@ -499,6 +668,112 @@ const dialogDetalle     = ref(false)
 const facturaActiva     = ref(null)
 const resultadosProducto = ref([])
 const busquedaProducto  = ref('')
+
+// Sin código
+const sinCodigo        = ref([])
+const loadingSinCodigo = ref(false)
+const filtroProd       = ref('')
+
+const sinCodigoFiltrado = computed(() => {
+  const q = filtroProd.value.toLowerCase()
+  if (!q) return sinCodigo.value
+  return sinCodigo.value.filter(p =>
+    (p.producto ?? '').toLowerCase().includes(q) ||
+    (p.color ?? '').toLowerCase().includes(q) ||
+    (p.proveedor ?? '').toLowerCase().includes(q)
+  )
+})
+
+async function cargarSinCodigo() {
+  if (sinCodigo.value.length) return
+  loadingSinCodigo.value = true
+  try {
+    const { data } = await axiosInstance.get(`${API}/sin-codigo`)
+    sinCodigo.value = data.data.map(p => ({ ...p, _itemSeleccionado: null, _resultados: [], _buscando: false, _guardando: false }))
+  } catch (e) {
+    console.error('Error cargando sin código', e)
+  } finally {
+    loadingSinCodigo.value = false
+  }
+}
+
+const _debounceTimers = {}
+function buscarItemParaPcp(pcp, q) {
+  if (!q || q.length < 2) { pcp._resultados = []; return }
+  clearTimeout(_debounceTimers[pcp.pcp_id])
+  _debounceTimers[pcp.pcp_id] = setTimeout(async () => {
+    pcp._buscando = true
+    try {
+      const { data } = await axiosInstance.get(`${API}/buscar-producto`, { params: { q } })
+      pcp._resultados = data.data.flatMap(prod =>
+        prod.historial.filter(h => h.codigo).map(h => ({
+          _label: `[${h.codigo}] ${prod.nombre} — ${h.proveedor} (${formatFecha(h.fecha)})`,
+          codigo: h.codigo,
+          nombre: prod.nombre,
+        }))
+      ).filter((v, i, arr) => arr.findIndex(x => x.codigo === v.codigo) === i)
+    } finally {
+      pcp._buscando = false
+    }
+  }, 350)
+}
+
+async function asignarCodigo(pcp) {
+  if (!pcp._itemSeleccionado) return
+  pcp._guardando = true
+  try {
+    await axiosInstance.patch(`${API}/asignar-codigo`, {
+      pcp_id: pcp.pcp_id,
+      codigo: pcp._itemSeleccionado.codigo,
+    })
+    sinCodigo.value = sinCodigo.value.filter(p => p.pcp_id !== pcp.pcp_id)
+  } catch (e) {
+    console.error('Error asignando código', e)
+  } finally {
+    pcp._guardando = false
+  }
+}
+
+// Alertas de precio / match
+const alertas        = ref([])
+const matchResult    = ref(null)
+const matcheando     = ref(false)
+const loadingAlertas = ref(false)
+
+async function ejecutarMatch() {
+  matcheando.value = true
+  matchResult.value = null
+  try {
+    const { data } = await axiosInstance.post(`${API}/matchear`)
+    matchResult.value = data
+    await cargarAlertas()
+  } catch (e) {
+    console.error('Error en match', e)
+  } finally {
+    matcheando.value = false
+  }
+}
+
+async function cargarAlertas() {
+  loadingAlertas.value = true
+  try {
+    const { data } = await axiosInstance.get(`${API}/alertas-precio`)
+    alertas.value = data.data
+  } catch (e) {
+    console.error('Error cargando alertas', e)
+  } finally {
+    loadingAlertas.value = false
+  }
+}
+
+async function actualizarCosto(alerta) {
+  try {
+    await axiosInstance.patch(`${API}/actualizar-costo`, { pcp_id: alerta.pcp_id, costo: alerta.precio_compra })
+    alertas.value = alertas.value.filter(a => a.compra_item_id !== alerta.compra_item_id)
+  } catch (e) {
+    console.error('Error actualizando costo', e)
+  }
+}
 
 // Agregar a productos
 const dialogAgregar     = ref(false)

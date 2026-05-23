@@ -30,6 +30,7 @@ declare module 'vue-router/auto-routes' {
     'cliente-table': RouteRecordInfo<'cliente-table', '/ClienteTable', Record<never, never>, Record<never, never>>,
     'compras': RouteRecordInfo<'compras', '/compras', Record<never, never>, Record<never, never>>,
     'comprasmensuales': RouteRecordInfo<'comprasmensuales', '/comprasmensuales', Record<never, never>, Record<never, never>>,
+    'conciliacion': RouteRecordInfo<'conciliacion', '/conciliacion', Record<never, never>, Record<never, never>>,
     'cotizacion-editar-eliminarparece': RouteRecordInfo<'cotizacion-editar-eliminarparece', '/cotizacion-editarELIMINARPARECE', Record<never, never>, Record<never, never>>,
     'cotizacion-ver': RouteRecordInfo<'cotizacion-ver', '/cotizacion-ver', Record<never, never>, Record<never, never>>,
     'cotizaciones': RouteRecordInfo<'cotizaciones', '/cotizaciones', Record<never, never>, Record<never, never>>,

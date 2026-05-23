@@ -113,6 +113,11 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('compras')->group(function () {
         Route::get('/estadisticas',                 [\App\Http\Controllers\CompraController::class, 'estadisticas']);
         Route::get('/buscar-producto',              [\App\Http\Controllers\CompraController::class, 'buscarProducto']);
+        Route::get('/alertas-precio',              [\App\Http\Controllers\CompraController::class, 'alertasPrecio']);
+        Route::get('/sin-codigo',                  [\App\Http\Controllers\CompraController::class, 'sinCodigo']);
+        Route::post('/matchear',                   [\App\Http\Controllers\CompraController::class, 'matchear']);
+        Route::patch('/actualizar-costo',          [\App\Http\Controllers\CompraController::class, 'actualizarCosto']);
+        Route::patch('/asignar-codigo',            [\App\Http\Controllers\CompraController::class, 'asignarCodigo']);
         Route::post('/sincronizar',                [\App\Http\Controllers\CompraController::class, 'sincronizar']);
         Route::post('/cargar-xmls-pendientes',     [\App\Http\Controllers\CompraController::class, 'cargarXmlsPendientes']);
         Route::post('/{compra}/cargar-xml',        [\App\Http\Controllers\CompraController::class, 'cargarXml']);
@@ -140,6 +145,17 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/cotizaciones/{id}/documentos-facturacion', [DocumentoFacturacionController::class, 'store']);
     Route::patch('/documentos-facturacion/{id}/emitir', [DocumentoFacturacionController::class, 'marcarEmitido']);
     Route::delete('/documentos-facturacion/{id}', [DocumentoFacturacionController::class, 'destroy']);
+
+    // Conciliación bancaria
+    Route::prefix('conciliacion')->group(function () {
+        Route::get('/test-conexion',  [\App\Http\Controllers\ConciliacionController::class, 'testConexion']);
+        Route::get('/saldo',          [\App\Http\Controllers\ConciliacionController::class, 'saldo']);
+        Route::post('/importar',      [\App\Http\Controllers\ConciliacionController::class, 'importar']);
+        Route::get('/movimientos',    [\App\Http\Controllers\ConciliacionController::class, 'index']);
+        Route::patch('/movimientos/{id}', [\App\Http\Controllers\ConciliacionController::class, 'update']);
+        Route::post('/auto-concilar', [\App\Http\Controllers\ConciliacionController::class, 'autoConcilar']);
+        Route::get('/flujo-caja',     [\App\Http\Controllers\ConciliacionController::class, 'flujoCaja']);
+    });
 
     // Operaciones
     Route::get('/operaciones', [OperacionesController::class, 'index']);

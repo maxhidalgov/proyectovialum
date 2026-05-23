@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Compra;
 use App\Models\CompraItem;
+use App\Models\ProductoColorProveedor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -483,5 +484,150 @@ class CompraController extends Controller
                 'neto'   => $evolucionNeto,
             ],
         ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/compras/sin-codigo  — PCPs sin codigo_proveedor
+    // -------------------------------------------------------------------------
+    public function sinCodigo()
+    {
+        $pcps = ProductoColorProveedor::with(['producto:id,nombre', 'proveedor:id,nombre', 'color:id,nombre'])
+            ->whereNull('codigo_proveedor')
+            ->orWhere('codigo_proveedor', '')
+            ->orderBy('id')
+            ->get()
+            ->map(fn($p) => [
+                'pcp_id'   => $p->id,
+                'producto' => $p->producto?->nombre,
+                'color'    => $p->color?->nombre,
+                'proveedor'=> $p->proveedor?->nombre,
+                'costo'    => $p->costo,
+            ]);
+
+        return response()->json(['data' => $pcps]);
+    }
+
+    // -------------------------------------------------------------------------
+    // PATCH /api/compras/asignar-codigo  — asigna codigo_proveedor a un PCP
+    // -------------------------------------------------------------------------
+    public function asignarCodigo(Request $request)
+    {
+        $pcp = ProductoColorProveedor::findOrFail($request->input('pcp_id'));
+        $pcp->update(['codigo_proveedor' => $request->input('codigo')]);
+
+        // Intentar vincular compra_items que tengan ese código y este proveedor
+        $vinculados = CompraItem::whereNull('pcp_id')
+            ->where('codigo', $request->input('codigo'))
+            ->whereHas('compra', fn($q) => $q->where('nombre_emisor', 'like', '%' . explode(' ', $pcp->proveedor?->nombre ?? '')[0] . '%'))
+            ->update(['pcp_id' => $pcp->id]);
+
+        return response()->json(['success' => true, 'vinculados' => $vinculados]);
+    }
+
+    // -------------------------------------------------------------------------
+    // PATCH /api/compras/actualizar-costo  — actualiza costo en producto_color_proveedor
+    // -------------------------------------------------------------------------
+    public function actualizarCosto(Request $request)
+    {
+        $pcp = ProductoColorProveedor::findOrFail($request->input('pcp_id'));
+        $pcp->update(['costo' => (int)$request->input('costo')]);
+        return response()->json(['success' => true, 'costo' => $pcp->costo]);
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/compras/matchear  — vincula compra_items con producto_color_proveedor
+    // -------------------------------------------------------------------------
+    public function matchear()
+    {
+        // Cargar todos los PCP que tienen codigo_proveedor
+        $pcps = ProductoColorProveedor::with(['proveedor', 'producto.tipoProducto'])
+            ->whereNotNull('codigo_proveedor')
+            ->get()
+            ->groupBy('codigo_proveedor'); // clave: codigo → colección de PCPs
+
+        $vinculados  = 0;
+        $sinMatch    = 0;
+        $yaVinculados = 0;
+
+        // Procesar items que tienen código y aún no están vinculados
+        CompraItem::with('compra:id,nombre_emisor')
+            ->whereNotNull('codigo')
+            ->whereNull('pcp_id')
+            ->chunkById(500, function ($items) use ($pcps, &$vinculados, &$sinMatch) {
+                foreach ($items as $item) {
+                    $codigo = trim($item->codigo);
+                    if (!isset($pcps[$codigo])) { $sinMatch++; continue; }
+
+                    $candidatos = $pcps[$codigo];
+
+                    // Si solo hay un PCP con ese código, matchear directo
+                    if ($candidatos->count() === 1) {
+                        $item->update(['pcp_id' => $candidatos->first()->id]);
+                        $vinculados++;
+                        continue;
+                    }
+
+                    // Más de un PCP: intentar afinar por nombre de proveedor
+                    $nombreFactura = strtolower($item->compra?->nombre_emisor ?? '');
+                    $match = $candidatos->first(function ($pcp) use ($nombreFactura) {
+                        $nombrePcp = strtolower($pcp->proveedor?->nombre ?? '');
+                        return $nombreFactura && $nombrePcp &&
+                            (str_contains($nombreFactura, explode(' ', $nombrePcp)[0]) ||
+                             str_contains($nombrePcp, explode(' ', $nombreFactura)[0]));
+                    }) ?? $candidatos->first();
+
+                    $item->update(['pcp_id' => $match->id]);
+                    $vinculados++;
+                }
+            });
+
+        $yaVinculados = CompraItem::whereNotNull('pcp_id')->count();
+
+        return response()->json([
+            'success'       => true,
+            'vinculados'    => $vinculados,
+            'sin_match'     => $sinMatch,
+            'total_vinculados' => $yaVinculados,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/compras/alertas-precio  — items donde precio_neto ≠ costo en PCP
+    // -------------------------------------------------------------------------
+    public function alertasPrecio(Request $request)
+    {
+        $umbral = (float)($request->query('umbral', 3)); // % de diferencia mínima
+
+        $alertas = CompraItem::with([
+                'compra:id,folio,nombre_emisor,fecha_emision,pdf_url',
+                'pcp.producto:id,nombre',
+                'pcp.proveedor:id,nombre',
+                'pcp.color:id,nombre',
+            ])
+            ->whereNotNull('pcp_id')
+            ->whereRaw('ABS(precio_unitario * (1 - descuento/100) - (SELECT costo FROM producto_color_proveedor WHERE id = pcp_id)) / NULLIF((SELECT costo FROM producto_color_proveedor WHERE id = pcp_id), 0) * 100 > ?', [$umbral])
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get()
+            ->map(function ($item) {
+                $precioNeto  = round($item->precio_unitario * (1 - $item->descuento / 100));
+                $costoActual = (int)($item->pcp?->costo ?? 0);
+                $diferencia  = $costoActual > 0 ? round(($precioNeto - $costoActual) / $costoActual * 100, 1) : null;
+                return [
+                    'compra_item_id' => $item->id,
+                    'fecha'          => $item->compra?->fecha_emision,
+                    'folio'          => $item->compra?->folio,
+                    'pdf_url'        => $item->compra?->pdf_url,
+                    'proveedor'      => $item->compra?->nombre_emisor,
+                    'producto'       => $item->pcp?->producto?->nombre,
+                    'color'          => $item->pcp?->color?->nombre,
+                    'precio_compra'  => $precioNeto,
+                    'costo_bd'       => $costoActual,
+                    'diferencia_pct' => $diferencia,
+                    'pcp_id'         => $item->pcp_id,
+                ];
+            });
+
+        return response()->json(['data' => $alertas]);
     }
 }

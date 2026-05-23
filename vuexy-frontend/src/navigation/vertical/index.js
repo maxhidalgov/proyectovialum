@@ -125,6 +125,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Conciliación',
+    to: { name: 'conciliacion' },
+    icon: { icon: 'mdi-bank-outline' },
+    permission: 'ver_dashboard',
+  },
+  {
     title: 'Administración',
     icon: { icon: 'tabler-settings' },
     permission: 'gestionar_usuarios', // Solo admin
