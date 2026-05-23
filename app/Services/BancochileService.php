@@ -3,12 +3,10 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class BancochileService
 {
-    private string $tokenUrl;
     private string $apiBase;
     private string $clientId;
     private string $clientSecret;
@@ -19,7 +17,6 @@ class BancochileService
 
     public function __construct()
     {
-        $this->tokenUrl       = config('services.bch.token_url');
         $this->apiBase        = config('services.bch.api_base');
         $this->clientId       = config('services.bch.client_id');
         $this->clientSecret   = config('services.bch.client_secret');
@@ -30,31 +27,11 @@ class BancochileService
         $this->rutApoderado   = [['value' => $rutAp]];
     }
 
-    // ── OAuth2 token (client_credentials) ────────────────────────────────────
-
-    private function getToken(): string
-    {
-        return Cache::remember('bch_access_token', 3000, function () {
-            $resp = Http::timeout(15)
-                ->withBasicAuth($this->clientId, $this->clientSecret)
-                ->asForm()
-                ->post($this->tokenUrl, ['grant_type' => 'client_credentials']);
-
-            if (!$resp->successful()) {
-                Log::error('BCH token error', ['status' => $resp->status(), 'body' => $resp->body()]);
-                throw new \RuntimeException('BCH token error ' . $resp->status() . ': ' . $resp->body());
-            }
-
-            return $resp->json('access_token');
-        });
-    }
-
-    // ── Headers ───────────────────────────────────────────────────────────────
+    // ── Headers (sandbox: client-id + client-secret directo) ─────────────────
 
     private function headers(): array
     {
         return [
-            'Authorization' => 'Bearer ' . $this->getToken(),
             'client-id'     => $this->clientId,
             'client-secret' => $this->clientSecret,
             'Content-Type'  => 'application/json',
@@ -84,11 +61,6 @@ class BancochileService
             $resp = Http::timeout(30)
                 ->withHeaders($this->headers())
                 ->post("{$this->apiBase}/obtener-periodo", $body);
-
-            if ($resp->status() === 401) {
-                Cache::forget('bch_access_token');
-                throw new \RuntimeException('BCH: token expirado, reintenta.');
-            }
 
             if (!$resp->successful()) {
                 Log::error('BCH /obtener-periodo error', ['status' => $resp->status(), 'body' => $resp->body()]);
