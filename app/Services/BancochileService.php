@@ -158,7 +158,15 @@ class BancochileService
 
     public static function parseDate(?string $raw): ?string
     {
-        if (!$raw || strlen($raw) !== 8) return null;
-        return substr($raw, 0, 4) . '-' . substr($raw, 4, 2) . '-' . substr($raw, 6, 2);
+        if (!$raw) return null;
+        if (strlen($raw) === 8 && ctype_digit($raw)) {
+            // YYYYMMDD → YYYY-MM-DD
+            return substr($raw, 0, 4) . '-' . substr($raw, 4, 2) . '-' . substr($raw, 6, 2);
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $raw)) {
+            // Ya viene en YYYY-MM-DD
+            return substr($raw, 0, 10);
+        }
+        return null;
     }
 }

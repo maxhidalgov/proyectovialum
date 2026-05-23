@@ -306,6 +306,9 @@
             <span v-else>
               {{ importResult.nuevos }} nuevos · {{ importResult.duplicados }} duplicados
               ({{ importResult.total }} total)
+              <span v-if="importResult.errores?.length" class="d-block text-caption mt-1">
+                Errores ({{ importResult.errores.length }}): {{ importResult.errores[0] }}
+              </span>
             </span>
           </VAlert>
         </VCardText>
