@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class BancochileService
 {
+    private string $tokenUrl;
     private string $apiBase;
     private string $clientId;
     private string $clientSecret;
@@ -17,6 +19,7 @@ class BancochileService
 
     public function __construct()
     {
+        $this->tokenUrl       = config('services.bch.token_url');
         $this->apiBase        = config('services.bch.api_base');
         $this->clientId       = config('services.bch.client_id');
         $this->clientSecret   = config('services.bch.client_secret');
@@ -27,11 +30,31 @@ class BancochileService
         $this->rutApoderado   = [['value' => $rutAp]];
     }
 
-    // ── Auth headers (sandbox: client-id/secret directo en header) ────────────
+    // ── OAuth2 token (client_credentials) ────────────────────────────────────
+
+    private function getToken(): string
+    {
+        return Cache::remember('bch_access_token', 3000, function () {
+            $resp = Http::timeout(15)
+                ->withBasicAuth($this->clientId, $this->clientSecret)
+                ->asForm()
+                ->post($this->tokenUrl, ['grant_type' => 'client_credentials']);
+
+            if (!$resp->successful()) {
+                Log::error('BCH token error', ['status' => $resp->status(), 'body' => $resp->body()]);
+                throw new \RuntimeException('BCH token error ' . $resp->status() . ': ' . $resp->body());
+            }
+
+            return $resp->json('access_token');
+        });
+    }
+
+    // ── Headers ───────────────────────────────────────────────────────────────
 
     private function headers(): array
     {
         return [
+            'Authorization' => 'Bearer ' . $this->getToken(),
             'client-id'     => $this->clientId,
             'client-secret' => $this->clientSecret,
             'Content-Type'  => 'application/json',
@@ -41,16 +64,11 @@ class BancochileService
 
     // ── Movimientos por período ───────────────────────────────────────────────
 
-    /**
-     * Trae todos los movimientos entre $desde y $hasta (YYYY-MM-DD).
-     * Maneja paginación automáticamente.
-     * Retorna ['movimientos' => [...], 'meta' => {saldo, titular, ...}]
-     */
     public function getMovimientosPorPeriodo(string $desde, string $hasta): array
     {
-        $todos     = [];
-        $pagDesde  = 0;
-        $meta      = [];
+        $todos    = [];
+        $pagDesde = 0;
+        $meta     = [];
 
         do {
             $body = [
@@ -67,20 +85,20 @@ class BancochileService
                 ->withHeaders($this->headers())
                 ->post("{$this->apiBase}/obtener-periodo", $body);
 
-            if (!$resp->successful()) {
-                Log::error('BCH /obtener-periodo error', [
-                    'status' => $resp->status(),
-                    'body'   => $resp->body(),
-                ]);
-                throw new \RuntimeException(
-                    'Banco Chile error ' . $resp->status() . ': ' . $resp->body()
-                );
+            if ($resp->status() === 401) {
+                Cache::forget('bch_access_token');
+                throw new \RuntimeException('BCH: token expirado, reintenta.');
             }
 
-            $data    = $resp->json();
-            $items   = $data['movimientos'] ?? [];
-            $todos   = array_merge($todos, $items);
-            $hayMas  = ($data['indicadorMasPaginas'] ?? 'N') === 'Y';
+            if (!$resp->successful()) {
+                Log::error('BCH /obtener-periodo error', ['status' => $resp->status(), 'body' => $resp->body()]);
+                throw new \RuntimeException('Banco Chile error ' . $resp->status() . ': ' . $resp->body());
+            }
+
+            $data     = $resp->json();
+            $items    = $data['movimientos'] ?? [];
+            $todos    = array_merge($todos, $items);
+            $hayMas   = ($data['indicadorMasPaginas'] ?? 'N') === 'Y';
             $pagDesde = ($data['indiceTerminoRespuesta'] ?? $pagDesde) + 1;
 
             if (empty($meta)) {
@@ -89,7 +107,7 @@ class BancochileService
 
         } while ($hayMas && count($items) > 0);
 
-        unset($meta['movimientos']); // no duplicar en meta
+        unset($meta['movimientos']);
 
         return ['movimientos' => $todos, 'meta' => $meta];
     }
@@ -128,10 +146,10 @@ class BancochileService
     public function getResumen(): array
     {
         $body = [
-            'rutOrigen'      => $this->rutOrigen,
-            'productoCuenta' => $this->productoCuenta,
-            'cuenta'         => $this->cuenta,
-            'rutApoderado'   => $this->rutApoderado,
+            'rutOrigen'       => $this->rutOrigen,
+            'productoCuenta'  => $this->productoCuenta,
+            'cuenta'          => $this->cuenta,
+            'rutApoderado'    => $this->rutApoderado,
             'paginacionDesde' => 0,
         ];
 
@@ -153,7 +171,6 @@ class BancochileService
         return $this->cuenta;
     }
 
-    /** Convierte YYYYMMDD → Y-m-d (null si inválido). */
     public static function parseDate(?string $raw): ?string
     {
         if (!$raw || strlen($raw) !== 8) return null;

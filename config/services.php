@@ -40,6 +40,7 @@ return [
     ],
 
     'bch' => [
+        'token_url'      => env('BCH_TOKEN_URL', 'https://gw.apistore.bancochile.cl/token'),
         'api_base'       => env('BCH_API_BASE', 'https://gw.apistore.bancochile.cl/banco-chile/sandbox/v1/movimientos-cuenta'),
         'client_id'      => env('BCH_CLIENT_ID'),
         'client_secret'  => env('BCH_CLIENT_SECRET'),
