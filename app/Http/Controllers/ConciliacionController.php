@@ -65,6 +65,7 @@ class ConciliacionController extends Controller
         $movs       = $result['movimientos'];
         $nuevos     = 0;
         $duplicados = 0;
+        $errores    = [];
 
         foreach ($movs as $m) {
             $secuencial    = $m['secuencial'] ?? null;
@@ -97,27 +98,36 @@ class ConciliacionController extends Controller
                 }
             }
 
-            MovimientoBancario::create([
-                'cuenta'           => $svc->getCuenta(),
-                'fecha_contable'   => $fechaContable,
-                'fecha_valor'      => $fechaValor,
-                'descripcion'      => mb_substr($descripcion, 0, 255),
-                'monto'            => $monto,
-                'tipo'             => $tipo,
-                'numero_documento' => $nroDoc,
-                'saldo_disponible' => $saldo,
-                'bch_codigo'       => $secuencial,
-                'raw'              => $m,
-                'conciliado'       => false,
-            ]);
+            if (!$fechaContable) {
+                $errores[] = 'fecha inválida: ' . ($m['fechaContable'] ?? 'null');
+                continue;
+            }
 
-            $nuevos++;
+            try {
+                MovimientoBancario::create([
+                    'cuenta'           => $svc->getCuenta(),
+                    'fecha_contable'   => $fechaContable,
+                    'fecha_valor'      => $fechaValor,
+                    'descripcion'      => mb_substr($descripcion, 0, 255),
+                    'monto'            => $monto,
+                    'tipo'             => $tipo,
+                    'numero_documento' => $nroDoc,
+                    'saldo_disponible' => $saldo,
+                    'bch_codigo'       => $secuencial,
+                    'raw'              => $m,
+                    'conciliado'       => false,
+                ]);
+                $nuevos++;
+            } catch (\Throwable $e) {
+                $errores[] = $e->getMessage();
+            }
         }
 
         return response()->json([
             'total'      => count($movs),
             'nuevos'     => $nuevos,
             'duplicados' => $duplicados,
+            'errores'    => $errores,
         ]);
     }
 

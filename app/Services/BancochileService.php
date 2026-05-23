@@ -48,8 +48,9 @@ class BancochileService
         $pagDesde = 0;
         $meta     = [];
 
-        $maxPaginas = 20;
-        $pagina     = 0;
+        $maxPaginas     = 50;
+        $pagina         = 0;
+        $ultimoIndice   = -1;
 
         do {
             $body = [
@@ -71,16 +72,23 @@ class BancochileService
                 throw new \RuntimeException('Banco Chile error ' . $resp->status() . ': ' . $resp->body());
             }
 
-            $data     = $resp->json();
-            $items    = $data['movimientos'] ?? [];
-            $todos    = array_merge($todos, $items);
-            $hayMas   = ($data['indicadorMasPaginas'] ?? 'N') === 'Y';
-            $pagDesde = ($data['indiceTerminoRespuesta'] ?? $pagDesde) + 1;
+            $data          = $resp->json();
+            $items         = $data['movimientos'] ?? [];
+            $nuevoIndice   = (int) ($data['indiceTerminoRespuesta'] ?? 0);
+            $todos         = array_merge($todos, $items);
+            $hayMas        = ($data['indicadorMasPaginas'] ?? 'N') === 'Y';
             $pagina++;
 
             if (empty($meta)) {
                 $meta = $data;
             }
+
+            // Evitar loop infinito si el índice no avanza (mock sandbox)
+            if ($nuevoIndice === $ultimoIndice) {
+                break;
+            }
+            $ultimoIndice = $nuevoIndice;
+            $pagDesde     = $nuevoIndice + 1;
 
         } while ($hayMas && count($items) > 0 && $pagina < $maxPaginas);
 
