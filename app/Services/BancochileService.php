@@ -48,6 +48,9 @@ class BancochileService
         $pagDesde = 0;
         $meta     = [];
 
+        $maxPaginas = 20;
+        $pagina     = 0;
+
         do {
             $body = [
                 'rutOrigen'       => $this->rutOrigen,
@@ -59,7 +62,7 @@ class BancochileService
                 'paginacionDesde' => $pagDesde,
             ];
 
-            $resp = Http::timeout(30)
+            $resp = Http::timeout(25)
                 ->withHeaders($this->headers())
                 ->post("{$this->apiBase}/obtener-periodo", $body);
 
@@ -73,12 +76,13 @@ class BancochileService
             $todos    = array_merge($todos, $items);
             $hayMas   = ($data['indicadorMasPaginas'] ?? 'N') === 'Y';
             $pagDesde = ($data['indiceTerminoRespuesta'] ?? $pagDesde) + 1;
+            $pagina++;
 
             if (empty($meta)) {
                 $meta = $data;
             }
 
-        } while ($hayMas && count($items) > 0);
+        } while ($hayMas && count($items) > 0 && $pagina < $maxPaginas);
 
         unset($meta['movimientos']);
 
