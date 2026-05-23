@@ -34,6 +34,7 @@ class BancochileService
         return [
             'client-id'     => $this->clientId,
             'client-secret' => $this->clientSecret,
+            'Authorization' => 'Bearer ' . $this->clientId, // sandbox: usa client-id como bearer
             'Content-Type'  => 'application/json',
             'Accept'        => 'application/json',
         ];
