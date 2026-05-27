@@ -62,4 +62,9 @@ return [
         'serie'   => env('WINPERFIL_SERIE', 'A'),
     ],
 
+    'chipax' => [
+        'base_url' => env('CHIPAX_BASE_URL', 'https://manhattan.chipax.com'),
+        'cookie'   => env('CHIPAX_COOKIE'),   // valor de la cookie "Chipax=" del browser
+    ],
+
 ];
