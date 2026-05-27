@@ -26,7 +26,7 @@
         <v-card variant="outlined" class="pa-3">
           <div class="d-flex align-center gap-2 mb-1">
             <v-icon size="16" color="success">mdi-check-circle-outline</v-icon>
-            <span class="text-caption text-medium-emphasis">Pagadas</span>
+            <span class="text-caption text-medium-emphasis">Cobradas</span>
           </div>
           <div class="text-h6 font-weight-bold">{{ statsPagadas.count }}</div>
           <div class="text-caption text-medium-emphasis">{{ clp(statsPagadas.monto) }}</div>
@@ -133,19 +133,15 @@
           <span class="text-caption">{{ fmtFecha(item.fecha) }}</span>
         </template>
 
-        <!-- Cobrado -->
+        <!-- Facturado y cobrado (dos barras) -->
         <template #item.cobrado="{ item }">
-          <div v-if="item.documentos_facturacion?.length" style="min-width: 90px">
+          <div v-if="item.documentos_facturacion?.some(d => d.estado === 'emitido')" style="min-width: 100px">
             <div class="d-flex justify-space-between text-caption mb-1">
-              <span class="text-success">{{ clp(totalEmitido(item)) }}</span>
-              <span class="text-medium-emphasis">{{ pctEmitido(item) }}%</span>
+              <span class="text-info">Fact: {{ pctEmitido(item) }}%</span>
+              <span class="text-success">Cobr: {{ pctCobrado(item) }}%</span>
             </div>
-            <v-progress-linear
-              :model-value="pctEmitido(item)"
-              color="success"
-              bg-color="grey-lighten-3"
-              rounded height="4"
-            />
+            <v-progress-linear :model-value="pctEmitido(item)" color="info" bg-color="grey-lighten-3" rounded height="3" class="mb-1" />
+            <v-progress-linear :model-value="pctCobrado(item)" color="success" bg-color="grey-lighten-3" rounded height="3" />
           </div>
           <span v-else class="text-caption text-disabled">—</span>
         </template>
@@ -178,7 +174,7 @@
           </div>
         </template>
 
-        <!-- Expanded row: historial de documentos emitidos -->
+        <!-- Expanded row: items + historial de documentos con estado de cobro -->
         <template #expanded-row="{ columns, item }">
           <tr>
             <td :colspan="columns.length" class="pa-0">
@@ -235,50 +231,89 @@
                     </div>
                   </v-col>
 
-                  <!-- Derecha: historial de emisiones -->
+                  <!-- Derecha: historial de emisiones con estado de cobro -->
                   <v-col cols="12" md="5">
-                    <p class="text-caption font-weight-medium mb-2">Historial de facturación</p>
+                    <p class="text-caption font-weight-medium mb-2">Historial de facturación y cobro</p>
 
                     <div v-if="item.documentos_facturacion?.length">
                       <div
                         v-for="doc in item.documentos_facturacion"
                         :key="doc.id"
-                        class="d-flex align-center justify-space-between mb-2 pa-2 rounded"
+                        class="mb-3 pa-3 rounded"
                         style="border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity))"
                       >
-                        <div>
+                        <!-- Cabecera del doc -->
+                        <div class="d-flex align-center justify-space-between mb-2">
                           <div class="d-flex align-center gap-1">
-                            <v-icon size="14" color="success">mdi-check-circle</v-icon>
+                            <v-icon size="14" :color="doc.estado === 'emitido' ? 'success' : 'warning'">
+                              {{ doc.estado === 'emitido' ? 'mdi-check-circle' : 'mdi-clock-outline' }}
+                            </v-icon>
                             <span class="text-body-2 font-weight-medium text-capitalize">{{ doc.tipo }}</span>
                             <span class="text-caption text-medium-emphasis">({{ doc.porcentaje }}%)</span>
                           </div>
-                          <div class="text-caption text-medium-emphasis">
-                            {{ clp(doc.monto) }}
-                            <span v-if="doc.numero_documento_bsale"> · Doc #{{ doc.numero_documento_bsale }}</span>
-                            <span v-if="doc.fecha_emision"> · {{ doc.fecha_emision }}</span>
-                          </div>
+                          <v-btn
+                            v-if="doc.url_pdf_bsale"
+                            icon size="x-small" variant="text" color="info"
+                            :href="doc.url_pdf_bsale" target="_blank"
+                          >
+                            <v-icon size="14">mdi-file-pdf-box</v-icon>
+                          </v-btn>
                         </div>
-                        <v-btn
-                          v-if="doc.url_pdf_bsale"
-                          icon size="x-small" variant="text" color="info"
-                          :href="doc.url_pdf_bsale" target="_blank"
-                        >
-                          <v-icon size="14">mdi-file-pdf-box</v-icon>
-                        </v-btn>
+
+                        <!-- Monto y N° doc -->
+                        <div class="text-caption text-medium-emphasis mb-2">
+                          <span class="font-weight-medium text-body-2">{{ clp(doc.monto) }}</span>
+                          <span v-if="doc.numero_documento_bsale" class="ml-2">· Doc #{{ doc.numero_documento_bsale }}</span>
+                          <span v-if="doc.fecha_emision" class="ml-2">· {{ doc.fecha_emision }}</span>
+                        </div>
+
+                        <!-- Estado de cobro (solo docs emitidos) -->
+                        <template v-if="doc.estado === 'emitido'">
+                          <div class="d-flex justify-space-between text-caption mb-1">
+                            <span class="text-success">Cobrado: {{ clp(doc.monto_cobrado || 0) }}</span>
+                            <span :class="(doc.pendiente || 0) > 0 ? 'text-warning' : 'text-success'">
+                              {{ (doc.pendiente || 0) > 0 ? `Por cobrar: ${clp(doc.pendiente)}` : '✓ Cobrado' }}
+                            </span>
+                          </div>
+                          <v-progress-linear
+                            :model-value="doc.monto > 0 ? ((doc.monto_cobrado || 0) / doc.monto) * 100 : 0"
+                            color="success"
+                            bg-color="warning"
+                            height="4"
+                            rounded
+                            class="mb-2"
+                          />
+                          <v-btn
+                            size="x-small"
+                            variant="tonal"
+                            color="success"
+                            @click.stop="abrirConciliarCobro(doc, item)"
+                          >
+                            <v-icon size="12" start>mdi-link-variant</v-icon>
+                            Conciliar cobro
+                          </v-btn>
+                        </template>
+                        <v-chip v-else size="x-small" color="warning" variant="tonal">Pendiente de emisión</v-chip>
                       </div>
 
-                      <!-- Barra progreso -->
-                      <div class="mt-2">
+                      <!-- Totales globales cobro -->
+                      <div class="mt-2 pa-2 rounded bg-surface-variant">
                         <div class="d-flex justify-space-between text-caption mb-1">
-                          <span>Emitido: {{ clp(totalEmitido(item)) }}</span>
-                          <span class="text-medium-emphasis">Pendiente: {{ clp(item.total - totalEmitido(item)) }}</span>
+                          <span>Facturado: {{ clp(item.total_emitido || 0) }}</span>
+                          <span>Cobrado: {{ clp(item.total_cobrado || 0) }}</span>
                         </div>
                         <v-progress-linear
-                          :model-value="pctEmitido(item)"
+                          :model-value="(item.total_emitido || 0) > 0 ? ((item.total_cobrado || 0) / item.total_emitido) * 100 : 0"
                           color="success"
-                          bg-color="grey-lighten-3"
+                          bg-color="warning"
                           rounded height="6"
                         />
+                        <div v-if="(item.saldo_por_cobrar || 0) > 0" class="text-caption text-warning text-end mt-1">
+                          Por cobrar: {{ clp(item.saldo_por_cobrar) }}
+                        </div>
+                        <div v-else-if="(item.total_cobrado || 0) > 0" class="text-caption text-success text-end mt-1">
+                          ✓ Completamente cobrada
+                        </div>
                       </div>
                     </div>
 
@@ -321,6 +356,142 @@
       />
     </v-dialog>
 
+    <!-- ── Modal Conciliar Cobro ────────────────────────────────────────────── -->
+    <v-dialog v-model="dialogConciliarCobro" max-width="1100" scrollable>
+      <v-card v-if="docConciliando">
+        <v-card-title class="d-flex align-center pa-4 pb-2">
+          <span>Conciliar Cobro</span>
+          <v-chip size="x-small" color="info" variant="tonal" class="ml-2 text-capitalize">{{ docConciliando.tipo }}</v-chip>
+          <v-chip size="x-small" color="success" variant="tonal" class="ml-1">{{ clp(docConciliando.monto) }}</v-chip>
+          <v-spacer />
+          <v-btn icon variant="text" @click="dialogConciliarCobro = false"><v-icon>mdi-close</v-icon></v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-0">
+          <v-row no-gutters style="min-height: 440px">
+
+            <!-- Izquierda: ingresos bancarios disponibles -->
+            <v-col cols="12" md="8" class="border-e">
+              <div class="pa-4">
+                <p class="text-subtitle-2 font-weight-bold mb-3 text-primary">Ingresos bancarios (Créditos disponibles)</p>
+
+                <!-- Ya asignados -->
+                <div v-if="cobrosAsignados.length" class="mb-4">
+                  <p class="text-caption text-medium-emphasis mb-2">Asignados a esta factura:</p>
+                  <v-table density="compact">
+                    <tbody>
+                      <tr v-for="a in cobrosAsignados" :key="a.pivot_id">
+                        <td class="text-caption">{{ fmtFecha(a.fecha_contable) }}</td>
+                        <td class="text-caption" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.descripcion }}</td>
+                        <td class="text-end text-caption font-weight-bold text-success">{{ clp(a.monto_asignado) }}</td>
+                        <td>
+                          <v-btn size="x-small" icon variant="text" color="error"
+                            :loading="loadingDesasignarCobro[a.pivot_id]"
+                            @click="desasignarCobro(a.pivot_id)">
+                            <v-icon size="14">mdi-close</v-icon>
+                          </v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                  <v-divider class="my-3" />
+                </div>
+
+                <!-- Buscador -->
+                <v-text-field
+                  v-model="buscarMovCobro"
+                  placeholder="Buscar por descripción del ingreso..."
+                  density="compact"
+                  variant="outlined"
+                  prepend-inner-icon="mdi-magnify"
+                  hide-details
+                  class="mb-3"
+                  clearable
+                  @update:modelValue="cargarMovDisponibles"
+                />
+
+                <!-- Lista -->
+                <div v-if="loadingMovDisp" class="text-center py-6">
+                  <v-progress-circular indeterminate size="28" />
+                </div>
+                <div v-else style="overflow-x: auto">
+                  <v-table density="compact">
+                    <thead>
+                      <tr>
+                        <th>Saldo disponible</th>
+                        <th>Monto total</th>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="mov in movDisponibles" :key="mov.id">
+                        <td class="font-weight-bold text-success">{{ clp(mov.saldo_por_asignar) }}</td>
+                        <td>{{ clp(mov.monto) }}</td>
+                        <td class="text-caption">{{ fmtFecha(mov.fecha_contable) }}</td>
+                        <td class="text-caption" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                          {{ mov.descripcion }}
+                          <span v-if="mov.glosa" class="text-medium-emphasis d-block">{{ mov.glosa }}</span>
+                        </td>
+                        <td>
+                          <v-btn size="x-small" color="success" variant="tonal"
+                            :loading="loadingAsignarCobro[mov.id]"
+                            :disabled="saldoPorCobrar <= 0"
+                            @click="asignarCobro(mov)">
+                            Seleccionar
+                          </v-btn>
+                        </td>
+                      </tr>
+                      <tr v-if="!movDisponibles.length">
+                        <td colspan="5" class="text-center text-caption text-medium-emphasis py-4">
+                          Sin ingresos bancarios disponibles
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+              </div>
+            </v-col>
+
+            <!-- Derecha: resumen doc -->
+            <v-col cols="12" md="4">
+              <div class="pa-4">
+                <p class="text-subtitle-2 font-weight-bold mb-3 text-primary">Resumen</p>
+                <v-card variant="outlined" class="pa-4">
+                  <p class="font-weight-bold mb-0">{{ cotizConciliando?.cliente?.razon_social || `${cotizConciliando?.cliente?.first_name || ''} ${cotizConciliando?.cliente?.last_name || ''}`.trim() }}</p>
+                  <p class="text-caption text-medium-emphasis mb-3">Cot. #{{ cotizConciliando?.id }}</p>
+                  <v-divider class="mb-3" />
+                  <div class="d-flex justify-space-between">
+                    <span class="text-body-2">Total factura</span>
+                    <span class="font-weight-bold">{{ clp(docConciliando.monto) }}</span>
+                  </div>
+                  <div class="d-flex justify-space-between mt-1">
+                    <span class="text-body-2 text-success">Cobrado</span>
+                    <span class="text-success">{{ clp(docConciliando.monto - saldoPorCobrar) }}</span>
+                  </div>
+                  <v-divider class="my-2" />
+                  <div class="d-flex justify-space-between">
+                    <span class="text-body-2 font-weight-bold" :class="saldoPorCobrar > 0 ? 'text-warning' : 'text-success'">Por cobrar</span>
+                    <span class="font-weight-bold text-h6" :class="saldoPorCobrar > 0 ? 'text-warning' : 'text-success'">
+                      {{ clp(saldoPorCobrar) }}
+                    </span>
+                  </div>
+                  <v-progress-linear
+                    :model-value="docConciliando.monto > 0 ? ((docConciliando.monto - saldoPorCobrar) / docConciliando.monto) * 100 : 0"
+                    color="success" bg-color="warning" height="8" rounded class="mt-3"
+                  />
+                  <v-chip v-if="saldoPorCobrar <= 0" color="success" variant="tonal" class="mt-3 w-100" style="justify-content:center">
+                    <v-icon start size="14">mdi-check-circle</v-icon> Cobrada completamente
+                  </v-chip>
+                </v-card>
+              </div>
+            </v-col>
+          </v-row>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar -->
     <v-snackbar v-model="snack.show" :color="snack.color" location="top right" :timeout="4000">
       {{ snack.text }}
@@ -348,21 +519,33 @@ const snack = ref({ show: false, text: '', color: 'success' })
 
 const filtros = ref({ busqueda: '', estado: null, cliente: null })
 
+// ── Conciliar cobro ──────────────────────────────────────────────────
+const dialogConciliarCobro   = ref(false)
+const docConciliando         = ref(null)
+const cotizConciliando       = ref(null)
+const cobrosAsignados        = ref([])
+const movDisponibles         = ref([])
+const saldoPorCobrar         = ref(0)
+const buscarMovCobro         = ref('')
+const loadingMovDisp         = ref(false)
+const loadingAsignarCobro    = ref({})
+const loadingDesasignarCobro = ref({})
+
 // ── Headers ──────────────────────────────────────────────────────────
 const headers = [
-  { title: '#',        key: 'id',                 sortable: true,  width: '80px' },
-  { title: 'Cliente',  key: 'cliente',            sortable: false },
-  { title: 'Total Neto', key: 'total',            sortable: true },
-  { title: 'Estado',   key: 'estado_facturacion', sortable: true },
-  { title: 'Fecha',    key: 'fecha',              sortable: true },
-  { title: 'Facturado', key: 'cobrado',            sortable: false, width: '120px' },
-  { title: 'Acciones', key: 'acciones',           sortable: false, width: '130px' },
+  { title: '#',               key: 'id',                 sortable: true,  width: '80px' },
+  { title: 'Cliente',         key: 'cliente',            sortable: false },
+  { title: 'Total Neto',      key: 'total',              sortable: true },
+  { title: 'Estado',          key: 'estado_facturacion', sortable: true },
+  { title: 'Fecha',           key: 'fecha',              sortable: true },
+  { title: 'Facturado/Cobrado', key: 'cobrado',          sortable: false, width: '130px' },
+  { title: 'Acciones',        key: 'acciones',           sortable: false, width: '130px' },
 ]
 
 const estadosFacturacion = [
   { title: 'Por facturar', value: 'aprobada' },
   { title: 'Facturada',    value: 'facturada' },
-  { title: 'Pagada',       value: 'pagada' },
+  { title: 'Cobrada',      value: 'pagada' },
 ]
 
 // ── Computed ─────────────────────────────────────────────────────────
@@ -385,8 +568,8 @@ const cotizacionesFiltradas = computed(() => {
       c.cliente?.identification?.toLowerCase().includes(q)
     )
   }
-  if (filtros.value.estado)   list = list.filter(c => c.estado_facturacion === filtros.value.estado)
-  if (filtros.value.cliente)  list = list.filter(c => c.cliente?.id === filtros.value.cliente)
+  if (filtros.value.estado)  list = list.filter(c => c.estado_facturacion === filtros.value.estado)
+  if (filtros.value.cliente) list = list.filter(c => c.cliente?.id === filtros.value.cliente)
   return list
 })
 
@@ -400,11 +583,19 @@ function stats(estado) {
   return { count: list.length, monto: list.reduce((s, c) => s + Number(c.total), 0) }
 }
 
+// ── Helpers de cobro por cotización ─────────────────────────────────
 function totalEmitido(item) {
   return item.documentos_facturacion?.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto), 0) || 0
 }
+function totalCobrado(item) {
+  return item.documentos_facturacion?.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto_cobrado || 0), 0) || 0
+}
 function pctEmitido(item) {
   return item.total > 0 ? Math.round((totalEmitido(item) / item.total) * 100) : 0
+}
+function pctCobrado(item) {
+  const emitido = totalEmitido(item)
+  return emitido > 0 ? Math.round((totalCobrado(item) / emitido) * 100) : 0
 }
 
 // ── Carga ────────────────────────────────────────────────────────────
@@ -419,7 +610,6 @@ async function cargarCotizaciones() {
     loading.value = false
   }
 }
-
 
 // ── Acciones ─────────────────────────────────────────────────────────
 function abrirModalBsale(item) {
@@ -457,14 +647,75 @@ function limpiarFiltros() {
   filtros.value = { busqueda: '', estado: null, cliente: null }
 }
 
+// ── Conciliar cobro ──────────────────────────────────────────────────
+function abrirConciliarCobro(doc, cot) {
+  docConciliando.value    = doc
+  cotizConciliando.value  = cot
+  buscarMovCobro.value    = ''
+  cobrosAsignados.value   = []
+  movDisponibles.value    = []
+  saldoPorCobrar.value    = 0
+  dialogConciliarCobro.value = true
+  cargarEstadoCobro()
+}
+
+async function cargarEstadoCobro() {
+  if (!docConciliando.value) return
+  try {
+    const { data } = await api.get(`/api/ventas/${docConciliando.value.id}/movimientos`)
+    cobrosAsignados.value = data.asignados
+    saldoPorCobrar.value  = data.saldo_por_cobrar
+  } catch (e) { console.error(e) }
+  await cargarMovDisponibles()
+}
+
+async function cargarMovDisponibles() {
+  if (!docConciliando.value) return
+  loadingMovDisp.value = true
+  try {
+    const { data } = await api.get(`/api/ventas/${docConciliando.value.id}/movimientos-disponibles`, {
+      params: { buscar: buscarMovCobro.value || undefined }
+    })
+    movDisponibles.value = data.data ?? data
+  } catch (e) { console.error(e) }
+  finally { loadingMovDisp.value = false }
+}
+
+async function asignarCobro(mov) {
+  loadingAsignarCobro.value[mov.id] = true
+  try {
+    const monto = Math.min(mov.saldo_por_asignar, saldoPorCobrar.value)
+    await api.post(`/api/ventas/${docConciliando.value.id}/movimientos`, {
+      movimiento_id: mov.id,
+      monto,
+    })
+    await cargarEstadoCobro()
+    await cargarCotizaciones()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingAsignarCobro.value[mov.id] = false
+  }
+}
+
+async function desasignarCobro(pivotId) {
+  loadingDesasignarCobro.value[pivotId] = true
+  try {
+    await api.delete(`/api/ventas/${docConciliando.value.id}/movimientos/${pivotId}`)
+    await cargarEstadoCobro()
+    await cargarCotizaciones()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingDesasignarCobro.value[pivotId] = false
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 const clp = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(n) || 0)
-
 const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-CL') : '-'
-
-
 const colorEstado = (e) => ({ aprobada: 'warning', facturada: 'info', pagada: 'success' }[e] || 'grey')
-const textoEstado = (e) => ({ aprobada: 'Por facturar', facturada: 'Facturada', pagada: 'Pagada' }[e] || e)
+const textoEstado = (e) => ({ aprobada: 'Por facturar', facturada: 'Facturada', pagada: 'Cobrada' }[e] || e)
 
 function mostrarSnack(text, color = 'success') {
   snack.value = { show: true, text, color }

@@ -56,4 +56,10 @@ return [
         'token' => env('BSALE_TOKEN'),
     ],
 
+    'winperfil' => [
+        'url'     => env('WINPERFIL_URL', 'http://localhost:2024'),
+        'empresa' => (int) env('WINPERFIL_EMPRESA', 1),
+        'serie'   => env('WINPERFIL_SERIE', 'A'),
+    ],
+
 ];

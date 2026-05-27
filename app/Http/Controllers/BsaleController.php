@@ -902,6 +902,26 @@ class BsaleController extends Controller
     }
 
     /**
+     * DEBUG TEMPORAL: Ver pagos de un documento Bsale (para encontrar campo Nº Comprobante)
+     * GET /api/bsale/debug/payments/{id}
+     */
+    public function debugPayments($id)
+    {
+        $payments = Http::withHeaders($this->getBsaleHeaders())
+            ->timeout(15)
+            ->get($this->baseUrl . "documents/{$id}/payments.json");
+
+        $references = Http::withHeaders($this->getBsaleHeaders())
+            ->timeout(15)
+            ->get($this->baseUrl . "documents/{$id}/references.json");
+
+        return response()->json([
+            'payments'   => $payments->json(),
+            'references' => $references->json(),
+        ]);
+    }
+
+    /**
      * Listar atributos dinámicos de la cuenta Bsale (para encontrar el ID de Observaciones)
      */
     public function getDynamicAttributes()

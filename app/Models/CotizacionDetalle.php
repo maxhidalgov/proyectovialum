@@ -23,7 +23,9 @@ class CotizacionDetalle extends Model
         'ancho_mm',
         'alto_mm',
         'm2',
-        'pulido'
+        'pulido',
+        'winperfil_grafico',
+        'winperfil_grafico_png',  // JPEG pre-renderizado por canvg en el browser
     ];
 
     protected $casts = [

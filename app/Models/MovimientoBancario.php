@@ -9,7 +9,7 @@ class MovimientoBancario extends Model
     protected $table = 'movimientos_bancarios';
 
     protected $fillable = [
-        'cuenta', 'fecha_contable', 'fecha_valor', 'descripcion',
+        'cuenta', 'fecha_contable', 'fecha_valor', 'descripcion', 'glosa',
         'monto', 'tipo', 'numero_documento', 'saldo_disponible',
         'bch_codigo', 'raw', 'compra_id', 'cotizacion_id',
         'categoria', 'conciliado',

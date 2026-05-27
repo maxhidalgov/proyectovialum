@@ -22,6 +22,7 @@ use App\Http\Controllers\ProduccionController;
 use App\Http\Controllers\OperacionesController;
 use App\Http\Controllers\DocumentoFacturacionController;
 use App\Http\Controllers\Api\AgenteController;
+use App\Http\Controllers\WinperfilController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -55,7 +56,9 @@ Route::middleware('auth:api')->group(function () {
     // Rutas resource
     Route::apiResource('cotizaciones', CotizacionController::class);
 
-    Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
+    Route::get('/cotizaciones/{id}/pdf',  [CotizacionController::class, 'generarPDF']);
+    Route::post('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']); // con graficos PNG del frontend (fallback)
+    Route::post('/cotizaciones/{id}/guardar-graficos-png', [CotizacionController::class, 'guardarGraficosPng']);
     Route::get('/cotizaciones/{id}/orden-trabajo', [CotizacionController::class, 'generarOrdenTrabajo']);
     Route::get('/cotizaciones/{id}/hoja-cortes', [ProduccionController::class, 'hojaCortes']);
     Route::get('/cotizaciones/{id}/materiales', [ProduccionController::class, 'resumenMateriales']);
@@ -148,14 +151,105 @@ Route::middleware('auth:api')->group(function () {
 
     // Conciliación bancaria
     Route::prefix('conciliacion')->group(function () {
-        Route::get('/test-conexion',  [\App\Http\Controllers\ConciliacionController::class, 'testConexion']);
-        Route::get('/saldo',          [\App\Http\Controllers\ConciliacionController::class, 'saldo']);
-        Route::post('/importar',      [\App\Http\Controllers\ConciliacionController::class, 'importar']);
-        Route::get('/movimientos',    [\App\Http\Controllers\ConciliacionController::class, 'index']);
+        Route::get('/test-conexion',      [\App\Http\Controllers\ConciliacionController::class, 'testConexion']);
+        Route::get('/saldo',              [\App\Http\Controllers\ConciliacionController::class, 'saldo']);
+        Route::post('/importar',          [\App\Http\Controllers\ConciliacionController::class, 'importar']);
+        Route::post('/importar-cartola',  [\App\Http\Controllers\ConciliacionController::class, 'importarCartola']);
+        Route::get('/movimientos',        [\App\Http\Controllers\ConciliacionController::class, 'index']);
         Route::patch('/movimientos/{id}', [\App\Http\Controllers\ConciliacionController::class, 'update']);
-        Route::post('/auto-concilar', [\App\Http\Controllers\ConciliacionController::class, 'autoConcilar']);
-        Route::get('/flujo-caja',     [\App\Http\Controllers\ConciliacionController::class, 'flujoCaja']);
+        Route::post('/auto-concilar',     [\App\Http\Controllers\ConciliacionController::class, 'autoConcilar']);
+        Route::get('/flujo-caja',         [\App\Http\Controllers\ConciliacionController::class, 'flujoCaja']);
+        // Reglas de categorización
+        Route::get('/reglas',             [\App\Http\Controllers\ReglaConciliacionController::class, 'index']);
+        Route::post('/reglas',            [\App\Http\Controllers\ReglaConciliacionController::class, 'store']);
+        Route::put('/reglas/{id}',        [\App\Http\Controllers\ReglaConciliacionController::class, 'update']);
+        Route::delete('/reglas/{id}',     [\App\Http\Controllers\ReglaConciliacionController::class, 'destroy']);
+        Route::post('/reglas/aplicar',    [\App\Http\Controllers\ReglaConciliacionController::class, 'aplicar']);
+
+        // Conciliar movimiento ↔ facturas (perspectiva desde movimiento)
+        Route::get('/movimientos/{id}/compras',              [\App\Http\Controllers\CompraMovimientoController::class, 'indexPorMovimiento']);
+        Route::get('/movimientos/{id}/compras-disponibles',  [\App\Http\Controllers\CompraMovimientoController::class, 'disponiblesPorMovimiento']);
+        Route::post('/movimientos/{id}/compras',             [\App\Http\Controllers\CompraMovimientoController::class, 'storePorMovimiento']);
+        Route::delete('/movimientos/{id}/compras/{pivotId}', [\App\Http\Controllers\CompraMovimientoController::class, 'destroyPorMovimiento']);
+        // Conciliar movimiento ↔ gastos (perspectiva desde movimiento)
+        Route::get('/movimientos/{id}/gastos',              [\App\Http\Controllers\GastoMovimientoController::class, 'indexPorMovimiento']);
+        Route::get('/movimientos/{id}/gastos-disponibles',  [\App\Http\Controllers\GastoMovimientoController::class, 'disponiblesPorMovimiento']);
+        Route::post('/movimientos/{id}/gastos',             [\App\Http\Controllers\GastoMovimientoController::class, 'storePorMovimiento']);
+        Route::delete('/movimientos/{id}/gastos/{pivotId}', [\App\Http\Controllers\GastoMovimientoController::class, 'destroyPorMovimiento']);
+        // Conciliar movimiento ↔ sueldos
+        Route::get('/movimientos/{id}/sueldos',             [\App\Http\Controllers\SueldoMovimientoController::class, 'indexPorMovimiento']);
+        Route::get('/movimientos/{id}/sueldos-disponibles', [\App\Http\Controllers\SueldoMovimientoController::class, 'disponiblesPorMovimiento']);
+        Route::post('/movimientos/{id}/sueldos',            [\App\Http\Controllers\SueldoMovimientoController::class, 'storePorMovimiento']);
+        Route::delete('/movimientos/{id}/sueldos/{pagoId}', [\App\Http\Controllers\SueldoMovimientoController::class, 'destroyPorMovimiento']);
+        // Conciliar movimiento crédito ↔ ventas (ingresos)
+        Route::get('/movimientos/{id}/ventas',              [\App\Http\Controllers\VentaMovimientoController::class, 'indexPorMovimiento']);
+        Route::get('/movimientos/{id}/ventas-disponibles',  [\App\Http\Controllers\VentaMovimientoController::class, 'disponiblesPorMovimiento']);
+        Route::post('/movimientos/{id}/ventas',             [\App\Http\Controllers\VentaMovimientoController::class, 'storePorMovimiento']);
+        Route::delete('/movimientos/{id}/ventas/{pivotId}', [\App\Http\Controllers\VentaMovimientoController::class, 'destroyPorMovimiento']);
+        // Conciliar movimiento crédito ↔ ingresos manuales (sin doc SII)
+        Route::get('/movimientos/{id}/ingresos',              [\App\Http\Controllers\IngresoManualController::class, 'indexPorMovimiento']);
+        Route::post('/movimientos/{id}/ingresos',             [\App\Http\Controllers\IngresoManualController::class, 'storePorMovimiento']);
+        Route::delete('/movimientos/{id}/ingresos/{pivotId}', [\App\Http\Controllers\IngresoManualController::class, 'destroyPorMovimiento']);
     });
+
+    // Ingresos manuales (para EERR y módulo)
+    Route::get('/ingresos-manuales',         [\App\Http\Controllers\IngresoManualController::class, 'index']);
+    Route::get('/ingresos-manuales-detalle', [\App\Http\Controllers\IngresoManualController::class, 'detalle']);
+    Route::post('/ingresos-manuales',        [\App\Http\Controllers\IngresoManualController::class, 'store']);
+    Route::put('/ingresos-manuales/{id}',    [\App\Http\Controllers\IngresoManualController::class, 'update']);
+    Route::delete('/ingresos-manuales/{id}', [\App\Http\Controllers\IngresoManualController::class, 'destroy']);
+
+    // Empleados
+    Route::prefix('empleados')->group(function () {
+        Route::get('/',                         [\App\Http\Controllers\EmpleadoController::class, 'index']);
+        Route::post('/',                        [\App\Http\Controllers\EmpleadoController::class, 'store']);
+        Route::put('/{id}',                     [\App\Http\Controllers\EmpleadoController::class, 'update']);
+        Route::delete('/{id}',                  [\App\Http\Controllers\EmpleadoController::class, 'destroy']);
+        Route::get('/{id}/pagos',               [\App\Http\Controllers\EmpleadoController::class, 'pagos']);
+        Route::post('/{id}/pagos',              [\App\Http\Controllers\EmpleadoController::class, 'storePago']);
+        Route::put('/pagos/{pagoId}',           [\App\Http\Controllers\EmpleadoController::class, 'updatePago']);
+        Route::delete('/pagos/{pagoId}',        [\App\Http\Controllers\EmpleadoController::class, 'destroyPago']);
+        Route::post('/generar-sueldos',         [\App\Http\Controllers\EmpleadoController::class, 'generarSueldos']);
+        Route::get('/resumen-mensual',          [\App\Http\Controllers\EmpleadoController::class, 'resumenMensual']);
+        Route::get('/pagos-por-periodo',        [\App\Http\Controllers\EmpleadoController::class, 'pagosPorPeriodo']);
+    });
+
+    // Cuentas por Pagar
+    Route::get('/cuentas-por-pagar', [\App\Http\Controllers\CuentasPorPagarController::class, 'index']);
+    Route::get('/cuentas-por-pagar/{rut}/facturas', [\App\Http\Controllers\CuentasPorPagarController::class, 'facturas']);
+
+    // Estado de Resultados
+    Route::get('/eerr', [\App\Http\Controllers\EERRController::class, 'index']);
+
+    // Sync ventas desde Bsale → documentos_facturacion
+    Route::post('/ventas/sincronizar',            [\App\Http\Controllers\BsaleVentaSyncController::class, 'sincronizar']);
+    Route::post('/ventas/backfill-comprobantes',  [\App\Http\Controllers\BsaleVentaSyncController::class, 'backfillComprobantes']);
+
+    // Cuentas por Cobrar
+    Route::get('/cuentas-por-cobrar', [\App\Http\Controllers\CuentasPorCobrarController::class, 'index']);
+    Route::get('/cuentas-por-cobrar/{clienteId}/facturas', [\App\Http\Controllers\CuentasPorCobrarController::class, 'facturas']);
+    Route::get('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'index']);
+    Route::get('/ventas/{id}/movimientos-disponibles', [\App\Http\Controllers\VentaMovimientoController::class, 'disponibles']);
+    Route::post('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'store']);
+    Route::delete('/ventas/{id}/movimientos/{pivotId}', [\App\Http\Controllers\VentaMovimientoController::class, 'destroy']);
+
+    // Gastos Generales
+    Route::prefix('gastos')->group(function () {
+        Route::get('/',        [\App\Http\Controllers\GastoController::class, 'index']);
+        Route::post('/',       [\App\Http\Controllers\GastoController::class, 'store']);
+        Route::put('/{id}',    [\App\Http\Controllers\GastoController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\GastoController::class, 'destroy']);
+        Route::get('/{id}/movimientos',              [\App\Http\Controllers\GastoMovimientoController::class, 'index']);
+        Route::get('/{id}/movimientos-disponibles',  [\App\Http\Controllers\GastoMovimientoController::class, 'disponibles']);
+        Route::post('/{id}/movimientos',             [\App\Http\Controllers\GastoMovimientoController::class, 'store']);
+        Route::delete('/{id}/movimientos/{pivotId}', [\App\Http\Controllers\GastoMovimientoController::class, 'destroy']);
+    });
+
+    // Conciliación factura ↔ movimiento (pivot many-to-many)
+    Route::get('/compras/{id}/movimientos', [\App\Http\Controllers\CompraMovimientoController::class, 'index']);
+    Route::get('/compras/{id}/movimientos-disponibles', [\App\Http\Controllers\CompraMovimientoController::class, 'disponibles']);
+    Route::post('/compras/{id}/movimientos', [\App\Http\Controllers\CompraMovimientoController::class, 'store']);
+    Route::delete('/compras/{id}/movimientos/{pivotId}', [\App\Http\Controllers\CompraMovimientoController::class, 'destroy']);
 
     // Operaciones
     Route::get('/operaciones', [OperacionesController::class, 'index']);
@@ -166,6 +260,51 @@ Route::middleware('auth:api')->group(function () {
     // routes/api.php
     Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);
     Route::get('/compras-terceros-mensuales', [DashboardController::class, 'comprasTercerosMensuales']);
+
+    // DEBUG temporal Bsale (eliminar después)
+    Route::get('/bsale/debug/payments/{id}', [\App\Http\Controllers\BsaleController::class, 'debugPayments']);
+
+    // ── Winperfil API Integration ──────────────────────────────────────────────
+    Route::prefix('winperfil')->group(function () {
+        // Debug (temporal — ver estructura real de respuesta)
+        Route::get('/debug-raw',                [WinperfilController::class, 'debugRaw']);
+
+        // Conectividad
+        Route::get('/test',                     [WinperfilController::class, 'testConexion']);
+
+        // Proxy (lectura directa desde Winperfil, sin persistir)
+        Route::get('/presupuestos',             [WinperfilController::class, 'getPresupuestos']);
+        Route::get('/presupuesto',              [WinperfilController::class, 'getPresupuesto']);
+        Route::get('/pedidos',                  [WinperfilController::class, 'getPedidos']);
+        Route::get('/clientes',                 [WinperfilController::class, 'getClientes']);
+
+        // Sincronización (persiste en BD)
+        Route::post('/sync/clientes',           [WinperfilController::class, 'syncClientes']);
+        Route::post('/sync/presupuestos',       [WinperfilController::class, 'syncPresupuestos']);
+        Route::post('/sync/pedidos',            [WinperfilController::class, 'syncPedidos']);
+        Route::post('/sync/todo',               [WinperfilController::class, 'syncTodo']);
+        Route::post('/sync/resync',             [WinperfilController::class, 'resyncSincronizados']);
+
+        // Listado de cotizaciones sincronizadas
+        Route::get('/cotizaciones',             [WinperfilController::class, 'cotizacionesSincronizadas']);
+    });
+
+    // Transbank
+    Route::prefix('transbank')->group(function () {
+        Route::get('/',                [\App\Http\Controllers\TransbankController::class, 'index']);
+        Route::post('/subir',          [\App\Http\Controllers\TransbankController::class, 'subir']);
+        Route::delete('/{id}',         [\App\Http\Controllers\TransbankController::class, 'destroy']);
+        Route::get('/{id}/abonos',     [\App\Http\Controllers\TransbankController::class, 'abonos']);
+        Route::get('/depositos',       [\App\Http\Controllers\TransbankController::class, 'depositos']);
+        Route::get('/resumen-sii',                  [\App\Http\Controllers\TransbankController::class, 'resumenSii']);
+        Route::get('/documentos',                   [\App\Http\Controllers\TransbankController::class, 'documentos']);
+        Route::post('/auto-link',                   [\App\Http\Controllers\TransbankController::class, 'autoLink']);
+        Route::get('/facturas-disponibles',         [\App\Http\Controllers\TransbankController::class, 'facturasDisponibles']);
+        Route::post('/transaccion/{id}/link',       [\App\Http\Controllers\TransbankController::class, 'linkDocumento']);
+        Route::delete('/transaccion/{id}/link',     [\App\Http\Controllers\TransbankController::class, 'unlinkDocumento']);
+        Route::post('/auto-match',     [\App\Http\Controllers\TransbankController::class, 'autoMatch']);
+        Route::post('/deposito/match', [\App\Http\Controllers\TransbankController::class, 'matchDeposito']);
+    });
 
 
 

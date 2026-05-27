@@ -29,6 +29,7 @@
     "@vueuse/core": "10.11.1",
     "@vueuse/math": "10.11.1",
     "apexcharts": "^4.7.0",
+    "canvg": "^4.0.3",
     "chart.js": "4.4.7",
     "cookie-es": "1.2.2",
     "destr": "2.0.3",

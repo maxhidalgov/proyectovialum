@@ -131,6 +131,54 @@ const allMenuItems = [
     permission: 'ver_dashboard',
   },
   {
+    title: 'Empleados',
+    to: { name: 'empleados' },
+    icon: { icon: 'mdi-account-group' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Cuentas por Cobrar',
+    to: { name: 'cuentas-por-cobrar' },
+    icon: { icon: 'mdi-file-document-plus' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Cuentas por Pagar',
+    to: { name: 'cuentas-por-pagar' },
+    icon: { icon: 'mdi-file-document-minus' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Gastos Generales',
+    to: { name: 'gastos-generales' },
+    icon: { icon: 'mdi-receipt-text-minus' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Ingresos sin doc SII',
+    to: { name: 'ingresos-manuales' },
+    icon: { icon: 'mdi-receipt-text-plus' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Estado de Resultados',
+    to: { name: 'eerr' },
+    icon: { icon: 'mdi-chart-line' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Transbank',
+    to: { name: 'transbank' },
+    icon: { icon: 'mdi-credit-card-outline' },
+    permission: 'ver_dashboard',
+  },
+  {
+    title: 'Winperfil',
+    to: { name: 'winperfil' },
+    icon: { icon: 'mdi-window-maximize' },
+    permission: 'ver_dashboard',
+  },
+  {
     title: 'Administración',
     icon: { icon: 'tabler-settings' },
     permission: 'gestionar_usuarios', // Solo admin

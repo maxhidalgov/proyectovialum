@@ -27,6 +27,9 @@ class Cotizacion extends Model
         'estado_produccion',
         'fecha_entrega',
         'notas_operaciones',
+        'winperfil_numero',
+        'winperfil_serie',
+        'winperfil_synced_at',
     ];
 
     protected $casts = [

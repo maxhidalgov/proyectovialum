@@ -131,6 +131,7 @@
                       <th class="text-center" style="width:60px">Cant.</th>
                       <th class="text-right" style="width:120px">Precio unit.</th>
                       <th class="text-right" style="width:110px">Total</th>
+                      <th style="width:36px" class="text-center">Gráf.</th>
                       <th style="width:36px"></th>
                     </tr>
                   </thead>
@@ -144,6 +145,9 @@
                           hide-details
                           :rules="[v => !!v || '']"
                         />
+                        <div v-if="item.ancho_mm && item.alto_mm" class="text-caption text-medium-emphasis pl-1" style="line-height:1">
+                          {{ Number(item.ancho_mm).toLocaleString('es-CL') }} × {{ Number(item.alto_mm).toLocaleString('es-CL') }} mm
+                        </div>
                       </td>
                       <td class="py-1 px-1 text-center">
                         <v-text-field
@@ -165,6 +169,17 @@
                       </td>
                       <td class="py-1 px-2 text-right text-no-wrap font-weight-medium text-caption">
                         {{ fmt(item.total) }}
+                      </td>
+                      <td class="py-1 text-center">
+                        <v-btn
+                          v-if="item.winperfil_grafico"
+                          icon variant="text" size="x-small" color="deep-purple"
+                          title="Ver gráfico de ventana"
+                          @click="svgPreview = item.winperfil_grafico.trim(); svgPreviewDesc = item.descripcion; dialogSvgPreview = true"
+                        >
+                          <v-icon size="16">mdi-image-outline</v-icon>
+                        </v-btn>
+                        <v-icon v-else size="16" color="grey-lighten-2">mdi-image-off-outline</v-icon>
                       </td>
                       <td class="py-1 text-center">
                         <v-btn icon variant="text" size="x-small" color="error"
@@ -234,6 +249,29 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="4000" location="top">
       {{ snackbar.message }}
     </v-snackbar>
+
+    <!-- Dialog preview gráfico SVG -->
+    <v-dialog v-model="dialogSvgPreview" max-width="800">
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center pa-4">
+          <span class="text-subtitle-1">
+            <v-icon start color="deep-purple">mdi-window-open</v-icon>
+            {{ svgPreviewDesc || 'Gráfico de ventana' }}
+          </span>
+          <v-btn icon variant="text" @click="dialogSvgPreview = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text class="text-center pa-6 bg-grey-lighten-5">
+          <img
+            v-if="svgPreview"
+            :src="svgPreview"
+            style="max-width:100%; max-height:65vh; object-fit:contain;"
+            alt="Vista de ventana"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -290,10 +328,13 @@ onMounted(async () => {
       form.value.items              = (cot.detalles || [])
         .filter(d => d.tipo_item === 'winperfil')
         .map(d => ({
-          descripcion:     d.descripcion,
-          cantidad:        Number(d.cantidad),
-          precio_unitario: Number(d.precio_unitario),
-          total:           Number(d.cantidad) * Number(d.precio_unitario),
+          descripcion:        d.descripcion,
+          cantidad:           Number(d.cantidad),
+          precio_unitario:    Number(d.precio_unitario),
+          total:              Number(d.cantidad) * Number(d.precio_unitario),
+          winperfil_grafico:  d.winperfil_grafico || null,
+          ancho_mm:           d.ancho_mm || null,
+          alto_mm:            d.alto_mm || null,
         }))
       if (!form.value.items.length) form.value.items.push(itemVacio())
 
@@ -405,7 +446,7 @@ async function procesarArchivo(file) {
 
 // ── Items ────────────────────────────────────────────────────────
 function itemVacio() {
-  return { descripcion: '', cantidad: 1, precio_unitario: 0, total: 0 }
+  return { descripcion: '', cantidad: 1, precio_unitario: 0, total: 0, winperfil_grafico: null, ancho_mm: null, alto_mm: null }
 }
 function agregarItem()   { form.value.items.push(itemVacio()) }
 function quitarItem(i)   { form.value.items.splice(i, 1) }
@@ -468,6 +509,11 @@ function reiniciar() {
   form.value          = { cliente: null, fecha: '', numero_presupuesto: '', observaciones: '', items: [] }
   parsed.value        = { cliente_nombre: '' }
 }
+
+// ── SVG Preview dialog ───────────────────────────────────────────
+const dialogSvgPreview = ref(false)
+const svgPreview       = ref('')
+const svgPreviewDesc   = ref('')
 
 // ── Helpers ──────────────────────────────────────────────────────
 const snackbar = ref({ show: false, message: '', color: 'success' })

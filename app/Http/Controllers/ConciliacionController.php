@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MovimientoBancario;
+use App\Models\ReglaConciliacion;
 use App\Models\Compra;
 use App\Services\BancochileService;
 use Illuminate\Http\Request;
@@ -75,6 +76,7 @@ class ConciliacionController extends Controller
             $monto         = abs((float) ($m['monto'] ?? 0));
             $nroDoc        = $m['numeroDocumento'] ?: null;
             $descripcion   = $m['descripcionLarga'] ?? $m['descripcionCorta'] ?? '';
+            $glosa         = trim($m['campoComplementario8'] ?? '') ?: null;
             $saldo         = isset($m['saldoDisponibleAcumulado']) ? (float) $m['saldoDisponibleAcumulado'] : null;
 
             // Deduplicar por secuencial (UUID único por movimiento)
@@ -104,17 +106,22 @@ class ConciliacionController extends Controller
             }
 
             try {
+                $descTrunc = mb_substr($descripcion, 0, 255);
+                $categoria = ReglaConciliacion::categorizar($descTrunc, $tipo);
+
                 MovimientoBancario::create([
                     'cuenta'           => $svc->getCuenta(),
                     'fecha_contable'   => $fechaContable,
                     'fecha_valor'      => $fechaValor,
-                    'descripcion'      => mb_substr($descripcion, 0, 255),
+                    'descripcion'      => $descTrunc,
+                    'glosa'            => $glosa,
                     'monto'            => $monto,
                     'tipo'             => $tipo,
                     'numero_documento' => $nroDoc,
                     'saldo_disponible' => $saldo,
                     'bch_codigo'       => $secuencial,
                     'raw'              => $m,
+                    'categoria'        => $categoria,
                     'conciliado'       => false,
                 ]);
                 $nuevos++;
@@ -125,6 +132,101 @@ class ConciliacionController extends Controller
 
         return response()->json([
             'total'      => count($movs),
+            'nuevos'     => $nuevos,
+            'duplicados' => $duplicados,
+            'errores'    => $errores,
+        ]);
+    }
+
+    // ── Importar cartola CSV de Banco de Chile ───────────────────────────────
+
+    public function importarCartola(Request $request)
+    {
+        $request->validate(['archivo' => 'required|file|max:10240']);
+
+        $path      = $request->file('archivo')->getRealPath();
+        $contenido = file_get_contents($path);
+
+        // Banco de Chile exporta en Windows-1252
+        if (!mb_check_encoding($contenido, 'UTF-8')) {
+            $contenido = mb_convert_encoding($contenido, 'UTF-8', 'Windows-1252');
+        }
+
+        $lineas = preg_split('/\r\n|\r|\n/', $contenido);
+
+        // Línea 1: extraer número de cuenta
+        $cabecera = trim($lineas[0] ?? '');
+        preg_match('/cta:(\d+)/i', $cabecera, $m);
+        $cuenta = $m[1] ?? config('services.bch.cuenta', '');
+
+        $nuevos     = 0;
+        $duplicados = 0;
+        $errores    = [];
+
+        foreach (array_slice($lineas, 2) as $i => $linea) {
+            $linea = trim($linea, " \t\r\n\"");
+            if (!$linea) continue;
+
+            $cols = explode(';', $linea);
+            if (count($cols) < 4) continue;
+
+            [$fecha, $detalle, $cargo, $abono, $saldo, $docto] = array_pad($cols, 6, '');
+
+            // Fecha: DD/MM/YYYY → YYYY-MM-DD
+            $partes = explode('/', trim($fecha));
+            if (count($partes) !== 3) continue;
+            $fechaContable = trim($partes[2]) . '-' . trim($partes[1]) . '-' . trim($partes[0]);
+            if (!strtotime($fechaContable)) continue;
+
+            // Montos: "+0000017400" → entero
+            $montoCargoRaw = (int) ltrim(trim($cargo), '+');
+            $montoAbonoRaw = (int) ltrim(trim($abono), '+');
+
+            if ($montoCargoRaw > 0) {
+                $tipo  = 'D';
+                $monto = $montoCargoRaw;
+            } elseif ($montoAbonoRaw > 0) {
+                $tipo  = 'C';
+                $monto = $montoAbonoRaw;
+            } else {
+                continue;
+            }
+
+            $saldoVal    = (int) ltrim(trim($saldo), '+');
+            $detalleTrim = trim($detalle);
+            $doctoNum    = (int) ltrim(trim($docto), '0+') ?: null;
+
+            // ID determinístico: cuenta+fecha+detalle+cargo+abono+saldo
+            $bchCodigo = 'CSV-' . md5($cuenta . $fechaContable . $detalleTrim . $cargo . $abono . $saldo);
+
+            if (MovimientoBancario::where('bch_codigo', $bchCodigo)->exists()) {
+                $duplicados++;
+                continue;
+            }
+
+            $categoria = ReglaConciliacion::categorizar(mb_substr($detalleTrim, 0, 100), $tipo);
+
+            try {
+                MovimientoBancario::create([
+                    'cuenta'           => $cuenta,
+                    'fecha_contable'   => $fechaContable,
+                    'descripcion'      => mb_substr($detalleTrim, 0, 255),
+                    'monto'            => $monto,
+                    'tipo'             => $tipo,
+                    'numero_documento' => $doctoNum,
+                    'saldo_disponible' => $saldoVal,
+                    'bch_codigo'       => $bchCodigo,
+                    'categoria'        => $categoria,
+                    'conciliado'       => false,
+                ]);
+                $nuevos++;
+            } catch (\Throwable $e) {
+                $errores[] = 'Fila ' . ($i + 3) . ': ' . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'total'      => $nuevos + $duplicados,
             'nuevos'     => $nuevos,
             'duplicados' => $duplicados,
             'errores'    => $errores,
@@ -158,6 +260,36 @@ class ConciliacionController extends Controller
 
         $movs = $q->paginate(150);
 
+        // Enriquecer con montos asignados (facturas + gastos)
+        $ids = $movs->pluck('id');
+
+        $asignadosCompra = DB::table('compra_movimiento')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
+        $asignadosGasto = DB::table('gasto_movimiento')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
+        $asignadosSueldo = DB::table('pagos_empleado')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
+        $movs->getCollection()->transform(function ($mov) use ($asignadosCompra, $asignadosGasto, $asignadosSueldo) {
+            $asignado = (float) ($asignadosCompra[$mov->id] ?? 0)
+                      + (float) ($asignadosGasto[$mov->id] ?? 0)
+                      + (float) ($asignadosSueldo[$mov->id] ?? 0);
+            $mov->monto_asignado    = $asignado;
+            $mov->saldo_por_asignar = max(0, $mov->monto - $asignado);
+            return $mov;
+        });
+
         $totalesQ = MovimientoBancario::query();
         if ($request->filled('desde')) {
             $totalesQ->where('fecha_contable', '>=', $request->desde);
@@ -167,10 +299,14 @@ class ConciliacionController extends Controller
         }
 
         $totales = $totalesQ->selectRaw("
-            SUM(CASE WHEN tipo='C' THEN monto ELSE 0 END) as total_creditos,
-            SUM(CASE WHEN tipo='D' THEN monto ELSE 0 END) as total_debitos,
-            COUNT(*) as total_movimientos,
-            SUM(CASE WHEN conciliado=0 THEN 1 ELSE 0 END) as pendientes
+            SUM(CASE WHEN tipo='C' THEN monto ELSE 0 END)                      as total_creditos,
+            SUM(CASE WHEN tipo='D' THEN monto ELSE 0 END)                      as total_debitos,
+            COUNT(*)                                                            as total_movimientos,
+            SUM(CASE WHEN tipo='C' THEN 1 ELSE 0 END)                         as total_creditos_count,
+            SUM(CASE WHEN tipo='D' THEN 1 ELSE 0 END)                         as total_debitos_count,
+            SUM(CASE WHEN conciliado=0 THEN 1 ELSE 0 END)                      as pendientes,
+            SUM(CASE WHEN conciliado=1 AND tipo='C' THEN 1 ELSE 0 END)        as conciliados_creditos,
+            SUM(CASE WHEN conciliado=1 AND tipo='D' THEN 1 ELSE 0 END)        as conciliados_debitos
         ")->first();
 
         return response()->json([

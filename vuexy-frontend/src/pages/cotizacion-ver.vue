@@ -6,10 +6,12 @@
         <v-btn
           class="ml-2"
           color="secondary"
-          @click="descargarPDF"
+          :loading="generandoPDF"
           :disabled="!cotizacion?.id"
+          prepend-icon="mdi-file-pdf-box"
+          @click="descargarPDF"
         >
-          Descargar PDF
+          {{ generandoPDF ? 'Generando...' : 'Descargar PDF' }}
         </v-btn>
 
         <!-- Botones de cambio de estado -->
@@ -117,16 +119,91 @@
         </template>
       </v-data-table>
     </v-card>
+
+    <!-- ── Ventanas WINPERFIL ─────────────────────────────────────── -->
+    <v-card v-if="winperfilDetalles.length > 0" class="mt-4">
+      <v-card-title class="d-flex align-center gap-2 pa-4">
+        <v-icon color="deep-purple">mdi-window-open</v-icon>
+        Ventanas WINPERFIL
+        <v-chip size="small" color="deep-purple" variant="tonal" class="ml-1">
+          {{ winperfilDetalles.length }} ítem{{ winperfilDetalles.length !== 1 ? 's' : '' }}
+        </v-chip>
+      </v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col
+            v-for="(det, i) in winperfilDetalles"
+            :key="i"
+            cols="12" sm="6" md="4"
+          >
+            <v-card variant="outlined" class="h-100">
+              <!-- Gráfico SVG de la ventana -->
+              <div
+                class="pa-3 text-center bg-grey-lighten-5"
+                style="min-height:160px; display:flex; align-items:center; justify-content:center;"
+              >
+                <img
+                  v-if="det.winperfil_grafico"
+                  :src="det.winperfil_grafico.trim()"
+                  style="max-width:100%; max-height:200px; object-fit:contain; cursor:pointer;"
+                  alt="Vista de ventana"
+                  :title="det.descripcion"
+                  @click="svgAmpliado = det.winperfil_grafico.trim(); dialogSvg = true"
+                />
+                <v-icon v-else size="56" color="grey-lighten-2">mdi-window-maximize</v-icon>
+              </div>
+
+              <v-card-text class="pa-3">
+                <div class="text-subtitle-2 font-weight-bold mb-1" style="line-height:1.3">
+                  {{ det.descripcion }}
+                </div>
+                <div v-if="det.ancho_mm && det.alto_mm" class="text-caption text-medium-emphasis mb-2">
+                  <v-icon size="13" class="mr-1">mdi-arrow-expand-horizontal</v-icon>
+                  {{ Number(det.ancho_mm).toLocaleString('es-CL') }} × {{ Number(det.alto_mm).toLocaleString('es-CL') }} mm
+                </div>
+                <v-divider class="mb-2" />
+                <div class="d-flex justify-space-between text-caption">
+                  <span class="text-medium-emphasis">
+                    Cant: <strong class="text-high-emphasis">{{ det.cantidad }}</strong>
+                  </span>
+                  <strong>{{ clp(det.total) }}</strong>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-card-text>
+    </v-card>
+
+    <!-- Dialog para ampliar SVG -->
+    <v-dialog v-model="dialogSvg" max-width="800">
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center">
+          Gráfico de ventana
+          <v-btn icon variant="text" @click="dialogSvg = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text class="text-center pa-6">
+          <img
+            v-if="svgAmpliado"
+            :src="svgAmpliado"
+            style="max-width:100%; max-height:70vh; object-fit:contain;"
+            alt="Vista ampliada"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script setup>
 import { onMounted, ref, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import api from '@/axiosInstance'
+import { svgDataUriToPng } from '@/composables/useSvgToPng'
 
 const clp = (n) => '$' + new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(Number(n) || 0)
-import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
-import api from '@/axiosInstance'
 
 
 const route = useRoute()
@@ -163,6 +240,16 @@ const productosDetalle = computed(() => {
   return cotizacion.value.detalles.filter(d => d.tipo_item === 'producto')
 })
 
+// Computed para items Winperfil
+const winperfilDetalles = computed(() => {
+  if (!cotizacion.value?.detalles) return []
+  return cotizacion.value.detalles.filter(d => d.tipo_item === 'winperfil')
+})
+
+// Dialog para ampliar SVG
+const dialogSvg  = ref(false)
+const svgAmpliado = ref('')
+
 const getEstadoColor = (estado) => {
   switch (estado) {
     case 'Evaluación': return 'grey'
@@ -192,9 +279,50 @@ const volver = () => {
   router.push({ name: 'cotizaciones' })
 }
 
-const descargarPDF = async () => {
+/**
+ * Convierte los SVGs de Winperfil a PNG usando canvg y los guarda en la BD.
+ * Solo procesa los que aún no tienen winperfil_grafico_png (primera vez).
+ * Corre en background sin bloquear la UI.
+ */
+async function guardarPngsEnBackground(cot) {
+  const sinPng = (cot.detalles || []).filter(
+    d => d.tipo_item === 'winperfil' && d.winperfil_grafico && !d.winperfil_grafico_png
+  )
+  if (!sinPng.length) return
+
+  const graficos = {}
+  for (const det of sinPng) {
+    try {
+      graficos[det.id] = await svgDataUriToPng(det.winperfil_grafico.trim())
+      // Actualizar también el objeto local para que el display sea inmediato
+      const local = cotizacion.value?.detalles?.find(d => d.id === det.id)
+      if (local) local.winperfil_grafico_png = graficos[det.id]
+    } catch (e) {
+      console.warn('[guardarPngs] error en detalle', det.id, e)
+    }
+  }
+
+  if (!Object.keys(graficos).length) return
+
   try {
-    const response = await api.get(`/api/cotizaciones/${cotizacion.value.id}/pdf`, { responseType: 'blob' })
+    await api.post(`/api/cotizaciones/${cot.id}/guardar-graficos-png`, { graficos })
+    console.info(`[guardarPngs] ${Object.keys(graficos).length} PNGs guardados en BD`)
+  } catch (e) {
+    console.warn('[guardarPngs] no se pudieron guardar en BD:', e)
+  }
+}
+
+const generandoPDF = ref(false)
+
+const descargarPDF = async () => {
+  generandoPDF.value = true
+  try {
+    // Los PNGs están guardados en BD (por guardarPngsEnBackground al cargar).
+    // El endpoint GET los usa directamente — no necesita conversión browser.
+    const response = await api.get(
+      `/api/cotizaciones/${cotizacion.value.id}/pdf`,
+      { responseType: 'blob' }
+    )
     const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
     const link = document.createElement('a')
     link.href = url
@@ -205,7 +333,9 @@ const descargarPDF = async () => {
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   } catch (error) {
     console.error('Error al descargar PDF:', error)
-    alert('Error al descargar el PDF. Verifica que estás autenticado.')
+    alert('Error al descargar el PDF.')
+  } finally {
+    generandoPDF.value = false
   }
 }
 
@@ -213,6 +343,10 @@ onMounted(async () => {
   try {
     const { data } = await api.get(`/api/cotizaciones/${cotizacionId}`)
     cotizacion.value = data
+
+    // Auto-guardar PNGs en BD si hay SVGs sin PNG convertido todavía.
+    // Se hace en background (sin bloquear la UI) la primera vez que se abre la cotización.
+    guardarPngsEnBackground(data)
   } catch (error) {
     console.error('Error al cargar cotización:', error)
   }

@@ -530,8 +530,14 @@ public function store(Request $request)
         return response()->json(['message' => 'Cotización eliminada correctamente']);
     }
 
-    public function generarPDF($id)
+    public function generarPDF($id, Request $request)
     {
+        // Imágenes PNG convertidas en el navegador (canvg SVG→PNG), indexadas por detalle ID.
+        // Vienen solo cuando el frontend hace POST /api/cotizaciones/{id}/pdf.
+        // Cuando la petición es GET (sin parámetros), $graficos estará vacío.
+        // PNGs enviados por el browser (fallback si no hay en BD)
+        $graficosRequest = $request->input('graficos', []);
+
         $cotizacion = Cotizacion::with([
             'cliente',
             'vendedor',
@@ -708,10 +714,51 @@ public function store(Request $request)
             }
         }
 
-        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64', 'logoBase64', 'detallesConstructor'))
+        // Construir mapa de PNGs: primero los guardados en BD, luego los del request (fallback)
+        $graficos = [];
+        foreach ($cotizacion->detalles as $det) {
+            if ($det->tipo_item === 'winperfil' && $det->winperfil_grafico_png) {
+                $graficos[$det->id] = $det->winperfil_grafico_png;
+            }
+        }
+        // Merge con los enviados por el browser (tienen prioridad si la BD no tiene)
+        foreach ($graficosRequest as $detalleId => $png) {
+            if (!isset($graficos[$detalleId]) && $png) {
+                $graficos[$detalleId] = $png;
+            }
+        }
+
+        $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64', 'logoBase64', 'detallesConstructor', 'graficos'))
             ->setOptions(['isPhpEnabled' => true]);
 
         return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');
+    }
+
+    /**
+     * Guarda los PNGs pre-renderizados por canvg (browser) en la BD.
+     * Llamado automáticamente al abrir cotizacion-ver.vue si hay SVGs sin PNG guardado.
+     * { graficos: { detalle_id: "data:image/jpeg;base64,..." } }
+     */
+    public function guardarGraficosPng($id, Request $request)
+    {
+        $graficos = $request->input('graficos', []);
+        if (empty($graficos)) {
+            return response()->json(['guardados' => 0]);
+        }
+
+        $guardados = 0;
+        foreach ($graficos as $detalleId => $png) {
+            if (!$png || !str_starts_with($png, 'data:image/')) continue;
+
+            $actualizado = \App\Models\CotizacionDetalle::where('id', $detalleId)
+                ->where('cotizacion_id', $id)  // seguridad: solo detalles de esta cotización
+                ->whereNull('winperfil_grafico_png')  // no sobreescribir si ya existe
+                ->update(['winperfil_grafico_png' => $png]);
+
+            if ($actualizado) $guardados++;
+        }
+
+        return response()->json(['guardados' => $guardados]);
     }
 
     public function generarOrdenTrabajo($id)
@@ -899,18 +946,45 @@ public function getAprobadas()
             'estado'
         ])
         ->whereHas('estado', function($query) {
-            $query->whereIn('nombre', ['Aprobada', 'Facturada', 'Pagada']);
+            $query->whereIn('nombre', ['Aprobada', 'Facturada']);
         })
         ->orderBy('created_at', 'desc')
-        ->get()
-        ->map(function($cotizacion) {
+        ->get();
+
+        // Enriquecer con cobros reales (venta_movimiento) en una sola query
+        $ventaIds = $cotizaciones->flatMap(fn($c) => $c->documentosFacturacion->pluck('id'));
+        $cobros = \Illuminate\Support\Facades\DB::table('venta_movimiento')
+            ->whereIn('venta_id', $ventaIds)
+            ->groupBy('venta_id')
+            ->selectRaw('venta_id, SUM(monto) as monto_cobrado')
+            ->pluck('monto_cobrado', 'venta_id');
+
+        $cotizaciones = $cotizaciones->map(function($cotizacion) use ($cobros) {
+            // Adjuntar datos de cobro a cada documento
+            $cotizacion->documentosFacturacion->each(function($doc) use ($cobros) {
+                $doc->monto_cobrado = (float)($cobros[$doc->id] ?? 0);
+                $doc->pendiente     = max(0, $doc->monto - $doc->monto_cobrado);
+            });
+
+            // Totales de cobro de la cotización
+            $docsEmitidos = $cotizacion->documentosFacturacion->where('estado', 'emitido');
+            $totalEmitido = $docsEmitidos->sum('monto');
+            $totalCobrado = $docsEmitidos->sum('monto_cobrado');
+            $cotizacion->total_emitido   = $totalEmitido;
+            $cotizacion->total_cobrado   = $totalCobrado;
+            $cotizacion->saldo_por_cobrar = max(0, $totalEmitido - $totalCobrado);
+
             // Mapear estado para el frontend (simplificado)
             $cotizacion->estado_facturacion = match($cotizacion->estado->nombre ?? '') {
                 'Aprobada' => 'aprobada',
-                'Facturada' => 'facturada', 
-                'Pagada' => 'pagada',
+                'Facturada' => 'facturada',
                 default => 'aprobada'
             };
+
+            // Si todo lo emitido está cobrado → dinámicamente 'pagada'
+            if ($totalEmitido > 0 && $totalCobrado >= $totalEmitido) {
+                $cotizacion->estado_facturacion = 'pagada';
+            }
             
             // Mapear cliente para compatibilidad
             if ($cotizacion->cliente) {

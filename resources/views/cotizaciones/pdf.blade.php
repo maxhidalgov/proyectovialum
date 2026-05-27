@@ -275,8 +275,73 @@
   </table>
 @endforeach
 
-{{-- Productos Adicionales --}}
-@if($cotizacion->detalles && $cotizacion->detalles->count() > 0)
+{{-- ── Ventanas WINPERFIL ─────────────────────────────────────────────── --}}
+@php
+  $winperfilItems = $cotizacion->detalles->where('tipo_item', 'winperfil')->values();
+  $productosItems = $cotizacion->detalles->where('tipo_item', '!=', 'winperfil')->values();
+@endphp
+
+@if($winperfilItems->count() > 0)
+  <div class="section-title">Ventanas WINPERFIL</div>
+
+  @foreach($winperfilItems as $i => $detalle)
+    {{-- Una tarjeta por ventana: imagen izq. | datos der. --}}
+    <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1px solid #ddd; page-break-inside:avoid;">
+      <tr>
+
+        {{-- Celda imagen: ancho fijo 38%, imagen centrada con max-height --}}
+        <td style="width:38%; background:#f7f9fb; border-right:1px solid #ddd; padding:10px; text-align:center; vertical-align:middle;">
+          @if(!empty($graficos[$detalle->id]))
+            <img
+              src="{{ $graficos[$detalle->id] }}"
+              style="display:block; margin:0 auto; max-width:190px; max-height:160px; width:auto; height:auto;"
+              alt="{{ $detalle->descripcion }}"
+            />
+          @else
+            <span style="color:#bbb; font-size:10px;">Sin imagen</span>
+          @endif
+        </td>
+
+        {{-- Celda datos --}}
+        <td style="width:62%; vertical-align:top; padding:0;">
+          {{-- Encabezado azul --}}
+          <div style="background:#1B3A6B; color:#fff; padding:7px 10px; font-size:11px; font-weight:bold; line-height:1.4;">
+            {{ $detalle->descripcion }}
+          </div>
+          {{-- Tabla de atributos --}}
+          @php
+            $lbl = 'padding:5px 8px; font-weight:bold; color:#555; background:#f5f5f5; border:1px solid #eee; width:40%; font-size:10px;';
+            $val = 'padding:5px 8px; border:1px solid #eee; font-size:10px;';
+          @endphp
+          <table style="width:100%; border-collapse:collapse;">
+            @if($detalle->ancho_mm && $detalle->alto_mm)
+            <tr>
+              <td style="{{ $lbl }}">Dimensiones</td>
+              <td style="{{ $val }}">{{ number_format($detalle->ancho_mm,0,',','.') }} × {{ number_format($detalle->alto_mm,0,',','.') }} mm</td>
+            </tr>
+            @endif
+            <tr>
+              <td style="{{ $lbl }}">Cantidad</td>
+              <td style="{{ $val }}">{{ number_format($detalle->cantidad, 0) }} ud.</td>
+            </tr>
+            <tr>
+              <td style="{{ $lbl }}">Precio Unitario</td>
+              <td style="{{ $val }}">${{ number_format($detalle->precio_unitario, 0, ',', '.') }}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 8px; font-weight:bold; color:#fff; background:#1B3A6B; font-size:10px;">Total</td>
+              <td style="padding:6px 8px; font-weight:bold; color:#1B3A6B; border:1px solid #ddd; font-size:11px;">${{ number_format($detalle->total, 0, ',', '.') }}</td>
+            </tr>
+          </table>
+        </td>
+
+      </tr>
+    </table>
+  @endforeach
+@endif
+
+{{-- ── Productos Adicionales (sin winperfil) ─────────────────────────── --}}
+@if($productosItems->count() > 0)
   <div class="section-title">Productos Adicionales</div>
   <table class="products-table">
     <thead>
@@ -288,7 +353,7 @@
       </tr>
     </thead>
     <tbody>
-      @foreach($cotizacion->detalles as $detalle)
+      @foreach($productosItems as $detalle)
         <tr>
           <td>
             @if($detalle->listaPrecio)
@@ -322,12 +387,23 @@
 {{-- Totales --}}
 @php
   $totalVentanas    = $cotizacion->ventanas->sum('precio');
-  $totalProductos   = $cotizacion->detalles->sum('total');
+  $totalProductos   = $cotizacion->detalles->sum('total');   // incluye winperfil + productos
   $subtotalNeto     = $totalVentanas + $totalProductos;
   $iva              = $subtotalNeto * 0.19;
   $totalGeneral     = $subtotalNeto + $iva;
+
+  // Cantidad y m² de ventanas del cotizador
   $cantidadTotal    = $cotizacion->ventanas->sum('cantidad');
   $totalM2          = $cotizacion->ventanas->sum(fn($v) => ($v->ancho / 1000) * ($v->alto / 1000) * $v->cantidad);
+
+  // Sumar también las ventanas Winperfil (tipo_item = 'winperfil' en detalles)
+  $wpItems = $cotizacion->detalles->where('tipo_item', 'winperfil');
+  $cantidadTotal += $wpItems->sum('cantidad');
+  $totalM2       += $wpItems->sum(
+      fn($d) => ($d->ancho_mm > 0 && $d->alto_mm > 0)
+          ? ($d->ancho_mm / 1000) * ($d->alto_mm / 1000) * $d->cantidad
+          : 0
+  );
 @endphp
 
 <div class="totals-section">
