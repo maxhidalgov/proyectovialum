@@ -129,6 +129,8 @@ class ChipaxImportarRemuneraciones extends Command
                 }
 
                 // 2. Crear o actualizar pagos_empleado
+                // Usamos chipax_remuneracion_id como clave única — cada registro
+                // Chipax es una fila independiente (permite múltiples pagos/mes/empleado)
                 if (!$dry) {
                     $existing = DB::table('pagos_empleado')
                         ->where('chipax_remuneracion_id', $chipaxRemId)
@@ -144,39 +146,21 @@ class ChipaxImportarRemuneraciones extends Command
                         ]);
                         $stats['remuneraciones_actualizadas']++;
                     } else {
-                        // Intentar upsert ignorando unique(empleado_id, periodo, tipo)
-                        $existePorPeriodo = DB::table('pagos_empleado')
-                            ->where('empleado_id', $empleadoId)
-                            ->where('periodo', $periodoDate)
-                            ->where('tipo', 'sueldo')
-                            ->first();
-
-                        if ($existePorPeriodo) {
-                            // Actualizar y registrar chipax_remuneracion_id
-                            DB::table('pagos_empleado')->where('id', $existePorPeriodo->id)->update([
-                                'chipax_remuneracion_id' => $chipaxRemId,
-                                'monto'                  => $montoLiq,
-                                'movimiento_id'          => $movId ?? $existePorPeriodo->movimiento_id,
-                                'pagado'                 => true,
-                                'updated_at'             => now(),
-                            ]);
-                            $stats['remuneraciones_actualizadas']++;
-                        } else {
-                            DB::table('pagos_empleado')->insert([
-                                'chipax_remuneracion_id' => $chipaxRemId,
-                                'empleado_id'  => $empleadoId,
-                                'movimiento_id'=> $movId,
-                                'periodo'      => $periodoDate,
-                                'monto'        => $montoLiq,
-                                'tipo'         => 'sueldo',
-                                'pagado'       => $movId ? true : false,
-                                'fecha_pago'   => $movId ? $this->obtenerFechaMov($movId) : null,
-                                'notas'        => "Importado desde Chipax (rem id $chipaxRemId)",
-                                'created_at'   => now(),
-                                'updated_at'   => now(),
-                            ]);
-                            $stats['remuneraciones_creadas']++;
-                        }
+                        // Insertar nuevo registro — cada chipax_remuneracion_id es único
+                        DB::table('pagos_empleado')->insert([
+                            'chipax_remuneracion_id' => $chipaxRemId,
+                            'empleado_id'  => $empleadoId,
+                            'movimiento_id'=> $movId,
+                            'periodo'      => $periodoDate,
+                            'monto'        => $montoLiq,
+                            'tipo'         => 'sueldo',
+                            'pagado'       => $movId ? true : false,
+                            'fecha_pago'   => $movId ? $this->obtenerFechaMov($movId) : null,
+                            'notas'        => "Importado desde Chipax (rem id $chipaxRemId)",
+                            'created_at'   => now(),
+                            'updated_at'   => now(),
+                        ]);
+                        $stats['remuneraciones_creadas']++;
                     }
 
                     if ($movId) {
