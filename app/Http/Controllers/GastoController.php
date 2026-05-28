@@ -15,11 +15,21 @@ class GastoController extends Controller
         $cat     = $request->get('categoria');
         $buscar  = $request->get('buscar');
 
+        // Solo mostrar gastos operativos (chipax /gastos o creados manualmente)
+        // Excluir: pre-2025 históricos, y los auto-importados previred/impuestos/honorarios
+        $excluirTipos = ['previred', 'impuesto', 'honorario'];
+
         $gastos = DB::table('gastos')
             ->leftJoin(
                 DB::raw('(SELECT gasto_id, SUM(monto) as pagado FROM gasto_movimiento GROUP BY gasto_id) as pagos'),
                 'gastos.id', '=', 'pagos.gasto_id'
             )
+            ->where('gastos.pagado_historico', false)
+            ->where(function ($q) use ($excluirTipos) {
+                // Incluir: chipax_tipo = NULL (manuales) o 'gasto', excluir previred/impuesto/honorario
+                $q->whereNull('gastos.chipax_tipo')
+                  ->orWhereNotIn('gastos.chipax_tipo', $excluirTipos);
+            })
             ->when($desde,  fn($q) => $q->where('gastos.fecha', '>=', $desde))
             ->when($hasta,  fn($q) => $q->where('gastos.fecha', '<=', $hasta))
             ->when($cat,    fn($q) => $q->where('gastos.categoria', $cat))
@@ -40,6 +50,11 @@ class GastoController extends Controller
                 DB::raw('(SELECT gasto_id, SUM(monto) as pagado FROM gasto_movimiento GROUP BY gasto_id) as pagos'),
                 'gastos.id', '=', 'pagos.gasto_id'
             )
+            ->where('gastos.pagado_historico', false)
+            ->where(function ($q) use ($excluirTipos) {
+                $q->whereNull('gastos.chipax_tipo')
+                  ->orWhereNotIn('gastos.chipax_tipo', $excluirTipos);
+            })
             ->when($desde, fn($q) => $q->where('gastos.fecha', '>=', $desde))
             ->when($hasta, fn($q) => $q->where('gastos.fecha', '<=', $hasta))
             ->selectRaw('

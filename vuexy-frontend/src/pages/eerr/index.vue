@@ -7,8 +7,16 @@
         <p class="text-body-2 text-medium-emphasis mb-0">Ingresos, costos y utilidad por período</p>
       </VCol>
       <VCol cols="auto" class="d-flex align-center gap-2">
+        <!-- Toggle Mensual / Anual -->
+        <VBtnToggle v-model="modo" density="compact" variant="outlined" color="primary" mandatory divided>
+          <VBtn value="mensual" size="small">Mensual</VBtn>
+          <VBtn value="anual"   size="small">Anual</VBtn>
+        </VBtnToggle>
+
+        <!-- Selector de mes (modo mensual) -->
         <VTextField
-          v-model="periodo"
+          v-if="modo === 'mensual'"
+          v-model="periodoMes"
           type="month"
           density="compact"
           variant="outlined"
@@ -16,6 +24,19 @@
           style="max-width: 160px"
           @update:modelValue="cargar"
         />
+
+        <!-- Selector de año (modo anual) -->
+        <VSelect
+          v-else
+          v-model="periodoAnio"
+          :items="aniosDisponibles"
+          density="compact"
+          variant="outlined"
+          hide-details
+          style="max-width: 110px"
+          @update:modelValue="cargar"
+        />
+
         <VBtn icon="mdi-refresh" variant="text" size="small" :loading="loading" @click="cargar" />
       </VCol>
     </VRow>
@@ -200,7 +221,7 @@
       <VCol cols="12" md="6">
         <VCard class="h-100">
           <VCardTitle class="pa-4 pb-2 text-subtitle-1 font-weight-bold">
-            Tendencia — últimos 6 meses
+            {{ modo === 'anual' ? `Mensual ${periodoAnio}` : 'Tendencia — últimos 6 meses' }}
           </VCardTitle>
           <VCardText>
             <VueApexCharts
@@ -242,14 +263,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
 import api from '@/axiosInstance'
 
 // ── Estado ───────────────────────────────────────────────────────
-const loading = ref(false)
-const data    = ref(null)
-const periodo = ref(new Date().toISOString().slice(0, 7)) // YYYY-MM
+const loading    = ref(false)
+const data       = ref(null)
+const modo       = ref('mensual')                                   // 'mensual' | 'anual'
+const periodoMes = ref(new Date().toISOString().slice(0, 7))       // YYYY-MM
+const periodoAnio = ref(new Date().getFullYear())                   // número
+
+const hoy = new Date()
+const aniosDisponibles = Array.from({ length: 5 }, (_, i) => hoy.getFullYear() - i)
+
+// Recargar al cambiar modo
+watch(modo, cargar)
 
 // ── Computed ─────────────────────────────────────────────────────
 const utilidadColor = computed(() => {
@@ -258,8 +287,9 @@ const utilidadColor = computed(() => {
 })
 
 const periodoLabel = computed(() => {
-  if (!periodo.value) return ''
-  const [y, m] = periodo.value.split('-')
+  if (modo.value === 'anual') return `Año ${periodoAnio.value}`
+  if (!periodoMes.value) return ''
+  const [y, m] = periodoMes.value.split('-')
   return new Date(y, m - 1, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
 })
 
@@ -322,8 +352,14 @@ const chartOptions = computed(() => {
 async function cargar() {
   loading.value = true
   try {
-    const [anio, mes] = periodo.value.split('-')
-    const { data: res } = await api.get('/api/eerr', { params: { mes: parseInt(mes), anio } })
+    let params
+    if (modo.value === 'anual') {
+      params = { modo: 'anual', anio: periodoAnio.value }
+    } else {
+      const [anio, mes] = periodoMes.value.split('-')
+      params = { modo: 'mensual', mes: parseInt(mes), anio }
+    }
+    const { data: res } = await api.get('/api/eerr', { params })
     data.value = res
   } catch (e) {
     console.error(e)

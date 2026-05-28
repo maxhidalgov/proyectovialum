@@ -333,10 +333,10 @@ const totales = ref({})
 const loading = ref(false)
 const saving  = ref(false)
 
-const hoy           = new Date().toISOString().slice(0, 10)
-const primerDiaMes  = new Date(new Date().getFullYear() - 2, 0, 1).toISOString().slice(0, 10)
+const hoy          = new Date().toISOString().slice(0, 10)
+const primerDiAnio = new Date(new Date().getFullYear() - 1, 0, 1).toISOString().slice(0, 10)
 
-const filtros = ref({ desde: primerDiaMes, hasta: hoy, categoria: '', buscar: '' })
+const filtros = ref({ desde: primerDiAnio, hasta: hoy, categoria: '', buscar: '' })
 
 const dialogForm = ref(false)
 const editando   = ref(null)
