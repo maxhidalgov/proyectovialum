@@ -21,15 +21,22 @@ class EERRController extends Controller
 
     public function index(Request $request)
     {
-        [$desde, $hasta] = $this->parsePeriodo($request);
+        [$desde, $hasta, $modo] = $this->parsePeriodo($request);
         $desdeStr = $desde->toDateString();
         $hastaStr = $hasta->toDateString();
         $mes  = (int) $desde->month;
         $anio = (int) $desde->year;
 
-        // ── Ingresos: Bsale documents.json (igual que Dashboard) ─────
-        ['neto' => $totalIngresos, 'bruto' => $ingBruto, 'cantidad' => $ingCantidad] =
-            $this->bsaleVentas($desde->timestamp, $hasta->timestamp);
+        // ── Ingresos ──────────────────────────────────────────────────
+        // Modo anual: DB local (sync Bsale ya realizado, evita 12 llamadas API)
+        // Modo mensual: API Bsale en tiempo real (solo 1 llamada)
+        if ($modo === 'anual') {
+            ['neto' => $totalIngresos, 'bruto' => $ingBruto, 'cantidad' => $ingCantidad] =
+                $this->ventasDB($desdeStr, $hastaStr);
+        } else {
+            ['neto' => $totalIngresos, 'bruto' => $ingBruto, 'cantidad' => $ingCantidad] =
+                $this->bsaleVentas($desde->timestamp, $hasta->timestamp);
+        }
 
         // ── Ingresos manuales (sin doc SII) ──────────────────────────
         $ingManualesCat = DB::table('ingresos_manuales')
@@ -39,8 +46,8 @@ class EERRController extends Controller
             ->orderByDesc('total')
             ->get();
 
-        $totalIngManuales   = (float) $ingManualesCat->sum('total');
-        $cantidadIngManuales = (int) $ingManualesCat->sum('cantidad');
+        $totalIngManuales    = (float) $ingManualesCat->sum('total');
+        $cantidadIngManuales = (int)   $ingManualesCat->sum('cantidad');
 
         // Total ingresos combinado (SII + manuales)
         $totalIngresosCombinado = $totalIngresos + $totalIngManuales;
@@ -51,9 +58,13 @@ class EERRController extends Controller
             ->whereBetween('m.fecha_contable', [$desdeStr, $hastaStr])
             ->sum('vm.monto');
 
-        // ── Compras: Bsale third_party_documents.json con netAmount ──
+        // ── Compras ───────────────────────────────────────────────────
+        // Modo anual: DB local (evita 12 llamadas API que causan timeout)
+        // Modo mensual: API Bsale (1 llamada, rápida)
         ['neto' => $totalCompras, 'bruto' => $comprasBruto, 'cantidad' => $comprasCantidad] =
-            $this->bsaleCompras($mes, $anio);
+            $modo === 'anual'
+                ? $this->comprasDB($desdeStr, $hastaStr)
+                : $this->bsaleCompras($mes, $anio);
 
         // Top proveedores desde DB local (sincronizada, más rápido)
         $topProveedores = DB::table('compras')
@@ -65,13 +76,20 @@ class EERRController extends Controller
             ->get();
 
         // ── Gastos generales: DB local ────────────────────────────────
-        $gastosTot = DB::table('gastos')
+        // Excluir impuestos (IVA, PPM, retenciones): son obligaciones tributarias,
+        // no egresos operacionales — contablemente no van en el EERR.
+        $gastosBase = DB::table('gastos')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
+            ->where(function ($q) {
+                $q->whereNull('chipax_tipo')
+                  ->orWhereNotIn('chipax_tipo', ['impuesto']);
+            });
+
+        $gastosTot = (clone $gastosBase)
             ->selectRaw('COUNT(*) as cantidad, SUM(monto) as total')
             ->first();
 
-        $gastosCat = DB::table('gastos')
-            ->whereBetween('fecha', [$desdeStr, $hastaStr])
+        $gastosCat = (clone $gastosBase)
             ->selectRaw("COALESCE(categoria, 'Sin categoría') as categoria, COUNT(*) as cantidad, SUM(monto) as total")
             ->groupBy('categoria')
             ->orderByDesc('total')
@@ -149,7 +167,11 @@ class EERRController extends Controller
                 'margen_operacional'   => $margenOperacional,
             ],
 
-            'historico' => $this->historico(),
+            'historico' => $modo === 'anual'
+                ? $this->historicoAnual($anio)
+                : $this->historico(),
+            'modo'    => $modo,
+            'periodo' => ['desde' => $desdeStr, 'hasta' => $hastaStr, 'modo' => $modo],
         ]);
     }
 
@@ -269,6 +291,7 @@ class EERRController extends Controller
 
         $gastos = DB::table('gastos')
             ->where('fecha', '>=', $inicio)
+            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto']); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -290,8 +313,108 @@ class EERRController extends Controller
         })->values()->all();
     }
 
+    // ── Ventas desde BD local (documentos_facturacion sincronizados de Bsale) ─
+
+    private function ventasDB(string $desde, string $hasta): array
+    {
+        $r = DB::table('documentos_facturacion')
+            ->where('estado', 'emitido')
+            ->whereBetween('fecha_emision', [$desde, $hasta])
+            ->selectRaw('
+                COUNT(*) as cantidad,
+                COALESCE(SUM(COALESCE(neto, monto)), 0) as neto,
+                COALESCE(SUM(monto), 0) as bruto
+            ')
+            ->first();
+
+        return [
+            'neto'     => (int) round((float) ($r->neto ?? 0)),
+            'bruto'    => (int) round((float) ($r->bruto ?? 0)),
+            'cantidad' => (int) ($r->cantidad ?? 0),
+        ];
+    }
+
+    // ── Compras desde BD local (tabla compras sincronizada de Bsale) ─────────
+
+    private function comprasDB(string $desde, string $hasta): array
+    {
+        // tipo_dte 61 = nota de crédito (signo negativo)
+        $r = DB::table('compras')
+            ->whereBetween('fecha_emision', [$desde, $hasta])
+            ->selectRaw('
+                COUNT(*) as cantidad,
+                SUM(CASE WHEN tipo_dte = 61 THEN -COALESCE(neto,0) ELSE COALESCE(neto,0) END) as neto,
+                SUM(CASE WHEN tipo_dte = 61 THEN -COALESCE(total,0) ELSE COALESCE(total,0) END) as bruto
+            ')
+            ->first();
+
+        return [
+            'neto'     => (int) round((float) ($r->neto ?? 0)),
+            'bruto'    => (int) round((float) ($r->bruto ?? 0)),
+            'cantidad' => (int) ($r->cantidad ?? 0),
+        ];
+    }
+
+    // ── Histórico de los 12 meses del año solicitado ─────────────────────────
+
+    private function historicoAnual(int $anio): array
+    {
+        $inicio = Carbon::create($anio, 1, 1)->toDateString();
+        $fin    = Carbon::create($anio, 12, 31)->toDateString();
+
+        $ingresos = DB::table('documentos_facturacion')
+            ->where('estado', 'emitido')
+            ->whereBetween('fecha_emision', [$inicio, $fin])
+            ->selectRaw("DATE_FORMAT(fecha_emision, '%Y-%m') as mes, SUM(monto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        $ingresosManuales = DB::table('ingresos_manuales')
+            ->whereBetween('fecha', [$inicio, $fin])
+            ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        $compras = DB::table('compras')
+            ->whereBetween('fecha_emision', [$inicio, $fin])
+            ->selectRaw("DATE_FORMAT(fecha_emision, '%Y-%m') as mes, SUM(neto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        $gastos = DB::table('gastos')
+            ->whereBetween('fecha', [$inicio, $fin])
+            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto']); })
+            ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        $remu = DB::table('pagos_empleado')
+            ->whereBetween('periodo', [$inicio, $fin])
+            ->selectRaw("DATE_FORMAT(periodo, '%Y-%m') as mes, SUM(monto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        return collect(range(1, 12))->map(function ($m) use ($anio, $ingresos, $ingresosManuales, $compras, $gastos, $remu) {
+            $mes = sprintf('%d-%02d', $anio, $m);
+            $ing = (float) ($ingresos[$mes] ?? 0) + (float) ($ingresosManuales[$mes] ?? 0);
+            $egr = (float) ($compras[$mes] ?? 0) + (float) ($gastos[$mes] ?? 0) + (float) ($remu[$mes] ?? 0);
+            return ['periodo' => $mes, 'ingresos' => $ing, 'egresos' => $egr, 'utilidad' => $ing - $egr];
+        })->values()->all();
+    }
+
     private function parsePeriodo(Request $request): array
     {
+        $modo = $request->get('modo', 'mensual');
+
+        // Modo anual: recibe solo anio
+        if ($modo === 'anual' && $request->filled('anio')) {
+            $anio  = (int) $request->anio;
+            $desde = Carbon::create($anio, 1, 1)->startOfDay();
+            $hasta = Carbon::create($anio, 12, 31)->endOfDay();
+            return [$desde, $hasta, 'anual'];
+        }
+
+        // Modo mensual
         if ($request->filled(['mes', 'anio'])) {
             $desde = Carbon::create((int) $request->anio, (int) $request->mes, 1)->startOfMonth();
         } elseif ($request->filled(['desde'])) {
@@ -299,6 +422,6 @@ class EERRController extends Controller
         } else {
             $desde = now()->startOfMonth();
         }
-        return [$desde, $desde->copy()->endOfMonth()];
+        return [$desde, $desde->copy()->endOfMonth(), 'mensual'];
     }
 }
