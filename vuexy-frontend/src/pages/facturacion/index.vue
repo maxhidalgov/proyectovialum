@@ -296,6 +296,14 @@
                         <v-chip v-else size="x-small" color="warning" variant="tonal">Pendiente de emisión</v-chip>
                       </div>
 
+                      <!-- Vincular doc Bsale huérfano -->
+                      <div class="mt-2 d-flex justify-end">
+                        <v-btn size="x-small" color="info" variant="tonal" @click.stop="abrirDialogVincular(item)">
+                          <v-icon size="12" start>mdi-link-variant-plus</v-icon>
+                          Vincular doc Bsale
+                        </v-btn>
+                      </div>
+
                       <!-- Totales globales cobro -->
                       <div class="mt-2 pa-2 rounded bg-surface-variant">
                         <div class="d-flex justify-space-between text-caption mb-1">
@@ -320,9 +328,15 @@
                     <div v-else class="text-center pa-4">
                       <v-icon size="32" color="grey" class="mb-1">mdi-receipt-text-outline</v-icon>
                       <p class="text-caption text-medium-emphasis">Sin documentos emitidos aún</p>
-                      <v-btn size="small" color="success" variant="tonal" class="mt-2" @click.stop="abrirModalBsale(item)">
-                        Emitir primer documento
-                      </v-btn>
+                      <div class="d-flex gap-2 justify-center mt-2 flex-wrap">
+                        <v-btn size="small" color="success" variant="tonal" @click.stop="abrirModalBsale(item)">
+                          Emitir primer documento
+                        </v-btn>
+                        <v-btn size="small" color="info" variant="tonal" @click.stop="abrirDialogVincular(item)">
+                          <v-icon size="14" start>mdi-link-variant-plus</v-icon>
+                          Vincular doc Bsale
+                        </v-btn>
+                      </div>
                     </div>
                   </v-col>
                 </v-row>
@@ -492,6 +506,92 @@
       </v-card>
     </v-dialog>
 
+    <!-- ── Modal Vincular Doc Bsale Huérfano ──────────────────────────────── -->
+    <v-dialog v-model="dialogVincular" max-width="820" scrollable>
+      <v-card v-if="cotizVinculando">
+        <v-card-title class="d-flex align-center pa-4 pb-2">
+          <v-icon start color="info">mdi-link-variant-plus</v-icon>
+          Vincular documento Bsale
+          <v-spacer />
+          <v-btn icon variant="text" @click="dialogVincular = false"><v-icon>mdi-close</v-icon></v-btn>
+        </v-card-title>
+        <v-card-subtitle class="px-4 pb-3">
+          Cot. #{{ cotizVinculando.id }} ·
+          <span class="text-medium-emphasis">
+            {{ cotizVinculando.cliente?.razon_social || `${cotizVinculando.cliente?.first_name || ''} ${cotizVinculando.cliente?.last_name || ''}`.trim() }}
+          </span>
+          · Total: <span class="font-weight-bold">{{ clp(cotizVinculando.total) }}</span>
+        </v-card-subtitle>
+        <v-divider />
+
+        <v-card-text class="pa-4">
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Documentos emitidos directamente en Bsale (sin cotización asignada). Al vincular, el porcentaje se calculará automáticamente respecto al total de la cotización.
+          </p>
+
+          <v-text-field
+            v-model="buscarHuerfano"
+            placeholder="Buscar por N° doc, tipo, N° comprobante..."
+            density="compact"
+            variant="outlined"
+            prepend-inner-icon="mdi-magnify"
+            hide-details
+            class="mb-4"
+            clearable
+            @update:modelValue="cargarHuerfanos"
+          />
+
+          <div v-if="loadingHuerfanos" class="text-center py-8">
+            <v-progress-circular indeterminate size="32" color="info" />
+          </div>
+
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>N° Bsale</th>
+                <th>Monto</th>
+                <th>% sobre cot.</th>
+                <th>Fecha emisión</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="doc in huerfanos" :key="doc.id">
+                <td>
+                  <v-chip size="x-small" variant="tonal" color="info" class="text-capitalize">{{ doc.tipo }}</v-chip>
+                </td>
+                <td class="text-caption">{{ doc.numero_documento_bsale || '-' }}</td>
+                <td class="text-caption font-weight-bold text-success">{{ clp(doc.monto) }}</td>
+                <td class="text-caption text-medium-emphasis">
+                  {{ cotizVinculando.total > 0 ? Math.round((doc.monto / cotizVinculando.total) * 100) + '%' : '-' }}
+                </td>
+                <td class="text-caption">{{ fmtFecha(doc.fecha_emision) }}</td>
+                <td>
+                  <v-btn
+                    size="x-small"
+                    color="info"
+                    variant="tonal"
+                    :loading="loadingVincular[doc.id]"
+                    @click="vincularDoc(doc)"
+                  >
+                    <v-icon size="12" start>mdi-link</v-icon>
+                    Vincular
+                  </v-btn>
+                </td>
+              </tr>
+              <tr v-if="!huerfanos.length">
+                <td colspan="6" class="text-center text-caption text-medium-emphasis py-8">
+                  <v-icon size="32" color="grey" class="d-block mx-auto mb-2">mdi-receipt-text-check-outline</v-icon>
+                  No hay documentos Bsale sin cotización asignada
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar -->
     <v-snackbar v-model="snack.show" :color="snack.color" location="top right" :timeout="4000">
       {{ snack.text }}
@@ -530,6 +630,14 @@ const buscarMovCobro         = ref('')
 const loadingMovDisp         = ref(false)
 const loadingAsignarCobro    = ref({})
 const loadingDesasignarCobro = ref({})
+
+// ── Vincular doc Bsale huérfano ───────────────────────────────────────
+const dialogVincular   = ref(false)
+const cotizVinculando  = ref(null)
+const huerfanos        = ref([])
+const buscarHuerfano   = ref('')
+const loadingHuerfanos = ref(false)
+const loadingVincular  = ref({})
 
 // ── Headers ──────────────────────────────────────────────────────────
 const headers = [
@@ -708,6 +816,46 @@ async function desasignarCobro(pivotId) {
     console.error(e)
   } finally {
     loadingDesasignarCobro.value[pivotId] = false
+  }
+}
+
+// ── Vincular doc Bsale huérfano ──────────────────────────────────────
+async function abrirDialogVincular(item) {
+  cotizVinculando.value = item
+  buscarHuerfano.value  = ''
+  huerfanos.value       = []
+  dialogVincular.value  = true
+  await cargarHuerfanos()
+}
+
+async function cargarHuerfanos() {
+  loadingHuerfanos.value = true
+  try {
+    const { data } = await api.get('/api/documentos-facturacion/huerfanos', {
+      params: { buscar: buscarHuerfano.value || undefined },
+    })
+    huerfanos.value = data
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingHuerfanos.value = false
+  }
+}
+
+async function vincularDoc(doc) {
+  loadingVincular.value[doc.id] = true
+  try {
+    await api.patch(`/api/documentos-facturacion/${doc.id}/vincular`, {
+      cotizacion_id: cotizVinculando.value.id,
+    })
+    dialogVincular.value = false
+    mostrarSnack(`Documento ${doc.numero_documento_bsale ? '#' + doc.numero_documento_bsale : ''} vinculado correctamente`)
+    await cargarCotizaciones()
+  } catch (e) {
+    const msg = e.response?.data?.message || 'Error al vincular documento'
+    mostrarSnack(msg, 'error')
+  } finally {
+    loadingVincular.value[doc.id] = false
   }
 }
 
