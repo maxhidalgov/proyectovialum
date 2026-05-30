@@ -127,49 +127,49 @@ const allMenuItems = [
   {
     title: 'Finanzas',
     icon: { icon: 'mdi-bank' },
-    permission: 'ver_dashboard',
+    permission: 'gestionar_usuarios', // Solo admin
     children: [
       {
         title: 'Conciliación',
         to: { name: 'conciliacion' },
         icon: { icon: 'mdi-bank-outline' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
       {
         title: 'Cuentas por Cobrar',
         to: { name: 'cuentas-por-cobrar' },
         icon: { icon: 'mdi-file-document-plus' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
       {
         title: 'Cuentas por Pagar',
         to: { name: 'cuentas-por-pagar' },
         icon: { icon: 'mdi-file-document-minus' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
       {
         title: 'Gastos Generales',
         to: { name: 'gastos-generales' },
         icon: { icon: 'mdi-receipt-text-minus' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
       {
         title: 'Ingresos sin doc SII',
         to: { name: 'ingresos-manuales' },
         icon: { icon: 'mdi-receipt-text-plus' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
       {
         title: 'Estado de Resultados',
         to: { name: 'eerr' },
         icon: { icon: 'mdi-chart-line' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
       {
         title: 'Transbank',
         to: { name: 'transbank' },
         icon: { icon: 'mdi-credit-card-outline' },
-        permission: 'ver_dashboard',
+        permission: 'gestionar_usuarios',
       },
     ],
   },
@@ -177,7 +177,7 @@ const allMenuItems = [
     title: 'Empleados',
     to: { name: 'empleados' },
     icon: { icon: 'mdi-account-group' },
-    permission: 'ver_dashboard',
+    permission: 'gestionar_usuarios', // Solo admin
   },
   {
     title: 'Winperfil',
