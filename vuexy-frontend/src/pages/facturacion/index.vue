@@ -548,16 +548,22 @@
           <v-table v-else density="compact">
             <thead>
               <tr>
+                <th>Cliente</th>
+                <th>RUT</th>
                 <th>Tipo</th>
                 <th>N° Bsale</th>
                 <th>Monto</th>
                 <th>% sobre cot.</th>
-                <th>Fecha emisión</th>
+                <th>Fecha</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="doc in huerfanos" :key="doc.id">
+                <td class="text-caption" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  {{ doc.cliente_nombre_local || doc.bsale_cliente_nombre || '-' }}
+                </td>
+                <td class="text-caption text-medium-emphasis">{{ doc.bsale_cliente_rut || '-' }}</td>
                 <td>
                   <v-chip size="x-small" variant="tonal" color="info" class="text-capitalize">{{ doc.tipo }}</v-chip>
                 </td>
@@ -581,7 +587,7 @@
                 </td>
               </tr>
               <tr v-if="!huerfanos.length">
-                <td colspan="6" class="text-center text-caption text-medium-emphasis py-8">
+                <td colspan="8" class="text-center text-caption text-medium-emphasis py-8">
                   <v-icon size="32" color="grey" class="d-block mx-auto mb-2">mdi-receipt-text-check-outline</v-icon>
                   No hay documentos Bsale sin cotización asignada
                 </td>

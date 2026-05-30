@@ -5,9 +5,86 @@ namespace App\Http\Controllers;
 use App\Models\Cotizacion;
 use App\Models\DocumentoFacturacion;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DocumentoFacturacionController extends Controller
 {
+    /**
+     * Documentos emitidos en Bsale sin cotización asignada.
+     * Se usan para vincular facturas/anticipos creados directamente en Bsale.
+     */
+    public function huerfanos(Request $request)
+    {
+        $q = DB::table('documentos_facturacion as df')
+            ->leftJoin('clientes as c', 'c.id', '=', 'df.cliente_id')
+            ->whereNull('df.cotizacion_id')
+            ->where('df.estado', 'emitido')
+            ->when($request->buscar, function ($q, $b) {
+                $q->where(function ($w) use ($b) {
+                    $w->where('df.numero_documento_bsale', 'like', "%{$b}%")
+                      ->orWhere('df.tipo', 'like', "%{$b}%")
+                      ->orWhere('df.nro_comprobante', 'like', "%{$b}%")
+                      ->orWhere('df.bsale_cliente_nombre', 'like', "%{$b}%")
+                      ->orWhere('df.bsale_cliente_rut', 'like', "%{$b}%")
+                      ->orWhere('c.razon_social', 'like', "%{$b}%");
+                });
+            })
+            ->orderByDesc('df.fecha_emision')
+            ->limit(100)
+            ->select([
+                'df.id',
+                'df.tipo',
+                'df.monto',
+                'df.neto',
+                'df.porcentaje',
+                'df.estado',
+                'df.numero_documento_bsale',
+                'df.url_pdf_bsale',
+                'df.fecha_emision',
+                'df.nro_comprobante',
+                'df.bsale_cliente_rut',
+                'df.bsale_cliente_nombre',
+                DB::raw("COALESCE(c.razon_social, CONCAT(c.first_name, ' ', c.last_name)) as cliente_nombre_local"),
+            ])
+            ->get();
+
+        return response()->json($q);
+    }
+
+    /**
+     * Vincula un documento huérfano a una cotización.
+     * Recalcula el porcentaje en base al total de la cotización.
+     */
+    public function vincular(Request $request, int $id)
+    {
+        $request->validate([
+            'cotizacion_id' => 'required|exists:cotizaciones,id',
+        ]);
+
+        $doc = DocumentoFacturacion::findOrFail($id);
+
+        if ($doc->cotizacion_id) {
+            return response()->json([
+                'message' => 'Este documento ya está vinculado a la cotización #' . $doc->cotizacion_id,
+            ], 422);
+        }
+
+        $cotizacion = Cotizacion::findOrFail($request->cotizacion_id);
+
+        // Recalcular porcentaje respecto al total de la cotización
+        $pct = $cotizacion->total > 0
+            ? round(($doc->monto / $cotizacion->total) * 100, 2)
+            : 0;
+
+        $doc->update([
+            'cotizacion_id' => $cotizacion->id,
+            'porcentaje'    => $pct,
+        ]);
+
+        return response()->json($doc->fresh());
+    }
+
+
     // Listar documentos de una cotización
     public function index($cotizacionId)
     {
