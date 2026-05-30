@@ -23,7 +23,7 @@ class DocumentoFacturacionController extends Controller
                 $q->where(function ($w) use ($b) {
                     $w->where('df.numero_documento_bsale', 'like', "%{$b}%")
                       ->orWhere('df.tipo', 'like', "%{$b}%")
-                      ->orWhere('df.nro_comprobante', 'like', "%{$b}%")
+                      ->orWhere('df.nro_comprobante_transbank', 'like', "%{$b}%")
                       ->orWhere('df.bsale_cliente_nombre', 'like', "%{$b}%")
                       ->orWhere('df.bsale_cliente_rut', 'like', "%{$b}%")
                       ->orWhere('c.razon_social', 'like', "%{$b}%");
@@ -41,7 +41,7 @@ class DocumentoFacturacionController extends Controller
                 'df.numero_documento_bsale',
                 'df.url_pdf_bsale',
                 'df.fecha_emision',
-                'df.nro_comprobante',
+                'df.nro_comprobante_transbank',
                 'df.bsale_cliente_rut',
                 'df.bsale_cliente_nombre',
                 DB::raw("COALESCE(c.razon_social, CONCAT(c.first_name, ' ', c.last_name)) as cliente_nombre_local"),
