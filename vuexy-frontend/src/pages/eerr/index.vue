@@ -195,10 +195,23 @@
                   <span class="text-error">({{ clp(data.resultados.remuneraciones) }})</span>
                 </div>
               </div>
-              <div v-if="data.remuneraciones.cantidad === 0" class="eerr-row px-4 py-1 text-caption text-medium-emphasis pl-8">Sin pagos en el período</div>
-              <div v-for="r in data.remuneraciones.por_tipo" :key="r.tipo" class="eerr-row px-4 py-1 d-flex justify-space-between">
-                <span class="text-caption pl-4 text-capitalize">{{ r.tipo }} <span class="text-medium-emphasis">({{ r.cantidad }})</span></span>
-                <span class="text-caption">{{ clp(r.total) }}</span>
+              <div v-if="data.remuneraciones.sueldos_cantidad === 0 && data.remuneraciones.previred_cantidad === 0"
+                class="eerr-row px-4 py-1 text-caption text-medium-emphasis pl-8">Sin pagos en el período</div>
+              <!-- Sueldos líquidos -->
+              <div v-if="data.remuneraciones.sueldos_total > 0" class="eerr-row px-4 py-1 d-flex justify-space-between">
+                <span class="text-caption pl-4">
+                  Sueldos líquidos
+                  <span class="text-medium-emphasis">({{ data.remuneraciones.sueldos_cantidad }})</span>
+                </span>
+                <span class="text-caption">{{ clp(data.remuneraciones.sueldos_total) }}</span>
+              </div>
+              <!-- Previred (cotizaciones AFP/salud) -->
+              <div v-if="data.remuneraciones.previred_total > 0" class="eerr-row px-4 py-1 d-flex justify-space-between">
+                <span class="text-caption pl-4">
+                  Previred — cotizaciones
+                  <span class="text-medium-emphasis">({{ data.remuneraciones.previred_cantidad }} períodos)</span>
+                </span>
+                <span class="text-caption">{{ clp(data.remuneraciones.previred_total) }}</span>
               </div>
 
               <VDivider />

@@ -76,13 +76,14 @@ class EERRController extends Controller
             ->get();
 
         // ── Gastos generales: DB local ────────────────────────────────
-        // Excluir impuestos (IVA, PPM, retenciones): son obligaciones tributarias,
-        // no egresos operacionales — contablemente no van en el EERR.
+        // Excluidos del EERR:
+        //   impuesto  → IVA/PPM/retenciones: obligaciones tributarias, no egresos
+        //   previred  → cotizaciones previsionales: van en la sección Remuneraciones
         $gastosBase = DB::table('gastos')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
             ->where(function ($q) {
                 $q->whereNull('chipax_tipo')
-                  ->orWhereNotIn('chipax_tipo', ['impuesto']);
+                  ->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']);
             });
 
         $gastosTot = (clone $gastosBase)
@@ -97,7 +98,7 @@ class EERRController extends Controller
 
         $totalGastos = (float) ($gastosTot->total ?? 0);
 
-        // ── Remuneraciones: DB local ──────────────────────────────────
+        // ── Remuneraciones: sueldos + Previred (cotizaciones AFP/salud) ──
         $remuTot = DB::table('pagos_empleado')
             ->whereBetween('periodo', [$desdeStr, $hastaStr])
             ->selectRaw('COUNT(*) as cantidad, SUM(monto) as total')
@@ -109,7 +110,16 @@ class EERRController extends Controller
             ->groupBy('tipo')
             ->get();
 
-        $totalRemu = (float) ($remuTot->total ?? 0);
+        // Previred: cotizaciones previsionales (AFP + salud empleador)
+        $previredTot = DB::table('gastos')
+            ->whereBetween('fecha', [$desdeStr, $hastaStr])
+            ->where('chipax_tipo', 'previred')
+            ->selectRaw('COUNT(*) as cantidad, SUM(monto) as total')
+            ->first();
+
+        $totalSueldos  = (float) ($remuTot->total ?? 0);
+        $totalPrevired = (float) ($previredTot->total ?? 0);
+        $totalRemu     = $totalSueldos + $totalPrevired;
 
         // ── Resultados (usando ingresos combinados) ───────────────────
         $utilidadBruta       = $totalIngresosCombinado - $totalCompras;
@@ -148,9 +158,12 @@ class EERRController extends Controller
             ],
 
             'remuneraciones' => [
-                'total'    => $totalRemu,
-                'cantidad' => (int) ($remuTot->cantidad ?? 0),
-                'por_tipo' => $remuTipo,
+                'total'            => $totalRemu,
+                'sueldos_total'    => $totalSueldos,
+                'sueldos_cantidad' => (int) ($remuTot->cantidad ?? 0),
+                'previred_total'   => $totalPrevired,
+                'previred_cantidad'=> (int) ($previredTot->cantidad ?? 0),
+                'por_tipo'         => $remuTipo,
             ],
 
             'resultados' => [
@@ -291,7 +304,14 @@ class EERRController extends Controller
 
         $gastos = DB::table('gastos')
             ->where('fecha', '>=', $inicio)
-            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto']); })
+            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
+            ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        $previred = DB::table('gastos')
+            ->where('fecha', '>=', $inicio)
+            ->where('chipax_tipo', 'previred')
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -302,13 +322,14 @@ class EERRController extends Controller
             ->groupBy('mes')
             ->pluck('total', 'mes');
 
-        return collect(range(5, 0))->map(function ($i) use ($ingresos, $ingresosManuales, $compras, $gastos, $remu) {
+        return collect(range(5, 0))->map(function ($i) use ($ingresos, $ingresosManuales, $compras, $gastos, $previred, $remu) {
             $mes = now()->subMonths($i)->format('Y-m');
             $ing = (float) ($ingresos[$mes] ?? 0)
                  + (float) ($ingresosManuales[$mes] ?? 0);
             $egr = (float) ($compras[$mes] ?? 0)
                  + (float) ($gastos[$mes] ?? 0)
-                 + (float) ($remu[$mes] ?? 0);
+                 + (float) ($remu[$mes] ?? 0)
+                 + (float) ($previred[$mes] ?? 0);
             return ['periodo' => $mes, 'ingresos' => $ing, 'egresos' => $egr, 'utilidad' => $ing - $egr];
         })->values()->all();
     }
@@ -383,7 +404,14 @@ class EERRController extends Controller
 
         $gastos = DB::table('gastos')
             ->whereBetween('fecha', [$inicio, $fin])
-            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto']); })
+            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
+            ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
+            ->groupBy('mes')
+            ->pluck('total', 'mes');
+
+        $previred = DB::table('gastos')
+            ->whereBetween('fecha', [$inicio, $fin])
+            ->where('chipax_tipo', 'previred')
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -394,10 +422,13 @@ class EERRController extends Controller
             ->groupBy('mes')
             ->pluck('total', 'mes');
 
-        return collect(range(1, 12))->map(function ($m) use ($anio, $ingresos, $ingresosManuales, $compras, $gastos, $remu) {
+        return collect(range(1, 12))->map(function ($m) use ($anio, $ingresos, $ingresosManuales, $compras, $gastos, $previred, $remu) {
             $mes = sprintf('%d-%02d', $anio, $m);
             $ing = (float) ($ingresos[$mes] ?? 0) + (float) ($ingresosManuales[$mes] ?? 0);
-            $egr = (float) ($compras[$mes] ?? 0) + (float) ($gastos[$mes] ?? 0) + (float) ($remu[$mes] ?? 0);
+            $egr = (float) ($compras[$mes] ?? 0)
+                 + (float) ($gastos[$mes] ?? 0)
+                 + (float) ($remu[$mes] ?? 0)
+                 + (float) ($previred[$mes] ?? 0);
             return ['periodo' => $mes, 'ingresos' => $ing, 'egresos' => $egr, 'utilidad' => $ing - $egr];
         })->values()->all();
     }
