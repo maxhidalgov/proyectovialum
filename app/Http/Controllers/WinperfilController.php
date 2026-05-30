@@ -871,6 +871,13 @@ class WinperfilController extends Controller
 
     private function buildEstadoMap($estados): array
     {
+        // Mapa de campo ACEPTADO de Winperfil → estado local:
+        //   ''  = no confirmado aún      → Evaluación
+        //   'T' = aceptado/confirmado    → Aceptado
+        //   'C' = cerrado/facturado      → Facturado/Cerrado
+        //   'F' = no aceptado en Winperf → Evaluación (NO rechazado:
+        //         en Winperfil 'F' puede ser simplemente un presupuesto
+        //         pendiente de confirmación, no un rechazo definitivo)
         $map = ['' => null, 'T' => null, 'C' => null, 'F' => null];
 
         foreach ($estados as $estado) {
@@ -881,10 +888,12 @@ class WinperfilController extends Controller
                 $map['T'] = $estado->id;
             } elseif (str_contains($n, 'facturad') || str_contains($n, 'cerrad')) {
                 $map['C'] = $estado->id;
-            } elseif (str_contains($n, 'rechazad') || str_contains($n, 'no aceptad') || str_contains($n, 'cancel')) {
-                $map['F'] = $estado->id;
             }
+            // 'F' (no aceptado) → se asigna después como Evaluación (igual que '')
         }
+
+        // 'F' → mismo estado que '' (Evaluación), no Rechazado
+        $map['F'] = $map[''];
 
         // Si no hay coincidencia exacta, usar el primero disponible como fallback
         $fallback = $estados->first()?->id;
