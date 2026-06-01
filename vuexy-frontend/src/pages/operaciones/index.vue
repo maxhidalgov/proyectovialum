@@ -152,14 +152,9 @@
 
           <!-- Abonado -->
           <template #item.total_abonado="{ item }">
-            <div class="d-flex align-center gap-1">
-              <span :class="item.saldo <= 0 ? 'text-success' : 'text-warning'" class="text-body-2">
-                {{ fmt(item.total_abonado) }}
-              </span>
-              <v-btn icon size="x-small" variant="text" @click="abrirAbonos(item)">
-                <v-icon size="14">mdi-plus-circle-outline</v-icon>
-              </v-btn>
-            </div>
+            <span :class="item.saldo <= 0 ? 'text-success' : 'text-warning'" class="text-body-2">
+              {{ fmt(item.total_abonado) }}
+            </span>
           </template>
 
           <!-- Saldo -->
@@ -318,59 +313,6 @@
         </div>
       </div>
     </template>
-
-    <!-- ── MODAL ABONOS ────────────────────────────────────────── -->
-    <v-dialog v-model="dialogAbonos" max-width="480">
-      <v-card v-if="itemAbonos">
-        <v-card-title class="pa-4 pb-2">
-          Abonos — {{ itemAbonos.cliente }} <span class="text-grey text-caption ml-1">#{{ itemAbonos.id }}</span>
-        </v-card-title>
-        <v-card-subtitle class="px-4 pb-3">
-          Total: {{ fmt(itemAbonos.total) }} · Saldo:
-          <strong :class="itemAbonos.saldo <= 0 ? 'text-success' : 'text-warning'">{{ fmt(itemAbonos.saldo) }}</strong>
-        </v-card-subtitle>
-        <v-divider />
-        <v-card-text class="pa-4">
-          <div v-if="itemAbonos.abonos.length" class="mb-4">
-            <div
-              v-for="ab in itemAbonos.abonos"
-              :key="ab.id"
-              class="d-flex align-center justify-space-between py-1"
-              style="border-bottom:1px solid rgba(255,255,255,0.08)"
-            >
-              <div>
-                <span class="text-body-2 font-weight-medium">{{ fmt(ab.monto) }}</span>
-                <span class="text-caption text-grey ml-2">{{ ab.fecha }}</span>
-                <span v-if="ab.nota" class="text-caption text-grey ml-2">— {{ ab.nota }}</span>
-              </div>
-              <v-btn icon size="x-small" color="error" variant="text" @click="eliminarAbono(ab)">
-                <v-icon size="14">mdi-delete</v-icon>
-              </v-btn>
-            </div>
-          </div>
-          <div v-else class="text-caption text-grey mb-4">Sin abonos registrados</div>
-
-          <v-divider class="mb-3" />
-          <p class="text-caption font-weight-bold mb-2">Agregar abono</p>
-          <v-row dense>
-            <v-col cols="6">
-              <v-text-field v-model.number="nuevoAbono.monto" label="Monto $" type="number" density="compact" variant="outlined" hide-details />
-            </v-col>
-            <v-col cols="6">
-              <v-text-field v-model="nuevoAbono.fecha" label="Fecha" type="date" density="compact" variant="outlined" hide-details />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field v-model="nuevoAbono.nota" label="Nota (opcional)" density="compact" variant="outlined" hide-details />
-            </v-col>
-          </v-row>
-        </v-card-text>
-        <v-card-actions class="pa-4 pt-0">
-          <v-btn variant="text" @click="dialogAbonos = false">Cerrar</v-btn>
-          <v-spacer />
-          <v-btn color="primary" variant="flat" :loading="guardandoAbono" @click="guardarAbono">Agregar abono</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
 
     <v-snackbar v-model="snack.show" :color="snack.color" timeout="3000" location="top">
       {{ snack.msg }}
@@ -542,53 +484,6 @@ async function updateCampo(item, campo, valor) {
   } catch {
     mostrarSnack('Error al guardar', 'error')
     cargar()
-  }
-}
-
-// ── Abonos ───────────────────────────────────────────────────────
-const dialogAbonos   = ref(false)
-const itemAbonos     = ref(null)
-const guardandoAbono = ref(false)
-const nuevoAbono     = ref({ monto: null, fecha: new Date().toISOString().split('T')[0], nota: '' })
-
-function abrirAbonos(item) {
-  itemAbonos.value = item
-  nuevoAbono.value = { monto: null, fecha: new Date().toISOString().split('T')[0], nota: '' }
-  dialogAbonos.value = true
-}
-
-async function guardarAbono() {
-  if (!nuevoAbono.value.monto || !nuevoAbono.value.fecha) {
-    mostrarSnack('Ingresa monto y fecha', 'error'); return
-  }
-  guardandoAbono.value = true
-  try {
-    const { data } = await api.post(`/api/operaciones/${itemAbonos.value.id}/abonos`, nuevoAbono.value)
-    itemAbonos.value.abonos.push(data)
-    itemAbonos.value.total_abonado += data.monto
-    itemAbonos.value.saldo         -= data.monto
-    nuevoAbono.value = { monto: null, fecha: new Date().toISOString().split('T')[0], nota: '' }
-    mostrarSnack('Abono registrado', 'success')
-  } catch {
-    mostrarSnack('Error al guardar abono', 'error')
-  } finally {
-    guardandoAbono.value = false
-  }
-}
-
-async function eliminarAbono(abono) {
-  if (!confirm(`¿Eliminar abono de ${fmt(abono.monto)}?`)) return
-  try {
-    await api.delete(`/api/operaciones/abonos/${abono.id}`)
-    const idx = itemAbonos.value.abonos.findIndex(a => a.id === abono.id)
-    if (idx !== -1) {
-      itemAbonos.value.total_abonado -= abono.monto
-      itemAbonos.value.saldo         += abono.monto
-      itemAbonos.value.abonos.splice(idx, 1)
-    }
-    mostrarSnack('Abono eliminado', 'success')
-  } catch {
-    mostrarSnack('Error al eliminar', 'error')
   }
 }
 
