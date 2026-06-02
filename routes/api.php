@@ -8,6 +8,7 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\VentanaController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DashboardFinancieroController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\BsaleClientController;
@@ -147,6 +148,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/cotizaciones/{id}/documentos-facturacion', [DocumentoFacturacionController::class, 'index']);
     Route::post('/cotizaciones/{id}/documentos-facturacion', [DocumentoFacturacionController::class, 'store']);
     Route::patch('/documentos-facturacion/{id}/emitir', [DocumentoFacturacionController::class, 'marcarEmitido']);
+    Route::patch('/documentos-facturacion/{id}/vincular', [DocumentoFacturacionController::class, 'vincular']);
+    Route::get('/documentos-facturacion/huerfanos', [DocumentoFacturacionController::class, 'huerfanos']);
     Route::delete('/documentos-facturacion/{id}', [DocumentoFacturacionController::class, 'destroy']);
 
     // Conciliación bancaria
@@ -159,6 +162,7 @@ Route::middleware('auth:api')->group(function () {
         Route::patch('/movimientos/{id}', [\App\Http\Controllers\ConciliacionController::class, 'update']);
         Route::post('/auto-concilar',     [\App\Http\Controllers\ConciliacionController::class, 'autoConcilar']);
         Route::get('/flujo-caja',         [\App\Http\Controllers\ConciliacionController::class, 'flujoCaja']);
+        Route::get('/cuentas',            [\App\Http\Controllers\ConciliacionController::class, 'cuentas']);
         // Reglas de categorización
         Route::get('/reglas',             [\App\Http\Controllers\ReglaConciliacionController::class, 'index']);
         Route::post('/reglas',            [\App\Http\Controllers\ReglaConciliacionController::class, 'store']);
@@ -259,6 +263,7 @@ Route::middleware('auth:api')->group(function () {
 
     // routes/api.php
     Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);
+    Route::get('/dashboard-financiero', [DashboardFinancieroController::class, 'index']);
     Route::get('/compras-terceros-mensuales', [DashboardController::class, 'comprasTercerosMensuales']);
 
     // DEBUG temporal Bsale (eliminar después)

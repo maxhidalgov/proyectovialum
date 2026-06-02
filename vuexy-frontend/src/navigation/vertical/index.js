@@ -130,6 +130,12 @@ const allMenuItems = [
     permission: 'gestionar_usuarios', // Solo admin
     children: [
       {
+        title: 'Dashboard',
+        to: { name: 'dashboard-financiero' },
+        icon: { icon: 'mdi-view-dashboard-outline' },
+        permission: 'gestionar_usuarios',
+      },
+      {
         title: 'Conciliación',
         to: { name: 'conciliacion' },
         icon: { icon: 'mdi-bank-outline' },
