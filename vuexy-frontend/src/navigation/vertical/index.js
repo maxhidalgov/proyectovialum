@@ -136,6 +136,12 @@ const allMenuItems = [
         permission: 'gestionar_usuarios',
       },
       {
+        title: 'Sugerencias ⚡',
+        to: { name: 'sugerencias-conciliacion' },
+        icon: { icon: 'mdi-lightning-bolt' },
+        permission: 'gestionar_usuarios',
+      },
+      {
         title: 'Conciliación',
         to: { name: 'conciliacion' },
         icon: { icon: 'mdi-bank-outline' },

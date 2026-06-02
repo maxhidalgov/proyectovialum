@@ -257,10 +257,13 @@ class ConciliacionController extends Controller
         if ($request->filled('buscar')) {
             $q->where('descripcion', 'like', '%' . $request->buscar . '%');
         }
+        if ($request->filled('cuenta')) {
+            $q->where('cuenta', $request->cuenta);
+        }
 
         $movs = $q->paginate(150);
 
-        // Enriquecer con montos asignados (facturas + gastos)
+        // Enriquecer con montos asignados (compras + gastos + sueldos + ventas + ingresos)
         $ids = $movs->pluck('id');
 
         $asignadosCompra = DB::table('compra_movimiento')
@@ -281,10 +284,26 @@ class ConciliacionController extends Controller
             ->selectRaw('movimiento_id, SUM(monto) as asignado')
             ->pluck('asignado', 'movimiento_id');
 
-        $movs->getCollection()->transform(function ($mov) use ($asignadosCompra, $asignadosGasto, $asignadosSueldo) {
+        $asignadosVenta = DB::table('venta_movimiento')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
+        $asignadosIngreso = DB::table('ingreso_movimiento')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
+        $movs->getCollection()->transform(function ($mov) use (
+            $asignadosCompra, $asignadosGasto, $asignadosSueldo, $asignadosVenta, $asignadosIngreso
+        ) {
             $asignado = (float) ($asignadosCompra[$mov->id] ?? 0)
                       + (float) ($asignadosGasto[$mov->id] ?? 0)
-                      + (float) ($asignadosSueldo[$mov->id] ?? 0);
+                      + (float) ($asignadosSueldo[$mov->id] ?? 0)
+                      + (float) ($asignadosVenta[$mov->id] ?? 0)
+                      + (float) ($asignadosIngreso[$mov->id] ?? 0);
             $mov->monto_asignado    = $asignado;
             $mov->saldo_por_asignar = max(0, $mov->monto - $asignado);
             return $mov;
@@ -296,6 +315,9 @@ class ConciliacionController extends Controller
         }
         if ($request->filled('hasta')) {
             $totalesQ->where('fecha_contable', '<=', $request->hasta);
+        }
+        if ($request->filled('cuenta')) {
+            $totalesQ->where('cuenta', $request->cuenta);
         }
 
         $totales = $totalesQ->selectRaw("
@@ -353,6 +375,208 @@ class ConciliacionController extends Controller
         }
 
         return response()->json(['matches' => $matches]);
+    }
+
+    // ── Sugerencias de conciliación ──────────────────────────────────────────
+    //
+    // Algoritmo: para cada movimiento no conciliado busca el mejor documento
+    // candidato por prioridad: RUT+monto (90pts) > RUT (50pts) > monto (40pts) > descripción+monto (60pts)
+    // Solo se sugiere si score >= 40 (mínimo monto exacto).
+
+    public function sugerencias()
+    {
+        // Movimientos sin asignar (cargos → compras, abonos → ventas)
+        $debitos = DB::table('movimientos_bancarios')
+            ->where('conciliado', false)
+            ->where('tipo', 'D')
+            ->orderByDesc('fecha_contable')
+            ->limit(300)
+            ->get();
+
+        $creditos = DB::table('movimientos_bancarios')
+            ->where('conciliado', false)
+            ->where('tipo', 'C')
+            ->orderByDesc('fecha_contable')
+            ->limit(300)
+            ->get();
+
+        // Compras con saldo pendiente
+        $comprasPendientes = DB::table('compras')
+            ->leftJoin(
+                DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as cm'),
+                'cm.compra_id', '=', 'compras.id'
+            )
+            ->where('compras.pagado_historico', false)
+            ->selectRaw('compras.id, compras.folio, compras.rut_emisor, compras.nombre_emisor,
+                         compras.fecha_emision, compras.total,
+                         compras.total - COALESCE(cm.pagado, 0) as saldo_pendiente')
+            ->get()
+            ->filter(fn($c) => $c->saldo_pendiente > 0);
+
+        // Ventas (documentos_facturacion) con saldo pendiente
+        $ventasPendientes = DB::table('documentos_facturacion as df')
+            ->leftJoin('cotizaciones as cot', 'cot.id', '=', 'df.cotizacion_id')
+            ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
+            ->leftJoin('clientes as cl_cot', 'cl_cot.id', '=', 'cot.cliente_id')
+            ->leftJoin(
+                DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
+                'vm.venta_id', '=', 'df.id'
+            )
+            ->where('df.estado', 'emitido')
+            ->selectRaw("
+                df.id, df.tipo, df.monto, df.fecha_emision, df.numero_documento_bsale,
+                df.bsale_cliente_rut, df.bsale_cliente_nombre, df.cotizacion_id,
+                df.monto - COALESCE(vm.cobrado, 0) as saldo_pendiente,
+                COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre) as nombre_cliente,
+                COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut_cliente
+            ")
+            ->get()
+            ->filter(fn($v) => $v->saldo_pendiente > 0);
+
+        $sugerencias    = [];
+        $usadosMovs     = [];
+        $usadosDocs     = [];
+
+        // ── Cargos → Compras ───────────────────────────────────────
+        foreach ($debitos as $mov) {
+            if (in_array($mov->id, $usadosMovs)) continue;
+
+            $texto = ($mov->descripcion ?? '') . ' ' . ($mov->glosa ?? '');
+            $rutMov = $this->extractRut($texto);
+
+            $mejor = null; $razon = null; $score = 0;
+
+            foreach ($comprasPendientes as $comp) {
+                if (in_array($comp->id, $usadosDocs)) continue;
+
+                $s = 0; $r = null;
+
+                // RUT match
+                if ($rutMov && $comp->rut_emisor &&
+                    $this->normalizarRut($rutMov) === $this->normalizarRut($comp->rut_emisor)) {
+                    $s += 50; $r = 'rut';
+                }
+
+                // Monto exacto
+                if (abs($mov->monto - $comp->saldo_pendiente) < 1) {
+                    $s += 40; $r = $r ?? 'monto';
+                }
+
+                // Nombre en descripción (primeros 8 chars del proveedor)
+                if ($comp->nombre_emisor &&
+                    mb_stripos($texto, mb_substr($comp->nombre_emisor, 0, 8)) !== false) {
+                    $s += 20; $r = $r ?? 'descripcion';
+                }
+
+                if ($s > $score && $s >= 40) {
+                    $score = $s; $mejor = $comp; $razon = $r;
+                }
+            }
+
+            if ($mejor) {
+                $sugerencias[] = [
+                    'id'             => "D{$mov->id}_C{$mejor->id}",
+                    'movimiento'     => $mov,
+                    'documento'      => $mejor,
+                    'tipo_documento' => 'compra',
+                    'razon'          => $razon,
+                    'score'          => $score,
+                    'monto_sugerido' => (float) min($mov->monto, $mejor->saldo_pendiente),
+                ];
+                $usadosMovs[] = $mov->id;
+                $usadosDocs[] = $mejor->id;
+            }
+        }
+
+        // ── Créditos → Ventas ──────────────────────────────────────
+        foreach ($creditos as $mov) {
+            if (in_array($mov->id, $usadosMovs)) continue;
+
+            $texto = ($mov->descripcion ?? '') . ' ' . ($mov->glosa ?? '');
+            $rutMov = $this->extractRut($texto);
+
+            $mejor = null; $razon = null; $score = 0;
+
+            foreach ($ventasPendientes as $venta) {
+                if (in_array($venta->id, $usadosDocs)) continue;
+
+                $s = 0; $r = null;
+
+                // RUT match
+                if ($rutMov && $venta->rut_cliente &&
+                    $this->normalizarRut($rutMov) === $this->normalizarRut($venta->rut_cliente)) {
+                    $s += 50; $r = 'rut';
+                }
+
+                // Monto exacto
+                if (abs($mov->monto - $venta->saldo_pendiente) < 1) {
+                    $s += 40; $r = $r ?? 'monto';
+                }
+
+                // Nombre cliente en descripción
+                if ($venta->nombre_cliente &&
+                    mb_stripos($texto, mb_substr($venta->nombre_cliente, 0, 8)) !== false) {
+                    $s += 20; $r = $r ?? 'descripcion';
+                }
+
+                if ($s > $score && $s >= 40) {
+                    $score = $s; $mejor = $venta; $razon = $r;
+                }
+            }
+
+            if ($mejor) {
+                $sugerencias[] = [
+                    'id'             => "C{$mov->id}_V{$mejor->id}",
+                    'movimiento'     => $mov,
+                    'documento'      => $mejor,
+                    'tipo_documento' => 'venta',
+                    'razon'          => $razon,
+                    'score'          => $score,
+                    'monto_sugerido' => (float) min($mov->monto, $mejor->saldo_pendiente),
+                ];
+                $usadosMovs[] = $mov->id;
+                $usadosDocs[] = $mejor->id;
+            }
+        }
+
+        // Ordenar: mayor score primero (RUT+monto > RUT > monto)
+        usort($sugerencias, fn($a, $b) => $b['score'] - $a['score']);
+
+        return response()->json($sugerencias);
+    }
+
+    // ── Helpers RUT ──────────────────────────────────────────────────────────
+
+    private function extractRut(string $texto): ?string
+    {
+        // Sin puntos: 76967670-8 o 12345678-K
+        if (preg_match('/\b(\d{7,8}-[\dkK])\b/i', $texto, $m)) {
+            return strtoupper($m[1]);
+        }
+        // Con puntos: 76.967.670-8
+        if (preg_match('/\b(\d{1,2}\.\d{3}\.\d{3}-[\dkK])\b/i', $texto, $m)) {
+            return strtoupper(str_replace('.', '', $m[1]));
+        }
+        return null;
+    }
+
+    private function normalizarRut(string $rut): string
+    {
+        return strtoupper(preg_replace('/[^0-9kK-]/', '', $rut));
+    }
+
+    // ── Cuentas bancarias distintas ──────────────────────────────────────────
+
+    public function cuentas()
+    {
+        $cuentas = DB::table('movimientos_bancarios')
+            ->selectRaw('cuenta, COUNT(*) as total, MAX(fecha_contable) as ultimo_movimiento')
+            ->whereNotNull('cuenta')
+            ->groupBy('cuenta')
+            ->orderByDesc('total')
+            ->get();
+
+        return response()->json($cuentas);
     }
 
     // ── Flujo de caja mensual ────────────────────────────────────────────────

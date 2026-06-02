@@ -163,6 +163,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/auto-concilar',     [\App\Http\Controllers\ConciliacionController::class, 'autoConcilar']);
         Route::get('/flujo-caja',         [\App\Http\Controllers\ConciliacionController::class, 'flujoCaja']);
         Route::get('/cuentas',            [\App\Http\Controllers\ConciliacionController::class, 'cuentas']);
+        Route::get('/sugerencias',        [\App\Http\Controllers\ConciliacionController::class, 'sugerencias']);
         // Reglas de categorización
         Route::get('/reglas',             [\App\Http\Controllers\ReglaConciliacionController::class, 'index']);
         Route::post('/reglas',            [\App\Http\Controllers\ReglaConciliacionController::class, 'store']);
