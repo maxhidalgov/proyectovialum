@@ -1,1 +1,0 @@
-import{ab as s,ac as r,ad as o,b as c,ae as n,af as d}from"./index-BaGiDzY-.js";const m=r({opacity:[Number,String],...d(),...n()},"VCardText"),x=s()({name:"VCardText",props:m(),setup(a,e){let{slots:t}=e;return o(()=>c(a.tag,{class:["v-card-text",a.class],style:[{"--v-card-text-opacity":a.opacity},a.style]},t)),{}}});export{x as V};
