@@ -866,10 +866,15 @@ async function sincronizar() {
     syncProgress.value = null
     fetchCompras()
 
-    // Contar XMLs pendientes solo si no es bulk
-    if (!esBulk || esSmart) {
-      const r = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote: 0 })
+    // Procesar XMLs pendientes automáticamente tras la sync
+    // (lote 0 = solo contar; > 0 = descargar y parsear)
+    if (!esBulk) {
+      // Si hubo docs nuevos, procesar hasta 80 XMLs en este mismo request
+      const lote = totalNuevas > 0 ? 80 : 0
+      const r = await axiosInstance.post(`${API}/cargar-xmls-pendientes`, { lote })
       xmlRestantes.value = r.data.restantes ?? 0
+      // Si procesamos XMLs y aún quedan, refrescar la tabla
+      if (lote > 0 && r.data.procesadas > 0) fetchCompras()
     }
   } catch (e) {
     console.error('Error sincronizando', e)

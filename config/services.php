@@ -63,8 +63,11 @@ return [
     ],
 
     'chipax' => [
-        'base_url' => env('CHIPAX_BASE_URL', 'https://manhattan.chipax.com'),
-        'cookie'   => env('CHIPAX_COOKIE'),   // valor de la cookie "Chipax=" del browser
+        'base_url'   => env('CHIPAX_BASE_URL', 'https://manhattan.chipax.com'),
+        'cookie'     => env('CHIPAX_COOKIE'),       // cookie de sesión del browser (legacy)
+        'api_base'   => env('CHIPAX_API_BASE', 'https://api.chipax.com/v2'),
+        'app_id'     => env('CHIPAX_APP_ID'),       // API oficial: app_id
+        'secret_key' => env('CHIPAX_SECRET_KEY'),   // API oficial: secret_key
     ],
 
 ];

@@ -8,58 +8,101 @@ use Illuminate\Support\Facades\DB;
 
 class CuentasPorPagarController extends Controller
 {
+    // ── Tipos DTE nota de crédito ────────────────────────────────────────────
+    private const TIPOS_NC = [61];
+
+    // ── Subquery de monto pagado efectivo por compra ─────────────────────────
+    //
+    //  Para DTE 33/34 (facturas): banco + NC aplicada sobre esta factura
+    //  Para DTE 61  (NCs)      : banco + monto de esta NC ya aplicado a alguna factura
+    //
+    private function efectivoPagadoSub(): \Illuminate\Database\Query\Expression
+    {
+        return DB::raw("(
+            SELECT
+                c.id AS compra_id,
+                COALESCE(pb.monto_banco, 0)
+                  + CASE WHEN c.tipo_dte IN (61)
+                         THEN COALESCE(ncnc.monto_nc, 0)
+                         ELSE COALESCE(ncf.monto_nc, 0)
+                    END AS monto_pagado_efectivo
+            FROM compras c
+            LEFT JOIN (SELECT compra_id, SUM(monto) monto_banco FROM compra_movimiento GROUP BY compra_id) pb
+                   ON pb.compra_id = c.id
+            LEFT JOIN (SELECT factura_id AS compra_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) ncf
+                   ON ncf.compra_id = c.id
+            LEFT JOIN (SELECT nc_id AS compra_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY nc_id) ncnc
+                   ON ncnc.compra_id = c.id
+        ) AS ef");
+    }
+
     // ── Resumen por proveedor ────────────────────────────────────────────────
 
     public function index(Request $request)
     {
-        $desde  = $request->get('desde');
-        $hasta  = $request->get('hasta');
-        $buscar = $request->get('buscar');
-        $solo_pendientes = filter_var($request->get('solo_pendientes', true), FILTER_VALIDATE_BOOLEAN);
+        $desde          = $request->get('desde');
+        $hasta          = $request->get('hasta');
+        $buscar         = $request->get('buscar');
+        $soloPendientes = filter_var($request->get('solo_pendientes', true), FILTER_VALIDATE_BOOLEAN);
 
         $q = DB::table('compras')
-            ->leftJoin(
-                DB::raw('(SELECT compra_id, SUM(monto) as monto_pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
-                'compras.id', '=', 'pagos.compra_id'
-            )
+            ->leftJoin($this->efectivoPagadoSub(), 'ef.compra_id', '=', 'compras.id')
+            ->where('compras.pagado_historico', false)
             ->select(
                 'compras.rut_emisor',
                 'compras.nombre_emisor',
-                DB::raw('COUNT(compras.id) as cantidad_facturas'),
-                DB::raw('SUM(compras.total) as total_facturas'),
-                DB::raw('COALESCE(SUM(pagos.monto_pagado), 0) as total_pagado'),
-                DB::raw('SUM(compras.total) - COALESCE(SUM(pagos.monto_pagado), 0) as total_pendiente')
+                DB::raw('COUNT(compras.id) as cantidad_docs'),
+                DB::raw('COUNT(CASE WHEN compras.tipo_dte IN (61) THEN 1 END) as cantidad_ncs'),
+                // Suma neta: facturas POSITIVO, NCs NEGATIVO
+                DB::raw('SUM(CASE WHEN compras.tipo_dte IN (61)
+                                  THEN -compras.total
+                                  ELSE  compras.total END) as total_neto'),
+                DB::raw('SUM(CASE WHEN compras.tipo_dte IN (61)
+                                  THEN -COALESCE(ef.monto_pagado_efectivo,0)
+                                  ELSE  COALESCE(ef.monto_pagado_efectivo,0) END) as total_pagado'),
+                DB::raw('SUM(CASE WHEN compras.tipo_dte IN (61)
+                                  THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
+                                  ELSE  (compras.total - COALESCE(ef.monto_pagado_efectivo,0)) END) as total_pendiente'),
+                DB::raw("SUM(CASE WHEN compras.nc_revision_estado = 'requiere_revision' THEN 1 ELSE 0 END) as facturas_por_revisar")
             )
             ->groupBy('compras.rut_emisor', 'compras.nombre_emisor');
 
         if ($desde) $q->where('compras.fecha_emision', '>=', $desde);
         if ($hasta) $q->where('compras.fecha_emision', '<=', $hasta);
-        if ($buscar) $q->where(function ($sq) use ($buscar) {
-            $sq->where('compras.nombre_emisor', 'like', "%$buscar%")
-               ->orWhere('compras.rut_emisor', 'like', "%$buscar%");
-        });
-
-        if ($solo_pendientes) {
+        if ($buscar) {
+            $q->where(function ($sq) use ($buscar) {
+                $sq->where('compras.nombre_emisor', 'like', "%$buscar%")
+                   ->orWhere('compras.rut_emisor',  'like', "%$buscar%");
+            });
+        }
+        if ($soloPendientes) {
             $q->havingRaw('total_pendiente > 0');
         }
 
-        $proveedores = $q->orderByDesc('total_pendiente')->get();
+        $proveedores = $q->orderByDesc('facturas_por_revisar')
+                         ->orderByDesc('total_pendiente')
+                         ->get();
 
         // Totales globales
         $totales = DB::table('compras')
-            ->leftJoin(
-                DB::raw('(SELECT compra_id, SUM(monto) as monto_pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
-                'compras.id', '=', 'pagos.compra_id'
-            )
-            ->selectRaw('
-                COUNT(compras.id) as total_facturas,
-                SUM(compras.total) as total_monto,
-                COALESCE(SUM(pagos.monto_pagado), 0) as total_pagado,
-                SUM(compras.total) - COALESCE(SUM(pagos.monto_pagado), 0) as total_pendiente,
-                COUNT(DISTINCT compras.rut_emisor) as total_proveedores
-            ')
+            ->leftJoin($this->efectivoPagadoSub(), 'ef.compra_id', '=', 'compras.id')
+            ->where('compras.pagado_historico', false)
             ->when($desde, fn($sq) => $sq->where('compras.fecha_emision', '>=', $desde))
             ->when($hasta, fn($sq) => $sq->where('compras.fecha_emision', '<=', $hasta))
+            ->selectRaw("
+                COUNT(compras.id) as total_docs,
+                COUNT(CASE WHEN compras.tipo_dte IN (61) THEN 1 END) as total_ncs,
+                COUNT(DISTINCT compras.rut_emisor) as total_proveedores,
+                SUM(CASE WHEN compras.tipo_dte IN (61)
+                         THEN -compras.total ELSE compras.total END) as total_monto,
+                SUM(CASE WHEN compras.tipo_dte IN (61)
+                         THEN -COALESCE(ef.monto_pagado_efectivo,0)
+                         ELSE  COALESCE(ef.monto_pagado_efectivo,0) END) as total_pagado,
+                SUM(CASE WHEN compras.tipo_dte IN (61)
+                         THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
+                         ELSE  (compras.total - COALESCE(ef.monto_pagado_efectivo,0)) END) as total_pendiente,
+                SUM(CASE WHEN compras.nc_revision_estado = 'requiere_revision' THEN 1 ELSE 0 END) as facturas_por_revisar
+            ")
             ->first();
 
         return response()->json([
@@ -68,20 +111,18 @@ class CuentasPorPagarController extends Controller
         ]);
     }
 
-    // ── Facturas de un proveedor ─────────────────────────────────────────────
+    // ── Facturas + NCs de un proveedor ───────────────────────────────────────
 
     public function facturas(Request $request, string $rut)
     {
-        $desde = $request->get('desde');
-        $hasta = $request->get('hasta');
-        $solo_pendientes = filter_var($request->get('solo_pendientes', true), FILTER_VALIDATE_BOOLEAN);
+        $desde          = $request->get('desde');
+        $hasta          = $request->get('hasta');
+        $soloPendientes = filter_var($request->get('solo_pendientes', false), FILTER_VALIDATE_BOOLEAN);
 
         $facturas = DB::table('compras')
-            ->leftJoin(
-                DB::raw('(SELECT compra_id, SUM(monto) as monto_pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
-                'compras.id', '=', 'pagos.compra_id'
-            )
+            ->leftJoin($this->efectivoPagadoSub(), 'ef.compra_id', '=', 'compras.id')
             ->where('compras.rut_emisor', $rut)
+            ->where('compras.pagado_historico', false)
             ->select(
                 'compras.id',
                 'compras.folio',
@@ -92,15 +133,87 @@ class CuentasPorPagarController extends Controller
                 'compras.total',
                 'compras.estado',
                 'compras.pdf_url',
-                DB::raw('COALESCE(pagos.monto_pagado, 0) as monto_pagado'),
-                DB::raw('compras.total - COALESCE(pagos.monto_pagado, 0) as pendiente')
+                'compras.nc_referencia_id',
+                'compras.nc_revision_estado',
+                DB::raw('COALESCE(ef.monto_pagado_efectivo, 0) as monto_pagado'),
+                DB::raw('CASE WHEN compras.tipo_dte IN (61)
+                              THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
+                              ELSE   compras.total - COALESCE(ef.monto_pagado_efectivo,0)
+                         END as pendiente'),
+                DB::raw('(compras.tipo_dte IN (61)) as es_nc')
             )
             ->when($desde, fn($q) => $q->where('compras.fecha_emision', '>=', $desde))
             ->when($hasta, fn($q) => $q->where('compras.fecha_emision', '<=', $hasta))
-            ->when($solo_pendientes, fn($q) => $q->havingRaw('pendiente > 0'))
+            ->orderByRaw('compras.tipo_dte IN (61) ASC') // facturas primero
             ->orderByDesc('compras.fecha_emision')
             ->get();
 
+        if ($soloPendientes) {
+            $facturas = $facturas->filter(fn($f) => abs((float)$f->pendiente) > 0.01)->values();
+        }
+
         return response()->json($facturas);
+    }
+
+    // ── Facturas que requieren revisión (alerta global) ───────────────────────
+
+    public function porRevisar()
+    {
+        $facturas = DB::table('compras as f')
+            ->where('f.nc_revision_estado', 'requiere_revision')
+            ->where('f.pagado_historico', false)
+            ->leftJoin('compras as nc', 'nc.nc_referencia_id', '=', 'f.id')
+            ->leftJoin(
+                DB::raw('(SELECT compra_id, SUM(monto) monto_banco FROM compra_movimiento GROUP BY compra_id) pb'),
+                'pb.compra_id', '=', 'f.id'
+            )
+            ->select(
+                'f.id', 'f.folio', 'f.tipo_dte', 'f.rut_emisor', 'f.nombre_emisor',
+                'f.fecha_emision', 'f.neto', 'f.iva', 'f.total', 'f.pdf_url',
+                'f.nc_revision_estado',
+                DB::raw('COALESCE(pb.monto_banco, 0) as monto_pagado'),
+                DB::raw('f.total - COALESCE(pb.monto_banco, 0) as pendiente_sin_nc'),
+                'nc.id as nc_id', 'nc.folio as nc_folio',
+                'nc.total as nc_total', 'nc.fecha_emision as nc_fecha'
+            )
+            ->orderByDesc('f.fecha_emision')
+            ->get();
+
+        $count = DB::table('compras')
+            ->where('nc_revision_estado', 'requiere_revision')
+            ->where('pagado_historico', false)
+            ->count();
+
+        return response()->json(['facturas' => $facturas, 'count' => $count]);
+    }
+
+    // ── NCs disponibles (sin vincular) del proveedor ──────────────────────────
+
+    public function ncsDisponibles(string $rut)
+    {
+        // NCs sin nc_referencia_id asignado y con saldo pendiente
+        $ncs = DB::table('compras as nc')
+            ->leftJoin(
+                DB::raw('(SELECT nc_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY nc_id) ap'),
+                'ap.nc_id', '=', 'nc.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT compra_id, SUM(monto) monto_banco FROM compra_movimiento GROUP BY compra_id) pb'),
+                'pb.compra_id', '=', 'nc.id'
+            )
+            ->where('nc.rut_emisor', $rut)
+            ->where('nc.tipo_dte', 61)
+            ->where('nc.pagado_historico', false)
+            ->whereNull('nc.nc_referencia_id')
+            ->select(
+                'nc.id', 'nc.folio', 'nc.fecha_emision', 'nc.neto', 'nc.iva', 'nc.total',
+                DB::raw('COALESCE(ap.monto_nc, 0) + COALESCE(pb.monto_banco, 0) as monto_usado'),
+                DB::raw('nc.total - COALESCE(ap.monto_nc, 0) - COALESCE(pb.monto_banco, 0) as saldo_disponible')
+            )
+            ->havingRaw('saldo_disponible > 0')
+            ->orderByDesc('nc.fecha_emision')
+            ->get();
+
+        return response()->json($ncs);
     }
 }

@@ -177,11 +177,11 @@
 </template>
 
 
-        <template #item.acciones="{ item, index }">
-          <v-btn icon @click="editarVentana(index)">
+        <template #item.acciones="{ item }">
+          <v-btn icon @click="editarVentana(cotizacion.ventanas.indexOf(item))">
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
-          <v-btn icon color="error" @click="eliminarVentana(index)">
+          <v-btn icon color="error" @click="eliminarVentana(cotizacion.ventanas.indexOf(item))">
             <v-icon>mdi-delete</v-icon>
           </v-btn>
         </template>

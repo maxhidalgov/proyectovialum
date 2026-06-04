@@ -296,6 +296,63 @@ class CompraMovimientoController extends Controller
         ], 201);
     }
 
+    // ── NCs de proveedor (DTE 61) disponibles para crédito bancario ──────────
+    //
+    // Se usa cuando un banco muestra un CRÉDITO (abono) que corresponde
+    // a una devolución de un proveedor por una nota de crédito emitida.
+    // El crédito se concilia usando la misma tabla compra_movimiento.
+
+    public function ncDisponiblesPorMovimiento(Request $request, int $movimientoId)
+    {
+        $mov    = MovimientoBancario::findOrFail($movimientoId);
+        $buscar = $request->get('buscar');
+
+        $asignadoMov = DB::table('compra_movimiento')
+            ->where('movimiento_id', $movimientoId)
+            ->sum('monto');
+        $saldoMov = max(0, $mov->monto - $asignadoMov);
+
+        $ncs = DB::table('compras')
+            ->leftJoin(
+                DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
+                'compras.id', '=', 'pagos.compra_id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT nc_id AS compra_id, SUM(monto) as aplicado FROM compra_nc_aplicacion GROUP BY nc_id) as nca'),
+                'compras.id', '=', 'nca.compra_id'
+            )
+            ->where('compras.tipo_dte', 61)
+            ->where('compras.pagado_historico', false)
+            ->whereNotExists(function ($q) use ($movimientoId) {
+                $q->from('compra_movimiento')
+                  ->whereColumn('compra_movimiento.compra_id', 'compras.id')
+                  ->where('compra_movimiento.movimiento_id', $movimientoId);
+            })
+            ->when($buscar, function ($q) use ($buscar) {
+                $q->where(function ($sq) use ($buscar) {
+                    $sq->where('compras.nombre_emisor', 'like', "%$buscar%")
+                       ->orWhere('compras.rut_emisor',  'like', "%$buscar%")
+                       ->orWhere('compras.folio',       'like', "%$buscar%");
+                });
+            })
+            ->select(
+                'compras.id',
+                'compras.folio',
+                'compras.tipo_dte',
+                'compras.fecha_emision',
+                'compras.total',
+                'compras.nombre_emisor',
+                'compras.rut_emisor',
+                'compras.nc_referencia_id',
+                DB::raw('compras.total - COALESCE(pagos.pagado, 0) - COALESCE(nca.aplicado, 0) as saldo_pendiente_nc')
+            )
+            ->havingRaw('saldo_pendiente_nc > 0')
+            ->orderByRaw('ABS(saldo_pendiente_nc - ?) ASC', [$saldoMov])
+            ->paginate(30);
+
+        return response()->json($ncs);
+    }
+
     // ── Desasignar compra de un movimiento ────────────────────────────────────
 
     public function destroyPorMovimiento(int $movimientoId, int $pivotId)

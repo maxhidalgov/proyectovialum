@@ -9,6 +9,7 @@ use App\Http\Controllers\VentanaController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardFinancieroController;
+use App\Http\Controllers\BancochilePortalController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\BsaleClientController;
@@ -220,8 +221,10 @@ Route::middleware('auth:api')->group(function () {
     });
 
     // Cuentas por Pagar
-    Route::get('/cuentas-por-pagar', [\App\Http\Controllers\CuentasPorPagarController::class, 'index']);
-    Route::get('/cuentas-por-pagar/{rut}/facturas', [\App\Http\Controllers\CuentasPorPagarController::class, 'facturas']);
+    Route::get('/cuentas-por-pagar',                   [\App\Http\Controllers\CuentasPorPagarController::class, 'index']);
+    Route::get('/cuentas-por-pagar/por-revisar',       [\App\Http\Controllers\CuentasPorPagarController::class, 'porRevisar']);
+    Route::get('/cuentas-por-pagar/{rut}/facturas',    [\App\Http\Controllers\CuentasPorPagarController::class, 'facturas']);
+    Route::get('/cuentas-por-pagar/{rut}/ncs',         [\App\Http\Controllers\CuentasPorPagarController::class, 'ncsDisponibles']);
 
     // Estado de Resultados
     Route::get('/eerr', [\App\Http\Controllers\EERRController::class, 'index']);
@@ -231,8 +234,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/ventas/backfill-comprobantes',  [\App\Http\Controllers\BsaleVentaSyncController::class, 'backfillComprobantes']);
 
     // Cuentas por Cobrar
-    Route::get('/cuentas-por-cobrar', [\App\Http\Controllers\CuentasPorCobrarController::class, 'index']);
-    Route::get('/cuentas-por-cobrar/{clienteId}/facturas', [\App\Http\Controllers\CuentasPorCobrarController::class, 'facturas']);
+    Route::get('/cuentas-por-cobrar',                        [\App\Http\Controllers\CuentasPorCobrarController::class, 'index']);
+    Route::get('/cuentas-por-cobrar/por-revisar',            [\App\Http\Controllers\CuentasPorCobrarController::class, 'porRevisar']);
+    Route::get('/cuentas-por-cobrar/{clienteId}/facturas',   [\App\Http\Controllers\CuentasPorCobrarController::class, 'facturas']);
     Route::get('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'index']);
     Route::get('/ventas/{id}/movimientos-disponibles', [\App\Http\Controllers\VentaMovimientoController::class, 'disponibles']);
     Route::post('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'store']);
@@ -255,6 +259,30 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/compras/{id}/movimientos-disponibles', [\App\Http\Controllers\CompraMovimientoController::class, 'disponibles']);
     Route::post('/compras/{id}/movimientos', [\App\Http\Controllers\CompraMovimientoController::class, 'store']);
     Route::delete('/compras/{id}/movimientos/{pivotId}', [\App\Http\Controllers\CompraMovimientoController::class, 'destroy']);
+
+    // ── Notas de Crédito ─────────────────────────────────────────────────────
+    Route::prefix('nc')->group(function () {
+        // Badge global
+        Route::get('/compra/badge',                       [\App\Http\Controllers\NcController::class, 'badgeCompra']);
+        Route::get('/venta/badge',                        [\App\Http\Controllers\NcController::class, 'badgeVenta']);
+        // Compras (DTE 61)
+        Route::post('/compra/{nc_id}/vincular',           [\App\Http\Controllers\NcController::class, 'vincularCompra']);
+        Route::delete('/compra/{nc_id}/vincular',         [\App\Http\Controllers\NcController::class, 'desvincularCompra']);
+        Route::post('/compra/{nc_id}/aplicar',            [\App\Http\Controllers\NcController::class, 'aplicarCompra']);
+        Route::delete('/compra/aplicacion/{id}',          [\App\Http\Controllers\NcController::class, 'eliminarAplicacionCompra']);
+        Route::patch('/compra/factura/{id}/estado',       [\App\Http\Controllers\NcController::class, 'estadoFacturaCompra']);
+        // Ventas (tipo Bsale 2)
+        Route::post('/venta/{nc_id}/vincular',            [\App\Http\Controllers\NcController::class, 'vincularVenta']);
+        Route::delete('/venta/{nc_id}/vincular',          [\App\Http\Controllers\NcController::class, 'desvincularVenta']);
+        Route::post('/venta/{nc_id}/aplicar',             [\App\Http\Controllers\NcController::class, 'aplicarVenta']);
+        Route::delete('/venta/aplicacion/{id}',           [\App\Http\Controllers\NcController::class, 'eliminarAplicacionVenta']);
+        Route::patch('/venta/factura/{id}/estado',        [\App\Http\Controllers\NcController::class, 'estadoFacturaVenta']);
+    });
+
+    // Conciliación: créditos bancarios ↔ NCs de proveedores (DTE 61)
+    // Se usa el CompraMovimientoController ya existente, pero el frontend filtra por tipo_dte=61
+    Route::get('/conciliacion/movimientos/{id}/nc-compras-disponibles',
+        [\App\Http\Controllers\CompraMovimientoController::class, 'ncDisponiblesPorMovimiento']);
 
     // Operaciones
     Route::get('/operaciones', [OperacionesController::class, 'index']);
@@ -294,6 +322,10 @@ Route::middleware('auth:api')->group(function () {
         // Listado de cotizaciones sincronizadas
         Route::get('/cotizaciones',             [WinperfilController::class, 'cotizacionesSincronizadas']);
     });
+
+    // Banco de Chile — importadores
+    Route::post('/banco/importar-portal', [BancochilePortalController::class, 'importar']);
+    Route::post('/banco/importar-json',   [BancochilePortalController::class, 'importarJson']);
 
     // Transbank
     Route::prefix('transbank')->group(function () {

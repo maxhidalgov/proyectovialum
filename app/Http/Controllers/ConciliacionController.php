@@ -28,22 +28,31 @@ class ConciliacionController extends Controller
         }
     }
 
-    // ── Saldo (viene de los movimientos) ─────────────────────────────────────
+    // ── Saldo (último saldo_disponible importado desde movimientos bancarios) ──
 
     public function saldo()
     {
-        try {
-            $result = (new BancochileService())->getMovimientosPorCantidad(1);
-            $meta   = $result['meta'];
+        $ultimo = DB::table('movimientos_bancarios')
+            ->whereNotNull('saldo_disponible')
+            ->orderByDesc('fecha_contable')
+            ->orderByRaw("COALESCE(fecha_hora_mov, '1900-01-01 00:00:00') DESC")
+            ->orderByDesc('id')
+            ->select('saldo_disponible', 'fecha_contable', 'fecha_hora_mov', 'cuenta')
+            ->first();
+
+        if (!$ultimo) {
             return response()->json([
-                'saldoDisponible' => $meta['saldoDisponible'] ?? null,
-                'saldoContable'   => $meta['saldoContable'] ?? null,
-                'titular'         => $meta['nombreTitular'] ?? null,
-                'cuenta'          => $meta['numeroCuenta'] ?? null,
+                'saldoDisponible' => null,
+                'fecha'           => null,
+                'mensaje'         => 'Sin movimientos con saldo importados aún',
             ]);
-        } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage()], 502);
         }
+
+        return response()->json([
+            'saldoDisponible' => (float) $ultimo->saldo_disponible,
+            'fecha'           => $ultimo->fecha_contable,   // YYYY-MM-DD
+            'cuenta'          => $ultimo->cuenta,
+        ]);
     }
 
     // ── Importar movimientos desde BCH ───────────────────────────────────────
@@ -255,7 +264,11 @@ class ConciliacionController extends Controller
             $q->where('categoria', $request->categoria);
         }
         if ($request->filled('buscar')) {
-            $q->where('descripcion', 'like', '%' . $request->buscar . '%');
+            $term = '%' . $request->buscar . '%';
+            $q->where(function ($q2) use ($term) {
+                $q2->where('descripcion', 'like', $term)
+                   ->orWhere('glosa', 'like', $term);
+            });
         }
         if ($request->filled('cuenta')) {
             $q->where('cuenta', $request->cuenta);
@@ -474,14 +487,19 @@ class ConciliacionController extends Controller
             }
 
             if ($mejor) {
+                $montoExacto = abs($mov->monto - $mejor->saldo_pendiente) < 1;
+                $diasDif     = abs(\Carbon\Carbon::parse($mov->fecha_contable)
+                                   ->diffInDays(\Carbon\Carbon::parse($mejor->fecha_emision)));
                 $sugerencias[] = [
-                    'id'             => "D{$mov->id}_C{$mejor->id}",
-                    'movimiento'     => $mov,
-                    'documento'      => $mejor,
-                    'tipo_documento' => 'compra',
-                    'razon'          => $razon,
-                    'score'          => $score,
-                    'monto_sugerido' => (float) min($mov->monto, $mejor->saldo_pendiente),
+                    'id'              => "D{$mov->id}_C{$mejor->id}",
+                    'movimiento'      => $mov,
+                    'documento'       => $mejor,
+                    'tipo_documento'  => 'compra',
+                    'razon'           => $razon,
+                    'score'           => $score,
+                    'monto_exacto'    => $montoExacto,
+                    'dias_diferencia' => $diasDif,
+                    'monto_sugerido'  => (float) min($mov->monto, $mejor->saldo_pendiente),
                 ];
                 $usadosMovs[] = $mov->id;
                 $usadosDocs[] = $mejor->id;
@@ -495,7 +513,7 @@ class ConciliacionController extends Controller
             $texto = ($mov->descripcion ?? '') . ' ' . ($mov->glosa ?? '');
             $rutMov = $this->extractRut($texto);
 
-            $mejor = null; $razon = null; $score = 0;
+            $mejor = null; $razon = null; $score = 0; $mejorDias = PHP_INT_MAX;
 
             foreach ($ventasPendientes as $venta) {
                 if (in_array($venta->id, $usadosDocs)) continue;
@@ -519,28 +537,46 @@ class ConciliacionController extends Controller
                     $s += 20; $r = $r ?? 'descripcion';
                 }
 
-                if ($s > $score && $s >= 40) {
-                    $score = $s; $mejor = $venta; $razon = $r;
+                if ($s >= 40) {
+                    $dias = abs(\Carbon\Carbon::parse($mov->fecha_contable)
+                                ->diffInDays(\Carbon\Carbon::parse($venta->fecha_emision)));
+                    // Prefiere mayor score; a igual score, fecha más cercana
+                    if ($s > $score || ($s === $score && $dias < $mejorDias)) {
+                        $score = $s; $mejor = $venta; $razon = $r; $mejorDias = $dias;
+                    }
                 }
             }
 
             if ($mejor) {
+                $montoExacto = abs($mov->monto - $mejor->saldo_pendiente) < 1;
+                $diasDif     = abs(\Carbon\Carbon::parse($mov->fecha_contable)
+                                   ->diffInDays(\Carbon\Carbon::parse($mejor->fecha_emision)));
                 $sugerencias[] = [
-                    'id'             => "C{$mov->id}_V{$mejor->id}",
-                    'movimiento'     => $mov,
-                    'documento'      => $mejor,
-                    'tipo_documento' => 'venta',
-                    'razon'          => $razon,
-                    'score'          => $score,
-                    'monto_sugerido' => (float) min($mov->monto, $mejor->saldo_pendiente),
+                    'id'              => "C{$mov->id}_V{$mejor->id}",
+                    'movimiento'      => $mov,
+                    'documento'       => $mejor,
+                    'tipo_documento'  => 'venta',
+                    'razon'           => $razon,
+                    'score'           => $score,
+                    'monto_exacto'    => $montoExacto,
+                    'dias_diferencia' => $diasDif,
+                    'monto_sugerido'  => (float) min($mov->monto, $mejor->saldo_pendiente),
                 ];
                 $usadosMovs[] = $mov->id;
                 $usadosDocs[] = $mejor->id;
             }
         }
 
-        // Ordenar: mayor score primero (RUT+monto > RUT > monto)
-        usort($sugerencias, fn($a, $b) => $b['score'] - $a['score']);
+        // Ordenar: 1° monto exacto, 2° fecha más cercana, 3° score más alto
+        usort($sugerencias, function ($a, $b) {
+            if ($a['monto_exacto'] !== $b['monto_exacto']) {
+                return $b['monto_exacto'] <=> $a['monto_exacto'];
+            }
+            if ($a['dias_diferencia'] !== $b['dias_diferencia']) {
+                return $a['dias_diferencia'] <=> $b['dias_diferencia'];
+            }
+            return $b['score'] <=> $a['score'];
+        });
 
         return response()->json($sugerencias);
     }

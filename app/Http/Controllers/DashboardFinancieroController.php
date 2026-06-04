@@ -33,11 +33,15 @@ class DashboardFinancieroController extends Controller
             ->selectRaw('COALESCE(SUM(compras.total) - SUM(COALESCE(cm.pagado, 0)), 0) as pendiente')
             ->value('pendiente');
 
-        $saldoCta = DB::table('movimientos_bancarios')
+        $ultimoMov = DB::table('movimientos_bancarios')
             ->whereNotNull('saldo_disponible')
             ->orderByDesc('fecha_contable')
+            ->orderByRaw("COALESCE(fecha_hora_mov, '1900-01-01 00:00:00') DESC")
             ->orderByDesc('id')
-            ->value('saldo_disponible');
+            ->select('saldo_disponible', 'fecha_contable')
+            ->first();
+        $saldoCta      = $ultimoMov ? (float) $ultimoMov->saldo_disponible : null;
+        $saldoCtaFecha = $ultimoMov ? $ultimoMov->fecha_contable : null;
 
         $promedioDias = DB::table('documentos_facturacion as df')
             ->join('venta_movimiento as vm', 'vm.venta_id', '=', 'df.id')
@@ -149,7 +153,8 @@ class DashboardFinancieroController extends Controller
             'kpis' => [
                 'por_cobrar'          => (float) ($porCobrar ?? 0),
                 'por_pagar'           => (float) ($porPagar  ?? 0),
-                'saldo_cta_corriente' => (float) ($saldoCta  ?? 0),
+                'saldo_cta_corriente'       => (float) ($saldoCta      ?? 0),
+                'saldo_cta_corriente_fecha' => $saldoCtaFecha,
                 'promedio_dias_cobro' => (int)   round((float) ($promedioDias ?? 0)),
             ],
             'top_clientes'          => $topClientes,

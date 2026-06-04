@@ -4,7 +4,13 @@
     <VRow class="mb-4" align="center">
       <VCol>
         <h4 class="text-h5 font-weight-bold">Conciliación Bancaria</h4>
-        <p class="text-body-2 text-medium-emphasis mb-0">Banco de Chile — Cuenta {{ cuenta }}</p>
+        <p class="text-body-2 text-medium-emphasis mb-0">
+          Chipax + BCH
+          <template v-if="cuentasDisponibles.length">
+            · {{ cuentasDisponibles.length }} cuenta{{ cuentasDisponibles.length > 1 ? 's' : '' }}
+            ({{ cuentasDisponibles.reduce((s, c) => s + c.total, 0).toLocaleString('es-CL') }} movimientos)
+          </template>
+        </p>
       </VCol>
       <VCol cols="auto" class="d-flex gap-2">
         <VBtn
@@ -33,6 +39,12 @@
           :loading="loadingCartola"
           @click="dialogCartola = true"
         >Importar Cartola</VBtn>
+        <VBtn
+          color="orange-darken-2"
+          prepend-icon="mdi-bank-transfer"
+          :loading="loadingPortal"
+          @click="dialogPortal = true"
+        >Portal BCH</VBtn>
       </VCol>
     </VRow>
 
@@ -44,6 +56,9 @@
             <p class="text-body-2 text-medium-emphasis mb-1">Saldo Disponible</p>
             <p class="text-h5 font-weight-bold text-primary mb-0">
               {{ saldo !== null ? formatMonto(saldo) : '—' }}
+            </p>
+            <p v-if="saldoFecha" class="text-caption text-medium-emphasis mt-1 mb-0">
+              Al {{ formatFecha(saldoFecha) }}
             </p>
           </VCardText>
         </VCard>
@@ -134,6 +149,22 @@
               </VCol>
               <VCol cols="6" md="2">
                 <VSelect
+                  v-model="filtros.cuenta"
+                  label="Cuenta"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  :items="[
+                    { title: 'Todas', value: '' },
+                    ...cuentasDisponibles.map(c => ({ title: c.cuenta, value: c.cuenta }))
+                  ]"
+                  item-title="title"
+                  item-value="value"
+                  @update:modelValue="cargarMovimientos"
+                />
+              </VCol>
+              <VCol cols="6" md="2">
+                <VSelect
                   v-model="filtros.tipo"
                   label="Tipo"
                   density="compact"
@@ -158,7 +189,7 @@
                   @update:modelValue="cargarMovimientos"
                 />
               </VCol>
-              <VCol cols="12" md="4">
+              <VCol cols="12" md="2">
                 <VTextField
                   v-model="filtros.buscar"
                   label="Buscar descripción"
@@ -229,12 +260,34 @@
               {{ formatFecha(item.fecha_contable) }}
             </template>
 
-            <!-- Descripción + glosa -->
+            <!-- Cuenta bancaria -->
+            <template #item.cuenta="{ item }">
+              <VChip
+                size="x-small"
+                :color="item.chipax_id ? 'info' : 'default'"
+                variant="tonal"
+                class="text-no-wrap"
+              >{{ item.cuenta || '—' }}</VChip>
+            </template>
+
+            <!-- Descripción + glosa + resumen Chipax docs -->
             <template #item.descripcion="{ item }">
               <div>
                 <span>{{ item.descripcion }}</span>
-                <div v-if="item.glosa" class="text-caption text-medium-emphasis mt-n1">
-                  <VIcon size="11" class="mr-1">mdi-comment-text-outline</VIcon>{{ item.glosa }}
+                <VTooltip v-if="item.glosa" location="bottom" max-width="420">
+                  <template #activator="{ props }">
+                    <VIcon v-bind="props" size="13" class="mt-n1 ml-1 text-medium-emphasis" style="cursor:help">
+                      mdi-comment-text-outline
+                    </VIcon>
+                  </template>
+                  <div style="font-size:11px;line-height:1.8">
+                    <div v-for="(parte, i) in item.glosa.split(' · ')" :key="i">{{ parte }}</div>
+                  </div>
+                </VTooltip>
+                <!-- Resumen de docs Chipax (si ya fue sincronizado) -->
+                <div v-if="item.raw?.linked_docs?.length" class="text-caption text-info mt-n1">
+                  <VIcon size="11" color="info" class="mr-1">mdi-link-variant</VIcon>
+                  {{ item.raw.linked_docs.map(d => d.label).join(' · ') }}
                 </div>
               </div>
             </template>
@@ -271,22 +324,36 @@
 
             <!-- Estado conciliación: saldo por asignar -->
             <template #item.saldo_por_asignar="{ item }">
-              <div v-if="item.tipo === 'D'" class="text-end" style="cursor: pointer" @click="abrirConciliar(item)">
-                <VChip v-if="item.conciliado" size="x-small" color="success" variant="tonal">
+              <div
+                v-if="item.tipo === 'D' || item.tipo === 'C'"
+                class="text-end"
+                style="cursor: pointer"
+                @click="abrirConciliar(item)"
+              >
+                <!-- ✅ Totalmente cubierto por links locales -->
+                <VChip v-if="item.saldo_por_asignar === 0" size="x-small" color="success" variant="tonal">
                   <VIcon start size="11">mdi-check</VIcon> Conciliado
                 </VChip>
-                <span v-else-if="item.saldo_por_asignar > 0" class="text-caption text-warning font-weight-bold">
-                  {{ formatMonto(item.saldo_por_asignar) }} por conciliar
+
+                <!-- ⚠ Parcialmente cubierto: hay links pero queda saldo -->
+                <div v-else-if="item.monto_asignado > 0" class="text-end">
+                  <VChip size="x-small" color="warning" variant="tonal" class="mb-n1">
+                    <VIcon start size="11">mdi-alert-outline</VIcon> Parcial
+                  </VChip>
+                  <div class="text-caption text-warning font-weight-bold mt-1">
+                    {{ formatMonto(item.saldo_por_asignar) }} pendiente
+                  </div>
+                </div>
+
+                <!-- 🔵 Conciliado en Chipax/origen, sin links locales aún -->
+                <VChip v-else-if="item.conciliado" size="x-small" color="info" variant="tonal">
+                  <VIcon start size="11">mdi-check-circle-outline</VIcon> Chipax ✓
+                </VChip>
+
+                <!-- 🔴 Sin conciliar ni asignar -->
+                <span v-else class="text-caption text-warning font-weight-bold">
+                  {{ item.tipo === 'D' ? formatMonto(item.saldo_por_asignar) + ' pendiente' : 'Por conciliar' }}
                 </span>
-                <VChip v-else size="x-small" color="success" variant="tonal">
-                  <VIcon start size="11">mdi-check</VIcon> Conciliado
-                </VChip>
-              </div>
-              <div v-else-if="item.tipo === 'C'" class="text-end" style="cursor: pointer" @click="abrirConciliar(item)">
-                <VChip v-if="item.conciliado" size="x-small" color="success" variant="tonal">
-                  <VIcon start size="11">mdi-check</VIcon> Conciliado
-                </VChip>
-                <span v-else class="text-caption text-warning font-weight-bold">Por conciliar</span>
               </div>
               <span v-else class="text-caption text-medium-emphasis">—</span>
             </template>
@@ -305,85 +372,143 @@
             <!-- Acciones -->
             <template #item.actions="{ item }">
               <!-- Débito: vincular a compras / gastos / sueldos -->
-              <div v-if="item.tipo === 'D'" class="d-flex">
-                <VBtn
-                  size="x-small"
-                  variant="tonal"
-                  color="primary"
-                  style="border-radius: 4px 0 0 4px"
-                  @click="abrirConciliar(item)"
+              <div v-if="item.tipo === 'D'" class="d-flex align-center" style="gap:4px">
+                <!-- ⚡ Rayo: conciliación directa si hay match de monto exacto -->
+                <VTooltip
+                  v-if="sugerenciasPorMov[item.id] && item.saldo_por_asignar > 0"
+                  location="bottom"
+                  max-width="280"
                 >
-                  <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
-                </VBtn>
-                <VMenu location="bottom end">
-                  <template #activator="{ props }">
+                  <template #activator="{ props: tp }">
                     <VBtn
-                      v-bind="props"
+                      v-bind="tp"
                       size="x-small"
-                      variant="tonal"
-                      color="primary"
-                      style="border-radius: 0 4px 4px 0; border-left: 1px solid rgba(255,255,255,0.3); min-width: 20px; padding: 0 4px"
+                      icon
+                      variant="flat"
+                      color="warning"
+                      style="border-radius:4px;min-width:26px;height:26px"
+                      :loading="loadingRayo[item.id]"
+                      @click.stop="conciliarRayo(item)"
                     >
-                      <VIcon size="12">mdi-chevron-down</VIcon>
+                      <VIcon size="15">mdi-lightning-bolt</VIcon>
                     </VBtn>
                   </template>
-                  <VList density="compact" min-width="220">
-                    <VListItem
-                      prepend-icon="mdi-link-variant"
-                      title="Vincular documento existente"
-                      @click="abrirConciliar(item)"
-                    />
-                    <VDivider />
-                    <VListItem
-                      prepend-icon="mdi-plus-circle-outline"
-                      title="Crear gasto general"
-                      @click="abrirCrearGasto(item)"
-                    />
-                    <VListItem
-                      prepend-icon="mdi-account-cash"
-                      title="Crear sueldo"
-                      @click="abrirCrearSueldo(item)"
-                    />
-                  </VList>
-                </VMenu>
+                  <div style="font-size:11px;line-height:1.7">
+                    <div class="font-weight-bold mb-1">⚡ Conciliar directamente</div>
+                    <div>{{ sugerenciasPorMov[item.id].documento.nombre_emisor }}</div>
+                    <div class="text-medium-emphasis">Folio {{ sugerenciasPorMov[item.id].documento.folio }}</div>
+                    <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorMov[item.id].monto_sugerido) }}</div>
+                  </div>
+                </VTooltip>
+                <div class="d-flex">
+                  <VBtn
+                    size="x-small"
+                    variant="tonal"
+                    color="primary"
+                    style="border-radius: 4px 0 0 4px"
+                    @click="abrirConciliar(item)"
+                  >
+                    <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
+                  </VBtn>
+                  <VMenu location="bottom end">
+                    <template #activator="{ props }">
+                      <VBtn
+                        v-bind="props"
+                        size="x-small"
+                        variant="tonal"
+                        color="primary"
+                        style="border-radius: 0 4px 4px 0; border-left: 1px solid rgba(255,255,255,0.3); min-width: 20px; padding: 0 4px"
+                      >
+                        <VIcon size="12">mdi-chevron-down</VIcon>
+                      </VBtn>
+                    </template>
+                    <VList density="compact" min-width="220">
+                      <VListItem
+                        prepend-icon="mdi-link-variant"
+                        title="Vincular documento existente"
+                        @click="abrirConciliar(item)"
+                      />
+                      <VDivider />
+                      <VListItem
+                        prepend-icon="mdi-plus-circle-outline"
+                        title="Crear gasto general"
+                        @click="abrirCrearGasto(item)"
+                      />
+                      <VListItem
+                        prepend-icon="mdi-account-cash"
+                        title="Crear sueldo"
+                        @click="abrirCrearSueldo(item)"
+                      />
+                    </VList>
+                  </VMenu>
+                </div>
               </div>
               <!-- Crédito: vincular a ventas (facturas emitidas) -->
-              <div v-else-if="item.tipo === 'C'" class="d-flex">
-                <VBtn
-                  size="x-small"
-                  variant="tonal"
-                  color="success"
-                  style="border-radius: 4px 0 0 4px"
-                  @click="abrirConciliar(item)"
+              <div v-else-if="item.tipo === 'C'" class="d-flex align-center" style="gap:4px">
+                <!-- ⚡ Rayo: conciliación directa si hay match de monto exacto -->
+                <VTooltip
+                  v-if="sugerenciasPorMov[item.id] && item.saldo_por_asignar > 0"
+                  location="bottom"
+                  max-width="280"
                 >
-                  <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
-                </VBtn>
-                <VMenu location="bottom end">
-                  <template #activator="{ props }">
+                  <template #activator="{ props: tp }">
                     <VBtn
-                      v-bind="props"
+                      v-bind="tp"
                       size="x-small"
-                      variant="tonal"
-                      color="success"
-                      style="border-radius: 0 4px 4px 0; border-left: 1px solid rgba(255,255,255,0.3); min-width: 20px; padding: 0 4px"
+                      icon
+                      variant="flat"
+                      color="warning"
+                      style="border-radius:4px;min-width:26px;height:26px"
+                      :loading="loadingRayo[item.id]"
+                      @click.stop="conciliarRayo(item)"
                     >
-                      <VIcon size="12">mdi-chevron-down</VIcon>
+                      <VIcon size="15">mdi-lightning-bolt</VIcon>
                     </VBtn>
                   </template>
-                  <VList density="compact" min-width="220">
-                    <VListItem
-                      prepend-icon="mdi-link-variant"
-                      title="Vincular a venta / factura emitida"
-                      @click="abrirConciliar(item)"
-                    />
-                    <VDivider />
-                    <VListItem
-                      prepend-icon="mdi-check-circle-outline"
-                      title="Marcar conciliado directamente"
-                      @click="marcarConciliadoDirecto(item)"
-                    />
-                  </VList>
-                </VMenu>
+                  <div style="font-size:11px;line-height:1.7">
+                    <div class="font-weight-bold mb-1">⚡ Conciliar directamente</div>
+                    <div>{{ sugerenciasPorMov[item.id].documento.nombre_cliente }}</div>
+                    <div class="text-medium-emphasis">{{ sugerenciasPorMov[item.id].documento.tipo }} · Doc {{ sugerenciasPorMov[item.id].documento.numero_documento_bsale || '—' }}</div>
+                    <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorMov[item.id].monto_sugerido) }}</div>
+                  </div>
+                </VTooltip>
+                <div class="d-flex">
+                  <VBtn
+                    size="x-small"
+                    variant="tonal"
+                    color="success"
+                    style="border-radius: 4px 0 0 4px"
+                    @click="abrirConciliar(item)"
+                  >
+                    <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
+                  </VBtn>
+                  <VMenu location="bottom end">
+                    <template #activator="{ props }">
+                      <VBtn
+                        v-bind="props"
+                        size="x-small"
+                        variant="tonal"
+                        color="success"
+                        style="border-radius: 0 4px 4px 0; border-left: 1px solid rgba(255,255,255,0.3); min-width: 20px; padding: 0 4px"
+                      >
+                        <VIcon size="12">mdi-chevron-down</VIcon>
+                      </VBtn>
+                    </template>
+                    <VList density="compact" min-width="220">
+                      <VListItem
+                        prepend-icon="mdi-link-variant"
+                        title="Vincular a venta / factura emitida"
+                        @click="abrirConciliar(item)"
+                      />
+                      <VDivider />
+                      <VListItem
+                        prepend-icon="mdi-check-circle-outline"
+                        title="Marcar conciliado directamente"
+                        @click="marcarConciliadoDirecto(item)"
+                      />
+                    </VList>
+                  </VMenu>
+                </div>
               </div>
             </template>
 
@@ -642,6 +767,130 @@
       </VCard>
     </VDialog>
 
+    <!-- Dialog Importar Portal Banco de Chile ─────────────────────────────── -->
+    <VDialog v-model="dialogPortal" max-width="620">
+      <VCard>
+        <VCardTitle class="pa-4 pb-0 d-flex align-center gap-2">
+          <VIcon color="orange-darken-2">mdi-bank-transfer</VIcon>
+          Importar desde Portal Banco de Chile
+        </VCardTitle>
+
+        <VCardText class="pa-4">
+          <!-- Fechas siempre visibles -->
+          <VRow dense class="mb-3">
+            <VCol cols="6">
+              <VTextField v-model="portalForm.desde" label="Desde" type="date"
+                density="compact" variant="outlined" hide-details />
+            </VCol>
+            <VCol cols="6">
+              <VTextField v-model="portalForm.hasta" label="Hasta" type="date"
+                density="compact" variant="outlined" hide-details />
+            </VCol>
+          </VRow>
+
+          <!-- Tabs: método consola (recomendado) vs cookies -->
+          <VTabs v-model="portalTab" density="compact" class="mb-4">
+            <VTab value="consola">
+              <VIcon start size="16">mdi-console</VIcon>Consola del navegador
+              <VChip size="x-small" color="success" variant="flat" class="ml-2">Recomendado</VChip>
+            </VTab>
+            <VTab value="cookies">
+              <VIcon start size="16">mdi-cookie</VIcon>Cookies (solo red local)
+            </VTab>
+          </VTabs>
+
+          <!-- TAB CONSOLA -->
+          <div v-if="portalTab === 'consola'">
+            <VAlert color="blue" variant="tonal" density="compact" class="mb-3 text-caption">
+              <strong>4 pasos:</strong>
+              (1) Entra al portal del banco y ve a la sección <strong>Cartola</strong> →
+              (2) Abre DevTools (F12) → pestaña <strong>Console</strong> →
+              (3) Pega el script y presiona Enter → verás un alert "Interceptor activo" →
+              (4) <strong>Cambia el rango de fechas en la cartola</strong> para que el portal dispare su request → el JSON se copia solo al portapapeles.
+            </VAlert>
+
+            <!-- Script interceptor -->
+            <p class="text-caption text-medium-emphasis mb-1">Script interceptor (pega en la consola del banco):</p>
+            <div style="position:relative">
+              <pre class="portal-script pa-3 rounded text-caption" style="overflow-x:auto;background:rgba(0,0,0,0.06);white-space:pre-wrap;word-break:break-all">{{ consolaScript }}</pre>
+              <VBtn
+                size="x-small"
+                variant="tonal"
+                style="position:absolute;top:4px;right:4px"
+                @click="copiarScript"
+              >
+                <VIcon size="12" class="mr-1">{{ scriptCopiado ? 'mdi-check' : 'mdi-content-copy' }}</VIcon>
+                {{ scriptCopiado ? 'Copiado' : 'Copiar' }}
+              </VBtn>
+            </div>
+
+            <p class="text-caption text-medium-emphasis mt-3 mb-1">2. Después del alert, pega aquí el JSON (Ctrl+V):</p>
+            <VTextarea
+              v-model="portalForm.jsonData"
+              placeholder='{"movimientos":[...]}'
+              density="compact"
+              variant="outlined"
+              hide-details
+              rows="5"
+              style="font-size: 11px; font-family: monospace"
+            />
+          </div>
+
+          <!-- TAB COOKIES (solo útil desde red local, mismo IP que el browser) -->
+          <div v-else>
+            <VAlert color="warning" variant="tonal" density="compact" class="mb-3 text-caption">
+              <VIcon size="14" class="mr-1">mdi-alert-outline</VIcon>
+              Las cookies del banco son IP-bound (Incapsula). Solo funciona si el servidor
+              está en la <strong>misma red</strong> que el navegador (ej. XAMPP local).
+              Desde Railway/producción usa la pestaña <strong>Consola</strong>.
+            </VAlert>
+            <VTextarea
+              v-model="portalForm.cookies"
+              label="Pegar header Cookie completo"
+              placeholder="XSRF-TOKEN=...; OAMAuthnCookie=...; visid_incap_..."
+              density="compact"
+              variant="outlined"
+              hide-details
+              rows="5"
+              style="font-size: 11px; font-family: monospace"
+            />
+          </div>
+
+          <!-- Resultado -->
+          <VAlert
+            v-if="portalResult"
+            class="mt-4"
+            :color="portalResult.error ? 'error' : 'success'"
+            variant="tonal"
+          >
+            <span v-if="portalResult.error">{{ portalResult.error }}</span>
+            <div v-else>
+              <strong>{{ portalResult.nuevos }}</strong> nuevos ·
+              <strong>{{ portalResult.duplicados }}</strong> duplicados
+              ({{ portalResult.total }} total)
+              <div v-if="portalResult.message" class="text-caption mt-1">{{ portalResult.message }}</div>
+              <div v-if="portalResult.errores?.length" class="text-caption mt-1 text-error">
+                {{ portalResult.errores.length }} errores — {{ portalResult.errores[0] }}
+              </div>
+            </div>
+          </VAlert>
+        </VCardText>
+
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="dialogPortal = false">Cerrar</VBtn>
+          <VBtn
+            color="orange-darken-2"
+            :loading="loadingPortal"
+            :disabled="portalTab === 'consola' ? !portalForm.jsonData : (!portalForm.cookies || portalForm.cookies.length < 50)"
+            @click="portalTab === 'consola' ? importarJson() : importarPortal()"
+          >
+            <VIcon start>mdi-bank-transfer</VIcon>Importar
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
     <!-- ── Modal Conciliar Movimiento ↔ Facturas ───────────────────────────── -->
     <VDialog v-model="dialogConciliar" max-width="1300" scrollable>
       <VCard>
@@ -689,6 +938,33 @@
                   />
                 </VCardText>
               </VCard>
+
+              <!-- Chipax linked docs (aparece tras correr chipax:sync-docs) -->
+              <template v-if="movConciliando?.raw?.linked_docs?.length">
+                <p class="text-overline text-medium-emphasis mb-2">
+                  <VIcon size="14" color="info" class="mr-1">mdi-check-circle-outline</VIcon>
+                  Conciliado en Chipax
+                </p>
+                <VCard
+                  v-for="(doc, i) in movConciliando.raw.linked_docs"
+                  :key="'chipax-' + i"
+                  variant="tonal"
+                  color="info"
+                  class="mb-2"
+                >
+                  <VCardText class="pa-2">
+                    <div class="d-flex justify-space-between align-center">
+                      <div>
+                        <VChip size="x-small" color="info" variant="flat" class="mb-1">{{ doc.tipo }}</VChip>
+                        <div class="text-caption font-weight-bold">{{ doc.label }}</div>
+                        <div v-if="doc.razon" class="text-caption text-medium-emphasis">{{ doc.razon }}</div>
+                      </div>
+                      <div class="text-caption font-weight-bold text-info">{{ formatMonto(doc.monto) }}</div>
+                    </div>
+                  </VCardText>
+                </VCard>
+                <VDivider class="mb-3" />
+              </template>
 
               <p class="text-overline text-medium-emphasis mb-2">Documentos asignados</p>
 
@@ -1329,6 +1605,14 @@
         </VCardActions>
       </VCard>
     </VDialog>
+
+    <!-- ── Snackbar Rayo ──────────────────────────────────────────────────────── -->
+    <VSnackbar v-model="rayoSnack.show" :color="rayoSnack.color" location="top right" :timeout="3000">
+      {{ rayoSnack.text }}
+      <template #actions>
+        <VBtn variant="text" size="small" @click="rayoSnack.show = false">✕</VBtn>
+      </template>
+    </VSnackbar>
   </div>
 </template>
 
@@ -1337,7 +1621,16 @@ import { ref, computed, onMounted, watch } from 'vue'
 import axios from '@/axiosInstance'
 import VueApexCharts from 'vue3-apexcharts'
 
-const cuenta = computed(() => import.meta.env.VITE_BCH_CUENTA || '—')
+// ── Cuentas bancarias ────────────────────────────────────────────────────────
+
+const cuentasDisponibles = ref([])
+
+async function cargarCuentas() {
+  try {
+    const { data } = await axios.get('/api/conciliacion/cuentas')
+    cuentasDisponibles.value = data
+  } catch (e) { console.error(e) }
+}
 
 // ── Empleados (para sueldo rápido) ───────────────────────────────────────────
 
@@ -1355,7 +1648,8 @@ async function cargarEmpleados() {
 const tab = ref('movimientos')
 const movimientos = ref([])
 const totales = ref({})
-const saldo = ref(null)
+const saldo      = ref(null)
+const saldoFecha = ref(null)   // fecha del último movimiento con saldo
 const flujoCajaData = ref([])
 
 // ── Progreso de conciliación ─────────────────────────────────────────────────
@@ -1384,6 +1678,11 @@ const loadingReglas = ref(false)
 const loadingAplicar = ref(false)
 const savingRegla = ref(false)
 
+// ── Sugerencias / Rayo ⚡ ─────────────────────────────────────────────────────
+const sugerenciasPorMov = ref({})   // { [movimiento.id]: sugerencia } solo monto_exacto
+const loadingRayo       = ref({})   // { [movimiento.id]: true } mientras concilia
+const rayoSnack         = ref({ show: false, text: '', color: 'success' })
+
 const reglas = ref([])
 const dialogRegla = ref(false)
 const reglaEditando = ref(null)
@@ -1394,6 +1693,58 @@ const dialogImportar = ref(false)
 const dialogCartola = ref(false)
 const cartolaArchivo = ref(null)
 const cartolaResult = ref(null)
+
+// ── Portal Banco de Chile ─────────────────────────────────────────────────────
+const dialogPortal   = ref(false)
+const loadingPortal  = ref(false)
+const portalResult   = ref(null)
+const portalTab      = ref('consola')
+const scriptCopiado  = ref(false)
+const portalForm = ref({
+  desde:      new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
+  hasta:      new Date().toISOString().slice(0, 10),
+  cookies:    '',
+  jsonData:   '',
+  xsrfToken:  '',
+})
+
+// Script interceptor: captura la respuesta que el propio portal hace al banco
+// (evita problemas de XSRF-TOKEN HttpOnly y permisos de session)
+const consolaScript = computed(() => {
+  // Intercepta XMLHttpRequest (Angular HttpClient usa XHR, no fetch)
+  return (
+    `const _open=XMLHttpRequest.prototype.open;` +
+    `const _send=XMLHttpRequest.prototype.send;` +
+    `XMLHttpRequest.prototype.open=function(m,u,...r){this.__url=u;return _open.call(this,m,u,...r);};` +
+    `XMLHttpRequest.prototype.send=function(b){` +
+    `if(this.__url&&this.__url.includes('getcartola')){` +
+    `this.addEventListener('load',function(){` +
+    `XMLHttpRequest.prototype.open=_open;XMLHttpRequest.prototype.send=_send;` +
+    `const t=this.responseText;` +
+    `const ta=document.createElement('textarea');` +
+    `ta.value=t;ta.style.cssText='position:fixed;top:0;left:0;opacity:0.01';` +
+    `document.body.appendChild(ta);ta.focus();ta.select();` +
+    `let ok=false;try{ok=document.execCommand('copy');}catch(e){}` +
+    `document.body.removeChild(ta);` +
+    `const n=JSON.parse(t).movimientos?.length??'?';` +
+    `alert(ok?'✅ Copiado: '+n+' movimientos. Pégalo en la app.':'⚠️ No copiado — busca %%CART%% en consola');` +
+    `if(!ok)console.log('%%CART%%'+t+'%%END%%');` +
+    `});` +
+    `}` +
+    `return _send.call(this,b);` +
+    `};` +
+    `alert('🎣 Interceptor XHR activo. Ahora cambia las fechas en la Cartola del portal.');`
+  )
+})
+
+async function copiarScript() {
+  try {
+    await navigator.clipboard.writeText(consolaScript.value)
+    scriptCopiado.value = true
+    setTimeout(() => { scriptCopiado.value = false }, 2000)
+  } catch { /* fallback silencioso */ }
+}
+
 const dialogLinkCompra = ref(false)
 const movSeleccionado = ref(null)
 const buscarCompra = ref('')
@@ -1401,17 +1752,18 @@ const comprasSugeridas = ref([])
 const importResult = ref(null)
 
 const hoy = new Date().toISOString().slice(0, 10)
-const primerDiaMes = new Date(new Date().getFullYear() - 2, 0, 1).toISOString().slice(0, 10)
+const primerDiAnio = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
 
 const filtros = ref({
-  desde: primerDiaMes,
+  desde: primerDiAnio,
   hasta: hoy,
   tipo: '',
   conciliado: '',
   buscar: '',
+  cuenta: '',
 })
 
-const importForm = ref({ desde: primerDiaMes, hasta: hoy })
+const importForm = ref({ desde: primerDiAnio, hasta: hoy })
 
 const filtroFlujo = ref({
   desde: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
@@ -1444,6 +1796,7 @@ const headersReglas = [
 
 const headers = [
   { title: 'Fecha', key: 'fecha_contable', sortable: true },
+  { title: 'Cuenta', key: 'cuenta', sortable: false },
   { title: 'Descripción', key: 'descripcion', sortable: false },
   { title: 'N° Doc', key: 'numero_documento', sortable: false },
   { title: 'Monto', key: 'monto', align: 'end', sortable: true },
@@ -1474,7 +1827,8 @@ async function cargarSaldo() {
   loadingSaldo.value = true
   try {
     const { data } = await axios.get('/api/conciliacion/saldo')
-    saldo.value = data.saldoDisponible ?? data.saldo ?? null
+    saldo.value      = data.saldoDisponible ?? data.saldo ?? null
+    saldoFecha.value = data.fecha ?? null
   } catch (e) {
     console.error(e)
   } finally {
@@ -1524,6 +1878,48 @@ async function importarCartola() {
   }
 }
 
+async function importarPortal() {
+  loadingPortal.value = true
+  portalResult.value = null
+  try {
+    const { data } = await axios.post('/api/banco/importar-portal', {
+      cookies: portalForm.value.cookies,
+      desde:   portalForm.value.desde,
+      hasta:   portalForm.value.hasta,
+    })
+    portalResult.value = data
+    if (data.nuevos > 0) {
+      filtros.value.desde = portalForm.value.desde
+      filtros.value.hasta = portalForm.value.hasta
+      await cargarMovimientos()
+    }
+  } catch (e) {
+    portalResult.value = { error: e.response?.data?.error || e.response?.data?.message || 'Error al conectar con el banco' }
+  } finally {
+    loadingPortal.value = false
+  }
+}
+
+async function importarJson() {
+  loadingPortal.value = true
+  portalResult.value = null
+  try {
+    const { data } = await axios.post('/api/banco/importar-json', {
+      json_data: portalForm.value.jsonData,
+    })
+    portalResult.value = data
+    if (data.nuevos > 0) {
+      filtros.value.desde = portalForm.value.desde
+      filtros.value.hasta = portalForm.value.hasta
+      await cargarMovimientos()
+    }
+  } catch (e) {
+    portalResult.value = { error: e.response?.data?.error || e.response?.data?.message || 'JSON inválido o error al procesar' }
+  } finally {
+    loadingPortal.value = false
+  }
+}
+
 async function autoConcilar() {
   loadingMatch.value = true
   try {
@@ -1534,6 +1930,55 @@ async function autoConcilar() {
     console.error(e)
   } finally {
     loadingMatch.value = false
+  }
+}
+
+// ── Sugerencias automáticas (Rayo ⚡) ─────────────────────────────────────────
+
+async function cargarSugerencias() {
+  try {
+    const { data } = await axios.get('/api/conciliacion/sugerencias')
+    const mapa = {}
+    for (const s of data) {
+      if (s.monto_exacto) mapa[s.movimiento.id] = s
+    }
+    sugerenciasPorMov.value = mapa
+  } catch (e) {
+    console.error('sugerencias:', e)
+  }
+}
+
+async function conciliarRayo(item) {
+  const sug = sugerenciasPorMov.value[item.id]
+  if (!sug || loadingRayo.value[item.id]) return
+  loadingRayo.value[item.id] = true
+  try {
+    const movId = item.id
+    const docId = sug.documento.id
+    const monto = sug.monto_sugerido
+    if (sug.tipo_documento === 'compra') {
+      await axios.post(`/api/conciliacion/movimientos/${movId}/compras`, {
+        compra_id: docId,
+        monto,
+      })
+    } else {
+      await axios.post(`/api/conciliacion/movimientos/${movId}/ventas`, {
+        venta_id: docId,
+        monto,
+      })
+    }
+    delete sugerenciasPorMov.value[item.id]
+    rayoSnack.value = { show: true, color: 'success', text: `⚡ Conciliado: ${formatMonto(monto)}` }
+    cargarMovimientos()
+    cargarSugerencias()
+  } catch (e) {
+    rayoSnack.value = {
+      show: true,
+      color: 'error',
+      text: 'Error al conciliar: ' + (e.response?.data?.message || e.message),
+    }
+  } finally {
+    delete loadingRayo.value[item.id]
   }
 }
 
@@ -2194,6 +2639,19 @@ function formatMonto(v) {
   return '$' + parseFloat(v || 0).toLocaleString('es-CL', { minimumFractionDigits: 0 })
 }
 
+// Glosa corta: oculta campos ruidosos (cuentas e IDs de transacción)
+// El tooltip muestra la glosa completa
+const GLOSA_OMITIR = ['cuenta origen', 'cuenta destinatario', 'id transaccion', 'id transacción']
+function glosaCorta(glosa) {
+  if (!glosa) return ''
+  const partes = glosa.split(' · ').filter(p => {
+    const clave = p.split(':')[0].toLowerCase().trim()
+    return !GLOSA_OMITIR.includes(clave)
+  })
+  const texto = partes.join(' · ')
+  return texto.length > 80 ? texto.slice(0, 77) + '…' : texto
+}
+
 function formatFecha(str) {
   if (!str) return ''
   return str.slice(0, 10)
@@ -2277,5 +2735,7 @@ onMounted(async () => {
   await cargarReglas()
   cargarSaldo()
   cargarEmpleados()
+  cargarCuentas()
+  cargarSugerencias()
 })
 </script>

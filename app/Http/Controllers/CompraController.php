@@ -336,13 +336,14 @@ class CompraController extends Controller
             $resp = Http::timeout(15)->withHeaders($this->headers())->get($xmlUrl);
 
             if (!$resp->successful()) {
-                $compra->update(['xml_url' => null]);
+                // Error temporal (timeout, red, Bsale caído) — conservar xml_url para reintento
                 return;
             }
 
             $xml = @simplexml_load_string($resp->body());
             if (!$xml) {
-                $compra->update(['xml_url' => null]);
+                // XML malformado — puede ser temporal (Bsale en mantenimiento devuelve HTML)
+                // Conservar xml_url para reintento desde "Cargar XMLs pendientes"
                 return;
             }
 

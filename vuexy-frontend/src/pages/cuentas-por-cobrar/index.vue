@@ -6,7 +6,18 @@
         <h4 class="text-h5 font-weight-bold">Cuentas por Cobrar</h4>
         <p class="text-body-2 text-medium-emphasis mb-0">Facturas de venta emitidas a clientes (fuente: Bsale)</p>
       </VCol>
-      <VCol cols="auto">
+      <VCol cols="auto" class="d-flex align-center" style="gap:8px">
+        <!-- Badge "por revisar" -->
+        <VBtn
+          v-if="totales.facturas_por_revisar > 0"
+          color="warning"
+          variant="tonal"
+          size="small"
+          prepend-icon="mdi-alert-circle"
+          @click="abrirPorRevisar"
+        >
+          {{ totales.facturas_por_revisar }} por revisar
+        </VBtn>
         <VBtn
           color="primary"
           variant="tonal"
@@ -24,6 +35,11 @@
     <VSnackbar v-model="syncSnack.show" :color="syncSnack.color" location="top right" :timeout="5000">
       {{ syncSnack.text }}
       <template #actions><VBtn variant="text" @click="syncSnack.show = false">Cerrar</VBtn></template>
+    </VSnackbar>
+    <!-- Snackbar acciones NC -->
+    <VSnackbar v-model="snackNc.show" :color="snackNc.color" location="top right" :timeout="4000">
+      {{ snackNc.text }}
+      <template #actions><VBtn variant="text" @click="snackNc.show = false">Cerrar</VBtn></template>
     </VSnackbar>
 
     <!-- Filtros -->
@@ -91,7 +107,12 @@
       <VCol cols="12" sm="6" lg="3">
         <VCard>
           <VCardText>
-            <p class="text-body-2 text-medium-emphasis mb-1">Total facturado</p>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Total facturado neto
+              <VChip v-if="totales.total_ncs > 0" size="x-small" color="success" variant="tonal" class="ml-1">
+                {{ totales.total_ncs }} NC
+              </VChip>
+            </p>
             <p class="text-h5 font-weight-bold mb-0">{{ formatMonto(totales.total_facturado || 0) }}</p>
           </VCardText>
         </VCard>
@@ -134,9 +155,21 @@
           </div>
         </template>
 
-        <!-- N° Facturas -->
-        <template #item.cantidad_facturas="{ item }">
-          <VChip size="x-small" variant="tonal" color="secondary">{{ item.cantidad_facturas }}</VChip>
+        <!-- N° Docs -->
+        <template #item.cantidad_docs="{ item }">
+          <div class="d-flex align-center" style="gap:4px; justify-content:center">
+            <VChip size="x-small" variant="tonal" color="secondary">{{ item.cantidad_docs }}</VChip>
+            <VChip v-if="item.cantidad_ncs > 0" size="x-small" variant="tonal" color="success">
+              {{ item.cantidad_ncs }} NC
+            </VChip>
+            <VChip
+              v-if="item.facturas_por_revisar > 0"
+              size="x-small"
+              color="warning"
+              variant="flat"
+              prepend-icon="mdi-alert"
+            >{{ item.facturas_por_revisar }}</VChip>
+          </div>
         </template>
 
         <!-- Total facturado -->
@@ -172,12 +205,12 @@
           </div>
         </template>
 
-        <!-- Fila expandida: facturas del cliente -->
+        <!-- Fila expandida: documentos del cliente -->
         <template #expanded-row="{ item }">
           <tr>
             <td :colspan="headers.length + 1" class="pa-0">
               <div class="pa-4 bg-surface">
-                <p class="text-body-2 font-weight-medium mb-3">Facturas de {{ item.razon_social }}</p>
+                <p class="text-body-2 font-weight-medium mb-3">Documentos de {{ item.razon_social }}</p>
 
                 <div v-if="loadingFacturas[item.cliente_id]" class="text-center py-4">
                   <VProgressCircular indeterminate size="24" />
@@ -193,34 +226,177 @@
                       <th class="text-end">Monto</th>
                       <th class="text-end">Cobrado</th>
                       <th class="text-end">Pendiente</th>
-                      <th>Estado</th>
+                      <th>Estado / NC</th>
                       <th></th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="f in facturasCliente[item.cliente_id]" :key="f.id">
-                      <td class="font-weight-medium">{{ f.numero_documento_bsale || '—' }}</td>
-                      <td>
-                        <VChip size="x-small" variant="tonal" color="info">{{ f.tipo }}</VChip>
+                    <tr
+                      v-for="f in facturasCliente[item.cliente_id]"
+                      :key="f.id"
+                      :class="{ 'nc-row': !!f.es_nc }"
+                    >
+                      <!-- N° Doc -->
+                      <td class="font-weight-medium">
+                        <span v-if="f.es_nc" class="text-success text-caption font-weight-bold">NC</span>
+                        {{ f.numero_documento_bsale || '—' }}
                       </td>
-                      <td class="text-caption text-medium-emphasis">#{{ f.cotizacion_id }}</td>
-                      <td class="text-caption">{{ formatFecha(f.fecha_emision) }}</td>
-                      <td class="text-end font-weight-medium">{{ formatMonto(f.monto) }}</td>
-                      <td class="text-end text-success">{{ formatMonto(f.monto_cobrado) }}</td>
-                      <td class="text-end font-weight-bold" :class="f.pendiente > 0 ? 'text-warning' : 'text-success'">
-                        {{ formatMonto(f.pendiente) }}
-                      </td>
+
+                      <!-- Tipo -->
                       <td>
-                        <VChip size="x-small" :color="f.pendiente <= 0 ? 'success' : 'warning'" variant="tonal">
-                          {{ f.pendiente <= 0 ? 'Cobrada' : 'Pendiente' }}
+                        <VChip size="x-small" variant="tonal" :color="f.es_nc ? 'success' : 'info'">
+                          {{ f.es_nc ? 'Nota Créd.' : f.tipo }}
                         </VChip>
                       </td>
-                      <td>
-                        <VBtn size="x-small" variant="tonal" color="primary" @click="abrirConciliar(f, item)">
-                          <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
-                        </VBtn>
+
+                      <!-- Cotización -->
+                      <td class="text-caption text-medium-emphasis">
+                        {{ f.cotizacion_id ? '#' + f.cotizacion_id : '—' }}
                       </td>
+
+                      <!-- Fecha -->
+                      <td class="text-caption">{{ formatFecha(f.fecha_emision) }}</td>
+
+                      <!-- Monto -->
+                      <td class="text-end font-weight-medium" :class="f.es_nc ? 'text-success' : ''">
+                        {{ f.es_nc ? '−' : '' }}{{ formatMonto(f.monto) }}
+                      </td>
+
+                      <!-- Cobrado -->
+                      <td class="text-end text-success">{{ formatMonto(f.monto_cobrado) }}</td>
+
+                      <!-- Pendiente -->
+                      <td class="text-end font-weight-bold">
+                        <span v-if="f.es_nc" class="text-success">
+                          {{ formatMonto(Math.abs(f.pendiente)) }}
+                        </span>
+                        <span v-else :class="f.pendiente > 0 ? 'text-warning' : 'text-success'">
+                          {{ formatMonto(f.pendiente) }}
+                        </span>
+                      </td>
+
+                      <!-- Estado / NC -->
+                      <td>
+                        <!-- NC row: vincular / estado -->
+                        <div v-if="f.es_nc" class="d-flex align-center flex-wrap" style="gap:4px">
+                          <template v-if="f.nc_referencia_df_id">
+                            <VChip size="x-small" color="success" variant="tonal">
+                              <VIcon start size="11">mdi-link</VIcon>Vinculada
+                            </VChip>
+                            <VBtn
+                              size="x-small"
+                              variant="text"
+                              color="error"
+                              :loading="loadingDesvincular[f.id]"
+                              @click="desvincularNC(f, item)"
+                            >
+                              <VIcon size="13">mdi-link-off</VIcon>
+                            </VBtn>
+                          </template>
+                          <template v-else>
+                            <VBtn
+                              size="x-small"
+                              variant="tonal"
+                              color="success"
+                              @click="abrirVincularNC(f, item)"
+                            >
+                              <VIcon start size="13">mdi-link-variant</VIcon>Vincular
+                            </VBtn>
+                          </template>
+                        </div>
+
+                        <!-- Factura normal: estado NC si existe -->
+                        <div v-else class="d-flex align-center flex-wrap" style="gap:4px">
+                          <VChip
+                            v-if="f.nc_revision_estado"
+                            size="x-small"
+                            :color="ncRevisionColor(f.nc_revision_estado)"
+                            variant="tonal"
+                          >
+                            <VIcon start size="11">{{ ncRevisionIcon(f.nc_revision_estado) }}</VIcon>
+                            {{ ncRevisionLabel(f.nc_revision_estado) }}
+                          </VChip>
+                          <VMenu v-if="f.nc_revision_estado === 'requiere_revision'" location="bottom end">
+                            <template #activator="{ props: mp }">
+                              <VBtn v-bind="mp" size="x-small" icon variant="text" color="warning">
+                                <VIcon size="13">mdi-dots-vertical</VIcon>
+                              </VBtn>
+                            </template>
+                            <VList density="compact" min-width="200">
+                              <VListItem @click="cambiarEstadoFactura(f, 'reembolso_pendiente', item)">
+                                <VListItemTitle class="text-caption">Reembolso pendiente</VListItemTitle>
+                              </VListItem>
+                              <VListItem @click="cambiarEstadoFactura(f, 'ignorado', item)">
+                                <VListItemTitle class="text-caption">Ignorar</VListItemTitle>
+                              </VListItem>
+                            </VList>
+                          </VMenu>
+                          <VChip v-else-if="!f.nc_revision_estado" size="x-small" :color="f.pendiente <= 0 ? 'success' : 'warning'" variant="tonal">
+                            {{ f.pendiente <= 0 ? 'Cobrada' : 'Pendiente' }}
+                          </VChip>
+                        </div>
+                      </td>
+
+                      <!-- Acciones -->
+                      <td>
+                        <div v-if="f.es_nc" class="d-flex align-center" style="gap:4px">
+                          <!-- Aplicar NC (Escenario B) -->
+                          <VTooltip location="bottom" text="Aplicar NC a factura pendiente (sin movimiento bancario)">
+                            <template #activator="{ props: tp }">
+                              <VBtn
+                                v-bind="tp"
+                                size="x-small"
+                                variant="tonal"
+                                color="info"
+                                @click="abrirAplicarNC(f, item)"
+                              >
+                                <VIcon start size="13">mdi-file-document-edit</VIcon>Aplicar
+                              </VBtn>
+                            </template>
+                          </VTooltip>
+                        </div>
+                        <div v-else class="d-flex align-center" style="gap:4px">
+                          <!-- ⚡ Rayo: si hay movimiento de monto exacto sugerido -->
+                          <VTooltip
+                            v-if="sugerenciasPorVenta[f.id] && f.pendiente > 0"
+                            location="bottom"
+                            max-width="280"
+                          >
+                            <template #activator="{ props: tp }">
+                              <VBtn
+                                v-bind="tp"
+                                size="x-small"
+                                icon
+                                variant="flat"
+                                color="warning"
+                                style="border-radius:4px;min-width:26px;height:26px"
+                                :loading="loadingRayoVenta[f.id]"
+                                @click="conciliarRayoVenta(f, item)"
+                              >
+                                <VIcon size="15">mdi-lightning-bolt</VIcon>
+                              </VBtn>
+                            </template>
+                            <div style="font-size:11px;line-height:1.7">
+                              <div class="font-weight-bold mb-1">⚡ Conciliar directamente</div>
+                              <div class="text-medium-emphasis">Ingreso bancario:</div>
+                              <div>{{ sugerenciasPorVenta[f.id].movimiento.descripcion }}</div>
+                              <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorVenta[f.id].monto_sugerido) }}</div>
+                            </div>
+                          </VTooltip>
+                          <VBtn
+                            v-if="f.pendiente > 0"
+                            size="x-small"
+                            variant="tonal"
+                            color="primary"
+                            @click="abrirConciliar(f, item)"
+                          >
+                            <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
+                          </VBtn>
+                        </div>
+                      </td>
+
+                      <!-- PDF -->
                       <td>
                         <VBtn
                           v-if="f.url_pdf_bsale"
@@ -237,7 +413,7 @@
                   </tbody>
                 </VTable>
 
-                <p v-else class="text-body-2 text-medium-emphasis">Sin facturas emitidas en este período.</p>
+                <p v-else class="text-body-2 text-medium-emphasis">Sin documentos emitidos en este período.</p>
               </div>
             </td>
           </tr>
@@ -361,7 +537,8 @@
                   <p class="font-weight-bold mb-0">{{ clienteActivo?.razon_social }}</p>
                   <p class="text-caption text-medium-emphasis mb-1">{{ clienteActivo?.identification }}</p>
                   <p v-if="facturaActiva.numero_documento_bsale" class="text-caption mb-3">
-                    Doc. N° <strong>{{ facturaActiva.numero_documento_bsale }}</strong> · Cot. #{{ facturaActiva.cotizacion_id }}
+                    Doc. N° <strong>{{ facturaActiva.numero_documento_bsale }}</strong>
+                    <span v-if="facturaActiva.cotizacion_id"> · Cot. #{{ facturaActiva.cotizacion_id }}</span>
                   </p>
                   <VDivider class="mb-3" />
                   <div class="d-flex justify-space-between">
@@ -400,35 +577,363 @@
         </VCardText>
       </VCard>
     </VDialog>
+
+    <!-- ── Modal Vincular NC a Factura ───────────────────────────────────────── -->
+    <VDialog v-model="dialogVincular" max-width="700" scrollable>
+      <VCard v-if="ncActivo">
+        <VCardTitle class="d-flex align-center pa-4 pb-2">
+          <VIcon start color="success">mdi-link-variant</VIcon>
+          Vincular NC a Factura
+          <VSpacer />
+          <VBtn icon variant="text" @click="dialogVincular = false"><VIcon>mdi-close</VIcon></VBtn>
+        </VCardTitle>
+
+        <VCardText>
+          <!-- Info NC -->
+          <VAlert type="info" variant="tonal" density="compact" class="mb-4">
+            <div class="text-caption">
+              <strong>Nota de Crédito N° {{ ncActivo.numero_documento_bsale }}</strong>
+              · {{ formatFecha(ncActivo.fecha_emision) }}
+              · Monto: <strong>{{ formatMonto(ncActivo.monto) }}</strong>
+            </div>
+          </VAlert>
+
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            Selecciona la factura de venta que esta nota de crédito anula o modifica:
+          </p>
+
+          <!-- Buscador -->
+          <VTextField
+            v-model="buscarVincular"
+            placeholder="Buscar por N° documento..."
+            density="compact"
+            variant="outlined"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            hide-details
+            class="mb-3"
+          />
+
+          <div v-if="loadingFacturasVincular" class="text-center py-6">
+            <VProgressCircular indeterminate size="28" />
+          </div>
+          <VTable v-else density="compact" style="max-height:380px; overflow-y:auto">
+            <thead>
+              <tr>
+                <th>N° Doc</th>
+                <th>Fecha</th>
+                <th class="text-end">Monto</th>
+                <th class="text-end">Pendiente</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="fac in facturasParaVincularFiltradas"
+                :key="fac.id"
+                :class="{ 'bg-success-subtle': facturaSeleccionadaVincular === fac.id }"
+                style="cursor:pointer"
+                @click="facturaSeleccionadaVincular = fac.id"
+              >
+                <td class="font-weight-medium">{{ fac.numero_documento_bsale || '—' }}</td>
+                <td class="text-caption">{{ formatFecha(fac.fecha_emision) }}</td>
+                <td class="text-end">{{ formatMonto(fac.monto) }}</td>
+                <td class="text-end" :class="fac.pendiente > 0 ? 'text-warning font-weight-bold' : 'text-success'">
+                  {{ formatMonto(fac.pendiente) }}
+                </td>
+                <td>
+                  <VIcon v-if="facturaSeleccionadaVincular === fac.id" color="success" size="16">mdi-check-circle</VIcon>
+                </td>
+              </tr>
+              <tr v-if="!facturasParaVincularFiltradas.length">
+                <td colspan="5" class="text-center text-caption text-medium-emphasis py-4">
+                  Sin facturas disponibles
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCardText>
+
+        <VCardActions class="pa-4 pt-0">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogVincular = false">Cancelar</VBtn>
+          <VBtn
+            color="success"
+            variant="flat"
+            :disabled="!facturaSeleccionadaVincular"
+            :loading="loadingVincular"
+            @click="vincularNC"
+          >
+            <VIcon start size="16">mdi-link-variant</VIcon>Vincular
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- ── Modal Aplicar NC a Factura (Escenario B) ──────────────────────────── -->
+    <VDialog v-model="dialogAplicar" max-width="700" scrollable>
+      <VCard v-if="ncActivo">
+        <VCardTitle class="d-flex align-center pa-4 pb-2">
+          <VIcon start color="info">mdi-file-document-edit</VIcon>
+          Aplicar NC a Factura
+          <VSpacer />
+          <VBtn icon variant="text" @click="dialogAplicar = false"><VIcon>mdi-close</VIcon></VBtn>
+        </VCardTitle>
+
+        <VCardText>
+          <!-- Info NC -->
+          <VAlert type="info" variant="tonal" density="compact" class="mb-3">
+            <div class="text-caption">
+              <strong>NC N° {{ ncActivo.numero_documento_bsale }}</strong>
+              · Saldo disponible: <strong>{{ formatMonto(Math.abs(ncActivo.pendiente)) }}</strong>
+            </div>
+          </VAlert>
+          <VAlert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-information">
+            <div class="text-caption">
+              Escenario B: el proveedor aplicó el crédito directamente a una factura futura,
+              sin transferencia bancaria.
+            </div>
+          </VAlert>
+
+          <!-- Selección de factura destino -->
+          <p class="text-body-2 font-weight-medium mb-2">Factura donde se aplica la NC:</p>
+          <div v-if="loadingFacturasVincular" class="text-center py-4">
+            <VProgressCircular indeterminate size="24" />
+          </div>
+          <VTable v-else density="compact" class="mb-4" style="max-height:260px; overflow-y:auto">
+            <thead>
+              <tr>
+                <th>N° Doc</th>
+                <th>Fecha</th>
+                <th class="text-end">Pendiente</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="fac in facturasParaAplicar"
+                :key="fac.id"
+                :class="{ 'bg-info-subtle': facturaSeleccionadaAplicar === fac.id }"
+                style="cursor:pointer"
+                @click="facturaSeleccionadaAplicar = fac.id; montoAplicar = Math.min(Math.abs(ncActivo.pendiente), fac.pendiente)"
+              >
+                <td class="font-weight-medium">{{ fac.numero_documento_bsale || '—' }}</td>
+                <td class="text-caption">{{ formatFecha(fac.fecha_emision) }}</td>
+                <td class="text-end text-warning font-weight-bold">{{ formatMonto(fac.pendiente) }}</td>
+                <td>
+                  <VIcon v-if="facturaSeleccionadaAplicar === fac.id" color="info" size="16">mdi-check-circle</VIcon>
+                </td>
+              </tr>
+              <tr v-if="!facturasParaAplicar.length">
+                <td colspan="4" class="text-center text-caption text-medium-emphasis py-3">
+                  Sin facturas pendientes para aplicar
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+
+          <VRow dense>
+            <VCol cols="6">
+              <VTextField
+                v-model.number="montoAplicar"
+                label="Monto a aplicar"
+                type="number"
+                :max="Math.abs(ncActivo?.pendiente || 0)"
+                min="1"
+                density="compact"
+                variant="outlined"
+                hide-details
+                prefix="$"
+              />
+            </VCol>
+            <VCol cols="6">
+              <VTextField
+                v-model="fechaAplicar"
+                label="Fecha de aplicación"
+                type="date"
+                density="compact"
+                variant="outlined"
+                hide-details
+              />
+            </VCol>
+            <VCol cols="12" class="mt-2">
+              <VTextField
+                v-model="notaAplicar"
+                label="Nota (opcional)"
+                density="compact"
+                variant="outlined"
+                hide-details
+                placeholder="Ej: NC aplicada según acuerdo con cliente"
+              />
+            </VCol>
+          </VRow>
+        </VCardText>
+
+        <VCardActions class="pa-4 pt-0">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogAplicar = false">Cancelar</VBtn>
+          <VBtn
+            color="info"
+            variant="flat"
+            :disabled="!facturaSeleccionadaAplicar || !montoAplicar || montoAplicar <= 0"
+            :loading="loadingAplicar"
+            @click="aplicarNC"
+          >
+            <VIcon start size="16">mdi-check</VIcon>Aplicar NC
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- ── Modal Por Revisar ─────────────────────────────────────────────────── -->
+    <VDialog v-model="dialogPorRevisar" max-width="900" scrollable>
+      <VCard>
+        <VCardTitle class="d-flex align-center pa-4 pb-2">
+          <VIcon start color="warning">mdi-alert-circle</VIcon>
+          Facturas de venta por revisar
+          <VChip v-if="porRevisarList.length" size="small" color="warning" class="ml-2">{{ porRevisarList.length }}</VChip>
+          <VSpacer />
+          <VBtn icon variant="text" @click="dialogPorRevisar = false"><VIcon>mdi-close</VIcon></VBtn>
+        </VCardTitle>
+
+        <VCardText>
+          <VAlert type="warning" variant="tonal" density="compact" class="mb-4" icon="mdi-information">
+            <div class="text-caption">
+              Estas facturas tienen una Nota de Crédito asociada emitida después de haber sido cobradas.
+              Revisa si corresponde un reembolso al cliente o si la NC se aplicará a una futura factura.
+            </div>
+          </VAlert>
+
+          <div v-if="loadingPorRevisar" class="text-center py-6">
+            <VProgressCircular indeterminate size="32" />
+          </div>
+          <VTable v-else density="compact">
+            <thead>
+              <tr>
+                <th>Factura</th>
+                <th>Cliente</th>
+                <th>Fecha</th>
+                <th class="text-end">Monto</th>
+                <th class="text-end">Cobrado</th>
+                <th>NC asociada</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="fac in porRevisarList" :key="fac.id">
+                <td class="font-weight-medium">N° {{ fac.numero_documento_bsale }}</td>
+                <td>
+                  <div class="text-caption font-weight-medium">{{ fac.cliente_nombre }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ fac.cliente_rut }}</div>
+                </td>
+                <td class="text-caption">{{ formatFecha(fac.fecha_emision) }}</td>
+                <td class="text-end">{{ formatMonto(fac.monto) }}</td>
+                <td class="text-end text-success">{{ formatMonto(fac.monto_cobrado) }}</td>
+                <td>
+                  <div v-if="fac.nc_id" class="text-caption">
+                    <span class="font-weight-medium text-success">NC N° {{ fac.nc_numero }}</span>
+                    <span class="text-medium-emphasis d-block">{{ formatMonto(fac.nc_monto) }} · {{ formatFecha(fac.nc_fecha) }}</span>
+                  </div>
+                  <span v-else class="text-caption text-medium-emphasis">Sin NC vinculada</span>
+                </td>
+                <td>
+                  <div class="d-flex" style="gap:4px">
+                    <VBtn
+                      size="x-small"
+                      variant="tonal"
+                      color="info"
+                      :loading="loadingEstado[fac.id]"
+                      @click="cambiarEstadoDesdeModal(fac, 'reembolso_pendiente')"
+                    >Reembolso</VBtn>
+                    <VBtn
+                      size="x-small"
+                      variant="tonal"
+                      color="secondary"
+                      :loading="loadingEstado[fac.id]"
+                      @click="cambiarEstadoDesdeModal(fac, 'ignorado')"
+                    >Ignorar</VBtn>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!porRevisarList.length">
+                <td colspan="7" class="text-center text-caption text-medium-emphasis py-6">
+                  <VIcon size="32" color="success" class="mb-2 d-block">mdi-check-circle</VIcon>
+                  Sin facturas pendientes de revisión
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCardText>
+
+        <VCardActions class="pa-4 pt-0">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogPorRevisar = false">Cerrar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from '@/axiosInstance'
 
+// ── Estado principal ──────────────────────────────────────────────────────────
 const loading        = ref(false)
 const sincronizando  = ref(false)
 const syncSnack      = ref({ show: false, text: '', color: 'success' })
-const clientes = ref([])
-const totales  = ref({})
-const expanded = ref([])
+const snackNc        = ref({ show: false, text: '', color: 'success' })
+const clientes       = ref([])
+const totales        = ref({})
+const expanded       = ref([])
 const facturasCliente  = ref({})
 const loadingFacturas  = ref({})
 
-const dialogConciliar  = ref(false)
-const facturaActiva    = ref(null)
-const clienteActivo    = ref(null)
-const asignados        = ref([])
-const disponibles      = ref([])
-const saldoPorCobrar   = ref(0)
-const buscarMov        = ref('')
+// ── Sugerencias / Rayo ⚡ ─────────────────────────────────────────────────────
+const sugerenciasPorVenta = ref({})
+const loadingRayoVenta    = ref({})
+
+// ── Dialog Conciliar ──────────────────────────────────────────────────────────
+const dialogConciliar   = ref(false)
+const facturaActiva     = ref(null)
+const clienteActivo     = ref(null)
+const asignados         = ref([])
+const disponibles       = ref([])
+const saldoPorCobrar    = ref(0)
+const buscarMov         = ref('')
 const loadingDisponibles = ref(false)
-const loadingAsignar   = ref({})
+const loadingAsignar    = ref({})
 const loadingDesasignar = ref({})
 
-const hoy        = new Date().toISOString().slice(0, 10)
-const haceUnAño  = new Date(new Date().getFullYear() - 1, 0, 1).toISOString().slice(0, 10)
+// ── Dialog Vincular NC ────────────────────────────────────────────────────────
+const dialogVincular              = ref(false)
+const ncActivo                    = ref(null)
+const clienteActivoNc             = ref(null)
+const facturasParaVincular        = ref([]) // todas las facturas no-NC del cliente
+const facturasParaAplicar         = ref([]) // facturas pendientes para Escenario B
+const facturaSeleccionadaVincular = ref(null)
+const buscarVincular              = ref('')
+const loadingVincular             = ref(false)
+const loadingDesvincular          = ref({})
+const loadingFacturasVincular     = ref(false)
+
+// ── Dialog Aplicar NC ─────────────────────────────────────────────────────────
+const dialogAplicar              = ref(false)
+const facturaSeleccionadaAplicar = ref(null)
+const montoAplicar               = ref(null)
+const fechaAplicar               = ref(new Date().toISOString().slice(0, 10))
+const notaAplicar                = ref('')
+const loadingAplicar             = ref(false)
+
+// ── Dialog Por Revisar ────────────────────────────────────────────────────────
+const dialogPorRevisar  = ref(false)
+const porRevisarList    = ref([])
+const loadingPorRevisar = ref(false)
+const loadingEstado     = ref({})
+
+// ── Filtros ───────────────────────────────────────────────────────────────────
+const hoy       = new Date().toISOString().slice(0, 10)
+const haceUnAño = new Date(new Date().getFullYear() - 1, 0, 1).toISOString().slice(0, 10)
 
 const filtros = ref({
   desde:           haceUnAño,
@@ -437,15 +942,27 @@ const filtros = ref({
   solo_pendientes: true,
 })
 
+// ── Headers tabla ─────────────────────────────────────────────────────────────
 const headers = [
-  { title: 'Cliente', key: 'razon_social', sortable: true },
-  { title: 'Facturas', key: 'cantidad_facturas', align: 'center', sortable: true },
-  { title: 'Total facturado', key: 'total_facturado', align: 'end', sortable: true },
-  { title: 'Cobrado', key: 'total_cobrado', align: 'end', sortable: true },
-  { title: 'Por cobrar', key: 'total_pendiente', align: 'end', sortable: true },
-  { title: 'Avance', key: 'progreso', align: 'center', sortable: false },
+  { title: 'Cliente',          key: 'razon_social',    sortable: true },
+  { title: 'Docs',             key: 'cantidad_docs',   align: 'center', sortable: true },
+  { title: 'Total facturado',  key: 'total_facturado', align: 'end',    sortable: true },
+  { title: 'Cobrado',          key: 'total_cobrado',   align: 'end',    sortable: true },
+  { title: 'Por cobrar',       key: 'total_pendiente', align: 'end',    sortable: true },
+  { title: 'Avance',           key: 'progreso',        align: 'center', sortable: false },
 ]
 
+// ── Computed ──────────────────────────────────────────────────────────────────
+const facturasParaVincularFiltradas = computed(() => {
+  if (!buscarVincular.value) return facturasParaVincular.value
+  const q = buscarVincular.value.toLowerCase()
+  return facturasParaVincular.value.filter(f =>
+    (f.numero_documento_bsale || '').includes(q) ||
+    (f.tipo || '').toLowerCase().includes(q)
+  )
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function formatMonto(v) {
   return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v || 0)
 }
@@ -455,6 +972,22 @@ function formatFecha(f) {
   return new Date(f + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+function ncRevisionColor(estado) {
+  const map = { requiere_revision: 'warning', reembolso_pendiente: 'info', aplicado: 'success', ignorado: 'secondary' }
+  return map[estado] || 'default'
+}
+
+function ncRevisionLabel(estado) {
+  const map = { requiere_revision: 'Por revisar', reembolso_pendiente: 'Reembolso pend.', aplicado: 'NC aplicada', ignorado: 'Ignorada' }
+  return map[estado] || estado
+}
+
+function ncRevisionIcon(estado) {
+  const map = { requiere_revision: 'mdi-alert', reembolso_pendiente: 'mdi-bank-transfer', aplicado: 'mdi-check', ignorado: 'mdi-minus-circle' }
+  return map[estado] || 'mdi-help'
+}
+
+// ── Carga principal ───────────────────────────────────────────────────────────
 async function cargar() {
   loading.value = true
   try {
@@ -476,14 +1009,11 @@ async function cargar() {
   }
 }
 
-async function cargarFacturas(clienteId) {
-  if (facturasCliente.value[clienteId]) return
+async function cargarFacturasCliente(clienteId, forzar = false) {
+  if (facturasCliente.value[clienteId] && !forzar) return
   loadingFacturas.value[clienteId] = true
   try {
-    const params = {
-      desde: filtros.value.desde,
-      hasta: filtros.value.hasta,
-    }
+    const params = { desde: filtros.value.desde, hasta: filtros.value.hasta }
     const { data } = await axios.get(`/api/cuentas-por-cobrar/${clienteId}/facturas`, { params })
     facturasCliente.value[clienteId] = data
   } catch (e) {
@@ -495,9 +1025,16 @@ async function cargarFacturas(clienteId) {
 
 function onExpand(newExpanded) {
   expanded.value = newExpanded
-  newExpanded.forEach(id => cargarFacturas(id))
+  newExpanded.forEach(id => cargarFacturasCliente(id))
 }
 
+async function refrescarCliente(clienteId) {
+  delete facturasCliente.value[clienteId]
+  await cargarFacturasCliente(clienteId)
+  await cargar()
+}
+
+// ── Conciliar (banco) ─────────────────────────────────────────────────────────
 async function abrirConciliar(factura, cliente) {
   facturaActiva.value  = factura
   clienteActivo.value  = cliente
@@ -512,7 +1049,7 @@ async function cargarEstadoConciliar() {
   if (!facturaActiva.value) return
   try {
     const { data } = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos`)
-    asignados.value    = data.asignados
+    asignados.value      = data.asignados
     saldoPorCobrar.value = data.saldo_por_cobrar
   } catch (e) { console.error(e) }
   await cargarDisponibles()
@@ -539,7 +1076,7 @@ async function asignar(mov) {
       monto,
     })
     await cargarEstadoConciliar()
-    await refrescarFacturasCliente()
+    await refrescarCliente(clienteActivo.value.cliente_id)
   } catch (e) {
     console.error(e)
   } finally {
@@ -552,7 +1089,7 @@ async function desasignar(pivotId) {
   try {
     await axios.delete(`/api/ventas/${facturaActiva.value.id}/movimientos/${pivotId}`)
     await cargarEstadoConciliar()
-    await refrescarFacturasCliente()
+    await refrescarCliente(clienteActivo.value.cliente_id)
   } catch (e) {
     console.error(e)
   } finally {
@@ -560,14 +1097,145 @@ async function desasignar(pivotId) {
   }
 }
 
-async function refrescarFacturasCliente() {
-  if (!clienteActivo.value) return
-  const id = clienteActivo.value.cliente_id
-  delete facturasCliente.value[id]
-  await cargarFacturas(id)
-  await cargar()
+// ── NC: Vincular ──────────────────────────────────────────────────────────────
+async function abrirVincularNC(nc, cliente) {
+  ncActivo.value                    = nc
+  clienteActivoNc.value             = cliente
+  facturaSeleccionadaVincular.value = null
+  buscarVincular.value              = ''
+  facturasParaVincular.value        = []
+  dialogVincular.value              = true
+  loadingFacturasVincular.value     = true
+  try {
+    const { data } = await axios.get(`/api/cuentas-por-cobrar/${cliente.cliente_id}/facturas`)
+    // Solo facturas normales (no NCs) para poder vincular
+    facturasParaVincular.value = data.filter(f => !f.es_nc)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingFacturasVincular.value = false
+  }
 }
 
+async function vincularNC() {
+  if (!facturaSeleccionadaVincular.value) return
+  loadingVincular.value = true
+  try {
+    await axios.post(`/api/nc/venta/${ncActivo.value.id}/vincular`, {
+      factura_id: facturaSeleccionadaVincular.value,
+    })
+    snackNc.value = { show: true, color: 'success', text: 'NC vinculada correctamente' }
+    dialogVincular.value = false
+    await refrescarCliente(clienteActivoNc.value.cliente_id)
+  } catch (e) {
+    const msg = e.response?.data?.message || 'Error al vincular NC'
+    snackNc.value = { show: true, color: 'error', text: msg }
+  } finally {
+    loadingVincular.value = false
+  }
+}
+
+async function desvincularNC(nc, cliente) {
+  loadingDesvincular.value[nc.id] = true
+  try {
+    await axios.delete(`/api/nc/venta/${nc.id}/vincular`)
+    snackNc.value = { show: true, color: 'info', text: 'Vínculo NC eliminado' }
+    await refrescarCliente(cliente.cliente_id)
+  } catch (e) {
+    snackNc.value = { show: true, color: 'error', text: 'Error al desvincular NC' }
+  } finally {
+    delete loadingDesvincular.value[nc.id]
+  }
+}
+
+// ── NC: Aplicar (Escenario B) ─────────────────────────────────────────────────
+async function abrirAplicarNC(nc, cliente) {
+  ncActivo.value                   = nc
+  clienteActivoNc.value            = cliente
+  facturaSeleccionadaAplicar.value = null
+  montoAplicar.value               = null
+  fechaAplicar.value               = new Date().toISOString().slice(0, 10)
+  notaAplicar.value                = ''
+  facturasParaAplicar.value        = []
+  dialogAplicar.value              = true
+  loadingFacturasVincular.value    = true
+  try {
+    const { data } = await axios.get(`/api/cuentas-por-cobrar/${cliente.cliente_id}/facturas`)
+    // Solo facturas normales con saldo pendiente
+    facturasParaAplicar.value = data.filter(f => !f.es_nc && f.pendiente > 0)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingFacturasVincular.value = false
+  }
+}
+
+async function aplicarNC() {
+  if (!facturaSeleccionadaAplicar.value || !montoAplicar.value) return
+  loadingAplicar.value = true
+  try {
+    await axios.post(`/api/nc/venta/${ncActivo.value.id}/aplicar`, {
+      factura_id: facturaSeleccionadaAplicar.value,
+      monto:      montoAplicar.value,
+      fecha:      fechaAplicar.value,
+      nota:       notaAplicar.value || null,
+    })
+    snackNc.value = { show: true, color: 'success', text: 'NC aplicada correctamente' }
+    dialogAplicar.value = false
+    await refrescarCliente(clienteActivoNc.value.cliente_id)
+  } catch (e) {
+    const msg = e.response?.data?.message || 'Error al aplicar NC'
+    snackNc.value = { show: true, color: 'error', text: msg }
+  } finally {
+    loadingAplicar.value = false
+  }
+}
+
+// ── NC: Cambiar estado factura ────────────────────────────────────────────────
+async function cambiarEstadoFactura(factura, estado, cliente) {
+  loadingEstado.value[factura.id] = true
+  try {
+    await axios.patch(`/api/nc/venta/factura/${factura.id}/estado`, { estado })
+    const clienteId = cliente?.cliente_id ?? clienteActivoNc.value?.cliente_id
+    if (clienteId) await refrescarCliente(clienteId)
+    else await cargar()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    delete loadingEstado.value[factura.id]
+  }
+}
+
+async function cambiarEstadoDesdeModal(fac, estado) {
+  loadingEstado.value[fac.id] = true
+  try {
+    await axios.patch(`/api/nc/venta/factura/${fac.id}/estado`, { estado })
+    // Quitar de la lista local
+    porRevisarList.value = porRevisarList.value.filter(f => f.id !== fac.id)
+    await cargar()
+    snackNc.value = { show: true, color: 'success', text: 'Estado actualizado' }
+  } catch (e) {
+    snackNc.value = { show: true, color: 'error', text: 'Error al cambiar estado' }
+  } finally {
+    delete loadingEstado.value[fac.id]
+  }
+}
+
+// ── Por Revisar ───────────────────────────────────────────────────────────────
+async function abrirPorRevisar() {
+  dialogPorRevisar.value  = true
+  loadingPorRevisar.value = true
+  try {
+    const { data } = await axios.get('/api/cuentas-por-cobrar/por-revisar')
+    porRevisarList.value = data.facturas
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingPorRevisar.value = false
+  }
+}
+
+// ── Sincronizar Bsale ─────────────────────────────────────────────────────────
 async function sincronizarDesideBsale() {
   sincronizando.value = true
   try {
@@ -588,5 +1256,59 @@ async function sincronizarDesideBsale() {
   }
 }
 
-onMounted(cargar)
+// ── Sugerencias automáticas (Rayo ⚡) ─────────────────────────────────────────
+async function cargarSugerencias() {
+  try {
+    const { data } = await axios.get('/api/conciliacion/sugerencias')
+    const mapa = {}
+    for (const s of data) {
+      if (s.monto_exacto && s.tipo_documento === 'venta') {
+        mapa[s.documento.id] = s
+      }
+    }
+    sugerenciasPorVenta.value = mapa
+  } catch (e) {
+    console.error('sugerencias CxC:', e)
+  }
+}
+
+async function conciliarRayoVenta(factura, cliente) {
+  const sug = sugerenciasPorVenta.value[factura.id]
+  if (!sug || loadingRayoVenta.value[factura.id]) return
+  loadingRayoVenta.value[factura.id] = true
+  try {
+    await axios.post(`/api/ventas/${factura.id}/movimientos`, {
+      movimiento_id: sug.movimiento.id,
+      monto: sug.monto_sugerido,
+    })
+    delete sugerenciasPorVenta.value[factura.id]
+    await refrescarCliente(cliente?.cliente_id ?? Object.keys(facturasCliente.value).find(id =>
+      facturasCliente.value[id]?.some(f => f.id === factura.id)
+    ))
+  } catch (e) {
+    console.error('conciliar rayo venta:', e)
+  } finally {
+    delete loadingRayoVenta.value[factura.id]
+  }
+}
+
+onMounted(async () => {
+  await cargar()
+  cargarSugerencias()
+})
 </script>
+
+<style scoped>
+.nc-row {
+  background: rgba(var(--v-theme-success), 0.04);
+  border-left: 3px solid rgb(var(--v-theme-success));
+}
+
+.bg-success-subtle {
+  background: rgba(var(--v-theme-success), 0.08) !important;
+}
+
+.bg-info-subtle {
+  background: rgba(var(--v-theme-info), 0.08) !important;
+}
+</style>

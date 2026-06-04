@@ -127,16 +127,19 @@ class VentaMovimientoController extends Controller
     {
         $asignados = DB::table('venta_movimiento as vm')
             ->join('documentos_facturacion as df', 'df.id', '=', 'vm.venta_id')
+            ->leftJoin('cotizaciones as c',    'c.id',    '=', 'df.cotizacion_id')
+            ->leftJoin('clientes as cl_cot',   'cl_cot.id', '=', 'c.cliente_id')
+            ->leftJoin('clientes as cl_dir',   'cl_dir.id', '=', 'df.cliente_id')
             ->where('vm.movimiento_id', $movimientoId)
             ->select(
                 'vm.id as pivot_id',
                 'vm.monto as monto_asignado',
                 'df.id as venta_id',
-                'df.folio',
+                DB::raw('df.numero_documento_bsale as folio'),
                 'df.fecha_emision',
-                'df.nombre_receptor',
+                DB::raw('COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre) as nombre_receptor'),
                 'df.monto',
-                'df.tipo_doc',
+                DB::raw('df.tipo as tipo_doc'),
             )
             ->get();
 
@@ -148,28 +151,47 @@ class VentaMovimientoController extends Controller
     {
         $buscar = $request->get('buscar');
 
+        // Saldo restante del movimiento (para ordenar por cercanía de monto)
+        $mov = DB::table('movimientos_bancarios')->where('id', $movimientoId)->firstOrFail();
+        $asignadoMov = DB::table('venta_movimiento')
+            ->where('movimiento_id', $movimientoId)
+            ->sum('monto');
+        $saldoMov = max(0, $mov->monto - $asignadoMov);
+
         $ventas = DB::table('documentos_facturacion as df')
+            ->leftJoin('cotizaciones as c',    'c.id',    '=', 'df.cotizacion_id')
+            ->leftJoin('clientes as cl_cot',   'cl_cot.id', '=', 'c.cliente_id')
+            ->leftJoin('clientes as cl_dir',   'cl_dir.id', '=', 'df.cliente_id')
             ->leftJoin(
                 DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
                 'df.id', '=', 'vm.venta_id'
             )
+            // Excluir ventas ya vinculadas a este movimiento
+            ->whereNotExists(function ($q) use ($movimientoId) {
+                $q->from('venta_movimiento as vm2')
+                  ->whereColumn('vm2.venta_id', 'df.id')
+                  ->where('vm2.movimiento_id', $movimientoId);
+            })
             ->where('df.estado', 'emitido')
             ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) > 0')
             ->select(
                 'df.id',
-                'df.folio',
+                DB::raw('df.numero_documento_bsale as folio'),
                 'df.fecha_emision',
-                'df.nombre_receptor',
-                'df.rut_receptor',
+                DB::raw('COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre) as nombre_receptor'),
+                DB::raw('COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut_receptor'),
                 'df.monto',
-                'df.tipo_doc',
+                DB::raw('df.tipo as tipo_doc'),
                 DB::raw('df.monto - COALESCE(vm.cobrado, 0) as saldo_por_cobrar')
             )
             ->when($buscar, fn($q) => $q->where(function ($q2) use ($buscar) {
-                $q2->where('df.folio', 'like', "%$buscar%")
-                   ->orWhere('df.nombre_receptor', 'like', "%$buscar%");
+                $q2->where('df.numero_documento_bsale', 'like', "%$buscar%")
+                   ->orWhere('df.bsale_cliente_nombre',  'like', "%$buscar%")
+                   ->orWhere('cl_cot.razon_social',       'like', "%$buscar%")
+                   ->orWhere('cl_dir.razon_social',       'like', "%$buscar%");
             }))
-            ->orderByDesc('df.fecha_emision')
+            // Ordenar por monto más cercano al saldo del movimiento (igual que compras)
+            ->orderByRaw('ABS(df.monto - COALESCE(vm.cobrado, 0) - ?) ASC', [$saldoMov])
             ->paginate(30);
 
         return response()->json($ventas);

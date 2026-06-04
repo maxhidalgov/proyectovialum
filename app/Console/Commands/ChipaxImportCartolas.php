@@ -172,7 +172,7 @@ class ChipaxImportCartolas extends Command
         $conciliadoChipax = !isset($pendingIds[$item['id']])
             || (($item['Saldo']['idCartolasDocumentos'] ?? 0) > 0);
 
-        $monto  = $item['abono'] > 0 ? $item['abono'] : -abs($item['cargo']);
+        $monto  = $item['abono'] > 0 ? $item['abono'] : abs($item['cargo']);
         $tipo   = $item['abono'] > 0 ? 'C' : 'D';
         $cuenta = $item['CuentaCorriente']['numeroCuenta'] ?? 'CHIPAX';
         $banco  = $item['CuentaCorriente']['banco'] ?? '';

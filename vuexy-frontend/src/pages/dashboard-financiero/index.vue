@@ -61,7 +61,12 @@
             <p v-else class="text-h5 font-weight-bold mb-0" :class="data.kpis.saldo_cta_corriente >= 0 ? 'text-info' : 'text-error'">
               {{ clp(data.kpis.saldo_cta_corriente) }}
             </p>
-            <p class="text-caption text-medium-emphasis mt-1 mb-0">Último saldo disponible en banco</p>
+            <p class="text-caption text-medium-emphasis mt-1 mb-0">
+              <template v-if="data.kpis.saldo_cta_corriente_fecha">
+                Al {{ fmtFecha(data.kpis.saldo_cta_corriente_fecha) }}
+              </template>
+              <template v-else>Último saldo disponible en banco</template>
+            </p>
           </v-card-text>
         </v-card>
       </v-col>
@@ -311,6 +316,11 @@ function fmtMes(ym) {
   const [y, m] = ym.split('-')
   const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   return `${meses[parseInt(m) - 1]}-${y.slice(2)}`
+}
+
+function fmtFecha(f) {
+  if (!f) return '—'
+  return new Date(f + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function iniciales(nombre) {
