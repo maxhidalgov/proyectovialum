@@ -393,21 +393,17 @@
                           >
                             <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
                           </VBtn>
+                          <VBtn
+                            v-if="f.url_pdf_bsale"
+                            size="x-small"
+                            variant="text"
+                            icon
+                            :href="f.url_pdf_bsale"
+                            target="_blank"
+                          >
+                            <VIcon size="14">mdi-file-pdf-box</VIcon>
+                          </VBtn>
                         </div>
-                      </td>
-
-                      <!-- PDF -->
-                      <td>
-                        <VBtn
-                          v-if="f.url_pdf_bsale"
-                          size="x-small"
-                          variant="text"
-                          icon
-                          :href="f.url_pdf_bsale"
-                          target="_blank"
-                        >
-                          <VIcon size="14">mdi-file-pdf-box</VIcon>
-                        </VBtn>
                       </td>
                     </tr>
                   </tbody>

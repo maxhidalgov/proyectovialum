@@ -94,8 +94,18 @@ class BsaleVentaSyncController extends Controller
     {
         $bsaleId = (string) $doc['id'];
 
-        // Si ya existe en DB (creado desde app o sync previo) → omitir
-        if (DB::table('documentos_facturacion')->where('id_documento_bsale', $bsaleId)->exists()) {
+        // Si ya existe en DB → actualizar url_pdf_bsale si falta, luego omitir
+        $existente = DB::table('documentos_facturacion')
+            ->where('id_documento_bsale', $bsaleId)
+            ->select('id', 'url_pdf_bsale')
+            ->first();
+
+        if ($existente) {
+            if (!$existente->url_pdf_bsale && !empty($doc['urlPdf'])) {
+                DB::table('documentos_facturacion')
+                    ->where('id', $existente->id)
+                    ->update(['url_pdf_bsale' => $doc['urlPdf'], 'updated_at' => now()]);
+            }
             return 'omitido';
         }
 
@@ -130,7 +140,7 @@ class BsaleVentaSyncController extends Controller
             'estado'                     => 'emitido',
             'id_documento_bsale'         => $bsaleId,
             'numero_documento_bsale'     => (string) ($doc['number'] ?? ''),
-            'url_pdf_bsale'              => null,
+            'url_pdf_bsale'              => $doc['urlPdf'] ?? null,
             'fecha_emision'              => $fechaEmision,
             'tipo_documento_bsale_id'    => $tipo,
             'nro_comprobante_transbank'  => $nroComprobante,
