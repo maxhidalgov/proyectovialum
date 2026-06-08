@@ -332,7 +332,15 @@
                               </VListItem>
                             </VList>
                           </VMenu>
-                          <VChip v-else-if="!f.nc_revision_estado" size="x-small" :color="f.pendiente <= 0 ? 'success' : 'warning'" variant="tonal">
+                          <VChip
+                            v-else-if="!f.nc_revision_estado"
+                            size="x-small"
+                            :color="f.pendiente <= 0 ? 'success' : 'warning'"
+                            variant="tonal"
+                            :style="f.pendiente <= 0 ? 'cursor:pointer' : ''"
+                            @click="f.pendiente <= 0 ? abrirConciliar(f, item) : null"
+                          >
+                            <VIcon v-if="f.pendiente <= 0" start size="11">mdi-eye-outline</VIcon>
                             {{ f.pendiente <= 0 ? 'Cobrada' : 'Pendiente' }}
                           </VChip>
                         </div>
@@ -425,7 +433,7 @@
     <VDialog v-model="dialogConciliar" max-width="1200" scrollable>
       <VCard v-if="facturaActiva">
         <VCardTitle class="d-flex align-center pa-4 pb-2">
-          <span>Conciliar Factura de Venta</span>
+          <span>{{ facturaActiva.pendiente <= 0 ? 'Detalle de cobros — Factura de Venta' : 'Conciliar Factura de Venta' }}</span>
           <VSpacer />
           <VBtn icon variant="text" @click="dialogConciliar = false"><VIcon>mdi-close</VIcon></VBtn>
         </VCardTitle>
