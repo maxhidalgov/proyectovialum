@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\ChipaxApiService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -9,70 +10,83 @@ use Illuminate\Support\Facades\Http;
 class ChipaxSyncCobranza extends Command
 {
     protected $signature   = 'chipax:sync-cobranza {--limit=0 : Límite de DTEs a procesar (0 = todos)}';
-    protected $description = 'Sincroniza monto_por_cobrar desde Chipax /dtes para CxC';
-
-    private string $baseUrl = 'https://api.chipax.com/v2/';
+    protected $description = 'Sincroniza monto_por_cobrar (saldoDeudor) desde Chipax /dtes para CxC';
 
     public function handle(): int
     {
-        $cookie = env('CHIPAX_COOKIE', '');
-        if (!$cookie) {
-            $this->error('CHIPAX_COOKIE no configurada');
+        $limit = (int) $this->option('limit');
+
+        $this->info('Sincronizando saldoDeudor desde Chipax API oficial /dtes...');
+
+        try {
+            $api   = new ChipaxApiService();
+            $token = $api->getToken();
+        } catch (\Throwable $e) {
+            $this->error('Error autenticando con Chipax: ' . $e->getMessage());
             return 1;
         }
 
-        $limit        = (int) $this->option('limit');
-        $pageSize     = 100;
-        $offset       = 0;
-        $total        = 0;
+        $page         = 1;
+        $totalPages   = 1;
+        $processed    = 0;
         $actualizados = 0;
         $noMatch      = 0;
-
-        $this->info('Sincronizando monto_por_cobrar desde Chipax /dtes...');
+        $bar          = null;
 
         do {
-            $res = Http::timeout(30)
-                ->withHeaders(['Cookie' => $cookie])
-                ->get($this->baseUrl . 'dtes', [
-                    'limit'  => $pageSize,
-                    'offset' => $offset,
-                ]);
+            $resp = Http::timeout(30)
+                ->withHeaders(['Authorization' => 'JWT ' . $token])
+                ->get('https://api.chipax.com/v2/dtes', ['page' => $page, 'perPage' => 50]);
 
-            if ($res->failed()) {
-                $this->error("Error API Chipax: HTTP {$res->status()}");
+            if ($resp->failed()) {
+                $this->error("Error API Chipax: HTTP {$resp->status()} en página {$page}");
                 return 1;
             }
 
-            $dtes = $res->json();
-            if (empty($dtes) || !is_array($dtes)) break;
+            $data  = $resp->json();
+            $items = $data['items'] ?? [];
 
-            foreach ($dtes as $dte) {
-                $folio          = (string) ($dte['folio'] ?? '');
-                $montoPorCobrar = isset($dte['monto_por_cobrar']) ? (float) $dte['monto_por_cobrar'] : null;
+            if ($page === 1) {
+                $totalPages = $data['paginationAttributes']['totalPages'] ?? 1;
+                $total      = $data['paginationAttributes']['count'] ?? count($items);
+                $this->line("  → {$total} DTEs en {$totalPages} páginas");
+                $bar = $this->output->createProgressBar($totalPages);
+                $bar->start();
+            }
 
-                if (!$folio || $montoPorCobrar === null) continue;
+            if (empty($items)) break;
+
+            foreach ($items as $dte) {
+                $folio       = (string) ($dte['folio'] ?? '');
+                $saldoDeudor = isset($dte['Saldo']['saldoDeudor']) ? (float) $dte['Saldo']['saldoDeudor'] : null;
+
+                if (!$folio || $saldoDeudor === null) continue;
 
                 $affected = DB::table('documentos_facturacion')
                     ->where('numero_documento_bsale', $folio)
-                    ->whereIn('tipo_documento_bsale_id', [1, 3, 4, 5, 6])
                     ->update([
-                        'chipax_monto_por_cobrar'   => $montoPorCobrar,
+                        'chipax_monto_por_cobrar'   => $saldoDeudor,
                         'chipax_cobranza_synced_at' => now(),
                         'updated_at'                => now(),
                     ]);
 
                 $affected ? $actualizados++ : $noMatch++;
-                $total++;
+                $processed++;
 
-                if ($limit > 0 && $total >= $limit) break 2;
+                if ($limit > 0 && $processed >= $limit) break 2;
             }
 
-            $offset += $pageSize;
-            $this->line("  Procesados: {$total} (actualizados: {$actualizados})");
+            $bar?->advance();
+            $page++;
 
-        } while (count($dtes) === $pageSize);
+            if ($page % 10 === 0) usleep(300_000);
 
-        $this->info("Completado: {$total} DTEs | {$actualizados} actualizados | {$noMatch} sin match local.");
+        } while ($page <= $totalPages);
+
+        $bar?->finish();
+        $this->newLine(2);
+        $this->info("Completado: {$processed} DTEs procesados | {$actualizados} actualizados | {$noMatch} sin match local.");
+
         return 0;
     }
 }
