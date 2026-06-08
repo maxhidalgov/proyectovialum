@@ -12,12 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
     health: '/up',
 )
     ->withMiddleware(function (Middleware $middleware) {
-        // Configuración CORS para permitir peticiones desde el frontend
-        $middleware->api(prepend: [
+        $middleware->prepend([
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
-        
-        // Registrar middleware de permisos
+
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
