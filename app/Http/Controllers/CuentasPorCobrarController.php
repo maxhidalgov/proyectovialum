@@ -21,7 +21,8 @@ class CuentasPorCobrarController extends Controller
                 COALESCE(vm.monto_cobrado, 0)
                   + CASE
                       WHEN tbk.monto_tbk IS NOT NULL THEN tbk.monto_tbk
-                      WHEN df.pagado_con_tarjeta = 1 AND COALESCE(vm.monto_cobrado, 0) = 0 THEN df.monto
+                      WHEN df.pagado_con_tarjeta = 1
+                        THEN GREATEST(0, df.monto - COALESCE(vm.monto_cobrado, 0))
                       ELSE 0
                     END
                   + COALESCE(df.monto_cobrado_manual, 0)
