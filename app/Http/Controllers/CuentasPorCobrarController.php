@@ -19,7 +19,10 @@ class CuentasPorCobrarController extends Controller
             SELECT
                 df.id AS df_id,
                 COALESCE(vm.monto_cobrado, 0)
-                  + COALESCE(tbk.monto_tbk, 0)
+                  + COALESCE(
+                      tbk.monto_tbk,
+                      CASE WHEN df.pagado_con_tarjeta = 1 THEN df.monto ELSE 0 END
+                    )
                   + COALESCE(df.monto_cobrado_manual, 0)
                   + CASE WHEN df.tipo_documento_bsale_id = 2
                          THEN COALESCE(ncnc.monto_nc, 0)
