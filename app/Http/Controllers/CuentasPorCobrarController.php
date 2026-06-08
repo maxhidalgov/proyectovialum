@@ -19,6 +19,7 @@ class CuentasPorCobrarController extends Controller
             SELECT
                 df.id AS df_id,
                 COALESCE(vm.monto_cobrado, 0)
+                  + COALESCE(tbk.monto_tbk, 0)
                   + CASE WHEN df.tipo_documento_bsale_id = 2
                          THEN COALESCE(ncnc.monto_nc, 0)
                          ELSE COALESCE(ncf.monto_nc, 0)
@@ -26,6 +27,11 @@ class CuentasPorCobrarController extends Controller
             FROM documentos_facturacion df
             LEFT JOIN (SELECT venta_id, SUM(monto) monto_cobrado FROM venta_movimiento GROUP BY venta_id) vm
                    ON vm.venta_id = df.id
+            LEFT JOIN (SELECT tf.documento_id, SUM(tt.monto_original) monto_tbk
+                       FROM transbank_factura tf
+                       JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
+                       GROUP BY tf.documento_id) tbk
+                   ON tbk.documento_id = df.id
             LEFT JOIN (SELECT factura_id AS df_id, SUM(monto) monto_nc FROM venta_nc_aplicacion GROUP BY factura_id) ncf
                    ON ncf.df_id = df.id
             LEFT JOIN (SELECT nc_id AS df_id, SUM(monto) monto_nc FROM venta_nc_aplicacion GROUP BY nc_id) ncnc
