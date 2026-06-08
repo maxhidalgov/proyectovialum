@@ -332,17 +332,30 @@
                               </VListItem>
                             </VList>
                           </VMenu>
-                          <VChip
-                            v-else-if="!f.nc_revision_estado"
-                            size="x-small"
-                            :color="f.pendiente <= 0 ? 'success' : 'warning'"
-                            variant="tonal"
-                            :style="f.pendiente <= 0 ? 'cursor:pointer' : ''"
-                            @click="f.pendiente <= 0 ? abrirConciliar(f, item) : null"
-                          >
-                            <VIcon v-if="f.pendiente <= 0" start size="11">mdi-eye-outline</VIcon>
-                            {{ f.pendiente <= 0 ? 'Cobrada' : 'Pendiente' }}
-                          </VChip>
+                          <template v-else-if="!f.nc_revision_estado">
+                            <VChip
+                              size="x-small"
+                              :color="f.pendiente <= 0 ? 'success' : 'warning'"
+                              variant="tonal"
+                              :style="f.pendiente <= 0 ? 'cursor:pointer' : ''"
+                              @click="f.pendiente <= 0 ? abrirConciliar(f, item) : null"
+                            >
+                              <VIcon v-if="f.pendiente <= 0" start size="11">mdi-eye-outline</VIcon>
+                              {{ f.pendiente <= 0 ? 'Cobrada' : 'Pendiente' }}
+                            </VChip>
+                            <VChip
+                              v-if="f.monto_cobrado_manual > 0"
+                              size="x-small"
+                              color="secondary"
+                              variant="tonal"
+                              class="ml-1"
+                              closable
+                              :disabled="!!loadingMarcarCobrada[f.id]"
+                              @click:close="desmarcarCobradoManual(f, item)"
+                            >
+                              <VIcon start size="11">mdi-cash</VIcon>Manual
+                            </VChip>
+                          </template>
                         </div>
                       </td>
 
@@ -401,6 +414,21 @@
                           >
                             <VIcon size="14" class="mr-1">mdi-link-variant</VIcon>Conciliar
                           </VBtn>
+                          <VTooltip v-if="f.pendiente > 0" location="bottom" text="Marcar como cobrada (pago sin mov. bancario)">
+                            <template #activator="{ props: tp }">
+                              <VBtn
+                                v-bind="tp"
+                                size="x-small"
+                                icon
+                                variant="tonal"
+                                color="secondary"
+                                :loading="loadingMarcarCobrada[f.id]"
+                                @click="abrirMarcarCobrada(f, item)"
+                              >
+                                <VIcon size="15">mdi-cash-check</VIcon>
+                              </VBtn>
+                            </template>
+                          </VTooltip>
                           <VBtn
                             v-if="f.url_pdf_bsale"
                             size="x-small"
@@ -875,6 +903,68 @@
         </VCardActions>
       </VCard>
     </VDialog>
+
+    <!-- ── Modal Marcar cobrada manualmente ──────────────────────────────────── -->
+    <VDialog v-model="dialogMarcarCobrada" max-width="460">
+      <VCard v-if="facturaParaMarcar">
+        <VCardTitle class="d-flex align-center pa-4 pb-2">
+          <VIcon start color="secondary">mdi-cash-check</VIcon>
+          Registrar cobro manual
+          <VSpacer />
+          <VBtn icon variant="text" @click="dialogMarcarCobrada = false"><VIcon>mdi-close</VIcon></VBtn>
+        </VCardTitle>
+
+        <VCardText>
+          <VAlert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-information">
+            <div class="text-caption">
+              Usa esta opción para registrar cobros realizados fuera del banco (Transbank, efectivo, etc.)
+              que no aparecen en los movimientos bancarios.
+            </div>
+          </VAlert>
+
+          <div class="text-caption text-medium-emphasis mb-1">Factura N° {{ facturaParaMarcar.numero_documento_bsale }}</div>
+          <div class="text-body-2 mb-4">
+            Total: <strong>{{ formatMonto(facturaParaMarcar.monto) }}</strong>
+            · Pendiente: <strong class="text-warning">{{ formatMonto(facturaParaMarcar.pendiente) }}</strong>
+          </div>
+
+          <VTextField
+            v-model.number="montoMarcar"
+            label="Monto a registrar"
+            type="number"
+            :min="1"
+            :max="facturaParaMarcar.monto"
+            density="compact"
+            variant="outlined"
+            prefix="$"
+            class="mb-3"
+            hide-details
+          />
+          <VTextField
+            v-model="notaMarcar"
+            label="Nota (opcional)"
+            density="compact"
+            variant="outlined"
+            hide-details
+            placeholder="Ej: Pago via Transbank nov 2024"
+          />
+        </VCardText>
+
+        <VCardActions class="pa-4 pt-0">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogMarcarCobrada = false">Cancelar</VBtn>
+          <VBtn
+            color="secondary"
+            variant="flat"
+            :disabled="!montoMarcar || montoMarcar <= 0"
+            :loading="!!loadingMarcarCobrada[facturaParaMarcar?.id]"
+            @click="confirmarMarcarCobrada"
+          >
+            <VIcon start size="16">mdi-check</VIcon>Registrar
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -928,6 +1018,14 @@ const montoAplicar               = ref(null)
 const fechaAplicar               = ref(new Date().toISOString().slice(0, 10))
 const notaAplicar                = ref('')
 const loadingAplicar             = ref(false)
+
+// ── Dialog Cobro Manual ───────────────────────────────────────────────────────
+const dialogMarcarCobrada  = ref(false)
+const facturaParaMarcar    = ref(null)
+const clienteParaMarcar    = ref(null)
+const montoMarcar          = ref(0)
+const notaMarcar           = ref('')
+const loadingMarcarCobrada = ref({})
 
 // ── Dialog Por Revisar ────────────────────────────────────────────────────────
 const dialogPorRevisar  = ref(false)
@@ -1222,6 +1320,45 @@ async function cambiarEstadoDesdeModal(fac, estado) {
     snackNc.value = { show: true, color: 'error', text: 'Error al cambiar estado' }
   } finally {
     delete loadingEstado.value[fac.id]
+  }
+}
+
+// ── Cobro Manual ──────────────────────────────────────────────────────────────
+function abrirMarcarCobrada(f, cliente) {
+  facturaParaMarcar.value = f
+  clienteParaMarcar.value = cliente
+  montoMarcar.value       = f.pendiente > 0 ? Math.round(f.pendiente) : Math.round(f.monto)
+  notaMarcar.value        = ''
+  dialogMarcarCobrada.value = true
+}
+
+async function confirmarMarcarCobrada() {
+  const f = facturaParaMarcar.value
+  if (!f) return
+  loadingMarcarCobrada.value[f.id] = true
+  try {
+    await axios.put(`/api/cuentas-cobrar/${f.id}/cobro-manual`, {
+      monto: montoMarcar.value,
+      nota:  notaMarcar.value || 'Cobro registrado manualmente',
+    })
+    dialogMarcarCobrada.value = false
+    await refrescarCliente(clienteParaMarcar.value.cliente_id)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    delete loadingMarcarCobrada.value[f.id]
+  }
+}
+
+async function desmarcarCobradoManual(f, cliente) {
+  loadingMarcarCobrada.value[f.id] = true
+  try {
+    await axios.delete(`/api/cuentas-cobrar/${f.id}/cobro-manual`)
+    await refrescarCliente(cliente.cliente_id)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    delete loadingMarcarCobrada.value[f.id]
   }
 }
 

@@ -20,6 +20,7 @@ class CuentasPorCobrarController extends Controller
                 df.id AS df_id,
                 COALESCE(vm.monto_cobrado, 0)
                   + COALESCE(tbk.monto_tbk, 0)
+                  + COALESCE(df.monto_cobrado_manual, 0)
                   + CASE WHEN df.tipo_documento_bsale_id = 2
                          THEN COALESCE(ncnc.monto_nc, 0)
                          ELSE COALESCE(ncf.monto_nc, 0)
@@ -138,6 +139,7 @@ class CuentasPorCobrarController extends Controller
                 'df.fecha_emision', 'df.numero_documento_bsale',
                 'df.url_pdf_bsale', 'df.id_documento_bsale', 'df.tipo_documento_bsale_id',
                 'df.nc_referencia_df_id', 'df.nc_revision_estado',
+                'df.monto_cobrado_manual', 'df.cobrado_manual_nota',
                 DB::raw('COALESCE(ec.monto_cobrado_efectivo, 0) as monto_cobrado'),
                 DB::raw('CASE WHEN df.tipo_documento_bsale_id = 2
                               THEN -(df.monto - COALESCE(ec.monto_cobrado_efectivo,0))
@@ -188,5 +190,35 @@ class CuentasPorCobrarController extends Controller
             ->count();
 
         return response()->json(['facturas' => $facturas, 'count' => $count]);
+    }
+
+    // PUT /api/cuentas-cobrar/{id}/cobro-manual
+    public function marcarCobradoManual(Request $request, int $id)
+    {
+        $doc = DB::table('documentos_facturacion')->where('id', $id)->first(['id', 'monto']);
+        if (!$doc) return response()->json(['error' => 'No encontrado'], 404);
+
+        $monto = $request->input('monto', $doc->monto);
+        $nota  = $request->input('nota', 'Marcado manualmente como cobrado');
+
+        DB::table('documentos_facturacion')->where('id', $id)->update([
+            'monto_cobrado_manual' => $monto,
+            'cobrado_manual_nota'  => $nota,
+            'updated_at'           => now(),
+        ]);
+
+        return response()->json(['ok' => true, 'monto_cobrado_manual' => $monto]);
+    }
+
+    // DELETE /api/cuentas-cobrar/{id}/cobro-manual
+    public function desmarcarCobradoManual(int $id)
+    {
+        DB::table('documentos_facturacion')->where('id', $id)->update([
+            'monto_cobrado_manual' => null,
+            'cobrado_manual_nota'  => null,
+            'updated_at'           => now(),
+        ]);
+
+        return response()->json(['ok' => true]);
     }
 }
