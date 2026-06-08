@@ -18,14 +18,18 @@ class CuentasPorCobrarController extends Controller
         return DB::raw("(
             SELECT
                 df.id AS df_id,
-                COALESCE(vm.monto_cobrado, 0)
-                  + COALESCE(tbk.monto_tbk, 0)
-                  + COALESCE(df.monto_cobrado_manual, 0)
-                  + COALESCE(df.monto_cobrado_manual, 0)
-                  + CASE WHEN df.tipo_documento_bsale_id = 2
-                         THEN COALESCE(ncnc.monto_nc, 0)
-                         ELSE COALESCE(ncf.monto_nc, 0)
-                    END AS monto_cobrado_efectivo
+                CASE
+                  WHEN df.chipax_monto_por_cobrar IS NOT NULL
+                    THEN df.monto - df.chipax_monto_por_cobrar
+                  ELSE
+                    COALESCE(vm.monto_cobrado, 0)
+                      + COALESCE(tbk.monto_tbk, 0)
+                      + COALESCE(df.monto_cobrado_manual, 0)
+                      + CASE WHEN df.tipo_documento_bsale_id = 2
+                             THEN COALESCE(ncnc.monto_nc, 0)
+                             ELSE COALESCE(ncf.monto_nc, 0)
+                        END
+                END AS monto_cobrado_efectivo
             FROM documentos_facturacion df
             LEFT JOIN (SELECT venta_id, SUM(monto) monto_cobrado FROM venta_movimiento GROUP BY venta_id) vm
                    ON vm.venta_id = df.id

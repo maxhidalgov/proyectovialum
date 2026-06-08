@@ -19,7 +19,15 @@ Artisan::command('inspire', function () {
 
 Schedule::command('bsale:sync')
     ->everyFourHours()
-    ->withoutOverlapping(10)        // skip si el anterior aún corre (max 10 min lock)
+    ->withoutOverlapping(10)
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/bsale-sync.log'));
+
+// Sincroniza estado de cobranza (monto_por_cobrar) desde Chipax /dtes
+// Corre cada 6 horas → actualiza qué facturas están pagadas según Chipax
+Schedule::command('chipax:sync-cobranza')
+    ->everySixHours()
+    ->withoutOverlapping(15)
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/chipax-cobranza.log'));
 
