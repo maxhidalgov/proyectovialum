@@ -19,12 +19,8 @@ class CuentasPorCobrarController extends Controller
             SELECT
                 df.id AS df_id,
                 COALESCE(vm.monto_cobrado, 0)
-                  + CASE
-                      WHEN tbk.monto_tbk IS NOT NULL THEN tbk.monto_tbk
-                      WHEN df.pagado_con_tarjeta = 1
-                        THEN GREATEST(0, df.monto - COALESCE(vm.monto_cobrado, 0))
-                      ELSE 0
-                    END
+                  + COALESCE(tbk.monto_tbk, 0)
+                  + COALESCE(df.monto_cobrado_manual, 0)
                   + COALESCE(df.monto_cobrado_manual, 0)
                   + CASE WHEN df.tipo_documento_bsale_id = 2
                          THEN COALESCE(ncnc.monto_nc, 0)
