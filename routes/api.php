@@ -239,6 +239,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/cuentas-por-cobrar/{clienteId}/facturas',   [\App\Http\Controllers\CuentasPorCobrarController::class, 'facturas']);
     Route::put('/cuentas-cobrar/{id}/cobro-manual',          [\App\Http\Controllers\CuentasPorCobrarController::class, 'marcarCobradoManual']);
     Route::delete('/cuentas-cobrar/{id}/cobro-manual',       [\App\Http\Controllers\CuentasPorCobrarController::class, 'desmarcarCobradoManual']);
+    Route::get('/registro-ventas',                           [\App\Http\Controllers\CuentasPorCobrarController::class, 'registroVentas']);
     Route::get('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'index']);
     Route::get('/ventas/{id}/movimientos-disponibles', [\App\Http\Controllers\VentaMovimientoController::class, 'disponibles']);
     Route::post('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'store']);

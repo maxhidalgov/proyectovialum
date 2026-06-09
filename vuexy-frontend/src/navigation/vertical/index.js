@@ -154,6 +154,12 @@ const allMenuItems = [
         permission: 'gestionar_usuarios',
       },
       {
+        title: 'Registro de Ventas',
+        to: { name: 'registro-ventas' },
+        icon: { icon: 'mdi-format-list-bulleted' },
+        permission: 'gestionar_usuarios',
+      },
+      {
         title: 'Cuentas por Pagar',
         to: { name: 'cuentas-por-pagar' },
         icon: { icon: 'mdi-file-document-minus' },

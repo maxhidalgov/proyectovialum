@@ -232,4 +232,70 @@ class CuentasPorCobrarController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    // GET /api/registro-ventas — lista plana de todos los documentos de venta
+    public function registroVentas(Request $request)
+    {
+        $desde          = $request->get('desde');
+        $hasta          = $request->get('hasta');
+        $buscar         = $request->get('buscar');
+        $soloPendientes = filter_var($request->get('solo_pendientes', false), FILTER_VALIDATE_BOOLEAN);
+
+        $q = DB::table('documentos_facturacion as df')
+            ->leftJoin('cotizaciones as c',  'c.id',      '=', 'df.cotizacion_id')
+            ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
+            ->leftJoin('clientes as cl_cot', 'cl_cot.id', '=', 'c.cliente_id')
+            ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
+            ->where('df.estado', 'emitido')
+            ->select(
+                'df.id',
+                'df.numero_documento_bsale',
+                'df.tipo_documento_bsale_id',
+                'df.tipo',
+                'df.fecha_emision',
+                'df.monto',
+                'df.url_pdf_bsale',
+                'df.monto_cobrado_manual',
+                'df.cobrado_manual_nota',
+                'df.chipax_monto_por_cobrar',
+                DB::raw('COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre) as razon_social'),
+                DB::raw('COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as identification'),
+                DB::raw('COALESCE(ec.monto_cobrado_efectivo, 0) as monto_cobrado'),
+                DB::raw('CASE WHEN df.tipo_documento_bsale_id = 2
+                              THEN -(df.monto - COALESCE(ec.monto_cobrado_efectivo,0))
+                              ELSE   df.monto - COALESCE(ec.monto_cobrado_efectivo,0)
+                         END as pendiente'),
+                DB::raw('(df.tipo_documento_bsale_id = 2) as es_nc')
+            )
+            ->orderByDesc('df.fecha_emision')
+            ->orderByDesc('df.id');
+
+        if ($desde)  $q->where('df.fecha_emision', '>=', $desde);
+        if ($hasta)  $q->where('df.fecha_emision', '<=', $hasta);
+        if ($buscar) {
+            $q->where(function ($sq) use ($buscar) {
+                $sq->where('cl_dir.razon_social',    'like', "%$buscar%")
+                   ->orWhere('cl_cot.razon_social',   'like', "%$buscar%")
+                   ->orWhere('df.bsale_cliente_nombre','like', "%$buscar%")
+                   ->orWhere('df.numero_documento_bsale','like', "%$buscar%")
+                   ->orWhere('cl_dir.identification', 'like', "%$buscar%")
+                   ->orWhere('cl_cot.identification', 'like', "%$buscar%")
+                   ->orWhere('df.bsale_cliente_rut',  'like', "%$buscar%");
+            });
+        }
+
+        $documentos = $q->get();
+
+        if ($soloPendientes) {
+            $documentos = $documentos->filter(fn($d) => abs((float)$d->pendiente) > 0.01)->values();
+        }
+
+        $totales = [
+            'total_docs'      => $documentos->count(),
+            'total_monto'     => $documentos->sum(fn($d) => $d->es_nc ? -(float)$d->monto : (float)$d->monto),
+            'total_pendiente' => $documentos->sum(fn($d) => (float)$d->pendiente),
+        ];
+
+        return response()->json(['documentos' => $documentos, 'totales' => $totales]);
+    }
 }
