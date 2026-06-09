@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\DB;
 class ChipaxSyncDocs extends Command
 {
     protected $signature = 'chipax:sync-docs
-                            {--desde=2026-01-01 : Fecha inicio (Y-m-d)}
+                            {--desde=           : Fecha inicio (Y-m-d), default 01-01 del año actual}
                             {--hasta=           : Fecha fin (Y-m-d), default hoy}
                             {--cuenta=          : ID Chipax de la cuenta corriente (vacío = todas)}
                             {--dry-run          : Solo muestra estadísticas, no actualiza}';
@@ -36,7 +36,7 @@ class ChipaxSyncDocs extends Command
 
     public function handle(): int
     {
-        $desde  = $this->option('desde') ?: '2026-01-01';
+        $desde  = $this->option('desde') ?: now()->startOfYear()->format('Y-m-d');
         $hasta  = $this->option('hasta') ?: now()->format('Y-m-d');
         $cuenta = $this->option('cuenta') ? (int) $this->option('cuenta') : null;
         $dry    = $this->option('dry-run');
