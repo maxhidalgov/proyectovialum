@@ -50,12 +50,8 @@ class VentaMovimientoController extends Controller
                 'm.id', '=', 'vm.movimiento_id'
             )
             ->where('m.tipo', 'C')
+            ->where('m.conciliado', 0)
             ->whereRaw('m.monto - COALESCE(vm.asignado, 0) > 0')
-            // Excluir movimientos ya conciliados por Chipax (sin asignación manual en nuestro sistema)
-            ->where(function ($q) {
-                $q->where('m.conciliado', 0)
-                  ->orWhereNotNull('vm.asignado'); // Si ya tiene asignación manual, igual mostrar
-            })
             ->select(
                 'm.id',
                 'm.fecha_contable',
