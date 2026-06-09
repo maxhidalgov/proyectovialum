@@ -345,6 +345,7 @@ Route::middleware('auth:api')->group(function () {
         Route::delete('/transaccion/{id}/link',     [\App\Http\Controllers\TransbankController::class, 'unlinkDocumento']);
         Route::post('/auto-match',     [\App\Http\Controllers\TransbankController::class, 'autoMatch']);
         Route::post('/deposito/match', [\App\Http\Controllers\TransbankController::class, 'matchDeposito']);
+        Route::post('/chipax-csv',     [\App\Http\Controllers\TransbankController::class, 'importarChipaxCsv']);
     });
 
 

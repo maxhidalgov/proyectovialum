@@ -767,4 +767,135 @@ class TransbankController extends Controller
         $clean = str_replace(['.', ',', ' '], '', trim($s));
         return (int) ($clean ?: 0);
     }
+
+    // ── POST /api/transbank/chipax-csv ────────────────────────────────────────
+    // Importa conciliacion_avanzada_*.csv de Chipax para crear venta_movimiento
+    // linking facturas → movimientos_bancarios Transbank.
+
+    public function importarChipaxCsv(Request $request)
+    {
+        $request->validate(['archivo' => 'required|file']);
+        $dry = filter_var($request->get('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+
+        $content = file_get_contents($request->file('archivo')->getRealPath());
+        // Normalize line endings
+        $content = str_replace(["\r\n", "\r"], "\n", $content);
+        $lines   = explode("\n", trim($content));
+
+        $stats = [
+            'movimientos_procesados'  => 0,
+            'facturas_vinculadas'     => 0,
+            'ya_existian'             => 0,
+            'mov_no_encontrado'       => 0,
+            'factura_no_encontrada'   => 0,
+            'skipped'                 => 0,
+            'conciliados'             => 0,
+            'log'                     => [],
+        ];
+
+        $currentMovId   = null;
+        $movimientoIds  = [];
+
+        foreach ($lines as $i => $line) {
+            if ($i === 0 || trim($line) === '') continue; // skip header & empty
+
+            $cols = str_getcsv($line);
+
+            // Pad to avoid undefined offset
+            while (count($cols) < 29) $cols[] = '';
+
+            $idCol = trim($cols[5] ?? '');
+
+            if (str_starts_with($idCol, 'cartola')) {
+                // ── Parent row: new bank movement ────────────────────────────
+                $chipaxId = (int) str_replace('cartola', '', $idCol);
+                $mov = DB::table('movimientos_bancarios')
+                    ->where('chipax_id', $chipaxId)
+                    ->first();
+
+                if ($mov) {
+                    $currentMovId = $mov->id;
+                    $movimientoIds[$mov->id] = true;
+                    $stats['movimientos_procesados']++;
+                } else {
+                    $currentMovId = null;
+                    $stats['mov_no_encontrado']++;
+                    $stats['log'][] = "SIN MOV: chipax_id=$chipaxId no encontrado";
+                }
+
+                // Inline doc in same row
+                if ($currentMovId !== null && trim($cols[22] ?? '') !== '') {
+                    $this->procesarDocCsv($cols, $currentMovId, $dry, $stats);
+                }
+            } elseif ($currentMovId !== null && trim($cols[21] ?? '') !== '') {
+                // ── Continuation child row ───────────────────────────────────
+                $this->procesarDocCsv($cols, $currentMovId, $dry, $stats);
+            }
+        }
+
+        // Recalcular conciliado para movimientos procesados
+        if (!$dry) {
+            foreach (array_keys($movimientoIds) as $movId) {
+                $totalAsignado = DB::table('venta_movimiento')
+                    ->where('movimiento_id', $movId)
+                    ->sum('monto');
+                $monto = DB::table('movimientos_bancarios')->where('id', $movId)->value('monto');
+                if ((float) $totalAsignado >= (float) $monto) {
+                    DB::table('movimientos_bancarios')
+                        ->where('id', $movId)
+                        ->update(['conciliado' => true]);
+                    $stats['conciliados']++;
+                }
+            }
+        }
+
+        return response()->json(['ok' => true, 'dry_run' => $dry, 'stats' => $stats]);
+    }
+
+    private function procesarDocCsv(array $cols, int $movId, bool $dry, array &$stats): void
+    {
+        $tipoCodigo    = (int)   ($cols[22] ?? 0);
+        $folio         = trim($cols[23] ?? '');
+        $rut           = trim($cols[24] ?? '');
+        $montoAsignado = (float) ($cols[28] ?? 0);
+
+        // Skip: boleta resumen mensual (tipo 39, folio negativo) o monto <= 0
+        if ($tipoCodigo === 39 || $montoAsignado <= 0 || $folio === '' || str_starts_with($folio, '-')) {
+            $stats['skipped']++;
+            return;
+        }
+
+        $df = DB::table('documentos_facturacion')
+            ->where('numero_documento_bsale', $folio)
+            ->first();
+
+        if (!$df) {
+            $stats['factura_no_encontrada']++;
+            $stats['log'][] = "SIN FAC: folio=$folio tipo=$tipoCodigo RUT=$rut";
+            return;
+        }
+
+        $existe = DB::table('venta_movimiento')
+            ->where('venta_id', $df->id)
+            ->where('movimiento_id', $movId)
+            ->exists();
+
+        if ($existe) {
+            $stats['ya_existian']++;
+            return;
+        }
+
+        if (!$dry) {
+            DB::table('venta_movimiento')->insert([
+                'venta_id'     => $df->id,
+                'movimiento_id' => $movId,
+                'monto'        => $montoAsignado,
+                'created_at'   => now(),
+                'updated_at'   => now(),
+            ]);
+        }
+
+        $stats['facturas_vinculadas']++;
+        $stats['log'][] = ($dry ? '[DRY] ' : '') . "OK: folio=$folio monto=$montoAsignado → mov_id=$movId df_id={$df->id}";
+    }
 }

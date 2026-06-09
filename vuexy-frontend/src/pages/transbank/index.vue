@@ -35,6 +35,9 @@
         <VBtn color="primary" prepend-icon="mdi-upload" @click="dialogSubir = true">
           Subir .dat
         </VBtn>
+        <VBtn variant="tonal" color="info" prepend-icon="mdi-file-import-outline" @click="dialogChipaxCsv = true">
+          Importar Chipax CSV
+        </VBtn>
       </VCol>
     </VRow>
 
@@ -795,6 +798,91 @@
       </VCard>
     </VDialog>
 
+    <!-- ──────────────────────────────────────────────────── -->
+    <!-- Dialog Importar CSV Chipax                          -->
+    <!-- ──────────────────────────────────────────────────── -->
+    <VDialog v-model="dialogChipaxCsv" max-width="560" persistent>
+      <VCard>
+        <VCardTitle class="d-flex align-center pa-4">
+          Importar conciliación Chipax CSV
+          <VSpacer />
+          <VBtn icon="mdi-close" variant="text" size="small" @click="cerrarChipaxCsv" />
+        </VCardTitle>
+        <VDivider />
+        <VCardText class="pa-4">
+          <VAlert type="info" variant="tonal" density="compact" class="mb-4">
+            Exporta desde Chipax: <strong>Conciliación → Conciliación avanzada → Exportar CSV</strong>.
+            El archivo vincula los abonos Transbank con sus facturas en nuestro sistema.
+          </VAlert>
+
+          <VFileInput
+            v-model="chipaxCsvArchivo"
+            label="Archivo conciliacion_avanzada_*.csv"
+            accept=".csv"
+            density="compact"
+            variant="outlined"
+            prepend-icon=""
+            prepend-inner-icon="mdi-file-delimited-outline"
+          />
+
+          <!-- Resultado -->
+          <template v-if="chipaxCsvResult">
+            <VAlert
+              :type="chipaxCsvResult.ok ? 'success' : 'error'"
+              variant="tonal"
+              density="compact"
+              class="mt-3"
+            >
+              <div class="font-weight-semibold mb-1">
+                {{ chipaxCsvResult.dry_run ? '[DRY RUN] ' : '' }}Resultado:
+              </div>
+              <div class="text-body-2">
+                Movimientos bancarios: <strong>{{ chipaxCsvResult.stats.movimientos_procesados }}</strong> |
+                Facturas vinculadas: <strong>{{ chipaxCsvResult.stats.facturas_vinculadas }}</strong> |
+                Ya existían: <strong>{{ chipaxCsvResult.stats.ya_existian }}</strong> |
+                Conciliados: <strong>{{ chipaxCsvResult.stats.conciliados }}</strong>
+              </div>
+              <div v-if="chipaxCsvResult.stats.mov_no_encontrado > 0 || chipaxCsvResult.stats.factura_no_encontrada > 0" class="text-body-2 mt-1 text-warning">
+                Sin movimiento: {{ chipaxCsvResult.stats.mov_no_encontrado }} |
+                Sin factura: {{ chipaxCsvResult.stats.factura_no_encontrada }}
+              </div>
+            </VAlert>
+
+            <!-- Log detallado (colapsable) -->
+            <VExpansionPanels v-if="chipaxCsvResult.stats.log?.length" class="mt-2" variant="accordion">
+              <VExpansionPanel>
+                <VExpansionPanelTitle class="text-caption">
+                  Ver log detallado ({{ chipaxCsvResult.stats.log.length }} entradas)
+                </VExpansionPanelTitle>
+                <VExpansionPanelText>
+                  <pre class="text-caption" style="max-height:200px;overflow:auto;white-space:pre-wrap">{{ chipaxCsvResult.stats.log.join('\n') }}</pre>
+                </VExpansionPanelText>
+              </VExpansionPanel>
+            </VExpansionPanels>
+          </template>
+
+          <VAlert v-if="chipaxCsvError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ chipaxCsvError }}
+          </VAlert>
+        </VCardText>
+        <VDivider />
+        <VCardActions class="pa-4">
+          <VBtn variant="tonal" color="secondary" :loading="chipaxCsvLoading" :disabled="!chipaxCsvArchivo" @click="ejecutarChipaxCsv(true)">
+            Vista previa (dry-run)
+          </VBtn>
+          <VSpacer />
+          <VBtn variant="text" @click="cerrarChipaxCsv">Cerrar</VBtn>
+          <VBtn
+            color="info"
+            variant="elevated"
+            :loading="chipaxCsvLoading"
+            :disabled="!chipaxCsvArchivo"
+            @click="ejecutarChipaxCsv(false)"
+          >Importar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
     <!-- Snackbar -->
     <VSnackbar v-model="snack.show" :color="snack.color" timeout="3500" location="bottom right">
       {{ snack.msg }}
@@ -892,6 +980,13 @@ const vinculando         = ref(null)
 const desvinculando      = ref(null)
 
 const snack = ref({ show: false, msg: '', color: 'success' })
+
+// ── Chipax CSV import ──────────────────────────────────────────────────────────
+const dialogChipaxCsv  = ref(false)
+const chipaxCsvArchivo = ref(null)
+const chipaxCsvLoading = ref(false)
+const chipaxCsvResult  = ref(null)
+const chipaxCsvError   = ref('')
 
 // ── Computed ───────────────────────────────────────────────────────────────────
 
@@ -1286,6 +1381,38 @@ async function desasociarFactura(tx) {
     toast('Error', 'error')
   } finally {
     desvinculando.value = null
+  }
+}
+
+// ── Chipax CSV import ──────────────────────────────────────────────────────────
+
+function cerrarChipaxCsv() {
+  dialogChipaxCsv.value  = false
+  chipaxCsvArchivo.value = null
+  chipaxCsvResult.value  = null
+  chipaxCsvError.value   = ''
+}
+
+async function ejecutarChipaxCsv(dryRun) {
+  chipaxCsvError.value  = ''
+  chipaxCsvResult.value = null
+  chipaxCsvLoading.value = true
+  const fd = new FormData()
+  fd.append('archivo',  chipaxCsvArchivo.value)
+  fd.append('dry_run',  dryRun ? '1' : '0')
+  try {
+    const { data } = await axios.post('/api/transbank/chipax-csv', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    chipaxCsvResult.value = data
+    if (!dryRun && data.ok) {
+      toast(`Importación OK: ${data.stats.facturas_vinculadas} facturas vinculadas, ${data.stats.conciliados} movimientos conciliados`)
+      await cargar()
+    }
+  } catch (e) {
+    chipaxCsvError.value = e.response?.data?.message ?? 'Error al procesar el CSV'
+  } finally {
+    chipaxCsvLoading.value = false
   }
 }
 </script>
