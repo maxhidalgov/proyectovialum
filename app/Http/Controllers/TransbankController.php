@@ -805,10 +805,12 @@ class TransbankController extends Controller
 
             if (str_starts_with($idCol, 'cartola')) {
                 // ── Parent row: new bank movement ────────────────────────────
-                $chipaxId = (int) str_replace('cartola', '', $idCol);
-                $mov = DB::table('movimientos_bancarios')
-                    ->where('chipax_id', $chipaxId)
-                    ->first();
+                $chipaxId   = (int) str_replace('cartola', '', $idCol);
+                $fechaXlsx  = trim((string) ($cols[6] ?? ''));   // YYYY-MM-DD
+                $abonoXlsx  = (float) ($cols[8] ?? 0);
+                $descXlsx   = trim((string) ($cols[9] ?? ''));
+
+                $mov = $this->buscarMovimientoTransbank($chipaxId, $fechaXlsx, $abonoXlsx, $descXlsx, $stats);
 
                 if ($mov) {
                     $currentMovId = $mov->id;
@@ -816,8 +818,7 @@ class TransbankController extends Controller
                     $stats['movimientos_procesados']++;
                 } else {
                     $currentMovId = null;
-                    $stats['mov_no_encontrado']++;
-                    $stats['log'][] = "SIN MOV: chipax_id=$chipaxId no encontrado";
+                    // mov_no_encontrado ya fue incrementado dentro de buscarMovimientoTransbank
                 }
 
                 // Inline doc in same row (col 22 = código tipo documento)
@@ -847,6 +848,62 @@ class TransbankController extends Controller
         }
 
         return response()->json(['ok' => true, 'dry_run' => $dry, 'stats' => $stats]);
+    }
+
+    /**
+     * Busca el movimiento bancario correspondiente al abono Transbank del XLSX.
+     * El chipax_id del XLSX es un ID de conciliación interna de Chipax (no nuestro chipax_id).
+     * Se intenta en orden:
+     *  1. Por chipax_id directo (por si acaso coincide)
+     *  2. Vía módulo Transbank: transbank_abonos del periodo → movimiento_bancario_id
+     *  3. Por monto exacto + descripción Transbank + fecha aproximada (±60 días)
+     */
+    private function buscarMovimientoTransbank(
+        int $chipaxId, string $fecha, float $abono, string $desc, array &$stats
+    ): ?object {
+        // 1. chipax_id directo
+        $mov = DB::table('movimientos_bancarios')
+            ->where('chipax_id', $chipaxId)
+            ->first();
+        if ($mov) return $mov;
+
+        // 2. Extraer periodo de la descripción (ej: "2024-07 Transbank Abono" → "2024-07")
+        if (preg_match('/(\d{4}-\d{2})/', $desc, $m)) {
+            $periodo = $m[1];
+            $movId = DB::table('transbank_abonos as ta')
+                ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+                ->where('tf.periodo', $periodo)
+                ->whereNotNull('ta.movimiento_bancario_id')
+                ->value('ta.movimiento_bancario_id');
+            if ($movId) {
+                $mov = DB::table('movimientos_bancarios')->where('id', $movId)->first();
+                if ($mov) {
+                    $stats['log'][] = "MOV vía Transbank .dat periodo=$periodo id={$mov->id} monto={$mov->monto}";
+                    return $mov;
+                }
+            }
+        }
+
+        // 3. Por monto exacto + descripción Transbank + ventana de ±60 días
+        if ($abono > 0 && $fecha) {
+            $mov = DB::table('movimientos_bancarios')
+                ->where('monto', $abono)
+                ->where('tipo', 'C')
+                ->where('descripcion', 'like', '%Transbank%')
+                ->whereBetween('fecha_contable', [
+                    \Carbon\Carbon::parse($fecha)->subDays(5)->toDateString(),
+                    \Carbon\Carbon::parse($fecha)->addDays(60)->toDateString(),
+                ])
+                ->first();
+            if ($mov) {
+                $stats['log'][] = "MOV vía monto=$abono id={$mov->id} fecha={$mov->fecha_contable}";
+                return $mov;
+            }
+        }
+
+        $stats['mov_no_encontrado']++;
+        $stats['log'][] = "SIN MOV: chipax_id=$chipaxId abono=$abono fecha=$fecha desc=\"$desc\"";
+        return null;
     }
 
     private function procesarDocCsv(array $cols, int $movId, bool $dry, array &$stats): void
