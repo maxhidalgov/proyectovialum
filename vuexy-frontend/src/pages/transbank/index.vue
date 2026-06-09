@@ -817,13 +817,17 @@
 
           <VFileInput
             v-model="chipaxCsvArchivo"
-            label="Archivo conciliacion_avanzada_*.csv"
-            accept=".csv"
+            label="Archivo conciliacion_avanzada_*.xlsx"
+            accept=".xlsx,.xls,.csv"
             density="compact"
             variant="outlined"
             prepend-icon=""
-            prepend-inner-icon="mdi-file-delimited-outline"
+            prepend-inner-icon="mdi-file-excel-outline"
+            @update:modelValue="onChipaxArchivoChange"
           />
+          <p v-if="chipaxRowCount" class="text-caption text-medium-emphasis mt-1">
+            {{ chipaxRowCount }} filas detectadas en el archivo
+          </p>
 
           <!-- Resultado -->
           <template v-if="chipaxCsvResult">
@@ -893,6 +897,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from '@/axiosInstance'
+import * as XLSX from 'xlsx'
 
 // ── Config tipos ───────────────────────────────────────────────────────────────
 
@@ -987,6 +992,8 @@ const chipaxCsvArchivo = ref(null)
 const chipaxCsvLoading = ref(false)
 const chipaxCsvResult  = ref(null)
 const chipaxCsvError   = ref('')
+const chipaxRowCount   = ref(0)
+let   chipaxParsedRows = []
 
 // ── Computed ───────────────────────────────────────────────────────────────────
 
@@ -1391,18 +1398,57 @@ function cerrarChipaxCsv() {
   chipaxCsvArchivo.value = null
   chipaxCsvResult.value  = null
   chipaxCsvError.value   = ''
+  chipaxRowCount.value   = 0
+  chipaxParsedRows       = []
+}
+
+async function onChipaxArchivoChange(file) {
+  chipaxRowCount.value = 0
+  chipaxParsedRows     = []
+  chipaxCsvResult.value = null
+  if (!file) return
+  try {
+    chipaxParsedRows   = await parseXlsxToRows(file)
+    chipaxRowCount.value = chipaxParsedRows.length - 1 // minus header
+  } catch {
+    chipaxCsvError.value = 'No se pudo leer el archivo. Asegúrate de que sea .xlsx o .csv de Chipax.'
+  }
+}
+
+function parseXlsxToRows(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data     = new Uint8Array(e.target.result)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const sheet    = workbook.Sheets[workbook.SheetNames[0]]
+        // header:1 → array of arrays; defval:'' → empty cells as empty string
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+        resolve(rows)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file)
+  })
 }
 
 async function ejecutarChipaxCsv(dryRun) {
   chipaxCsvError.value  = ''
   chipaxCsvResult.value = null
+
+  if (!chipaxParsedRows.length) {
+    chipaxCsvError.value = 'El archivo no pudo ser leído. Selecciónalo de nuevo.'
+    return
+  }
+
   chipaxCsvLoading.value = true
-  const fd = new FormData()
-  fd.append('archivo',  chipaxCsvArchivo.value)
-  fd.append('dry_run',  dryRun ? '1' : '0')
   try {
-    const { data } = await axios.post('/api/transbank/chipax-csv', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const { data } = await axios.post('/api/transbank/chipax-csv', {
+      rows:    chipaxParsedRows,
+      dry_run: dryRun ? '1' : '0',
     })
     chipaxCsvResult.value = data
     if (!dryRun && data.ok) {
@@ -1410,7 +1456,7 @@ async function ejecutarChipaxCsv(dryRun) {
       await cargar()
     }
   } catch (e) {
-    chipaxCsvError.value = e.response?.data?.message ?? 'Error al procesar el CSV'
+    chipaxCsvError.value = e.response?.data?.message ?? 'Error al procesar el archivo'
   } finally {
     chipaxCsvLoading.value = false
   }

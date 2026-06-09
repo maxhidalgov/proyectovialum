@@ -769,18 +769,17 @@ class TransbankController extends Controller
     }
 
     // ── POST /api/transbank/chipax-csv ────────────────────────────────────────
-    // Importa conciliacion_avanzada_*.csv de Chipax para crear venta_movimiento
-    // linking facturas → movimientos_bancarios Transbank.
+    // Recibe filas del XLSX de conciliación avanzada de Chipax (parseado en el
+    // browser con SheetJS) y crea venta_movimiento para cada factura vinculada.
 
     public function importarChipaxCsv(Request $request)
     {
-        $request->validate(['archivo' => 'required|file']);
-        $dry = filter_var($request->get('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+        $dry  = filter_var($request->get('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+        $rows = $request->input('rows', []);
 
-        $content = file_get_contents($request->file('archivo')->getRealPath());
-        // Normalize line endings
-        $content = str_replace(["\r\n", "\r"], "\n", $content);
-        $lines   = explode("\n", trim($content));
+        if (empty($rows)) {
+            return response()->json(['error' => 'No se recibieron filas'], 422);
+        }
 
         $stats = [
             'movimientos_procesados'  => 0,
@@ -793,18 +792,16 @@ class TransbankController extends Controller
             'log'                     => [],
         ];
 
-        $currentMovId   = null;
-        $movimientoIds  = [];
+        $currentMovId  = null;
+        $movimientoIds = [];
 
-        foreach ($lines as $i => $line) {
-            if ($i === 0 || trim($line) === '') continue; // skip header & empty
-
-            $cols = str_getcsv($line);
+        foreach ($rows as $i => $cols) {
+            if ($i === 0) continue; // skip header row
 
             // Pad to avoid undefined offset
             while (count($cols) < 29) $cols[] = '';
 
-            $idCol = trim($cols[5] ?? '');
+            $idCol = trim((string) ($cols[5] ?? ''));
 
             if (str_starts_with($idCol, 'cartola')) {
                 // ── Parent row: new bank movement ────────────────────────────
@@ -823,11 +820,11 @@ class TransbankController extends Controller
                     $stats['log'][] = "SIN MOV: chipax_id=$chipaxId no encontrado";
                 }
 
-                // Inline doc in same row
-                if ($currentMovId !== null && trim($cols[22] ?? '') !== '') {
+                // Inline doc in same row (col 22 = código tipo documento)
+                if ($currentMovId !== null && trim((string) ($cols[22] ?? '')) !== '') {
                     $this->procesarDocCsv($cols, $currentMovId, $dry, $stats);
                 }
-            } elseif ($currentMovId !== null && trim($cols[21] ?? '') !== '') {
+            } elseif ($currentMovId !== null && trim((string) ($cols[21] ?? '')) !== '') {
                 // ── Continuation child row ───────────────────────────────────
                 $this->procesarDocCsv($cols, $currentMovId, $dry, $stats);
             }
