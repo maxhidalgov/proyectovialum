@@ -771,6 +771,11 @@ class TransbankController extends Controller
     // ── POST /api/transbank/chipax-csv ────────────────────────────────────────
     // Recibe filas del XLSX de conciliación avanzada de Chipax (parseado en el
     // browser con SheetJS) y crea venta_movimiento para cada factura vinculada.
+    //
+    // Flujo esperado:
+    //  1. Subir .dat de Transbank → transbank_abonos.movimiento_bancario_id queda seteado
+    //  2. Subir XLSX de Chipax → este endpoint busca el movimiento por periodo
+    //     y crea venta_movimiento (factura ↔ movimiento_bancario)
 
     public function importarChipaxCsv(Request $request)
     {
@@ -782,52 +787,53 @@ class TransbankController extends Controller
         }
 
         $stats = [
-            'movimientos_procesados'  => 0,
-            'facturas_vinculadas'     => 0,
-            'ya_existian'             => 0,
-            'mov_no_encontrado'       => 0,
-            'factura_no_encontrada'   => 0,
-            'skipped'                 => 0,
-            'conciliados'             => 0,
-            'log'                     => [],
+            'movimientos_procesados' => 0,
+            'facturas_vinculadas'    => 0,
+            'ya_existian'            => 0,
+            'mov_no_encontrado'      => 0,
+            'factura_no_encontrada'  => 0,
+            'skipped'                => 0,
+            'conciliados'            => 0,
+            'log'                    => [],
         ];
 
         $currentMovId  = null;
         $movimientoIds = [];
 
         foreach ($rows as $i => $cols) {
-            if ($i === 0) continue; // skip header row
-
-            // Pad to avoid undefined offset
+            if ($i === 0) continue;
             while (count($cols) < 29) $cols[] = '';
 
             $idCol = trim((string) ($cols[5] ?? ''));
 
             if (str_starts_with($idCol, 'cartola')) {
-                // ── Parent row: new bank movement ────────────────────────────
-                $chipaxId   = (int) str_replace('cartola', '', $idCol);
-                $fechaXlsx  = trim((string) ($cols[6] ?? ''));   // YYYY-MM-DD
-                $abonoXlsx  = (float) ($cols[8] ?? 0);
-                $descXlsx   = trim((string) ($cols[9] ?? ''));
+                // ── Fila padre: un abono mensual de Transbank ────────────────
+                $descXlsx  = trim((string) ($cols[9] ?? ''));
+                $abonoXlsx = (float) ($cols[8] ?? 0);
 
-                $mov = $this->buscarMovimientoTransbank($chipaxId, $fechaXlsx, $abonoXlsx, $descXlsx, $stats);
+                $periodo = null;
+                if (preg_match('/(\d{4}-\d{2})/', $descXlsx, $m)) {
+                    $periodo = $m[1];
+                }
 
-                if ($mov) {
-                    $currentMovId = $mov->id;
-                    $movimientoIds[$mov->id] = true;
+                if ($periodo) {
+                    $movId = $this->buscarMovimientoPorPeriodo($periodo, $abonoXlsx, $stats);
+                    $currentMovId = $movId;
                     $stats['movimientos_procesados']++;
                 } else {
                     $currentMovId = null;
-                    // mov_no_encontrado ya fue incrementado dentro de buscarMovimientoTransbank
                 }
 
-                // Inline doc in same row (col 22 = código tipo documento)
+                // Inline doc en misma fila padre (raro, se procesa igual)
                 if ($currentMovId !== null && trim((string) ($cols[22] ?? '')) !== '') {
                     $this->procesarDocCsv($cols, $currentMovId, $dry, $stats);
+                    if (!$dry) $movimientoIds[$currentMovId] = true;
                 }
+
             } elseif ($currentMovId !== null && trim((string) ($cols[21] ?? '')) !== '') {
-                // ── Continuation child row ───────────────────────────────────
+                // ── Fila hija: factura/boleta vinculada al movimiento actual ─
                 $this->procesarDocCsv($cols, $currentMovId, $dry, $stats);
+                if (!$dry) $movimientoIds[$currentMovId] = true;
             }
         }
 
@@ -835,13 +841,11 @@ class TransbankController extends Controller
         if (!$dry) {
             foreach (array_keys($movimientoIds) as $movId) {
                 $totalAsignado = DB::table('venta_movimiento')
-                    ->where('movimiento_id', $movId)
-                    ->sum('monto');
+                    ->where('movimiento_id', $movId)->sum('monto');
                 $monto = DB::table('movimientos_bancarios')->where('id', $movId)->value('monto');
                 if ((float) $totalAsignado >= (float) $monto) {
                     DB::table('movimientos_bancarios')
-                        ->where('id', $movId)
-                        ->update(['conciliado' => true]);
+                        ->where('id', $movId)->update(['conciliado' => true]);
                     $stats['conciliados']++;
                 }
             }
@@ -851,58 +855,45 @@ class TransbankController extends Controller
     }
 
     /**
-     * Busca el movimiento bancario correspondiente al abono Transbank del XLSX.
-     * El chipax_id del XLSX es un ID de conciliación interna de Chipax (no nuestro chipax_id).
-     * Se intenta en orden:
-     *  1. Por chipax_id directo (por si acaso coincide)
-     *  2. Vía módulo Transbank: transbank_abonos del periodo → movimiento_bancario_id
-     *  3. Por monto exacto + descripción Transbank + fecha aproximada (±60 días)
+     * Encuentra el movimiento bancario mensual de Transbank para un periodo dado.
+     * Estrategia 1: via transbank_abonos → movimiento_bancario_id (requiere .dat subidos)
+     * Estrategia 2: por monto exacto + 'Transbank' en la descripción del mes
      */
-    private function buscarMovimientoTransbank(
-        int $chipaxId, string $fecha, float $abono, string $desc, array &$stats
-    ): ?object {
-        // 1. chipax_id directo
-        $mov = DB::table('movimientos_bancarios')
-            ->where('chipax_id', $chipaxId)
-            ->first();
-        if ($mov) return $mov;
+    private function buscarMovimientoPorPeriodo(string $periodo, float $abono, array &$stats): ?int
+    {
+        // Estrategia 1: via .dat subidos → transbank_abonos ya tiene el movimiento_bancario_id
+        $movId = DB::table('transbank_abonos as ta')
+            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+            ->where('tf.periodo', $periodo)
+            ->whereNotNull('ta.movimiento_bancario_id')
+            ->value('ta.movimiento_bancario_id');
 
-        // 2. Extraer periodo de la descripción (ej: "2024-07 Transbank Abono" → "2024-07")
-        if (preg_match('/(\d{4}-\d{2})/', $desc, $m)) {
-            $periodo = $m[1];
-            $movId = DB::table('transbank_abonos as ta')
-                ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
-                ->where('tf.periodo', $periodo)
-                ->whereNotNull('ta.movimiento_bancario_id')
-                ->value('ta.movimiento_bancario_id');
-            if ($movId) {
-                $mov = DB::table('movimientos_bancarios')->where('id', $movId)->first();
-                if ($mov) {
-                    $stats['log'][] = "MOV vía Transbank .dat periodo=$periodo id={$mov->id} monto={$mov->monto}";
-                    return $mov;
-                }
-            }
+        if ($movId) {
+            $stats['log'][] = "MOV periodo=$periodo vía .dat → mov_id=$movId";
+            return (int) $movId;
         }
 
-        // 3. Por monto exacto + descripción Transbank + ventana de ±60 días
-        if ($abono > 0 && $fecha) {
+        // Estrategia 2: por monto + descripción 'Transbank' dentro del mes
+        if ($abono > 0) {
+            [$y, $mo] = explode('-', $periodo);
+            $inicio = Carbon::create((int)$y, (int)$mo, 1)->toDateString();
+            $fin    = Carbon::create((int)$y, (int)$mo, 1)->endOfMonth()->addDays(5)->toDateString();
+
             $mov = DB::table('movimientos_bancarios')
                 ->where('monto', $abono)
                 ->where('tipo', 'C')
                 ->where('descripcion', 'like', '%Transbank%')
-                ->whereBetween('fecha_contable', [
-                    \Carbon\Carbon::parse($fecha)->subDays(5)->toDateString(),
-                    \Carbon\Carbon::parse($fecha)->addDays(60)->toDateString(),
-                ])
+                ->whereBetween('fecha_contable', [$inicio, $fin])
                 ->first();
+
             if ($mov) {
-                $stats['log'][] = "MOV vía monto=$abono id={$mov->id} fecha={$mov->fecha_contable}";
-                return $mov;
+                $stats['log'][] = "MOV periodo=$periodo vía monto=$abono → mov_id={$mov->id}";
+                return $mov->id;
             }
         }
 
         $stats['mov_no_encontrado']++;
-        $stats['log'][] = "SIN MOV: chipax_id=$chipaxId abono=$abono fecha=$fecha desc=\"$desc\"";
+        $stats['log'][] = "SIN MOV: periodo=$periodo abono=$abono (¿falta subir el .dat de Transbank?)";
         return null;
     }
 
