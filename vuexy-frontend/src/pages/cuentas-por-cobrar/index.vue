@@ -141,7 +141,7 @@
         :headers="headers"
         :items="clientes"
         :loading="loading"
-        item-value="cliente_id"
+        item-value="_row_key"
         density="compact"
         :expanded="expanded"
         show-expand
@@ -212,11 +212,11 @@
               <div class="pa-4 bg-surface">
                 <p class="text-body-2 font-weight-medium mb-3">Documentos de {{ item.razon_social }}</p>
 
-                <div v-if="loadingFacturas[item.cliente_id]" class="text-center py-4">
+                <div v-if="loadingFacturas[item._row_key]" class="text-center py-4">
                   <VProgressCircular indeterminate size="24" />
                 </div>
 
-                <VTable v-else-if="facturasCliente[item.cliente_id]?.length" density="compact">
+                <VTable v-else-if="facturasCliente[item._row_key]?.length" density="compact">
                   <thead>
                     <tr>
                       <th>N° Doc</th>
@@ -233,7 +233,7 @@
                   </thead>
                   <tbody>
                     <tr
-                      v-for="f in facturasCliente[item.cliente_id]"
+                      v-for="f in facturasCliente[item._row_key]"
                       :key="f.id"
                       :class="{ 'nc-row': !!f.es_nc }"
                     >
@@ -1100,7 +1100,11 @@ async function cargar() {
       solo_pendientes: filtros.value.solo_pendientes,
     }
     const { data } = await axios.get('/api/cuentas-por-cobrar', { params })
-    clientes.value = data.clientes
+    // _row_key: clave única por fila (cliente_id cuando existe, RUT/nombre si es null)
+    clientes.value = data.clientes.map(c => ({
+      ...c,
+      _row_key: c.cliente_id != null ? String(c.cliente_id) : (c.identification ?? c.razon_social ?? `_${Math.random()}`),
+    }))
     totales.value  = data.totales
     facturasCliente.value = {}
     expanded.value = []
@@ -1111,28 +1115,28 @@ async function cargar() {
   }
 }
 
-async function cargarFacturasCliente(clienteId, forzar = false) {
-  if (facturasCliente.value[clienteId] && !forzar) return
-  loadingFacturas.value[clienteId] = true
+async function cargarFacturasCliente(rowKey, forzar = false) {
+  if (facturasCliente.value[rowKey] && !forzar) return
+  loadingFacturas.value[rowKey] = true
   try {
     const params = { desde: filtros.value.desde, hasta: filtros.value.hasta }
-    const { data } = await axios.get(`/api/cuentas-por-cobrar/${clienteId}/facturas`, { params })
-    facturasCliente.value[clienteId] = data
+    const { data } = await axios.get(`/api/cuentas-por-cobrar/${encodeURIComponent(rowKey)}/facturas`, { params })
+    facturasCliente.value[rowKey] = data
   } catch (e) {
     console.error(e)
   } finally {
-    loadingFacturas.value[clienteId] = false
+    loadingFacturas.value[rowKey] = false
   }
 }
 
 function onExpand(newExpanded) {
   expanded.value = newExpanded
-  newExpanded.forEach(id => cargarFacturasCliente(id))
+  newExpanded.forEach(rowKey => cargarFacturasCliente(rowKey))
 }
 
-async function refrescarCliente(clienteId) {
-  delete facturasCliente.value[clienteId]
-  await cargarFacturasCliente(clienteId)
+async function refrescarCliente(rowKey) {
+  delete facturasCliente.value[rowKey]
+  await cargarFacturasCliente(rowKey)
   await cargar()
 }
 
@@ -1178,7 +1182,7 @@ async function asignar(mov) {
       monto,
     })
     await cargarEstadoConciliar()
-    await refrescarCliente(clienteActivo.value.cliente_id)
+    await refrescarCliente(clienteActivo.value._row_key)
   } catch (e) {
     console.error(e)
   } finally {
@@ -1191,7 +1195,7 @@ async function desasignar(pivotId) {
   try {
     await axios.delete(`/api/ventas/${facturaActiva.value.id}/movimientos/${pivotId}`)
     await cargarEstadoConciliar()
-    await refrescarCliente(clienteActivo.value.cliente_id)
+    await refrescarCliente(clienteActivo.value._row_key)
   } catch (e) {
     console.error(e)
   } finally {
@@ -1209,7 +1213,7 @@ async function abrirVincularNC(nc, cliente) {
   dialogVincular.value              = true
   loadingFacturasVincular.value     = true
   try {
-    const { data } = await axios.get(`/api/cuentas-por-cobrar/${cliente.cliente_id}/facturas`)
+    const { data } = await axios.get(`/api/cuentas-por-cobrar/${encodeURIComponent(cliente._row_key)}/facturas`)
     // Solo facturas normales (no NCs) para poder vincular
     facturasParaVincular.value = data.filter(f => !f.es_nc)
   } catch (e) {
@@ -1228,7 +1232,7 @@ async function vincularNC() {
     })
     snackNc.value = { show: true, color: 'success', text: 'NC vinculada correctamente' }
     dialogVincular.value = false
-    await refrescarCliente(clienteActivoNc.value.cliente_id)
+    await refrescarCliente(clienteActivoNc.value._row_key)
   } catch (e) {
     const msg = e.response?.data?.message || 'Error al vincular NC'
     snackNc.value = { show: true, color: 'error', text: msg }
@@ -1242,7 +1246,7 @@ async function desvincularNC(nc, cliente) {
   try {
     await axios.delete(`/api/nc/venta/${nc.id}/vincular`)
     snackNc.value = { show: true, color: 'info', text: 'Vínculo NC eliminado' }
-    await refrescarCliente(cliente.cliente_id)
+    await refrescarCliente(cliente._row_key)
   } catch (e) {
     snackNc.value = { show: true, color: 'error', text: 'Error al desvincular NC' }
   } finally {
@@ -1262,7 +1266,7 @@ async function abrirAplicarNC(nc, cliente) {
   dialogAplicar.value              = true
   loadingFacturasVincular.value    = true
   try {
-    const { data } = await axios.get(`/api/cuentas-por-cobrar/${cliente.cliente_id}/facturas`)
+    const { data } = await axios.get(`/api/cuentas-por-cobrar/${encodeURIComponent(cliente._row_key)}/facturas`)
     // Solo facturas normales con saldo pendiente
     facturasParaAplicar.value = data.filter(f => !f.es_nc && f.pendiente > 0)
   } catch (e) {
@@ -1284,7 +1288,7 @@ async function aplicarNC() {
     })
     snackNc.value = { show: true, color: 'success', text: 'NC aplicada correctamente' }
     dialogAplicar.value = false
-    await refrescarCliente(clienteActivoNc.value.cliente_id)
+    await refrescarCliente(clienteActivoNc.value._row_key)
   } catch (e) {
     const msg = e.response?.data?.message || 'Error al aplicar NC'
     snackNc.value = { show: true, color: 'error', text: msg }
@@ -1298,8 +1302,8 @@ async function cambiarEstadoFactura(factura, estado, cliente) {
   loadingEstado.value[factura.id] = true
   try {
     await axios.patch(`/api/nc/venta/factura/${factura.id}/estado`, { estado })
-    const clienteId = cliente?.cliente_id ?? clienteActivoNc.value?.cliente_id
-    if (clienteId) await refrescarCliente(clienteId)
+    const rowKey = cliente?._row_key ?? clienteActivoNc.value?._row_key
+    if (rowKey) await refrescarCliente(rowKey)
     else await cargar()
   } catch (e) {
     console.error(e)
@@ -1342,7 +1346,7 @@ async function confirmarMarcarCobrada() {
       nota:  notaMarcar.value || 'Cobro registrado manualmente',
     })
     dialogMarcarCobrada.value = false
-    await refrescarCliente(clienteParaMarcar.value.cliente_id)
+    await refrescarCliente(clienteParaMarcar.value._row_key)
   } catch (e) {
     console.error(e)
   } finally {
@@ -1354,7 +1358,7 @@ async function desmarcarCobradoManual(f, cliente) {
   loadingMarcarCobrada.value[f.id] = true
   try {
     await axios.delete(`/api/cuentas-cobrar/${f.id}/cobro-manual`)
-    await refrescarCliente(cliente.cliente_id)
+    await refrescarCliente(cliente._row_key)
   } catch (e) {
     console.error(e)
   } finally {
@@ -1423,8 +1427,8 @@ async function conciliarRayoVenta(factura, cliente) {
       monto: sug.monto_sugerido,
     })
     delete sugerenciasPorVenta.value[factura.id]
-    await refrescarCliente(cliente?.cliente_id ?? Object.keys(facturasCliente.value).find(id =>
-      facturasCliente.value[id]?.some(f => f.id === factura.id)
+    await refrescarCliente(cliente?._row_key ?? Object.keys(facturasCliente.value).find(key =>
+      facturasCliente.value[key]?.some(f => f.id === factura.id)
     ))
   } catch (e) {
     console.error('conciliar rayo venta:', e)

@@ -125,7 +125,7 @@ class CuentasPorCobrarController extends Controller
     }
 
     // Facturas + NCs de un cliente
-    public function facturas(Request $request, int $clienteId)
+    public function facturas(Request $request, string $clienteId)
     {
         $desde          = $request->get('desde');
         $hasta          = $request->get('hasta');
@@ -135,7 +135,13 @@ class CuentasPorCobrarController extends Controller
             ->leftJoin('cotizaciones as c', 'c.id', '=', 'df.cotizacion_id')
             ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
             ->where(function ($sq) use ($clienteId) {
-                $sq->where('c.cliente_id', $clienteId)->orWhere('df.cliente_id', $clienteId);
+                if (is_numeric($clienteId)) {
+                    $sq->where('c.cliente_id', (int) $clienteId)
+                       ->orWhere('df.cliente_id', (int) $clienteId);
+                } else {
+                    // Lookup por RUT para clientes sin registro local
+                    $sq->where('df.bsale_cliente_rut', $clienteId);
+                }
             })
             ->where('df.estado', 'emitido')
             ->select(
