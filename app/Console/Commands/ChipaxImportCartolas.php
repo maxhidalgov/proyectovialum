@@ -169,8 +169,10 @@ class ChipaxImportCartolas extends Command
         // Detectar si está conciliado en Chipax:
         // 1. No está en la lista de pendientes (porConciliar=true)
         // 2. Tiene documentos asociados (idCartolasDocumentos > 0)
-        $conciliadoChipax = !isset($pendingIds[$item['id']])
-            || (($item['Saldo']['idCartolasDocumentos'] ?? 0) > 0);
+        // Nota: el campo puede estar a nivel raíz O bajo Saldo según versión API
+        $idDocs = $item['idCartolasDocumentos']
+               ?? ($item['Saldo']['idCartolasDocumentos'] ?? 0);
+        $conciliadoChipax = !isset($pendingIds[$item['id']]) || $idDocs > 0;
 
         $monto  = $item['abono'] > 0 ? $item['abono'] : abs($item['cargo']);
         $tipo   = $item['abono'] > 0 ? 'C' : 'D';
@@ -218,7 +220,8 @@ class ChipaxImportCartolas extends Command
                         'banco'               => $item['CuentaCorriente']['banco'] ?? null,
                         'numeroDocumento'     => $item['numeroDocumento'] ?? null,
                         'idCargasCartolas'    => $item['idCargasCartolas'] ?? null,
-                        'idCartolasDocumentos'=> $item['Saldo']['idCartolasDocumentos'] ?? null,
+                        'idCartolasDocumentos'=> $item['idCartolasDocumentos']
+                                                ?? ($item['Saldo']['idCartolasDocumentos'] ?? null),
                     ],
                 ]
             );

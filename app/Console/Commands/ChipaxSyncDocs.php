@@ -94,6 +94,24 @@ class ChipaxSyncDocs extends Command
                 $montoVinculado = collect($linkedDocs)->sum('monto');
 
                 if (empty($linkedDocs)) {
+                    // Si Chipax tiene docs vinculados (idCartolasDocumentos > 0)
+                    // pero la API avanzada no los devuelve (ej: Transbank batch),
+                    // igual marcamos conciliado usando el raw almacenado.
+                    if (!$dry) {
+                        $movLocal = DB::table('movimientos_bancarios')
+                            ->where('chipax_id', $chipaxId)
+                            ->first();
+                        if ($movLocal) {
+                            $raw = is_string($movLocal->raw) ? json_decode($movLocal->raw, true) : (array) ($movLocal->raw ?? []);
+                            $idDocs = (int) ($raw['idCartolasDocumentos'] ?? 0);
+                            if ($idDocs > 0 && !$movLocal->conciliado) {
+                                DB::table('movimientos_bancarios')
+                                    ->where('id', $movLocal->id)
+                                    ->update(['conciliado' => true]);
+                                $updated++;
+                            }
+                        }
+                    }
                     $sinDocs++;
                     continue;
                 }
