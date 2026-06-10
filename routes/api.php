@@ -232,6 +232,7 @@ Route::middleware('auth:api')->group(function () {
     // Sync ventas desde Bsale → documentos_facturacion
     Route::post('/ventas/sincronizar',            [\App\Http\Controllers\BsaleVentaSyncController::class, 'sincronizar']);
     Route::post('/ventas/backfill-comprobantes',  [\App\Http\Controllers\BsaleVentaSyncController::class, 'backfillComprobantes']);
+    Route::post('/ventas/backfill-forma-pago',    [\App\Http\Controllers\BsaleVentaSyncController::class, 'backfillFormaPago']);
 
     // Boletas — resúmenes mensuales por forma de pago
     Route::prefix('boletas')->group(function () {

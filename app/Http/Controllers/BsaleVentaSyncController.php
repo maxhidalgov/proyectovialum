@@ -163,6 +163,55 @@ class BsaleVentaSyncController extends Controller
         return 'nuevo';
     }
 
+    // ── POST /api/ventas/backfill-forma-pago ─────────────────────────────────
+    // Rellena payment_type_id y forma_pago para boletas 2026 ya sincronizadas.
+    // Llamar en lotes (limit=50) hasta que pendientes=0.
+
+    public function backfillFormaPago(Request $request)
+    {
+        set_time_limit(0);
+        $limit = (int) $request->get('limit', 50);
+
+        $docs = DB::table('documentos_facturacion')
+            ->whereNotNull('id_documento_bsale')
+            ->whereIn('tipo_documento_bsale_id', [1, 5])
+            ->whereNull('forma_pago')
+            ->where('fecha_emision', '>=', '2026-01-01')
+            ->select('id', 'id_documento_bsale')
+            ->limit($limit)
+            ->get();
+
+        $actualizados = 0;
+
+        foreach ($docs as $doc) {
+            $pago = $this->obtenerInfoPago((int) $doc->id_documento_bsale);
+
+            DB::table('documentos_facturacion')
+                ->where('id', $doc->id)
+                ->update([
+                    'payment_type_id' => $pago['payment_type_id'],
+                    'forma_pago'      => $pago['forma_pago'],
+                    'updated_at'      => now(),
+                ]);
+
+            $actualizados++;
+        }
+
+        $pendientes = DB::table('documentos_facturacion')
+            ->whereNotNull('id_documento_bsale')
+            ->whereIn('tipo_documento_bsale_id', [1, 5])
+            ->whereNull('forma_pago')
+            ->where('fecha_emision', '>=', '2026-01-01')
+            ->count();
+
+        return response()->json([
+            'success'      => true,
+            'revisados'    => $docs->count(),
+            'actualizados' => $actualizados,
+            'pendientes'   => $pendientes,
+        ]);
+    }
+
     // ── POST /api/ventas/backfill-comprobantes ────────────────────────────────
     // Rellena nro_comprobante_transbank y pagado_con_tarjeta para docs ya sincronizados.
 
