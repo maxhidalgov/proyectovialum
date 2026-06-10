@@ -189,6 +189,12 @@ const allMenuItems = [
         icon: { icon: 'mdi-credit-card-outline' },
         permission: 'gestionar_usuarios',
       },
+      {
+        title: 'Boletas',
+        to: { name: 'boletas' },
+        icon: { icon: 'mdi-receipt-text-outline' },
+        permission: 'gestionar_usuarios',
+      },
     ],
   },
   {

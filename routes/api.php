@@ -233,6 +233,15 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/ventas/sincronizar',            [\App\Http\Controllers\BsaleVentaSyncController::class, 'sincronizar']);
     Route::post('/ventas/backfill-comprobantes',  [\App\Http\Controllers\BsaleVentaSyncController::class, 'backfillComprobantes']);
 
+    // Boletas — resúmenes mensuales por forma de pago
+    Route::prefix('boletas')->group(function () {
+        Route::get('/resumenes',                              [\App\Http\Controllers\BoletaResumenController::class, 'index']);
+        Route::get('/resumenes/{id}/boletas',                 [\App\Http\Controllers\BoletaResumenController::class, 'boletas']);
+        Route::post('/resumenes/{id}/conciliar',              [\App\Http\Controllers\BoletaResumenController::class, 'conciliar']);
+        Route::delete('/resumenes/movimiento/{pivotId}',      [\App\Http\Controllers\BoletaResumenController::class, 'desvincular']);
+        Route::post('/resumenes/recalcular',                  [\App\Http\Controllers\BoletaResumenController::class, 'recalcular']);
+    });
+
     // Cuentas por Cobrar
     Route::get('/cuentas-por-cobrar',                        [\App\Http\Controllers\CuentasPorCobrarController::class, 'index']);
     Route::get('/cuentas-por-cobrar/por-revisar',            [\App\Http\Controllers\CuentasPorCobrarController::class, 'porRevisar']);

@@ -13,9 +13,19 @@ class BsaleVentaSyncController extends Controller
     private string $token;
     private string $baseUrl;
 
-    // Tipos de documento Bsale que son ventas (excluye notas de crédito tipo 2)
     private const TIPOS_VENTA = [1, 3, 4, 5, 6];
     private const TIPOS_NC    = [2];
+
+    // paymentTypeId de Bsale → forma_pago normalizada para boleta_resumenes
+    private const FORMA_PAGO_MAP = [
+        1  => 'efectivo',
+        2  => 'tarjeta_credito',
+        5  => 'cheque',
+        6  => 'tarjeta_debito',
+        8  => 'transferencia',
+        10 => 'tarjeta_credito',  // webpay
+        13 => 'tarjeta_credito',  // mercadopago
+    ];
 
     public function __construct()
     {
@@ -124,9 +134,7 @@ class BsaleVentaSyncController extends Controller
         [$clienteId, $clienteRut, $clienteNombre] =
             $this->resolverCliente($doc, $clienteCache);
 
-        // Obtener info de pago con tarjeta desde Bsale (comprobante + flag)
-        ['tarjeta' => $pagadoConTarjeta, 'comprobante' => $nroComprobante] =
-            $this->obtenerInfoTarjeta((int) $bsaleId);
+        $pago = $this->obtenerInfoPago((int) $bsaleId);
 
         DB::table('documentos_facturacion')->insert([
             'cotizacion_id'              => null,
@@ -143,8 +151,10 @@ class BsaleVentaSyncController extends Controller
             'url_pdf_bsale'              => $doc['urlPdf'] ?? null,
             'fecha_emision'              => $fechaEmision,
             'tipo_documento_bsale_id'    => $tipo,
-            'nro_comprobante_transbank'  => $nroComprobante,
-            'pagado_con_tarjeta'         => $pagadoConTarjeta ? 1 : null,
+            'nro_comprobante_transbank'  => $pago['comprobante'],
+            'pagado_con_tarjeta'         => $pago['tarjeta'] ? 1 : 0,
+            'payment_type_id'            => $pago['payment_type_id'],
+            'forma_pago'                 => $pago['forma_pago'],
             'nota'                       => null,
             'created_at'                 => now(),
             'updated_at'                 => now(),
@@ -206,11 +216,11 @@ class BsaleVentaSyncController extends Controller
         ]);
     }
 
-    // ── Consultar Bsale payments: ¿fue pagado con tarjeta? ¿tiene comprobante? ──
+    // ── Consultar Bsale payments: forma de pago + comprobante ────────────────
 
-    private function obtenerInfoTarjeta(int $bsaleId): array
+    private function obtenerInfoPago(int $bsaleId): array
     {
-        $tiposTarjeta = ['2', '6', '10']; // credito, debito, webpay
+        $result = ['tarjeta' => false, 'comprobante' => null, 'payment_type_id' => null, 'forma_pago' => null];
 
         try {
             $res = Http::timeout(10)
@@ -220,25 +230,36 @@ class BsaleVentaSyncController extends Controller
                     'expand'     => 'attributes',
                 ]);
 
-            if (!$res->ok()) return ['tarjeta' => false, 'comprobante' => null];
+            if (!$res->ok()) return $result;
 
             foreach ($res->json()['items'] ?? [] as $pago) {
-                $typeId = (string) ($pago['payment_type']['id'] ?? '');
-                if (!in_array($typeId, $tiposTarjeta)) continue;
+                $typeId = (int) ($pago['payment_type']['id'] ?? 0);
+                if (!$typeId) continue;
 
-                // Hay pago con tarjeta — buscar Nº Comprobante (puede no estar si no fue digitado)
-                $comprobante = null;
-                foreach ($pago['attributes'] ?? [] as $attr) {
-                    if (($attr['name'] ?? '') === 'Nº Comprobante' && !empty($attr['value'])) {
-                        $comprobante = (string) ltrim((string) $attr['value'], '0') ?: null;
-                        break;
+                $result['payment_type_id'] = $typeId;
+                $result['forma_pago']      = self::FORMA_PAGO_MAP[$typeId] ?? null;
+                $result['tarjeta']         = in_array($typeId, [2, 6, 10, 13]);
+
+                if ($result['tarjeta']) {
+                    foreach ($pago['attributes'] ?? [] as $attr) {
+                        if (($attr['name'] ?? '') === 'Nº Comprobante' && !empty($attr['value'])) {
+                            $result['comprobante'] = (string) ltrim((string) $attr['value'], '0') ?: null;
+                            break;
+                        }
                     }
                 }
-                return ['tarjeta' => true, 'comprobante' => $comprobante];
+
+                break; // usar el primer medio de pago
             }
         } catch (\Throwable) {}
 
-        return ['tarjeta' => false, 'comprobante' => null];
+        return $result;
+    }
+
+    private function obtenerInfoTarjeta(int $bsaleId): array
+    {
+        $p = $this->obtenerInfoPago($bsaleId);
+        return ['tarjeta' => $p['tarjeta'], 'comprobante' => $p['comprobante']];
     }
 
     // ── Resolver cliente: cache + lookup local por RUT ────────────────────────
