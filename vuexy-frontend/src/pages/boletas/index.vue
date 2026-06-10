@@ -18,6 +18,17 @@
           <VBtn
             variant="outlined"
             size="small"
+            color="warning"
+            :loading="backfilling"
+            prepend-icon="mdi-download-outline"
+            @click="backfillFormaPago"
+            title="Consulta Bsale y rellena la forma de pago en boletas 2026 ya sincronizadas"
+          >
+            Backfill Forma Pago
+          </VBtn>
+          <VBtn
+            variant="outlined"
+            size="small"
             :loading="recalculando"
             prepend-icon="mdi-refresh"
             @click="recalcular"
@@ -27,6 +38,10 @@
         </VCardTitle>
 
         <VDivider />
+
+        <VAlert v-if="backfillMsg" type="info" density="compact" class="ma-3" closable @click:close="backfillMsg=''">
+          {{ backfillMsg }}
+        </VAlert>
 
         <VCardText v-if="loading" class="text-center pa-8">
           <VProgressCircular indeterminate color="primary" />
@@ -224,6 +239,8 @@ import axios from '@/axiosInstance'
 const loading      = ref(false)
 const recalculando = ref(false)
 const guardando    = ref(false)
+const backfilling  = ref(false)
+const backfillMsg  = ref('')
 
 const resumenes     = ref([])
 const periodos      = ref([])
@@ -255,6 +272,26 @@ async function cargar() {
 
 watch(periodoFiltro, cargar)
 onMounted(cargar)
+
+// ── Backfill forma_pago ───────────────────────────────────────────────────
+
+async function backfillFormaPago() {
+  backfilling.value = true
+  backfillMsg.value = ''
+  let total = 0
+  try {
+    while (true) {
+      const { data } = await axios.post('/api/ventas/backfill-forma-pago', { limit: 50 })
+      total += data.actualizados
+      backfillMsg.value = `Procesando… ${total} actualizadas, ${data.pendientes} pendientes`
+      if (data.pendientes === 0) break
+    }
+    backfillMsg.value = `✓ Listo — ${total} boletas actualizadas`
+    await recalcular()
+  } finally {
+    backfilling.value = false
+  }
+}
 
 // ── Recalcular ────────────────────────────────────────────────────────────
 
