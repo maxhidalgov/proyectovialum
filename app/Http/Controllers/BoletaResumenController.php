@@ -11,39 +11,31 @@ class BoletaResumenController extends Controller
 
     public function index(Request $request)
     {
-        $periodo = $request->get('periodo'); // opcional, filtra por mes
+        $periodo = $request->get('periodo');
 
         $resumenes = DB::table('boleta_resumenes as br')
-            ->select(
-                'br.*',
-                DB::raw('(
-                    SELECT JSON_ARRAYAGG(
-                        JSON_OBJECT(
-                            "id", brm.id,
-                            "movimiento_id", brm.movimiento_id,
-                            "monto", brm.monto,
-                            "fecha", mb.fecha_contable,
-                            "descripcion", mb.descripcion
-                        )
-                    )
-                    FROM boleta_resumen_movimiento brm
-                    JOIN movimientos_bancarios mb ON mb.id = brm.movimiento_id
-                    WHERE brm.boleta_resumen_id = br.id
-                ) as movimientos_json')
-            )
             ->when($periodo, fn($q) => $q->where('br.periodo', $periodo))
             ->orderByDesc('br.periodo')
             ->orderBy('br.forma_pago')
-            ->get()
-            ->map(function ($r) {
-                $r->movimientos = $r->movimientos_json
-                    ? json_decode($r->movimientos_json, true)
-                    : [];
-                unset($r->movimientos_json);
+            ->get();
+
+        if ($resumenes->isNotEmpty()) {
+            $ids = $resumenes->pluck('id')->all();
+
+            $movimientos = DB::table('boleta_resumen_movimiento as brm')
+                ->join('movimientos_bancarios as mb', 'mb.id', '=', 'brm.movimiento_id')
+                ->whereIn('brm.boleta_resumen_id', $ids)
+                ->select('brm.id', 'brm.boleta_resumen_id', 'brm.movimiento_id', 'brm.monto',
+                         'mb.fecha_contable as fecha', 'mb.descripcion')
+                ->get()
+                ->groupBy('boleta_resumen_id');
+
+            $resumenes = $resumenes->map(function ($r) use ($movimientos) {
+                $r->movimientos = $movimientos->get($r->id, collect())->values()->all();
                 return $r;
             });
+        }
 
-        // Periodos disponibles para el filtro
         $periodos = DB::table('boleta_resumenes')
             ->select('periodo')
             ->groupBy('periodo')
