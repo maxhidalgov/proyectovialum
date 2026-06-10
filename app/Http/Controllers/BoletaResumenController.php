@@ -57,7 +57,7 @@ class BoletaResumenController extends Controller
         if (!$resumen) return response()->json(['error' => 'No encontrado'], 404);
 
         $boletas = DB::table('documentos_facturacion')
-            ->whereIn('tipo_documento_bsale_id', [1, 5])
+            ->whereIn('tipo_documento_bsale_id', [1])
             ->where('forma_pago', $resumen->forma_pago)
             ->whereRaw("DATE_FORMAT(fecha_emision, '%Y-%m') = ?", [$resumen->periodo])
             ->select('id', 'numero_documento_bsale', 'bsale_cliente_nombre', 'fecha_emision', 'monto', 'forma_pago')

@@ -22,8 +22,8 @@ class BoletasRecalcularResumenes extends Command
 
     protected $description = 'Agrupa boletas por periodo+forma_pago y actualiza boleta_resumenes';
 
-    // tipo_documento_bsale_id que corresponden a boletas
-    private const TIPOS_BOLETA = [1, 5];
+    // tipo_documento_bsale_id que corresponden a boletas (tipo 1 = Boleta Electrónica en esta cuenta Bsale)
+    private const TIPOS_BOLETA = [1];
 
     public function handle(): int
     {

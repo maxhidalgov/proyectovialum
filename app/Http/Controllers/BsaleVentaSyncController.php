@@ -174,7 +174,7 @@ class BsaleVentaSyncController extends Controller
 
         $docs = DB::table('documentos_facturacion')
             ->whereNotNull('id_documento_bsale')
-            ->whereIn('tipo_documento_bsale_id', [1, 5])
+            ->whereIn('tipo_documento_bsale_id', [1])
             ->whereNull('forma_pago')
             ->where('fecha_emision', '>=', '2026-01-01')
             ->select('id', 'id_documento_bsale')
@@ -199,7 +199,7 @@ class BsaleVentaSyncController extends Controller
 
         $pendientes = DB::table('documentos_facturacion')
             ->whereNotNull('id_documento_bsale')
-            ->whereIn('tipo_documento_bsale_id', [1, 5])
+            ->whereIn('tipo_documento_bsale_id', [1])
             ->whereNull('forma_pago')
             ->where('fecha_emision', '>=', '2026-01-01')
             ->count();
