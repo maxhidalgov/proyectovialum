@@ -290,16 +290,11 @@
                     <span
                       v-bind="props"
                       style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default"
-                    >{{ descLimpia(item.descripcion) }}</span>
+                    >{{ descLimpia(item.glosa || item.descripcion) }}</span>
                   </template>
                   <div style="font-size:11px;line-height:1.8;white-space:pre-wrap">
-                    <div>{{ descLimpia(item.descripcion) }}</div>
-                    <div v-if="item.numero_documento" class="mt-1 text-medium-emphasis">
-                      N° Doc: {{ item.numero_documento }}
-                    </div>
-                    <div v-if="item.glosa && item.glosa !== item.descripcion" class="mt-1 text-medium-emphasis">
-                      <div v-for="(parte, i) in item.glosa.split(/\s*[•·]\s*/).filter(p => !/^banco\s/i.test(p.trim()))" :key="i">{{ parte }}</div>
-                    </div>
+                    <div v-for="(parte, i) in descLimpia(item.glosa || item.descripcion).split(' • ')" :key="i">{{ parte }}</div>
+                    <div v-if="item.numero_documento" class="mt-1 text-medium-emphasis">N° Doc: {{ item.numero_documento }}</div>
                   </div>
                 </VTooltip>
                 <!-- N° Doc (cheques) -->
