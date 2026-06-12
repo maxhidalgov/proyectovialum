@@ -290,10 +290,10 @@
                     <span
                       v-bind="props"
                       style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default"
-                    >{{ descLimpia(item.glosa || item.descripcion) }}</span>
+                    >{{ descCelda(item.descripcion, item.glosa) }}</span>
                   </template>
-                  <div style="font-size:11px;line-height:1.8;white-space:pre-wrap">
-                    <div v-for="(parte, i) in descLimpia(item.glosa || item.descripcion).split(' • ')" :key="i">{{ parte }}</div>
+                  <div style="font-size:11px;line-height:1.8">
+                    <div v-for="(parte, i) in glosaTipoFiltrada(item.glosa || item.descripcion)" :key="i">{{ parte }}</div>
                     <div v-if="item.numero_documento" class="mt-1 text-medium-emphasis">N° Doc: {{ item.numero_documento }}</div>
                   </div>
                 </VTooltip>
@@ -2732,6 +2732,25 @@ function formatMonto(v) {
 function descLimpia(desc) {
   if (!desc) return ''
   return desc.split(/\s*[•·]\s*/).filter(p => !/^banco\s/i.test(p.trim())).join(' • ').trim()
+}
+
+// Para movimientos BCH portal: descripcion limpia + comentario si existe
+function descCelda(desc, glosa) {
+  const comentario = extraerComentario(glosa)
+  const base = desc || ''
+  return comentario ? base + ' — ' + comentario : descLimpia(glosa || base)
+}
+
+function extraerComentario(glosa) {
+  if (!glosa) return ''
+  const parte = glosa.split(/\s*·\s*/).find(p => /^comentario:\s*/i.test(p.trim()))
+  return parte ? parte.replace(/^comentario:\s*/i, '').trim() : ''
+}
+
+// Partes del glosa para el tooltip, sin RUT ni Cuenta ni Banco
+function glosaTipoFiltrada(glosa) {
+  if (!glosa) return []
+  return glosa.split(/\s*·\s*/).filter(p => !/^(rut|cuenta|banco)/i.test(p.trim()) && p.trim())
 }
 
 // Glosa corta: oculta campos ruidosos (cuentas e IDs de transacción)
