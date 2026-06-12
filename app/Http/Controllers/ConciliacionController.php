@@ -165,8 +165,10 @@ class ConciliacionController extends Controller
 
         // Línea 1: extraer número de cuenta
         $cabecera = trim($lineas[0] ?? '');
-        preg_match('/cta:(\d+)/i', $cabecera, $m);
-        $cuenta = $m[1] ?? config('services.bch.cuenta', '');
+        preg_match('/cta:([\d\-]+)/i', $cabecera, $m);
+        $raw    = $m[1] ?? config('services.bch.cuenta', '');
+        // Normalizar: quitar guiones + ceros iniciales → mismo formato que portal BCH
+        $cuenta = ltrim(preg_replace('/[^0-9]/', '', $raw), '0') ?: $raw;
 
         $nuevos     = 0;
         $duplicados = 0;
@@ -270,13 +272,19 @@ class ConciliacionController extends Controller
                    ->orWhere('glosa', 'like', $term);
             });
         }
+        if ($request->filled('monto')) {
+            $montoNum = (int) preg_replace('/[^0-9]/', '', $request->monto);
+            if ($montoNum > 0) {
+                $q->whereRaw('ROUND(ABS(monto)) = ?', [$montoNum]);
+            }
+        }
         if ($request->filled('cuenta')) {
             $q->where('cuenta', $request->cuenta);
         }
 
         $movs = $q->paginate(150);
 
-        // Enriquecer con montos asignados (compras + gastos + sueldos + ventas + ingresos)
+        // Enriquecer con montos asignados (compras + gastos + sueldos + ventas + ingresos + boletas)
         $ids = $movs->pluck('id');
 
         $asignadosCompra = DB::table('compra_movimiento')
@@ -309,14 +317,30 @@ class ConciliacionController extends Controller
             ->selectRaw('movimiento_id, SUM(monto) as asignado')
             ->pluck('asignado', 'movimiento_id');
 
+        // Boletas conciliadas por forma_pago (desde CPC) y por período (desde Conciliación)
+        $asignadosBolResumen = DB::table('boleta_resumen_movimiento')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
+        $asignadosBolPeriodo = DB::table('boleta_periodo_movimiento')
+            ->whereIn('movimiento_id', $ids)
+            ->groupBy('movimiento_id')
+            ->selectRaw('movimiento_id, SUM(monto) as asignado')
+            ->pluck('asignado', 'movimiento_id');
+
         $movs->getCollection()->transform(function ($mov) use (
-            $asignadosCompra, $asignadosGasto, $asignadosSueldo, $asignadosVenta, $asignadosIngreso
+            $asignadosCompra, $asignadosGasto, $asignadosSueldo, $asignadosVenta,
+            $asignadosIngreso, $asignadosBolResumen, $asignadosBolPeriodo
         ) {
-            $asignado = (float) ($asignadosCompra[$mov->id] ?? 0)
-                      + (float) ($asignadosGasto[$mov->id] ?? 0)
-                      + (float) ($asignadosSueldo[$mov->id] ?? 0)
-                      + (float) ($asignadosVenta[$mov->id] ?? 0)
-                      + (float) ($asignadosIngreso[$mov->id] ?? 0);
+            $asignado = (float) ($asignadosCompra[$mov->id]     ?? 0)
+                      + (float) ($asignadosGasto[$mov->id]      ?? 0)
+                      + (float) ($asignadosSueldo[$mov->id]     ?? 0)
+                      + (float) ($asignadosVenta[$mov->id]      ?? 0)
+                      + (float) ($asignadosIngreso[$mov->id]    ?? 0)
+                      + (float) ($asignadosBolResumen[$mov->id] ?? 0)
+                      + (float) ($asignadosBolPeriodo[$mov->id] ?? 0);
             $mov->monto_asignado    = $asignado;
             $mov->saldo_por_asignar = max(0, $mov->monto - $asignado);
             return $mov;
