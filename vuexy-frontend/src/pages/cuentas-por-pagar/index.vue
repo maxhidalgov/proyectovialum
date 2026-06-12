@@ -6,14 +6,35 @@
         <h4 class="text-h5 font-weight-bold">Cuentas por Pagar</h4>
         <p class="text-body-2 text-medium-emphasis mb-0">Deuda neta con proveedores · facturas de compra menos notas de crédito</p>
       </VCol>
-      <VCol cols="auto">
+      <VCol cols="auto" class="d-flex align-center gap-2">
+        <!-- Reglas de categorización -->
+        <VBtn
+          color="info"
+          variant="tonal"
+          size="small"
+          @click="abrirReglas"
+        >
+          <VIcon start size="16">mdi-tag-multiple</VIcon>
+          Reglas
+        </VBtn>
+        <!-- Vincular NCs pendientes -->
+        <VBtn
+          color="secondary"
+          variant="tonal"
+          size="small"
+          :loading="loadingVincularNcs"
+          @click="vincularNcsPendientes"
+        >
+          <VIcon start size="16">mdi-link-variant</VIcon>
+          Vincular NCs
+        </VBtn>
         <!-- Alerta Por Revisar -->
         <VBtn
           v-if="totales.facturas_por_revisar > 0"
           color="warning"
           variant="tonal"
           size="small"
-          @click="dialogPorRevisar = true"
+          @click="abrirPorRevisar"
         >
           <VIcon start size="16">mdi-alert-circle</VIcon>
           {{ totales.facturas_por_revisar }} por revisar
@@ -31,10 +52,13 @@
           <VCol cols="12" sm="3">
             <VTextField v-model="filtros.hasta" label="Hasta" type="date" density="compact" variant="outlined" hide-details @update:modelValue="cargar" />
           </VCol>
-          <VCol cols="12" sm="4">
+          <VCol cols="12" sm="3">
             <VTextField v-model="filtros.buscar" label="Buscar proveedor" density="compact" variant="outlined" hide-details prepend-inner-icon="mdi-magnify" clearable @update:modelValue="cargar" />
           </VCol>
           <VCol cols="12" sm="2">
+            <VTextField v-model="filtros.monto" label="Monto exacto" density="compact" variant="outlined" hide-details prepend-inner-icon="mdi-currency-usd" clearable @update:modelValue="cargar" />
+          </VCol>
+          <VCol cols="12" sm="1">
             <VSwitch v-model="filtros.solo_pendientes" label="Solo pendientes" density="compact" hide-details color="warning" @update:modelValue="cargar" />
           </VCol>
         </VRow>
@@ -156,6 +180,7 @@
                       <th class="text-end">Total</th>
                       <th class="text-end">Pagado/Usado</th>
                       <th class="text-end">Pendiente</th>
+                      <th>Categoría</th>
                       <th>Estado</th>
                       <th>Acciones</th>
                     </tr>
@@ -189,6 +214,21 @@
                         <td class="text-end font-weight-bold" :class="f.pendiente > 0 ? 'text-error' : f.pendiente < 0 ? 'text-success' : 'text-medium-emphasis'">
                           {{ fmt(f.pendiente) }}
                         </td>
+                        <!-- Categoría editable -->
+                        <td>
+                          <div v-if="!f.es_nc" style="min-width:160px">
+                            <VSelect
+                              :model-value="f.categoria"
+                              :items="categoriasDisponibles"
+                              density="compact"
+                              variant="plain"
+                              hide-details
+                              placeholder="Sin categoría"
+                              style="font-size:12px"
+                              @update:model-value="(val) => abrirCambiarCategoria(f, item, val)"
+                            />
+                          </div>
+                        </td>
                         <!-- Estado -->
                         <td>
                           <div class="d-flex flex-column gap-1">
@@ -205,10 +245,10 @@
                             <VChip
                               v-if="f.es_nc"
                               size="x-small"
-                              :color="f.nc_referencia_id ? 'primary' : 'secondary'"
+                              :color="f.pendiente == 0 ? 'success' : (f.nc_posicion_factura_id ? 'primary' : 'secondary')"
                               variant="tonal"
                             >
-                              {{ f.nc_referencia_id ? 'Vinculada' : 'Sin vincular' }}
+                              {{ f.pendiente == 0 ? 'Aplicada' : (f.nc_posicion_factura_id ? 'Vinculada' : 'Sin vincular') }}
                             </VChip>
                             <!-- Estado revisión -->
                             <VChip
@@ -245,6 +285,9 @@
                               <VBtn v-if="f.pendiente > 0" size="x-small" variant="tonal" color="primary" @click="abrirConciliar(f, item)">
                                 <VIcon size="12" class="mr-1">mdi-link-variant</VIcon>Conciliar
                               </VBtn>
+                              <VBtn v-else size="x-small" variant="text" color="success" @click="abrirConciliar(f, item)">
+                                <VIcon size="13">mdi-eye-outline</VIcon>
+                              </VBtn>
                               <!-- Cambiar estado revisión si tiene NC -->
                               <VMenu v-if="f.nc_revision_estado === 'requiere_revision'" location="bottom end">
                                 <template #activator="{ props: mp }">
@@ -268,7 +311,8 @@
 
                             <!-- NC: vincular / aplicar -->
                             <template v-else>
-                              <VBtn size="x-small" variant="tonal"
+                              <!-- Vincular solo si tiene saldo (pendiente < 0) o ya está vinculada formalmente (para poder desvincular) -->
+                              <VBtn v-if="f.pendiente < 0 || f.nc_referencia_id" size="x-small" variant="tonal"
                                 :color="f.nc_referencia_id ? 'secondary' : 'success'"
                                 @click="abrirVincularNC(f, item)">
                                 <VIcon size="12" class="mr-1">{{ f.nc_referencia_id ? 'mdi-link-off' : 'mdi-link-plus' }}</VIcon>
@@ -316,11 +360,12 @@
             <VCol cols="12" md="8" class="border-e">
               <div class="pa-4">
                 <p class="text-subtitle-2 font-weight-bold mb-3 text-primary">Movimientos Bancarios</p>
-                <div v-if="asignados.length" class="mb-4">
+                <div v-if="asignados.length || ncsAplicadas.length" class="mb-4">
                   <p class="text-caption text-medium-emphasis mb-2">Asignados:</p>
                   <VTable density="compact">
                     <tbody>
-                      <tr v-for="a in asignados" :key="a.pivot_id">
+                      <!-- Pagos bancarios -->
+                      <tr v-for="a in asignados" :key="'b-' + a.pivot_id">
                         <td class="text-caption">{{ fmtFecha(a.fecha_contable) }}</td>
                         <td class="text-caption" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.descripcion }}</td>
                         <td class="text-end text-caption font-weight-bold text-success">{{ fmt(a.monto_asignado) }}</td>
@@ -330,12 +375,30 @@
                           </VBtn>
                         </td>
                       </tr>
+                      <!-- NCs aplicadas -->
+                      <tr v-for="nc in ncsAplicadas" :key="'nc-' + nc.pivot_id" style="opacity:0.85">
+                        <td class="text-caption">{{ fmtFecha(nc.fecha_contable) }}</td>
+                        <td class="text-caption" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                          <VChip size="x-small" color="success" variant="tonal" class="mr-1">NC</VChip>
+                          {{ nc.descripcion }}
+                        </td>
+                        <td class="text-end text-caption font-weight-bold text-success">{{ fmt(nc.monto_asignado) }}</td>
+                        <td></td>
+                      </tr>
                     </tbody>
                   </VTable>
                   <VDivider class="my-3" />
                 </div>
-                <VTextField v-model="buscarMov" placeholder="Buscar movimiento..." density="compact" variant="outlined"
-                  prepend-inner-icon="mdi-magnify" hide-details class="mb-3" clearable @update:modelValue="cargarDisponibles" />
+                <VRow dense class="mb-3">
+                  <VCol cols="8">
+                    <VTextField v-model="buscarMov" placeholder="Buscar descripción..." density="compact" variant="outlined"
+                      prepend-inner-icon="mdi-magnify" hide-details clearable @update:modelValue="cargarDisponibles" />
+                  </VCol>
+                  <VCol cols="4">
+                    <VTextField v-model="buscarMontoMov" placeholder="Monto exacto" density="compact" variant="outlined"
+                      prepend-inner-icon="mdi-currency-usd" hide-details clearable @update:modelValue="cargarDisponibles" />
+                  </VCol>
+                </VRow>
                 <div v-if="loadingDisponibles" class="text-center py-6"><VProgressCircular indeterminate size="28" /></div>
                 <VTable density="compact">
                   <thead>
@@ -379,8 +442,12 @@
                     <span class="font-weight-bold">{{ fmt(facturaActiva.total) }}</span>
                   </div>
                   <div class="d-flex justify-space-between mt-1">
-                    <span class="text-body-2 text-success">Pagado</span>
-                    <span class="text-success">{{ fmt(facturaActiva.total - saldoPorPagar) }}</span>
+                    <span class="text-body-2 text-success">Pagado (banco)</span>
+                    <span class="text-success">{{ fmt(asignados.reduce((s,a) => s + a.monto_asignado, 0)) }}</span>
+                  </div>
+                  <div v-if="ncsAplicadas.length" class="d-flex justify-space-between mt-1">
+                    <span class="text-body-2 text-success">Nota(s) de crédito</span>
+                    <span class="text-success">{{ fmt(ncsAplicadas.reduce((s,a) => s + a.monto_asignado, 0)) }}</span>
                   </div>
                   <VDivider class="my-2" />
                   <div class="d-flex justify-space-between">
@@ -566,6 +633,145 @@
         </VCardText>
       </VCard>
     </VDialog>
+
+    <!-- ── Dialog: Cambiar categoría ──────────────────────────────────────── -->
+    <VDialog v-model="dialogCategoria" max-width="460" persistent>
+      <VCard>
+        <VCardTitle class="text-h6 pa-4">Cambiar categoría</VCardTitle>
+        <VCardText class="pb-0">
+          <p class="text-body-2 mb-3">
+            <strong>{{ facturaCategoria?.folio }}</strong> ·
+            {{ fmtFecha(facturaCategoria?.fecha_emision) }} ·
+            {{ fmt(facturaCategoria?.total) }}
+          </p>
+          <VSelect
+            v-model="nuevaCategoria"
+            :items="categoriasDisponibles"
+            label="Categoría"
+            density="compact"
+            variant="outlined"
+          />
+          <VCheckbox
+            v-model="crearReglaCategoria"
+            density="compact"
+            hide-details
+            class="mt-2"
+            :label="`Crear regla para ${proveedorCategoria?.nombre_emisor} (${proveedorCategoria?.rut_emisor})`"
+          />
+          <p v-if="crearReglaCategoria" class="text-caption text-info mt-1 ml-8">
+            Todas las facturas futuras de este proveedor se categorizarán automáticamente.
+          </p>
+        </VCardText>
+        <VCardActions class="pa-4 pt-2">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogCategoria = false">Cancelar</VBtn>
+          <VBtn color="primary" variant="flat" :loading="loadingCategoria" @click="guardarCategoria">Guardar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- ── Dialog: Reglas de proveedores ──────────────────────────────────── -->
+    <VDialog v-model="dialogReglas" max-width="800">
+      <VCard>
+        <VCardTitle class="d-flex align-center justify-space-between pa-4 pb-2">
+          <span class="text-h6">Reglas de categorización</span>
+          <div class="d-flex gap-2">
+            <VBtn size="small" color="success" variant="flat" prepend-icon="mdi-plus" @click="abrirNuevaRegla">
+              Nueva regla
+            </VBtn>
+            <VBtn size="small" color="secondary" variant="tonal" prepend-icon="mdi-play" :loading="loadingAplicarReglas" @click="aplicarTodasReglas">
+              Aplicar a historial
+            </VBtn>
+          </div>
+        </VCardTitle>
+        <VCardText class="pa-0">
+          <VTable density="compact">
+            <thead>
+              <tr>
+                <th>RUT</th>
+                <th>Proveedor</th>
+                <th>Categoría</th>
+                <th style="width:80px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="reglas.length === 0">
+                <td colspan="4" class="text-center text-medium-emphasis py-4">Sin reglas</td>
+              </tr>
+              <template v-for="r in reglas" :key="r.id">
+                <tr>
+                  <td class="text-caption">{{ r.rut_emisor }}</td>
+                  <td class="text-caption">{{ r.nombre_emisor }}</td>
+                  <td>
+                    <template v-if="editandoRegla?.id === r.id">
+                      <VSelect
+                        v-model="editandoRegla.categoria"
+                        :items="categoriasDisponibles"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        style="min-width:200px"
+                      />
+                    </template>
+                    <VChip v-else size="x-small" color="info" variant="tonal">{{ r.categoria }}</VChip>
+                  </td>
+                  <td>
+                    <div class="d-flex gap-1">
+                      <template v-if="editandoRegla?.id === r.id">
+                        <VBtn icon size="x-small" color="success" variant="text" :loading="loadingGuardarRegla" @click="guardarRegla">
+                          <VIcon size="16">mdi-check</VIcon>
+                        </VBtn>
+                        <VBtn icon size="x-small" variant="text" @click="editandoRegla = null">
+                          <VIcon size="16">mdi-close</VIcon>
+                        </VBtn>
+                      </template>
+                      <template v-else>
+                        <VBtn icon size="x-small" variant="text" @click="editandoRegla = { ...r }">
+                          <VIcon size="16">mdi-pencil</VIcon>
+                        </VBtn>
+                        <VBtn icon size="x-small" color="error" variant="text" @click="eliminarRegla(r.id)">
+                          <VIcon size="16">mdi-delete</VIcon>
+                        </VBtn>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </VTable>
+        </VCardText>
+
+        <!-- Nueva regla form -->
+        <template v-if="mostrarFormNuevaRegla">
+          <VDivider />
+          <VCardText>
+            <p class="text-body-2 font-weight-medium mb-3">Nueva regla</p>
+            <VRow dense>
+              <VCol cols="3">
+                <VTextField v-model="nuevaReglaForm.rut_emisor" label="RUT" density="compact" variant="outlined" hide-details />
+              </VCol>
+              <VCol cols="5">
+                <VTextField v-model="nuevaReglaForm.nombre_emisor" label="Proveedor" density="compact" variant="outlined" hide-details />
+              </VCol>
+              <VCol cols="4">
+                <VSelect v-model="nuevaReglaForm.categoria" :items="categoriasDisponibles" label="Categoría" density="compact" variant="outlined" hide-details />
+              </VCol>
+            </VRow>
+          </VCardText>
+          <VCardActions class="px-4 pt-0 pb-4">
+            <VSpacer />
+            <VBtn variant="text" size="small" @click="mostrarFormNuevaRegla = false">Cancelar</VBtn>
+            <VBtn color="success" variant="flat" size="small" :loading="loadingGuardarRegla" @click="crearNuevaRegla">Crear</VBtn>
+          </VCardActions>
+        </template>
+        <template v-else>
+          <VCardActions class="pa-4 pt-2">
+            <VSpacer />
+            <VBtn variant="text" @click="dialogReglas = false">Cerrar</VBtn>
+          </VCardActions>
+        </template>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -590,9 +796,11 @@ const dialogConciliar  = ref(false)
 const facturaActiva    = ref(null)
 const proveedorActivo  = ref(null)
 const asignados        = ref([])
+const ncsAplicadas     = ref([])
 const disponibles      = ref([])
 const saldoPorPagar    = ref(0)
 const buscarMov        = ref('')
+const buscarMontoMov   = ref('')
 const loadingDisponibles = ref(false)
 const loadingAsignar   = ref({})
 const loadingDesasignar = ref({})
@@ -605,6 +813,7 @@ const facturasParaVincular = ref([])
 const loadingVincular     = ref(false)
 const loadingVincularBtn  = ref({})
 const loadingDesvincular  = ref(false)
+const loadingVincularNcs  = ref(false)
 
 // ── Modal Aplicar NC (Escenario B) ───────────────────────────────────────────
 const dialogAplicar     = ref(false)
@@ -620,10 +829,48 @@ const dialogPorRevisar   = ref(false)
 const facturasPorRevisar = ref([])
 const loadingPorRevisar  = ref(false)
 
+// ── Categorías de proveedores ─────────────────────────────────────────────────
+const dialogCategoria    = ref(false)
+const facturaCategoria   = ref(null)
+const proveedorCategoria = ref(null)
+const nuevaCategoria     = ref(null)
+const crearReglaCategoria = ref(false)
+const loadingCategoria   = ref(false)
+
+const dialogReglas         = ref(false)
+const reglas               = ref([])
+const loadingReglas        = ref(false)
+const editandoRegla        = ref(null)
+const loadingGuardarRegla  = ref(false)
+const loadingAplicarReglas = ref(false)
+const mostrarFormNuevaRegla = ref(false)
+const nuevaReglaForm       = ref({ rut_emisor: '', nombre_emisor: '', categoria: '' })
+
+const CATEGORIAS_FIJAS = [
+  'Almuerzos',
+  'Bencina',
+  'Comisiones Pagadas',
+  'Costos Directo por Venta Aluminio y Termopanel',
+  'Costos Directo por Venta PVC',
+  'Gastos de Investigación y Desarrollo',
+  'Gastos Financieros',
+  'Gastos Generales',
+  'Luz',
+  'Otros Costos Directos del Giro',
+  'Otros Egresos Fuera de Explotación',
+  'Otros Gastos de Administración y Venta',
+  'Repuestos/Arreglos',
+  'Seguros',
+  'Sueldos Administrativos',
+  'Transporte/Encomiendas',
+]
+const categoriasDisponibles = ref([...CATEGORIAS_FIJAS])
+
 // ── Filtros ──────────────────────────────────────────────────────────────────
 const hoy        = new Date().toISOString().slice(0, 10)
 const haceUnAño  = new Date(new Date().getFullYear() - 1, 0, 1).toISOString().slice(0, 10)
-const filtros    = ref({ desde: haceUnAño, hasta: hoy, buscar: '', solo_pendientes: true })
+const inicioAño  = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
+const filtros    = ref({ desde: inicioAño, hasta: hoy, buscar: '', monto: '', solo_pendientes: true })
 
 const headers = [
   { title: 'Proveedor',   key: 'nombre_emisor',  sortable: true },
@@ -656,6 +903,7 @@ async function cargar() {
         desde: filtros.value.desde,
         hasta: filtros.value.hasta,
         buscar: filtros.value.buscar || undefined,
+        monto: filtros.value.monto   || undefined,
         solo_pendientes: filtros.value.solo_pendientes,
       }
     })
@@ -674,14 +922,53 @@ async function cargarFacturas(rut) {
     const { data } = await axios.get(`/api/cuentas-por-pagar/${encodeURIComponent(rut)}/facturas`, {
       params: { desde: filtros.value.desde, hasta: filtros.value.hasta }
     })
-    facturasProveedor.value[rut] = data
+    facturasProveedor.value[rut] = intercalarNCs(data)
   } catch (e) { console.error(e) }
   finally { loadingFacturas.value[rut] = false }
+}
+
+// Reordena la lista para que NCs posicionables queden justo debajo de su factura.
+// Usa nc_posicion_factura_id (= nc_referencia_id ?? factura donde fue aplicada).
+function intercalarNCs(docs) {
+  // NCs con posición conocida (vinculadas o aplicadas a alguna factura)
+  const posicionables = docs.filter(d => d.es_nc && d.nc_posicion_factura_id)
+  const sinPosicion   = docs.filter(d => d.es_nc && !d.nc_posicion_factura_id)
+
+  const posicionablesIds = new Set(posicionables.map(nc => nc.id))
+  // Base: todo excepto las NCs que vamos a re-insertar
+  const result = docs.filter(d => !posicionablesIds.has(d.id))
+
+  for (const nc of posicionables) {
+    const idx = result.findIndex(d => d.id === nc.nc_posicion_factura_id)
+    if (idx !== -1) {
+      result.splice(idx + 1, 0, nc)
+    } else {
+      result.push(nc)
+    }
+  }
+
+  return result
 }
 
 function onExpand(newExpanded) {
   expanded.value = newExpanded
   newExpanded.forEach(rut => cargarFacturas(rut))
+}
+
+// ── Vincular NCs pendientes desde XML ────────────────────────────────────────
+async function vincularNcsPendientes() {
+  loadingVincularNcs.value = true
+  try {
+    const { data } = await axios.post('/api/compras/vincular-ncs')
+    alert(`Vinculación completada: ${data.vinculadas} NCs vinculadas de ${data.total} procesadas`)
+    facturasProveedor.value = {}
+    await cargar()
+  } catch (e) {
+    console.error(e)
+    alert('Error al vincular NCs')
+  } finally {
+    loadingVincularNcs.value = false
+  }
 }
 
 // ── Por Revisar ──────────────────────────────────────────────────────────────
@@ -700,7 +987,9 @@ async function abrirConciliar(factura, proveedor) {
   facturaActiva.value  = factura
   proveedorActivo.value = proveedor
   buscarMov.value      = ''
+  buscarMontoMov.value = ''
   asignados.value      = []
+  ncsAplicadas.value   = []
   disponibles.value    = []
   dialogConciliar.value = true
   await cargarEstadoConciliar()
@@ -710,7 +999,8 @@ async function cargarEstadoConciliar() {
   if (!facturaActiva.value) return
   try {
     const { data } = await axios.get(`/api/compras/${facturaActiva.value.id}/movimientos`)
-    asignados.value   = data.asignados
+    asignados.value     = data.asignados
+    ncsAplicadas.value  = data.ncs_aplicadas ?? []
     saldoPorPagar.value = data.saldo_por_pagar
   } catch (e) { console.error(e) }
   await cargarDisponibles()
@@ -721,7 +1011,7 @@ async function cargarDisponibles() {
   loadingDisponibles.value = true
   try {
     const { data } = await axios.get(`/api/compras/${facturaActiva.value.id}/movimientos-disponibles`, {
-      params: { buscar: buscarMov.value || undefined }
+      params: { buscar: buscarMov.value || undefined, monto: buscarMontoMov.value || undefined }
     })
     disponibles.value = data.data ?? data
   } catch (e) { console.error(e) }
@@ -791,23 +1081,36 @@ async function abrirAplicarNC(ncOFactura, proveedor) {
   loadingAplicar.value   = false
   aplicarForm.value      = { factura_id: null, monto: 0, fecha: new Date().toISOString().slice(0, 10), nota: '' }
 
-  // Cargar NCs disponibles y facturas para este proveedor
   try {
     const [ncsRes, facRes] = await Promise.all([
       axios.get(`/api/cuentas-por-pagar/${encodeURIComponent(proveedor.rut_emisor)}/ncs`),
       axios.get(`/api/cuentas-por-pagar/${encodeURIComponent(proveedor.rut_emisor)}/facturas`),
     ])
-    // Si se abrió desde una NC específica, pre-seleccionarla
-    if (ncOFactura.es_nc) {
-      ncAplicar.value = ncsRes.data.find(n => n.id === ncOFactura.id) || null
-    } else {
-      // Se abrió desde una factura con revisión: preseleccionar la NC vinculada si existe
-      ncAplicar.value = ncsRes.data[0] || null
-      aplicarForm.value.factura_id = ncOFactura.id
-    }
+
     facturasParaAplicar.value = facRes.data
       .filter(f => !f.es_nc && f.pendiente > 0)
       .map(f => ({ ...f, label: `#${f.folio} · ${fmt(f.total)} (pendiente: ${fmt(f.pendiente)})` }))
+
+    if (ncOFactura.es_nc) {
+      // Buscar en NCs sin vincular primero; si ya está vinculada, construir desde la fila
+      const ncDelEndpoint = ncsRes.data.find(n => n.id === ncOFactura.id)
+      ncAplicar.value = ncDelEndpoint ?? {
+        id: ncOFactura.id,
+        folio: ncOFactura.folio,
+        saldo_disponible: Math.abs(ncOFactura.pendiente),
+      }
+      // Pre-llenar monto con el saldo completo de la NC
+      aplicarForm.value.monto = Math.abs(ncOFactura.pendiente)
+      // Si ya tiene referencia, pre-seleccionar esa factura (si aún tiene saldo)
+      if (ncOFactura.nc_referencia_id) {
+        const facRef = facturasParaAplicar.value.find(f => f.id === ncOFactura.nc_referencia_id)
+        if (facRef) aplicarForm.value.factura_id = ncOFactura.nc_referencia_id
+      }
+    } else {
+      // Abierto desde factura con revisión: pre-seleccionar la NC vinculada si existe
+      ncAplicar.value = ncsRes.data[0] || null
+      aplicarForm.value.factura_id = ncOFactura.id
+    }
   } catch (e) { console.error(e) }
 }
 
@@ -877,6 +1180,99 @@ async function refrescarProveedor(rut) {
   delete facturasProveedor.value[rut]
   await cargarFacturas(rut)
   await cargar()
+}
+
+// ── Categorías ────────────────────────────────────────────────────────────────
+
+function abrirCambiarCategoria(factura, proveedor, valorSeleccionado) {
+  facturaCategoria.value   = factura
+  proveedorCategoria.value = proveedor
+  nuevaCategoria.value     = valorSeleccionado
+  crearReglaCategoria.value = false
+  dialogCategoria.value    = true
+}
+
+async function guardarCategoria() {
+  if (!nuevaCategoria.value || !facturaCategoria.value) return
+  loadingCategoria.value = true
+  try {
+    await axios.patch(`/api/compras/${facturaCategoria.value.id}/categoria`, {
+      categoria:    nuevaCategoria.value,
+      crear_regla:  crearReglaCategoria.value,
+    })
+    facturaCategoria.value.categoria = nuevaCategoria.value
+    // Actualizar en caché de facturas
+    const rut = proveedorCategoria.value?.rut_emisor
+    if (rut && facturasProveedor.value[rut]) {
+      const f = facturasProveedor.value[rut].find(x => x.id === facturaCategoria.value.id)
+      if (f) f.categoria = nuevaCategoria.value
+    }
+    dialogCategoria.value = false
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingCategoria.value = false
+  }
+}
+
+// ── Reglas ────────────────────────────────────────────────────────────────────
+
+async function abrirReglas() {
+  dialogReglas.value = true
+  mostrarFormNuevaRegla.value = false
+  editandoRegla.value = null
+  loadingReglas.value = true
+  try {
+    const { data } = await axios.get('/api/reglas-proveedor')
+    reglas.value = data
+  } catch (e) { console.error(e) }
+  finally { loadingReglas.value = false }
+}
+
+function abrirNuevaRegla() {
+  nuevaReglaForm.value = { rut_emisor: '', nombre_emisor: '', categoria: '' }
+  mostrarFormNuevaRegla.value = true
+}
+
+async function crearNuevaRegla() {
+  if (!nuevaReglaForm.value.rut_emisor || !nuevaReglaForm.value.categoria) return
+  loadingGuardarRegla.value = true
+  try {
+    const { data } = await axios.post('/api/reglas-proveedor', nuevaReglaForm.value)
+    reglas.value.push(data)
+    mostrarFormNuevaRegla.value = false
+  } catch (e) { console.error(e) }
+  finally { loadingGuardarRegla.value = false }
+}
+
+async function guardarRegla() {
+  if (!editandoRegla.value) return
+  loadingGuardarRegla.value = true
+  try {
+    const { data } = await axios.put(`/api/reglas-proveedor/${editandoRegla.value.id}`, editandoRegla.value)
+    const idx = reglas.value.findIndex(r => r.id === data.id)
+    if (idx !== -1) reglas.value[idx] = data
+    editandoRegla.value = null
+  } catch (e) { console.error(e) }
+  finally { loadingGuardarRegla.value = false }
+}
+
+async function eliminarRegla(id) {
+  if (!confirm('¿Eliminar esta regla?')) return
+  await axios.delete(`/api/reglas-proveedor/${id}`)
+  reglas.value = reglas.value.filter(r => r.id !== id)
+}
+
+async function aplicarTodasReglas() {
+  loadingAplicarReglas.value = true
+  try {
+    const { data } = await axios.post('/api/reglas-proveedor/aplicar')
+    alert(`${data.actualizadas} compras actualizadas`)
+    // Limpiar caché de facturas para que recarguen con nueva categoría
+    facturasProveedor.value = {}
+    expanded.value = []
+  } catch (e) { console.error(e) }
+  finally { loadingAplicarReglas.value = false }
 }
 
 onMounted(async () => {

@@ -201,6 +201,18 @@
                   @update:modelValue="debounceBuscar"
                 />
               </VCol>
+              <VCol cols="12" md="2">
+                <VTextField
+                  v-model="filtros.monto"
+                  label="Monto exacto"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  prepend-inner-icon="mdi-currency-usd"
+                  clearable
+                  @update:modelValue="cargarMovimientos"
+                />
+              </VCol>
             </VRow>
           </VCardText>
 
@@ -272,18 +284,28 @@
 
             <!-- Descripción + glosa + resumen Chipax docs -->
             <template #item.descripcion="{ item }">
-              <div>
-                <span>{{ item.descripcion }}</span>
-                <VTooltip v-if="item.glosa" location="bottom" max-width="420">
+              <div style="max-width:380px">
+                <VTooltip location="bottom" max-width="480">
                   <template #activator="{ props }">
-                    <VIcon v-bind="props" size="13" class="mt-n1 ml-1 text-medium-emphasis" style="cursor:help">
-                      mdi-comment-text-outline
-                    </VIcon>
+                    <span
+                      v-bind="props"
+                      style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default"
+                    >{{ descLimpia(item.descripcion) }}</span>
                   </template>
-                  <div style="font-size:11px;line-height:1.8">
-                    <div v-for="(parte, i) in item.glosa.split(' · ')" :key="i">{{ parte }}</div>
+                  <div style="font-size:11px;line-height:1.8;white-space:pre-wrap">
+                    <div>{{ descLimpia(item.descripcion) }}</div>
+                    <div v-if="item.numero_documento" class="mt-1 text-medium-emphasis">
+                      N° Doc: {{ item.numero_documento }}
+                    </div>
+                    <div v-if="item.glosa && item.glosa !== item.descripcion" class="mt-1 text-medium-emphasis">
+                      <div v-for="(parte, i) in item.glosa.split(/\s*[•·]\s*/).filter(p => !/^banco\s/i.test(p.trim()))" :key="i">{{ parte }}</div>
+                    </div>
                   </div>
                 </VTooltip>
+                <!-- N° Doc (cheques) -->
+                <div v-if="item.numero_documento" class="text-caption text-medium-emphasis mt-n1">
+                  N° {{ item.numero_documento }}
+                </div>
                 <!-- Resumen de docs Chipax (si ya fue sincronizado) -->
                 <div v-if="item.raw?.linked_docs?.length" class="text-caption text-info mt-n1">
                   <VIcon size="11" color="info" class="mr-1">mdi-link-variant</VIcon>
@@ -322,51 +344,38 @@
               />
             </template>
 
-            <!-- Estado conciliación: saldo por asignar -->
+            <!-- Estado conciliación + toggle fusionados -->
             <template #item.saldo_por_asignar="{ item }">
-              <div
-                v-if="item.tipo === 'D' || item.tipo === 'C'"
-                class="text-end"
-                style="cursor: pointer"
-                @click="abrirConciliar(item)"
-              >
-                <!-- ✅ Totalmente cubierto por links locales -->
-                <VChip v-if="item.saldo_por_asignar === 0" size="x-small" color="success" variant="tonal">
-                  <VIcon start size="11">mdi-check</VIcon> Conciliado
-                </VChip>
-
-                <!-- ⚠ Parcialmente cubierto: hay links pero queda saldo -->
-                <div v-else-if="item.monto_asignado > 0" class="text-end">
-                  <VChip size="x-small" color="warning" variant="tonal" class="mb-n1">
-                    <VIcon start size="11">mdi-alert-outline</VIcon> Parcial
+              <div class="d-flex align-center justify-end" style="gap:6px">
+                <div
+                  v-if="item.tipo === 'D' || item.tipo === 'C'"
+                  style="cursor:pointer"
+                  @click="abrirConciliar(item)"
+                >
+                  <VChip v-if="item.saldo_por_asignar === 0" size="x-small" color="success" variant="tonal">
+                    <VIcon start size="11">mdi-check</VIcon>Listo
                   </VChip>
-                  <div class="text-caption text-warning font-weight-bold mt-1">
-                    {{ formatMonto(item.saldo_por_asignar) }} pendiente
+                  <div v-else-if="item.monto_asignado > 0" class="text-end">
+                    <VChip size="x-small" color="warning" variant="tonal">
+                      <VIcon start size="11">mdi-alert-outline</VIcon>Parcial
+                    </VChip>
                   </div>
+                  <VChip v-else-if="item.conciliado" size="x-small" color="info" variant="tonal">
+                    <VIcon start size="11">mdi-check-circle-outline</VIcon>Chipax ✓
+                  </VChip>
+                  <span v-else class="text-caption text-warning font-weight-bold">
+                    {{ item.tipo === 'D' ? formatMonto(item.saldo_por_asignar) : 'Pendiente' }}
+                  </span>
                 </div>
-
-                <!-- 🔵 Conciliado en Chipax/origen, sin links locales aún -->
-                <VChip v-else-if="item.conciliado" size="x-small" color="info" variant="tonal">
-                  <VIcon start size="11">mdi-check-circle-outline</VIcon> Chipax ✓
-                </VChip>
-
-                <!-- 🔴 Sin conciliar ni asignar -->
-                <span v-else class="text-caption text-warning font-weight-bold">
-                  {{ item.tipo === 'D' ? formatMonto(item.saldo_por_asignar) + ' pendiente' : 'Por conciliar' }}
-                </span>
+                <VSwitch
+                  :model-value="item.conciliado"
+                  density="compact"
+                  hide-details
+                  color="success"
+                  style="flex:0 0 auto"
+                  @update:modelValue="(v) => actualizarMov(item, { conciliado: v })"
+                />
               </div>
-              <span v-else class="text-caption text-medium-emphasis">—</span>
-            </template>
-
-            <!-- Conciliado toggle -->
-            <template #item.conciliado="{ item }">
-              <VSwitch
-                :model-value="item.conciliado"
-                density="compact"
-                hide-details
-                color="success"
-                @update:modelValue="(v) => actualizarMov(item, { conciliado: v })"
-              />
             </template>
 
             <!-- Acciones -->
@@ -968,11 +977,24 @@
 
               <p class="text-overline text-medium-emphasis mb-2">Documentos asignados</p>
 
-              <!-- ── CRÉDITO: ventas vinculadas + ingresos manuales ── -->
+              <!-- ── CRÉDITO: ventas vinculadas + boletas + ingresos manuales ── -->
               <template v-if="movConciliando?.tipo === 'C'">
-                <p v-if="!concVentasAsignadas.length && !concIngresosAsignados.length" class="text-caption text-medium-emphasis mb-4">
+                <p v-if="!concVentasAsignadas.length && !concIngresosAsignados.length && !concBoletasAsignadas.length" class="text-caption text-medium-emphasis mb-4">
                   Ningún documento asignado aún
                 </p>
+                <!-- boletas asignadas (un documento por mes) -->
+                <VCard v-for="a in concBoletasAsignadas" :key="'b'+a.pivot_id" variant="tonal" color="warning" class="mb-2">
+                  <VCardText class="pa-2 d-flex align-center justify-space-between">
+                    <div>
+                      <VChip size="x-small" color="warning" variant="flat" class="mb-1">Boletas</VChip>
+                      <div class="text-caption font-weight-bold">Boletas {{ a.periodo }}</div>
+                      <div class="text-caption">Asignado: <strong>{{ formatMonto(a.monto_asignado) }}</strong></div>
+                    </div>
+                    <VBtn icon size="x-small" variant="text" color="error" :loading="loadingDesasignar === 'b'+a.pivot_id" @click="desasignarBoleta(a.pivot_id)">
+                      <VIcon size="16">mdi-close-circle</VIcon>
+                    </VBtn>
+                  </VCardText>
+                </VCard>
                 <!-- ventas Bsale asignadas -->
                 <VCard v-for="a in concVentasAsignadas" :key="'v'+a.pivot_id" variant="tonal" color="success" class="mb-2">
                   <VCardText class="pa-2 d-flex align-center justify-space-between">
@@ -1069,13 +1091,44 @@
               <!-- ══ CRÉDITO: tabs ventas + ingreso s/doc ══ -->
               <template v-else-if="movConciliando?.tipo === 'C'">
                 <VTabs v-model="concTab" density="compact" class="mb-3">
+                  <VTab value="boletas">
+                    <VIcon size="16" class="mr-1">mdi-receipt-text-outline</VIcon>Boletas
+                  </VTab>
                   <VTab value="ventas">
-                    <VIcon size="16" class="mr-1">mdi-file-document-outline</VIcon>Ventas Bsale
+                    <VIcon size="16" class="mr-1">mdi-file-document-outline</VIcon>Facturas Bsale
                   </VTab>
                   <VTab value="ingreso_manual">
                     <VIcon size="16" class="mr-1">mdi-receipt-text-plus</VIcon>Ingreso sin doc SII
                   </VTab>
                 </VTabs>
+
+                <!-- Sub-tab: Boletas por mes -->
+                <div v-if="concTab === 'boletas'">
+                  <div v-if="!concBoletasDisponibles.length" class="text-caption text-medium-emphasis text-center py-4">
+                    No hay períodos de boletas con saldo pendiente
+                  </div>
+                  <VTable v-else density="compact">
+                    <thead>
+                      <tr>
+                        <th>Período</th><th class="text-right">N° Boletas</th><th class="text-right">Monto Total</th><th class="text-right">Saldo</th><th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="b in concBoletasDisponibles" :key="b.periodo">
+                        <td class="font-weight-bold">{{ b.periodo }}</td>
+                        <td class="text-right">{{ b.total_boletas }}</td>
+                        <td class="text-right">{{ formatMonto(b.monto_total) }}</td>
+                        <td class="text-right font-weight-bold text-warning">{{ formatMonto(b.saldo_por_cobrar) }}</td>
+                        <td>
+                          <VBtn size="x-small" color="warning" variant="tonal"
+                            :loading="loadingAsignarBoleta === b.periodo"
+                            :disabled="concSaldoPorAsignar <= 0"
+                            @click="asignarBoleta(b)">Seleccionar</VBtn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </VTable>
+                </div>
 
                 <!-- Sub-tab: Ventas Bsale -->
                 <div v-if="concTab === 'ventas'">
@@ -1760,6 +1813,7 @@ const filtros = ref({
   tipo: '',
   conciliado: '',
   buscar: '',
+  monto: '',
   cuenta: '',
 })
 
@@ -1795,16 +1849,12 @@ const headersReglas = [
 ]
 
 const headers = [
-  { title: 'Fecha', key: 'fecha_contable', sortable: true },
-  { title: 'Cuenta', key: 'cuenta', sortable: false },
-  { title: 'Descripción', key: 'descripcion', sortable: false },
-  { title: 'N° Doc', key: 'numero_documento', sortable: false },
-  { title: 'Monto', key: 'monto', align: 'end', sortable: true },
-  { title: 'Tipo', key: 'tipo', align: 'center', sortable: false },
-  { title: 'Categoría', key: 'categoria', sortable: false },
-  { title: 'Estado Conciliación', key: 'saldo_por_asignar', align: 'end', sortable: false },
-  { title: 'Conciliado', key: 'conciliado', align: 'center', sortable: false },
-  { title: '', key: 'actions', sortable: false, width: '50px' },
+  { title: 'Fecha',       key: 'fecha_contable', sortable: true,  width: '110px' },
+  { title: 'Cuenta',      key: 'cuenta',         sortable: false, width: '140px' },
+  { title: 'Descripción', key: 'descripcion',    sortable: false },
+  { title: 'Monto',       key: 'monto',          align: 'end', sortable: true, width: '120px' },
+  { title: 'Estado',      key: 'saldo_por_asignar', align: 'end', sortable: false, width: '170px' },
+  { title: '',            key: 'actions',        sortable: false, width: '50px' },
 ]
 
 // ── API calls ────────────────────────────────────────────────────────────────
@@ -2013,11 +2063,14 @@ const concSueldosDisponibles = ref([])
 const concVentasAsignadas   = ref([])
 const concVentasDisponibles = ref([])
 const concIngresosAsignados = ref([])
-const loadingConciliar      = ref(false)
-const loadingAsignar        = ref(null)
-const loadingAsignarGasto   = ref(null)
-const loadingAsignarSueldo  = ref(null)
-const loadingAsignarVenta   = ref(null)
+const concBoletasAsignadas   = ref([])
+const concBoletasDisponibles = ref([])
+const loadingConciliar       = ref(false)
+const loadingAsignar         = ref(null)
+const loadingAsignarGasto    = ref(null)
+const loadingAsignarSueldo   = ref(null)
+const loadingAsignarVenta    = ref(null)
+const loadingAsignarBoleta   = ref(null)
 const loadingDesasignar     = ref(null)
 const savingIngresoManual   = ref(false)
 const buscarCompraDisp      = ref('')
@@ -2048,8 +2101,10 @@ function abrirConciliar(mov) {
   concVentasAsignadas.value    = []
   concVentasDisponibles.value  = []
   concIngresosAsignados.value  = []
+  concBoletasAsignadas.value   = []
+  concBoletasDisponibles.value = []
   ingresoManualForm.value      = { descripcion: mov.descripcion ?? '', categoria: 'Ingreso por ventas', notas: '' }
-  concTab.value                = mov.tipo === 'C' ? 'ventas' : 'facturas'
+  concTab.value                = mov.tipo === 'C' ? 'boletas' : 'facturas'
   dialogConciliar.value        = true
   cargarEstadoConciliar()
 }
@@ -2059,17 +2114,20 @@ async function cargarEstadoConciliar() {
   loadingConciliar.value = true
   try {
     if (movConciliando.value.tipo === 'C') {
-      // ── Crédito: cargar ventas asignadas + ingresos manuales asignados ──
-      const [resVentas, resIngresos] = await Promise.all([
+      // ── Crédito: cargar ventas + boletas + ingresos asignados ──
+      const [resVentas, resIngresos, resBoletas] = await Promise.all([
         axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/ventas`),
         axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/ingresos`),
+        axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/boletas`),
       ])
       concVentasAsignadas.value   = resVentas.data.asignados
       concIngresosAsignados.value = resIngresos.data.asignados
+      concBoletasAsignadas.value  = resBoletas.data.asignados
       const totalAsignado = concVentasAsignadas.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
                           + concIngresosAsignados.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
+                          + concBoletasAsignadas.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
       concSaldoPorAsignar.value = Math.max(0, (movConciliando.value?.monto ?? 0) - totalAsignado)
-      await cargarVentasDisponibles()
+      await Promise.all([cargarVentasDisponibles(), cargarBoletasDisponibles()])
     } else {
       // ── Débito: cargar compras / gastos / sueldos ──
       const [resCompras, resGastos, resSueldos] = await Promise.all([
@@ -2249,6 +2307,43 @@ async function asignarVenta(venta) {
     console.error(e)
   } finally {
     loadingAsignarVenta.value = null
+  }
+}
+
+// ── Boletas (para movimientos Crédito) ───────────────────────────────────────
+
+async function cargarBoletasDisponibles() {
+  if (!movConciliando.value) return
+  try {
+    const { data } = await axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/boletas-disponibles`)
+    concBoletasDisponibles.value = data
+  } catch (e) { console.error(e) }
+}
+
+async function asignarBoleta(boleta) {
+  loadingAsignarBoleta.value = boleta.periodo
+  try {
+    await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/boletas`, {
+      periodo: boleta.periodo,
+      monto: Math.min(concSaldoPorAsignar.value, boleta.saldo_por_cobrar),
+    })
+    await cargarEstadoConciliar()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingAsignarBoleta.value = null
+  }
+}
+
+async function desasignarBoleta(pivotId) {
+  loadingDesasignar.value = 'b' + pivotId
+  try {
+    await axios.delete(`/api/conciliacion/movimientos/${movConciliando.value.id}/boletas/${pivotId}`)
+    await cargarEstadoConciliar()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingDesasignar.value = null
   }
 }
 
@@ -2637,6 +2732,11 @@ const chartOptions = computed(() => ({
 
 function formatMonto(v) {
   return '$' + parseFloat(v || 0).toLocaleString('es-CL', { minimumFractionDigits: 0 })
+}
+
+function descLimpia(desc) {
+  if (!desc) return ''
+  return desc.split(/\s*[•·]\s*/).filter(p => !/^banco\s/i.test(p.trim())).join(' • ').trim()
 }
 
 // Glosa corta: oculta campos ruidosos (cuentas e IDs de transacción)

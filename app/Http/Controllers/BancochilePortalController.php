@@ -267,6 +267,9 @@ class BancochilePortalController extends Controller
                 // Omitir si el valor está completamente vacío
                 if ($valor === '') continue;
 
+                // Omitir banco — no aporta información útil
+                if ($clave === 'banco') continue;
+
                 // Normalizar RUTs: "Rut Origen: 0704380011" → "Rut Origen: 70438001-1"
                 if (preg_match('/^rut\s+\w+$/i', $clave)) {
                     $valor = $this->normalizarRutBanco($valor);

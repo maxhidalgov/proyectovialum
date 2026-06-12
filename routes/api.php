@@ -125,9 +125,20 @@ Route::middleware('auth:api')->group(function () {
         Route::patch('/asignar-codigo',            [\App\Http\Controllers\CompraController::class, 'asignarCodigo']);
         Route::post('/sincronizar',                [\App\Http\Controllers\CompraController::class, 'sincronizar']);
         Route::post('/cargar-xmls-pendientes',     [\App\Http\Controllers\CompraController::class, 'cargarXmlsPendientes']);
+        Route::post('/vincular-ncs',               [\App\Http\Controllers\CompraController::class, 'vincularNcsPendientes']);
+        Route::patch('/{compraId}/categoria',      [\App\Http\Controllers\ReglaProveedorController::class, 'asignarCategoria']);
         Route::post('/{compra}/cargar-xml',        [\App\Http\Controllers\CompraController::class, 'cargarXml']);
         Route::get('/{compra}',                    [\App\Http\Controllers\CompraController::class, 'show']);
         Route::get('/',                            [\App\Http\Controllers\CompraController::class, 'index']);
+    });
+
+    Route::prefix('reglas-proveedor')->group(function () {
+        Route::get('/',           [\App\Http\Controllers\ReglaProveedorController::class, 'index']);
+        Route::get('/categorias', [\App\Http\Controllers\ReglaProveedorController::class, 'categorias']);
+        Route::post('/',          [\App\Http\Controllers\ReglaProveedorController::class, 'store']);
+        Route::put('/{id}',       [\App\Http\Controllers\ReglaProveedorController::class, 'update']);
+        Route::delete('/{id}',    [\App\Http\Controllers\ReglaProveedorController::class, 'destroy']);
+        Route::post('/aplicar',   [\App\Http\Controllers\ReglaProveedorController::class, 'aplicar']);
     });
 
     // Rutas BSALE
@@ -187,11 +198,16 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/movimientos/{id}/sueldos-disponibles', [\App\Http\Controllers\SueldoMovimientoController::class, 'disponiblesPorMovimiento']);
         Route::post('/movimientos/{id}/sueldos',            [\App\Http\Controllers\SueldoMovimientoController::class, 'storePorMovimiento']);
         Route::delete('/movimientos/{id}/sueldos/{pagoId}', [\App\Http\Controllers\SueldoMovimientoController::class, 'destroyPorMovimiento']);
-        // Conciliar movimiento crédito ↔ ventas (ingresos)
+        // Conciliar movimiento crédito ↔ ventas/facturas (excluye boletas)
         Route::get('/movimientos/{id}/ventas',              [\App\Http\Controllers\VentaMovimientoController::class, 'indexPorMovimiento']);
         Route::get('/movimientos/{id}/ventas-disponibles',  [\App\Http\Controllers\VentaMovimientoController::class, 'disponiblesPorMovimiento']);
         Route::post('/movimientos/{id}/ventas',             [\App\Http\Controllers\VentaMovimientoController::class, 'storePorMovimiento']);
         Route::delete('/movimientos/{id}/ventas/{pivotId}', [\App\Http\Controllers\VentaMovimientoController::class, 'destroyPorMovimiento']);
+        // Conciliar movimiento crédito ↔ boletas (un documento agregado por mes)
+        Route::get('/movimientos/{id}/boletas',              [\App\Http\Controllers\BoletaResumenController::class, 'asignadosPorMovimiento']);
+        Route::get('/movimientos/{id}/boletas-disponibles',  [\App\Http\Controllers\BoletaResumenController::class, 'disponiblesPorMovimiento']);
+        Route::post('/movimientos/{id}/boletas',             [\App\Http\Controllers\BoletaResumenController::class, 'vincularPorMovimiento']);
+        Route::delete('/movimientos/{id}/boletas/{pivotId}', [\App\Http\Controllers\BoletaResumenController::class, 'destroyPorMovimiento']);
         // Conciliar movimiento crédito ↔ ingresos manuales (sin doc SII)
         Route::get('/movimientos/{id}/ingresos',              [\App\Http\Controllers\IngresoManualController::class, 'indexPorMovimiento']);
         Route::post('/movimientos/{id}/ingresos',             [\App\Http\Controllers\IngresoManualController::class, 'storePorMovimiento']);
@@ -236,11 +252,14 @@ Route::middleware('auth:api')->group(function () {
 
     // Boletas — resúmenes mensuales por forma de pago
     Route::prefix('boletas')->group(function () {
-        Route::get('/resumenes',                              [\App\Http\Controllers\BoletaResumenController::class, 'index']);
-        Route::get('/resumenes/{id}/boletas',                 [\App\Http\Controllers\BoletaResumenController::class, 'boletas']);
-        Route::post('/resumenes/{id}/conciliar',              [\App\Http\Controllers\BoletaResumenController::class, 'conciliar']);
-        Route::delete('/resumenes/movimiento/{pivotId}',      [\App\Http\Controllers\BoletaResumenController::class, 'desvincular']);
-        Route::post('/resumenes/recalcular',                  [\App\Http\Controllers\BoletaResumenController::class, 'recalcular']);
+        Route::get('/resumenes',                                    [\App\Http\Controllers\BoletaResumenController::class, 'index']);
+        Route::get('/resumenes/{id}/boletas',                       [\App\Http\Controllers\BoletaResumenController::class, 'boletas']);
+        Route::get('/resumenes/{id}/estado',                        [\App\Http\Controllers\BoletaResumenController::class, 'estado']);
+        Route::get('/resumenes/{id}/movimientos-disponibles',       [\App\Http\Controllers\BoletaResumenController::class, 'movimientosDisponibles']);
+        Route::post('/resumenes/{id}/conciliar',                    [\App\Http\Controllers\BoletaResumenController::class, 'conciliar']);
+        Route::delete('/resumenes/movimiento/{pivotId}',            [\App\Http\Controllers\BoletaResumenController::class, 'desvincular']);
+        Route::post('/resumenes/recalcular',                        [\App\Http\Controllers\BoletaResumenController::class, 'recalcular']);
+        Route::patch('/resumenes/{id}/conciliar-transbank',         [\App\Http\Controllers\BoletaResumenController::class, 'toggleConciliadoTransbank']);
     });
 
     // Cuentas por Cobrar
@@ -250,6 +269,7 @@ Route::middleware('auth:api')->group(function () {
     Route::put('/cuentas-cobrar/{id}/cobro-manual',          [\App\Http\Controllers\CuentasPorCobrarController::class, 'marcarCobradoManual']);
     Route::delete('/cuentas-cobrar/{id}/cobro-manual',       [\App\Http\Controllers\CuentasPorCobrarController::class, 'desmarcarCobradoManual']);
     Route::get('/registro-ventas',                           [\App\Http\Controllers\CuentasPorCobrarController::class, 'registroVentas']);
+    Route::get('/registro-compras',                          [\App\Http\Controllers\CuentasPorPagarController::class,  'registroCompras']);
     Route::get('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'index']);
     Route::get('/ventas/{id}/movimientos-disponibles', [\App\Http\Controllers\VentaMovimientoController::class, 'disponibles']);
     Route::post('/ventas/{id}/movimientos', [\App\Http\Controllers\VentaMovimientoController::class, 'store']);
@@ -349,10 +369,13 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/depositos',       [\App\Http\Controllers\TransbankController::class, 'depositos']);
         Route::get('/resumen-sii',                  [\App\Http\Controllers\TransbankController::class, 'resumenSii']);
         Route::get('/documentos',                   [\App\Http\Controllers\TransbankController::class, 'documentos']);
+        Route::get('/resumen-documentos',           [\App\Http\Controllers\TransbankController::class, 'resumenDocumentos']);
         Route::post('/auto-link',                   [\App\Http\Controllers\TransbankController::class, 'autoLink']);
         Route::get('/facturas-disponibles',         [\App\Http\Controllers\TransbankController::class, 'facturasDisponibles']);
         Route::post('/transaccion/{id}/link',       [\App\Http\Controllers\TransbankController::class, 'linkDocumento']);
         Route::delete('/transaccion/{id}/link',     [\App\Http\Controllers\TransbankController::class, 'unlinkDocumento']);
+        Route::get('/transacciones-sin-doc',               [\App\Http\Controllers\TransbankController::class, 'transaccionesSinDoc']);
+        Route::post('/transaccion/{id}/ingreso-manual',    [\App\Http\Controllers\IngresoManualController::class, 'storePorTransaccion']);
         Route::post('/auto-match',     [\App\Http\Controllers\TransbankController::class, 'autoMatch']);
         Route::post('/deposito/match', [\App\Http\Controllers\TransbankController::class, 'matchDeposito']);
         Route::post('/chipax-csv',     [\App\Http\Controllers\TransbankController::class, 'importarChipaxCsv']);

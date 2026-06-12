@@ -246,11 +246,20 @@ class CompraController extends Controller
         $fechaEmision   = isset($doc['emissionDate'])     ? date('Y-m-d', $doc['emissionDate'])     : null;
         $fechaRecepcion = isset($doc['siiReceptionDate']) ? date('Y-m-d', $doc['siiReceptionDate']) : null;
 
+        $rutEmisor = $doc['clientCode'] ?? null;
+        $categoria = null;
+        if ($rutEmisor) {
+            $regla = DB::table('reglas_categoria_proveedor')
+                ->where('rut_emisor', mb_strtolower($rutEmisor))
+                ->value('categoria');
+            $categoria = $regla ?: null;
+        }
+
         $compra = Compra::create([
             'bsale_id'        => $bsaleId,
             'folio'           => $doc['number']         ?? 0,
             'tipo_dte'        => $doc['codeSii']        ?? 46,
-            'rut_emisor'      => $doc['clientCode']     ?? null,
+            'rut_emisor'      => $rutEmisor,
             'nombre_emisor'   => $doc['clientActivity'] ?? null,
             'fecha_emision'   => $fechaEmision,
             'fecha_recepcion' => $fechaRecepcion,
@@ -260,6 +269,7 @@ class CompraController extends Controller
             'estado'          => is_array($doc['siiStatus'] ?? null) ? implode(',', $doc['siiStatus']) : ($doc['siiStatus'] ?? null),
             'xml_url'         => $doc['urlXml'] ?? null,
             'pdf_url'         => $doc['urlPdf'] ?? null,
+            'categoria'       => $categoria,
         ]);
 
         if ($fetchXml && !empty($doc['urlXml'])) {
@@ -267,6 +277,45 @@ class CompraController extends Controller
         }
 
         return 1;
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/compras/vincular-ncs  — re-procesa NCs sin referencia desde XML
+    // -------------------------------------------------------------------------
+    public function vincularNcsPendientes(Request $request)
+    {
+        set_time_limit(0);
+
+        $ncs = Compra::where('tipo_dte', 61)
+            ->whereNull('nc_referencia_id')
+            ->whereNotNull('xml_url')
+            ->where('pagado_historico', false)
+            ->get();
+
+        $vinculadas = 0;
+        $errores    = 0;
+
+        foreach ($ncs as $nc) {
+            try {
+                $resp = Http::timeout(15)->withHeaders($this->headers())->get($nc->xml_url);
+                if (!$resp->successful()) { $errores++; continue; }
+                $xml = @simplexml_load_string($resp->body());
+                if (!$xml) { $errores++; continue; }
+                $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
+                $antesDe = $nc->nc_referencia_id;
+                $this->vincularReferenciaNC($nc, $xml);
+                $nc->refresh();
+                if ($nc->nc_referencia_id && !$antesDe) $vinculadas++;
+            } catch (\Throwable $e) {
+                $errores++;
+            }
+        }
+
+        return response()->json([
+            'total'     => $ncs->count(),
+            'vinculadas'=> $vinculadas,
+            'errores'   => $errores,
+        ]);
     }
 
     // -------------------------------------------------------------------------
@@ -336,29 +385,27 @@ class CompraController extends Controller
             $resp = Http::timeout(15)->withHeaders($this->headers())->get($xmlUrl);
 
             if (!$resp->successful()) {
-                // Error temporal (timeout, red, Bsale caído) — conservar xml_url para reintento
                 return;
             }
 
             $xml = @simplexml_load_string($resp->body());
             if (!$xml) {
-                // XML malformado — puede ser temporal (Bsale en mantenimiento devuelve HTML)
-                // Conservar xml_url para reintento desde "Cargar XMLs pendientes"
                 return;
             }
 
-            // Registrar namespaces si los hay
             $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
 
-            // Intentar con namespace y sin él
+            // Para NCs (DTE 61): leer <Referencia> para auto-vincular a su factura original
+            if ($compra->tipo_dte == 61 && !$compra->nc_referencia_id) {
+                $this->vincularReferenciaNC($compra, $xml);
+            }
+
             $detalles = $xml->xpath('//sii:Detalle') ?: $xml->xpath('//Detalle');
 
             if (empty($detalles)) {
-                // Navegar manualmente por la estructura DTE
-                $dte = $xml->Documento ?? $xml->DTE ?? $xml;
+                $dte      = $xml->Documento ?? $xml->DTE ?? $xml;
                 $documento = $dte->Documento ?? $dte;
                 $detalles  = [];
-
                 if (isset($documento->Detalle)) {
                     foreach ($documento->Detalle as $d) {
                         $detalles[] = $d;
@@ -366,7 +413,6 @@ class CompraController extends Controller
                 }
             }
 
-            // XML sin líneas de detalle → marcar como sin XML para no reintentarlo
             if (empty($detalles)) {
                 $compra->update(['xml_url' => null]);
                 return;
@@ -400,6 +446,64 @@ class CompraController extends Controller
                 'url'       => $xmlUrl,
                 'error'     => $e->getMessage(),
             ]);
+        }
+    }
+
+    private function vincularReferenciaNC(Compra $nc, \SimpleXMLElement $xml): void
+    {
+        // Intentar xpath con namespace y sin él
+        $refs = $xml->xpath('//sii:Referencia') ?: $xml->xpath('//Referencia');
+
+        if (empty($refs)) {
+            $dte  = $xml->Documento ?? $xml->DTE ?? $xml;
+            $doc  = $dte->Documento ?? $dte;
+            $refs = [];
+            if (isset($doc->Referencia)) {
+                foreach ($doc->Referencia as $r) $refs[] = $r;
+            }
+        }
+
+        foreach ($refs as $ref) {
+            $tipoRef  = (int)($ref->TpoDocRef ?? 0);
+            $folioRef = (string)($ref->FolioRef ?? '');
+
+            if (!in_array($tipoRef, [33, 34]) || $folioRef === '') continue;
+
+            $factura = DB::table('compras')
+                ->where('folio', $folioRef)
+                ->where('rut_emisor', $nc->rut_emisor)
+                ->whereIn('tipo_dte', [33, 34])
+                ->first(['id']);
+
+            if (!$factura) break;
+
+            $nc->update(['nc_referencia_id' => $factura->id]);
+
+            // Si la factura no tiene pagos bancarios → auto-aplicar la NC
+            $tienePagos = DB::table('compra_movimiento')->where('compra_id', $factura->id)->exists();
+            if (!$tienePagos) {
+                $yaAplicado = (float) DB::table('compra_nc_aplicacion')
+                    ->where('nc_id', $nc->id)->sum('monto');
+                $saldo = (float) $nc->total - $yaAplicado;
+                if ($saldo > 0) {
+                    DB::table('compra_nc_aplicacion')->insert([
+                        'nc_id'      => $nc->id,
+                        'factura_id' => $factura->id,
+                        'monto'      => $saldo,
+                        'fecha'      => $nc->fecha_emision,
+                        'nota'       => 'Auto-aplicado desde XML Bsale',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            } else {
+                // Factura ya pagada → marcar para revisión
+                DB::table('compras')->where('id', $factura->id)
+                    ->whereNull('nc_revision_estado')
+                    ->update(['nc_revision_estado' => 'requiere_revision', 'updated_at' => now()]);
+            }
+
+            break; // Una sola referencia por NC
         }
     }
 

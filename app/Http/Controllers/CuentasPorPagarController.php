@@ -43,6 +43,7 @@ class CuentasPorPagarController extends Controller
         $desde          = $request->get('desde');
         $hasta          = $request->get('hasta');
         $buscar         = $request->get('buscar');
+        $monto          = $request->get('monto');
         $soloPendientes = filter_var($request->get('solo_pendientes', true), FILTER_VALIDATE_BOOLEAN);
 
         $q = DB::table('compras')
@@ -74,6 +75,10 @@ class CuentasPorPagarController extends Controller
                 $sq->where('compras.nombre_emisor', 'like', "%$buscar%")
                    ->orWhere('compras.rut_emisor',  'like', "%$buscar%");
             });
+        }
+        if ($monto) {
+            $montoNum = (int) preg_replace('/[^0-9]/', '', $monto);
+            if ($montoNum > 0) $q->where('compras.total', $montoNum);
         }
         if ($soloPendientes) {
             $q->havingRaw('total_pendiente > 0');
@@ -121,6 +126,10 @@ class CuentasPorPagarController extends Controller
 
         $facturas = DB::table('compras')
             ->leftJoin($this->efectivoPagadoSub(), 'ef.compra_id', '=', 'compras.id')
+            ->leftJoin(
+                DB::raw('(SELECT nc_id, MIN(factura_id) as factura_aplicada_id FROM compra_nc_aplicacion GROUP BY nc_id) nca'),
+                'nca.nc_id', '=', 'compras.id'
+            )
             ->where('compras.rut_emisor', $rut)
             ->where('compras.pagado_historico', false)
             ->select(
@@ -135,17 +144,19 @@ class CuentasPorPagarController extends Controller
                 'compras.pdf_url',
                 'compras.nc_referencia_id',
                 'compras.nc_revision_estado',
+                DB::raw('COALESCE(compras.nc_referencia_id, nca.factura_aplicada_id) as nc_posicion_factura_id'),
                 DB::raw('COALESCE(ef.monto_pagado_efectivo, 0) as monto_pagado'),
                 DB::raw('CASE WHEN compras.tipo_dte IN (61)
                               THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
                               ELSE   compras.total - COALESCE(ef.monto_pagado_efectivo,0)
                          END as pendiente'),
-                DB::raw('(compras.tipo_dte IN (61)) as es_nc')
+                DB::raw('(compras.tipo_dte IN (61)) as es_nc'),
+                'compras.categoria'
             )
             ->when($desde, fn($q) => $q->where('compras.fecha_emision', '>=', $desde))
             ->when($hasta, fn($q) => $q->where('compras.fecha_emision', '<=', $hasta))
-            ->orderByRaw('compras.tipo_dte IN (61) ASC') // facturas primero
             ->orderByDesc('compras.fecha_emision')
+            ->orderByDesc('compras.id')
             ->get();
 
         if ($soloPendientes) {
@@ -215,5 +226,73 @@ class CuentasPorPagarController extends Controller
             ->get();
 
         return response()->json($ncs);
+    }
+
+    // ── GET /api/registro-compras ─────────────────────────────────────────────
+    // Lista plana de documentos de compra individuales (espejo de registroVentas).
+
+    public function registroCompras(Request $request)
+    {
+        $desde          = $request->get('desde');
+        $hasta          = $request->get('hasta');
+        $buscar         = $request->get('buscar');
+        $monto          = $request->get('monto');
+        $soloPendientes = filter_var($request->get('solo_pendientes', false), FILTER_VALIDATE_BOOLEAN);
+
+        $q = DB::table('compras')
+            ->leftJoin($this->efectivoPagadoSub(), 'ef.compra_id', '=', 'compras.id')
+            ->where('compras.pagado_historico', false)
+            ->select(
+                'compras.id',
+                'compras.folio',
+                'compras.tipo_dte',
+                'compras.nombre_emisor',
+                'compras.rut_emisor',
+                'compras.fecha_emision',
+                'compras.neto',
+                'compras.iva',
+                'compras.total',
+                'compras.pdf_url',
+                'compras.nc_revision_estado',
+                DB::raw('COALESCE(ef.monto_pagado_efectivo, 0) as monto_pagado'),
+                DB::raw('CASE WHEN compras.tipo_dte IN (61)
+                              THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
+                              ELSE   compras.total - COALESCE(ef.monto_pagado_efectivo,0)
+                         END as pendiente'),
+                DB::raw('(compras.tipo_dte IN (61)) as es_nc')
+            )
+            ->orderByDesc('compras.fecha_emision')
+            ->orderByDesc('compras.id');
+
+        if ($desde) $q->where('compras.fecha_emision', '>=', $desde);
+        if ($hasta) $q->where('compras.fecha_emision', '<=', $hasta);
+        if ($buscar) {
+            $q->where(function ($sq) use ($buscar) {
+                $sq->where('compras.nombre_emisor', 'like', "%$buscar%")
+                   ->orWhere('compras.rut_emisor',  'like', "%$buscar%")
+                   ->orWhere('compras.folio',        'like', "%$buscar%");
+            });
+        }
+        if ($monto) {
+            $montoNum = (int) preg_replace('/[^0-9]/', '', $monto);
+            if ($montoNum > 0) $q->where('compras.total', $montoNum);
+        }
+
+        $compras = $q->get();
+
+        if ($soloPendientes) {
+            $compras = $compras->filter(fn($c) => abs((float) $c->pendiente) > 0.01)->values();
+        }
+
+        $totalMonto = $compras->sum(fn($c) => $c->es_nc ? -(float)$c->total : (float)$c->total);
+
+        return response()->json([
+            'compras' => $compras,
+            'totales' => [
+                'total_docs'      => $compras->count(),
+                'total_monto'     => $totalMonto,
+                'total_pendiente' => $compras->sum(fn($c) => (float) $c->pendiente),
+            ],
+        ]);
     }
 }

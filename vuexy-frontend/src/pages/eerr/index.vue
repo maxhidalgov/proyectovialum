@@ -14,26 +14,36 @@
         </VBtnToggle>
 
         <!-- Selector de mes (modo mensual) -->
-        <VTextField
-          v-if="modo === 'mensual'"
-          v-model="periodoMes"
-          type="month"
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="max-width: 160px"
-          @update:modelValue="cargar"
-        />
+        <template v-if="modo === 'mensual'">
+          <VSelect
+            v-model="mesSel"
+            :items="mesesOpts"
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="min-width:130px"
+            @update:modelValue="cargar"
+          />
+          <VSelect
+            v-model="anioSel"
+            :items="aniosDisponibles"
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="min-width:95px"
+            @update:modelValue="cargar"
+          />
+        </template>
 
         <!-- Selector de año (modo anual) -->
         <VSelect
           v-else
-          v-model="periodoAnio"
+          v-model="anioSel"
           :items="aniosDisponibles"
           density="compact"
           variant="outlined"
           hide-details
-          style="max-width: 110px"
+          style="min-width:95px"
           @update:modelValue="cargar"
         />
 
@@ -43,46 +53,56 @@
 
     <!-- Tarjetas resumen -->
     <VRow class="mb-5">
-      <VCol cols="6" sm="3">
-        <VCard variant="outlined" class="pa-3">
-          <div class="d-flex align-center gap-2 mb-1">
-            <VIcon size="16" color="success">mdi-trending-up</VIcon>
-            <span class="text-caption text-medium-emphasis">Ingresos</span>
-          </div>
-          <div class="text-h6 font-weight-bold text-success">{{ clp(data?.resultados?.ingresos) }}</div>
-          <div class="text-caption text-medium-emphasis">{{ data?.ingresos?.cantidad || 0 }} documentos emitidos (Bsale)</div>
-        </VCard>
-      </VCol>
-      <VCol cols="6" sm="3">
-        <VCard variant="outlined" class="pa-3">
-          <div class="d-flex align-center gap-2 mb-1">
-            <VIcon size="16" color="error">mdi-trending-down</VIcon>
-            <span class="text-caption text-medium-emphasis">Egresos</span>
-          </div>
-          <div class="text-h6 font-weight-bold text-error">{{ clp(data?.resultados?.total_egresos) }}</div>
-          <div class="text-caption text-medium-emphasis">Compras + Gastos + Rem.</div>
-        </VCard>
-      </VCol>
-      <VCol cols="6" sm="3">
-        <VCard variant="outlined" class="pa-3">
-          <div class="d-flex align-center gap-2 mb-1">
-            <VIcon size="16" :color="utilidadColor">mdi-scale-balance</VIcon>
-            <span class="text-caption text-medium-emphasis">Utilidad Operacional</span>
-          </div>
-          <div class="text-h6 font-weight-bold" :class="`text-${utilidadColor}`">{{ clp(data?.resultados?.utilidad_operacional) }}</div>
-          <div class="text-caption" :class="`text-${utilidadColor}`">Margen {{ data?.resultados?.margen_operacional }}%</div>
-        </VCard>
-      </VCol>
-      <VCol cols="6" sm="3">
-        <VCard variant="outlined" class="pa-3">
-          <div class="d-flex align-center gap-2 mb-1">
-            <VIcon size="16" color="info">mdi-bank-check</VIcon>
-            <span class="text-caption text-medium-emphasis">Cobrado (ref. caja)</span>
-          </div>
-          <div class="text-h6 font-weight-bold text-info">{{ clp(data?.ingresos?.cobrado) }}</div>
-          <div class="text-caption text-medium-emphasis">Solo referencia — no afecta EERR</div>
-        </VCard>
-      </VCol>
+      <template v-if="loading">
+        <VCol v-for="n in 4" :key="n" cols="6" sm="3">
+          <VCard variant="outlined" class="pa-3">
+            <VSkeletonLoader type="text" width="80" class="mb-2" />
+            <VSkeletonLoader type="heading" />
+          </VCard>
+        </VCol>
+      </template>
+      <template v-else>
+        <VCol cols="6" sm="3">
+          <VCard variant="outlined" class="pa-3">
+            <div class="d-flex align-center gap-2 mb-1">
+              <VIcon size="16" color="success">mdi-trending-up</VIcon>
+              <span class="text-caption text-medium-emphasis">Ingresos</span>
+            </div>
+            <div class="text-h6 font-weight-bold text-success">{{ clp(data?.resultados?.ingresos) }}</div>
+            <div class="text-caption text-medium-emphasis">{{ data?.ingresos?.cantidad || 0 }} documentos emitidos (Bsale)</div>
+          </VCard>
+        </VCol>
+        <VCol cols="6" sm="3">
+          <VCard variant="outlined" class="pa-3">
+            <div class="d-flex align-center gap-2 mb-1">
+              <VIcon size="16" color="error">mdi-trending-down</VIcon>
+              <span class="text-caption text-medium-emphasis">Egresos</span>
+            </div>
+            <div class="text-h6 font-weight-bold text-error">{{ clp(data?.resultados?.total_egresos) }}</div>
+            <div class="text-caption text-medium-emphasis">Compras + Gastos + Rem.</div>
+          </VCard>
+        </VCol>
+        <VCol cols="6" sm="3">
+          <VCard variant="outlined" class="pa-3">
+            <div class="d-flex align-center gap-2 mb-1">
+              <VIcon size="16" :color="utilidadColor">mdi-scale-balance</VIcon>
+              <span class="text-caption text-medium-emphasis">Utilidad Operacional</span>
+            </div>
+            <div class="text-h6 font-weight-bold" :class="`text-${utilidadColor}`">{{ clp(data?.resultados?.utilidad_operacional) }}</div>
+            <div class="text-caption" :class="`text-${utilidadColor}`">Margen {{ data?.resultados?.margen_operacional }}%</div>
+          </VCard>
+        </VCol>
+        <VCol cols="6" sm="3">
+          <VCard variant="outlined" class="pa-3">
+            <div class="d-flex align-center gap-2 mb-1">
+              <VIcon size="16" color="info">mdi-bank-check</VIcon>
+              <span class="text-caption text-medium-emphasis">Cobrado (ref. caja)</span>
+            </div>
+            <div class="text-h6 font-weight-bold text-info">{{ clp(data?.ingresos?.cobrado) }}</div>
+            <div class="text-caption text-medium-emphasis">Solo referencia — no afecta EERR</div>
+          </VCard>
+        </VCol>
+      </template>
     </VRow>
 
     <VRow>
@@ -147,74 +167,49 @@
 
               <VDivider />
 
-              <!-- COMPRAS -->
-              <div class="eerr-section eerr-header bg-error-subtle px-4 py-2">
-                <div class="d-flex justify-space-between font-weight-bold">
-                  <span>COSTO DE VENTAS (Compras neto)</span>
-                  <span class="text-error">({{ clp(data.resultados.compras) }})</span>
+              <!-- SECCIONES DE EGRESOS (dinámicas) -->
+              <template v-for="sec in data.secciones" :key="sec.key">
+                <div class="eerr-section eerr-header bg-error-subtle px-4 py-2">
+                  <div class="d-flex justify-space-between font-weight-bold">
+                    <span>{{ sec.titulo }}</span>
+                    <span class="text-error">({{ clp(sec.total) }})</span>
+                  </div>
                 </div>
-              </div>
-              <div v-if="data.compras.cantidad === 0" class="eerr-row px-4 py-1 text-caption text-medium-emphasis pl-8">Sin compras en el período</div>
-              <div v-for="p in data.compras.proveedores" :key="p.nombre_emisor" class="eerr-row px-4 py-1 d-flex justify-space-between">
-                <span class="text-caption pl-4 text-truncate" style="max-width:200px">{{ p.nombre_emisor || '—' }} <span class="text-medium-emphasis">({{ p.cantidad }})</span></span>
-                <span class="text-caption">{{ clp(p.total_neto) }}</span>
-              </div>
+                <template v-if="sec.total === 0">
+                  <div class="eerr-row px-4 py-1 d-flex align-center">
+                    <span class="text-caption text-medium-emphasis pl-4">Sin registros en el período</span>
+                  </div>
+                </template>
+                <template v-else>
+                  <template v-for="grupo in sec.grupos" :key="grupo.titulo ?? '_'">
+                    <template v-if="grupo.lineas.length > 0">
+                      <div v-if="grupo.titulo" class="eerr-row eerr-grupo-titulo px-4 py-1 d-flex align-center">
+                        <span class="text-caption font-weight-medium text-medium-emphasis pl-2">{{ grupo.titulo }}</span>
+                      </div>
+                      <div v-for="linea in grupo.lineas" :key="linea.label"
+                           class="eerr-row px-4 py-1 d-flex justify-space-between">
+                        <span class="text-caption" :class="grupo.titulo ? 'pl-8' : 'pl-4'">
+                          {{ linea.label }} <span class="text-medium-emphasis">({{ linea.cantidad }})</span>
+                        </span>
+                        <span class="text-caption">{{ clp(linea.total) }}</span>
+                      </div>
+                    </template>
+                  </template>
+                </template>
 
-              <VDivider />
-
-              <!-- UTILIDAD BRUTA -->
-              <div class="eerr-section px-4 py-2 d-flex justify-space-between font-weight-bold bg-surface-variant">
-                <span>UTILIDAD BRUTA</span>
-                <span :class="`text-${data.resultados.utilidad_bruta >= 0 ? 'success' : 'error'}`">
-                  {{ clp(data.resultados.utilidad_bruta) }}
-                  <span class="text-caption ml-1">({{ data.resultados.margen_bruto }}%)</span>
-                </span>
-              </div>
-
-              <VDivider />
-
-              <!-- GASTOS -->
-              <div class="eerr-section eerr-header bg-error-subtle px-4 py-2">
-                <div class="d-flex justify-space-between font-weight-bold">
-                  <span>GASTOS OPERACIONALES</span>
-                  <span class="text-error">({{ clp(data.resultados.gastos) }})</span>
-                </div>
-              </div>
-              <div v-if="data.gastos.cantidad === 0" class="eerr-row px-4 py-1 text-caption text-medium-emphasis pl-8">Sin gastos en el período</div>
-              <div v-for="g in data.gastos.por_categoria" :key="g.categoria" class="eerr-row px-4 py-1 d-flex justify-space-between">
-                <span class="text-caption pl-4">{{ g.categoria }} <span class="text-medium-emphasis">({{ g.cantidad }})</span></span>
-                <span class="text-caption">{{ clp(g.total) }}</span>
-              </div>
-
-              <VDivider />
-
-              <!-- REMUNERACIONES -->
-              <div class="eerr-section eerr-header bg-error-subtle px-4 py-2">
-                <div class="d-flex justify-space-between font-weight-bold">
-                  <span>REMUNERACIONES</span>
-                  <span class="text-error">({{ clp(data.resultados.remuneraciones) }})</span>
-                </div>
-              </div>
-              <div v-if="data.remuneraciones.sueldos_cantidad === 0 && data.remuneraciones.previred_cantidad === 0"
-                class="eerr-row px-4 py-1 text-caption text-medium-emphasis pl-8">Sin pagos en el período</div>
-              <!-- Sueldos líquidos -->
-              <div v-if="data.remuneraciones.sueldos_total > 0" class="eerr-row px-4 py-1 d-flex justify-space-between">
-                <span class="text-caption pl-4">
-                  Sueldos líquidos
-                  <span class="text-medium-emphasis">({{ data.remuneraciones.sueldos_cantidad }})</span>
-                </span>
-                <span class="text-caption">{{ clp(data.remuneraciones.sueldos_total) }}</span>
-              </div>
-              <!-- Previred (cotizaciones AFP/salud) -->
-              <div v-if="data.remuneraciones.previred_total > 0" class="eerr-row px-4 py-1 d-flex justify-space-between">
-                <span class="text-caption pl-4">
-                  Previred — cotizaciones
-                  <span class="text-medium-emphasis">({{ data.remuneraciones.previred_cantidad }} períodos)</span>
-                </span>
-                <span class="text-caption">{{ clp(data.remuneraciones.previred_total) }}</span>
-              </div>
-
-              <VDivider />
+                <!-- UTILIDAD BRUTA intercalada después de Costo de Ventas -->
+                <template v-if="sec.key === 'costo_ventas'">
+                  <VDivider />
+                  <div class="eerr-section px-4 py-2 d-flex justify-space-between font-weight-bold bg-surface-variant">
+                    <span>UTILIDAD BRUTA</span>
+                    <span :class="`text-${data.resultados.utilidad_bruta >= 0 ? 'success' : 'error'}`">
+                      {{ clp(data.resultados.utilidad_bruta) }}
+                      <span class="text-caption ml-1">({{ data.resultados.margen_bruto }}%)</span>
+                    </span>
+                  </div>
+                </template>
+                <VDivider />
+              </template>
 
               <!-- UTILIDAD OPERACIONAL -->
               <div class="px-4 py-3 d-flex justify-space-between font-weight-bold text-body-1" :class="data.resultados.utilidad_operacional >= 0 ? 'bg-success-subtle' : 'bg-error-subtle'">
@@ -234,7 +229,7 @@
       <VCol cols="12" md="6">
         <VCard class="h-100">
           <VCardTitle class="pa-4 pb-2 text-subtitle-1 font-weight-bold">
-            {{ modo === 'anual' ? `Mensual ${periodoAnio}` : 'Tendencia — últimos 6 meses' }}
+            {{ modo === 'anual' ? `Mensual ${anioSel}` : 'Tendencia — últimos 6 meses' }}
           </VCardTitle>
           <VCardText>
             <VueApexCharts
@@ -281,14 +276,35 @@ import VueApexCharts from 'vue3-apexcharts'
 import api from '@/axiosInstance'
 
 // ── Estado ───────────────────────────────────────────────────────
-const loading    = ref(false)
-const data       = ref(null)
-const modo       = ref('mensual')                                   // 'mensual' | 'anual'
-const periodoMes = ref(new Date().toISOString().slice(0, 7))       // YYYY-MM
-const periodoAnio = ref(new Date().getFullYear())                   // número
+const loading = ref(false)
+const data    = ref(null)
+const modo    = ref('mensual')   // 'mensual' | 'anual'
 
-const hoy = new Date()
+const _hoy   = new Date()
+const mesSel = ref(_hoy.getMonth() + 1)   // 1-12
+const anioSel = ref(_hoy.getFullYear())
+
+const periodoMes = computed(() =>
+  `${anioSel.value}-${String(mesSel.value).padStart(2, '0')}`
+)
+
+const hoy = _hoy
 const aniosDisponibles = Array.from({ length: 5 }, (_, i) => hoy.getFullYear() - i)
+
+const mesesOpts = [
+  { title: 'Enero',      value: 1  },
+  { title: 'Febrero',    value: 2  },
+  { title: 'Marzo',      value: 3  },
+  { title: 'Abril',      value: 4  },
+  { title: 'Mayo',       value: 5  },
+  { title: 'Junio',      value: 6  },
+  { title: 'Julio',      value: 7  },
+  { title: 'Agosto',     value: 8  },
+  { title: 'Septiembre', value: 9  },
+  { title: 'Octubre',    value: 10 },
+  { title: 'Noviembre',  value: 11 },
+  { title: 'Diciembre',  value: 12 },
+]
 
 // Recargar al cambiar modo
 watch(modo, cargar)
@@ -300,20 +316,17 @@ const utilidadColor = computed(() => {
 })
 
 const periodoLabel = computed(() => {
-  if (modo.value === 'anual') return `Año ${periodoAnio.value}`
-  if (!periodoMes.value) return ''
-  const [y, m] = periodoMes.value.split('-')
-  return new Date(y, m - 1, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
+  if (modo.value === 'anual') return `Año ${anioSel.value}`
+  return `${mesesOpts[mesSel.value - 1]?.title ?? ''} ${anioSel.value}`
 })
 
 const egresosItems = computed(() => {
-  if (!data.value) return []
+  if (!data.value?.secciones) return []
   const total = data.value.resultados.total_egresos || 1
-  return [
-    { label: 'Compras (neto)', monto: data.value.resultados.compras,       color: 'error',   pct: Math.round(data.value.resultados.compras       / total * 100) },
-    { label: 'Gastos generales', monto: data.value.resultados.gastos,      color: 'warning', pct: Math.round(data.value.resultados.gastos         / total * 100) },
-    { label: 'Remuneraciones',  monto: data.value.resultados.remuneraciones, color: 'deep-purple', pct: Math.round(data.value.resultados.remuneraciones / total * 100) },
-  ]
+  const colorMap = { costo_ventas: 'error', gastos_operacionales: 'warning', remuneraciones: 'deep-purple', financiero: 'blue-grey' }
+  return data.value.secciones
+    .filter(s => s.total > 0)
+    .map(s => ({ label: s.titulo, monto: s.total, color: colorMap[s.key] ?? 'grey', pct: Math.round(s.total / total * 100) }))
 })
 
 // ── Gráfico ───────────────────────────────────────────────────────
@@ -364,14 +377,11 @@ const chartOptions = computed(() => {
 // ── Carga ─────────────────────────────────────────────────────────
 async function cargar() {
   loading.value = true
+  data.value    = null
   try {
-    let params
-    if (modo.value === 'anual') {
-      params = { modo: 'anual', anio: periodoAnio.value }
-    } else {
-      const [anio, mes] = periodoMes.value.split('-')
-      params = { modo: 'mensual', mes: parseInt(mes), anio }
-    }
+    const params = modo.value === 'anual'
+      ? { modo: 'anual', anio: anioSel.value }
+      : { modo: 'mensual', mes: mesSel.value, anio: anioSel.value }
     const { data: res } = await api.get('/api/eerr', { params })
     data.value = res
   } catch (e) {
@@ -403,5 +413,10 @@ onMounted(cargar)
   min-height: 32px;
   display: flex;
   align-items: center;
+}
+.eerr-grupo-titulo {
+  background: rgba(var(--v-border-color), 0.04);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
+  min-height: 28px;
 }
 </style>

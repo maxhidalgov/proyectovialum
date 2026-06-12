@@ -28,8 +28,6 @@ class EERRController extends Controller
         $anio = (int) $desde->year;
 
         // ── Ingresos ──────────────────────────────────────────────────
-        // Modo anual: DB local (sync Bsale ya realizado, evita 12 llamadas API)
-        // Modo mensual: API Bsale en tiempo real (solo 1 llamada)
         if ($modo === 'anual') {
             ['neto' => $totalIngresos, 'bruto' => $ingBruto, 'cantidad' => $ingCantidad] =
                 $this->ventasDB($desdeStr, $hastaStr);
@@ -38,141 +36,96 @@ class EERRController extends Controller
                 $this->bsaleVentas($desde->timestamp, $hasta->timestamp);
         }
 
-        // ── Ingresos manuales (sin doc SII) ──────────────────────────
         $ingManualesCat = DB::table('ingresos_manuales')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
             ->selectRaw("COALESCE(categoria,'Sin categoría') as categoria, COUNT(*) as cantidad, SUM(monto) as total")
-            ->groupBy('categoria')
-            ->orderByDesc('total')
-            ->get();
+            ->groupBy('categoria')->orderByDesc('total')->get();
 
-        $totalIngManuales    = (float) $ingManualesCat->sum('total');
-        $cantidadIngManuales = (int)   $ingManualesCat->sum('cantidad');
-
-        // Total ingresos combinado (SII + manuales)
+        $totalIngManuales       = (float) $ingManualesCat->sum('total');
+        $cantidadIngManuales    = (int)   $ingManualesCat->sum('cantidad');
         $totalIngresosCombinado = $totalIngresos + $totalIngManuales;
 
-        // Cobrado en período (base caja, solo referencia)
         $cobradoPeriodo = (float) DB::table('venta_movimiento as vm')
             ->join('movimientos_bancarios as m', 'm.id', '=', 'vm.movimiento_id')
             ->whereBetween('m.fecha_contable', [$desdeStr, $hastaStr])
             ->sum('vm.monto');
 
-        // ── Compras ───────────────────────────────────────────────────
-        // Modo anual: DB local (evita 12 llamadas API que causan timeout)
-        // Modo mensual: API Bsale (1 llamada, rápida)
-        ['neto' => $totalCompras, 'bruto' => $comprasBruto, 'cantidad' => $comprasCantidad] =
+        // ── Compras: total bruto/IVA para header (modo puede venir de API) ──
+        ['neto' => $totalComprasApi, 'bruto' => $comprasBruto, 'cantidad' => $comprasCantidad] =
             $modo === 'anual'
                 ? $this->comprasDB($desdeStr, $hastaStr)
                 : $this->bsaleCompras($mes, $anio);
 
-        // Top proveedores desde DB local (sincronizada, más rápido)
-        $topProveedores = DB::table('compras')
+        // ── Data maps para buildSecciones ─────────────────────────────
+        // Compras por categoría (siempre desde DB local, excluyendo NCs)
+        $cmpMap = DB::table('compras')
             ->whereBetween('fecha_emision', [$desdeStr, $hastaStr])
-            ->selectRaw('nombre_emisor, COUNT(*) as cantidad, SUM(neto) as total_neto')
-            ->groupBy('nombre_emisor')
-            ->orderByDesc('total_neto')
-            ->limit(6)
-            ->get();
+            ->where(function ($q) { $q->whereNull('tipo_dte')->orWhere('tipo_dte', '!=', 61); })
+            ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(neto) as total")
+            ->groupBy('cat')->get()->keyBy('cat');
 
-        // ── Gastos generales: DB local ────────────────────────────────
-        // Excluidos del EERR:
-        //   impuesto  → IVA/PPM/retenciones: obligaciones tributarias, no egresos
-        //   previred  → cotizaciones previsionales: van en la sección Remuneraciones
-        $gastosBase = DB::table('gastos')
+        // Gastos (excluye impuesto y previred que van en otras secciones)
+        $gasMap = DB::table('gastos')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
             ->where(function ($q) {
-                $q->whereNull('chipax_tipo')
-                  ->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']);
-            });
+                $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']);
+            })
+            ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(monto) as total")
+            ->groupBy('cat')->get()->keyBy('cat');
 
-        $gastosTot = (clone $gastosBase)
-            ->selectRaw('COUNT(*) as cantidad, SUM(monto) as total')
-            ->first();
-
-        $gastosCat = (clone $gastosBase)
-            ->selectRaw("COALESCE(categoria, 'Sin categoría') as categoria, COUNT(*) as cantidad, SUM(monto) as total")
-            ->groupBy('categoria')
-            ->orderByDesc('total')
-            ->get();
-
-        $totalGastos = (float) ($gastosTot->total ?? 0);
-
-        // ── Remuneraciones: sueldos + Previred (cotizaciones AFP/salud) ──
-        $remuTot = DB::table('pagos_empleado')
+        // Pagos empleado por tipo
+        $remuMap = DB::table('pagos_empleado')
             ->whereBetween('periodo', [$desdeStr, $hastaStr])
-            ->selectRaw('COUNT(*) as cantidad, SUM(monto) as total')
-            ->first();
+            ->selectRaw('tipo as cat, COUNT(*) as n, SUM(monto) as total')
+            ->groupBy('tipo')->get()->keyBy('cat');
 
-        $remuTipo = DB::table('pagos_empleado')
-            ->whereBetween('periodo', [$desdeStr, $hastaStr])
-            ->selectRaw('tipo, COUNT(*) as cantidad, SUM(monto) as total')
-            ->groupBy('tipo')
-            ->get();
-
-        // Previred: cotizaciones previsionales (AFP + salud empleador)
-        $previredTot = DB::table('gastos')
+        // Previred
+        $previredRow = DB::table('gastos')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
             ->where('chipax_tipo', 'previred')
-            ->selectRaw('COUNT(*) as cantidad, SUM(monto) as total')
-            ->first();
+            ->selectRaw('COUNT(*) as n, SUM(monto) as total')->first();
 
-        $totalSueldos  = (float) ($remuTot->total ?? 0);
-        $totalPrevired = (float) ($previredTot->total ?? 0);
-        $totalRemu     = $totalSueldos + $totalPrevired;
+        // ── Construir secciones jerárquicas ───────────────────────────
+        $secciones = $this->buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow);
 
-        // ── Resultados (usando ingresos combinados) ───────────────────
-        $utilidadBruta       = $totalIngresosCombinado - $totalCompras;
-        $totalEgresos        = $totalCompras + $totalGastos + $totalRemu;
+        // ── Totales por sección para resultados ───────────────────────
+        $secTotales = collect($secciones)->keyBy('key')
+            ->map(fn($s) => (float) $s['total']);
+
+        $totalCostoVentas  = $secTotales->get('costo_ventas', 0);
+        $totalGastosOp     = $secTotales->get('gastos_operacionales', 0);
+        $totalRemu         = $secTotales->get('remuneraciones', 0);
+        $totalFinanciero   = $secTotales->get('financiero', 0);
+        $totalEgresos      = $totalCostoVentas + $totalGastosOp + $totalRemu + $totalFinanciero;
+
+        $utilidadBruta       = $totalIngresosCombinado - $totalCostoVentas;
         $utilidadOperacional = $totalIngresosCombinado - $totalEgresos;
         $margenBruto         = $totalIngresosCombinado > 0 ? round($utilidadBruta / $totalIngresosCombinado * 100, 1) : 0;
         $margenOperacional   = $totalIngresosCombinado > 0 ? round($utilidadOperacional / $totalIngresosCombinado * 100, 1) : 0;
 
         return response()->json([
-            'periodo' => ['desde' => $desdeStr, 'hasta' => $hastaStr],
-
             'ingresos' => [
-                'total'    => $totalIngresosCombinado,
-                'bsale'    => $totalIngresos,
-                'bruto'    => round($ingBruto),
-                'iva'      => round($ingBruto - $totalIngresos),
-                'cantidad' => $ingCantidad,
-                'cobrado'  => $cobradoPeriodo,
-                // Ingresos manuales (sin doc SII)
-                'manuales_total'    => $totalIngManuales,
-                'manuales_cantidad' => $cantidadIngManuales,
+                'total'                  => $totalIngresosCombinado,
+                'bsale'                  => $totalIngresos,
+                'bruto'                  => round($ingBruto),
+                'iva'                    => round($ingBruto - $totalIngresos),
+                'cantidad'               => $ingCantidad,
+                'cobrado'                => $cobradoPeriodo,
+                'manuales_total'         => $totalIngManuales,
+                'manuales_cantidad'      => $cantidadIngManuales,
                 'manuales_por_categoria' => $ingManualesCat,
             ],
 
-            'compras' => [
-                'total_neto' => $totalCompras,
-                'total_iva'  => round($comprasBruto - $totalCompras),
-                'cantidad'   => $comprasCantidad,
-                'proveedores' => $topProveedores,
-            ],
-
-            'gastos' => [
-                'total'         => $totalGastos,
-                'cantidad'      => (int) ($gastosTot->cantidad ?? 0),
-                'por_categoria' => $gastosCat,
-            ],
-
-            'remuneraciones' => [
-                'total'            => $totalRemu,
-                'sueldos_total'    => $totalSueldos,
-                'sueldos_cantidad' => (int) ($remuTot->cantidad ?? 0),
-                'previred_total'   => $totalPrevired,
-                'previred_cantidad'=> (int) ($previredTot->cantidad ?? 0),
-                'por_tipo'         => $remuTipo,
-            ],
+            'secciones' => $secciones,
 
             'resultados' => [
                 'ingresos'             => $totalIngresosCombinado,
                 'ingresos_bsale'       => $totalIngresos,
                 'ingresos_manuales'    => $totalIngManuales,
-                'compras'              => $totalCompras,
-                'gastos'               => $totalGastos,
+                'costo_ventas'         => $totalCostoVentas,
+                'gastos_operacionales' => $totalGastosOp,
                 'remuneraciones'       => $totalRemu,
+                'financiero'           => $totalFinanciero,
                 'total_egresos'        => $totalEgresos,
                 'utilidad_bruta'       => $utilidadBruta,
                 'margen_bruto'         => $margenBruto,
@@ -180,12 +133,113 @@ class EERRController extends Controller
                 'margen_operacional'   => $margenOperacional,
             ],
 
-            'historico' => $modo === 'anual'
-                ? $this->historicoAnual($anio)
-                : $this->historico(),
-            'modo'    => $modo,
-            'periodo' => ['desde' => $desdeStr, 'hasta' => $hastaStr, 'modo' => $modo],
+            'historico' => $modo === 'anual' ? $this->historicoAnual($anio) : $this->historico(),
+            'modo'      => $modo,
+            'periodo'   => ['desde' => $desdeStr, 'hasta' => $hastaStr, 'modo' => $modo],
         ]);
+    }
+
+    // ── Construye el árbol Sección → Grupo → Líneas ───────────────────────────
+
+    private function buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow): array
+    {
+        // Helper: extrae {label, cantidad, total} de un mapa
+        $l = function (string $label, $map, string $key) {
+            $r = $map->get($key);
+            return ['label' => $label, 'cantidad' => $r ? (int)$r->n : 0, 'total' => $r ? (float)$r->total : 0.0];
+        };
+
+        // Categorías de compras ya asignadas a secciones (para catch-all al final)
+        $cmpClaims = [
+            'Costos Directo por Venta Aluminio y Termopanel',
+            'Costos Directo por Venta PVC',
+            'Otros Costos Directos del Giro',
+            'Bencina',
+            'Transporte/Encomiendas',
+            'Repuestos/Arreglos',
+            'Gastos Generales',
+            'Luz',
+            'Gastos de Investigación y Desarrollo',
+            'Otros Gastos de Administración y Venta',
+            'Otros Egresos Fuera de Explotación',
+            'Seguros',
+            'Almuerzos',
+            'Sueldos Administrativos',
+            'Gastos Financieros',
+            'Comisiones Pagadas',
+        ];
+
+        // Líneas dinámicas del módulo Gastos (todas sus categorías)
+        $gastosLineas = $gasMap->map(fn($r) =>
+            ['label' => $r->cat, 'cantidad' => (int)$r->n, 'total' => (float)$r->total]
+        )->sortByDesc('total')->values()->all();
+
+        // Compras sin categoría o de categorías no clasificadas → van a Gastos Generales
+        $sinClasificar = $cmpMap->filter(fn($r, $k) => !in_array($k, $cmpClaims))
+            ->map(fn($r) => ['label' => $r->cat . ' *', 'cantidad' => (int)$r->n, 'total' => (float)$r->total])
+            ->sortByDesc('total')->values()->all();
+
+        // Construir grupos con totales calculados
+        $grupo = function (string $titulo = null, array $lineas) {
+            $lineas = array_filter($lineas, fn($l) => $l['total'] > 0);
+            $lineas = array_values($lineas);
+            return ['titulo' => $titulo, 'total' => array_sum(array_column($lineas, 'total')), 'lineas' => $lineas];
+        };
+
+        // ── 1. COSTO DE VENTAS ────────────────────────────────────────
+        $g1 = $grupo(null, [
+            $l('Costos Directo por Venta Aluminio y Termopanel', $cmpMap, 'Costos Directo por Venta Aluminio y Termopanel'),
+            $l('Costos Directo por Venta PVC',                   $cmpMap, 'Costos Directo por Venta PVC'),
+            $l('Otros Costos Directos del Giro',                 $cmpMap, 'Otros Costos Directos del Giro'),
+        ]);
+        $secCV = ['key' => 'costo_ventas', 'titulo' => 'COSTO DE VENTAS',
+                  'total' => $g1['total'], 'grupos' => [$g1]];
+
+        // ── 2. GASTOS OPERACIONALES ───────────────────────────────────
+        $gLog = $grupo('Logística', [
+            $l('Bencina',                    $cmpMap, 'Bencina'),
+            $l('Transporte / Encomiendas',   $cmpMap, 'Transporte/Encomiendas'),
+            $l('Repuestos / Arreglos',       $cmpMap, 'Repuestos/Arreglos'),
+        ]);
+        $gGen = $grupo('Gastos Generales', array_merge(
+            [
+                $l('Gastos Generales',                         $cmpMap, 'Gastos Generales'),
+                $l('Luz',                                      $cmpMap, 'Luz'),
+                $l('Gastos de Investigación y Desarrollo',     $cmpMap, 'Gastos de Investigación y Desarrollo'),
+                $l('Otros Gastos de Administración y Venta',   $cmpMap, 'Otros Gastos de Administración y Venta'),
+                $l('Otros Egresos Fuera de Explotación',       $cmpMap, 'Otros Egresos Fuera de Explotación'),
+                $l('Seguros',                                  $cmpMap, 'Seguros'),
+            ],
+            $gastosLineas,   // categorías del módulo Gastos
+            $sinClasificar   // compras sin clasificar
+        ));
+        $secGO = ['key' => 'gastos_operacionales', 'titulo' => 'GASTOS OPERACIONALES',
+                  'total' => $gLog['total'] + $gGen['total'], 'grupos' => [$gLog, $gGen]];
+
+        // ── 3. REMUNERACIONES ─────────────────────────────────────────
+        $remuLineas = array_filter([
+            $remuMap->get('sueldo')   ? ['label' => 'Sueldos líquidos',   'cantidad' => (int)$remuMap->get('sueldo')->n,   'total' => (float)$remuMap->get('sueldo')->total]   : null,
+            $remuMap->get('bono')     ? ['label' => 'Bonos',              'cantidad' => (int)$remuMap->get('bono')->n,     'total' => (float)$remuMap->get('bono')->total]     : null,
+            $remuMap->get('finiquito')? ['label' => 'Finiquitos',         'cantidad' => (int)$remuMap->get('finiquito')->n,'total' => (float)$remuMap->get('finiquito')->total]: null,
+            $previredRow && $previredRow->total > 0
+                ? ['label' => 'Previred — cotizaciones', 'cantidad' => (int)$previredRow->n, 'total' => (float)$previredRow->total]
+                : null,
+            $l('Almuerzos',              $cmpMap, 'Almuerzos'),
+            $l('Sueldos Administrativos', $cmpMap, 'Sueldos Administrativos'),
+        ]);
+        $gRemu = $grupo(null, array_values($remuLineas));
+        $secRemu = ['key' => 'remuneraciones', 'titulo' => 'REMUNERACIONES',
+                    'total' => $gRemu['total'], 'grupos' => [$gRemu]];
+
+        // ── 4. GASTOS FINANCIEROS ─────────────────────────────────────
+        $gFin = $grupo(null, [
+            $l('Gastos Financieros',   $cmpMap, 'Gastos Financieros'),
+            $l('Comisiones Pagadas',   $cmpMap, 'Comisiones Pagadas'),
+        ]);
+        $secFin = ['key' => 'financiero', 'titulo' => 'GASTOS FINANCIEROS',
+                   'total' => $gFin['total'], 'grupos' => [$gFin]];
+
+        return [$secCV, $secGO, $secRemu, $secFin];
     }
 
     // ── Ventas: documents.json ────────────────────────────────────────────────
