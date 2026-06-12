@@ -26,14 +26,32 @@ class CompraMovimientoController extends Controller
                 'movimientos_bancarios.descripcion',
                 'movimientos_bancarios.monto',
                 'movimientos_bancarios.glosa',
+                DB::raw("'banco' as tipo_asignado"),
             )
             ->get();
 
-        $saldo_por_pagar = $compra->total - $asignados->sum('monto_asignado');
+        // NCs aplicadas a esta factura
+        $ncsAplicadas = DB::table('compra_nc_aplicacion')
+            ->join('compras as nc', 'nc.id', '=', 'compra_nc_aplicacion.nc_id')
+            ->where('compra_nc_aplicacion.factura_id', $compraId)
+            ->select(
+                'compra_nc_aplicacion.id as pivot_id',
+                'compra_nc_aplicacion.monto as monto_asignado',
+                'compra_nc_aplicacion.fecha as fecha_contable',
+                DB::raw("CONCAT('NC #', nc.folio) as descripcion"),
+                'compra_nc_aplicacion.nota as glosa',
+                DB::raw("'nc' as tipo_asignado"),
+            )
+            ->get();
+
+        $totalBanco = $asignados->sum('monto_asignado');
+        $totalNC    = $ncsAplicadas->sum('monto_asignado');
+        $saldo_por_pagar = max(0, $compra->total - $totalBanco - $totalNC);
 
         return response()->json([
-            'compra'         => $compra,
-            'asignados'      => $asignados,
+            'compra'          => $compra,
+            'asignados'       => $asignados,
+            'ncs_aplicadas'   => $ncsAplicadas,
             'saldo_por_pagar' => $saldo_por_pagar,
         ]);
     }
@@ -44,6 +62,12 @@ class CompraMovimientoController extends Controller
     {
         $compra  = Compra::findOrFail($compraId);
         $buscar  = $request->get('buscar');
+        $monto   = $request->get('monto');
+
+        // Saldo pendiente de la compra para ordenar por proximidad de monto
+        $bancoPagado = DB::table('compra_movimiento')->where('compra_id', $compraId)->sum('monto');
+        $ncPagado    = DB::table('compra_nc_aplicacion')->where('factura_id', $compraId)->sum('monto');
+        $saldoPendiente = max(0, (float) $compra->total - (float) $bancoPagado - (float) $ncPagado);
 
         // Saldo por asignar por movimiento = monto - SUM ya asignado en pivot
         $movimientos = DB::table('movimientos_bancarios')
@@ -83,6 +107,10 @@ class CompraMovimientoController extends Controller
                        ->orWhere('movimientos_bancarios.glosa', 'like', "%$buscar%");
                 });
             })
+            ->when($monto, function ($q) use ($monto) {
+                $montoNum = (int) preg_replace('/[^0-9]/', '', $monto);
+                if ($montoNum > 0) $q->whereRaw('ROUND(movimientos_bancarios.monto) = ?', [$montoNum]);
+            })
             ->select(
                 'movimientos_bancarios.id',
                 'movimientos_bancarios.fecha_contable',
@@ -92,6 +120,7 @@ class CompraMovimientoController extends Controller
                 DB::raw('movimientos_bancarios.monto - COALESCE(asig.asignado, 0) as saldo_por_asignar')
             )
             ->havingRaw('saldo_por_asignar > 0')
+            ->orderByRaw('ABS(movimientos_bancarios.monto - COALESCE(asig.asignado, 0) - ?) ASC', [$saldoPendiente])
             ->orderByDesc('movimientos_bancarios.fecha_contable')
             ->paginate(50);
 

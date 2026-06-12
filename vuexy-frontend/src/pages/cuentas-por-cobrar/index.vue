@@ -68,7 +68,7 @@
               @update:modelValue="cargar"
             />
           </VCol>
-          <VCol cols="12" sm="4">
+          <VCol cols="12" sm="3">
             <VTextField
               v-model="filtros.buscar"
               label="Buscar cliente"
@@ -81,6 +81,18 @@
             />
           </VCol>
           <VCol cols="12" sm="2">
+            <VTextField
+              v-model="filtros.monto"
+              label="Monto exacto"
+              density="compact"
+              variant="outlined"
+              hide-details
+              prepend-inner-icon="mdi-currency-usd"
+              clearable
+              @update:modelValue="cargar"
+            />
+          </VCol>
+          <VCol cols="12" sm="1">
             <VSwitch
               v-model="filtros.solo_pendientes"
               label="Solo pendientes"
@@ -578,8 +590,12 @@
                     <span class="font-weight-bold">{{ formatMonto(facturaActiva.monto) }}</span>
                   </div>
                   <div class="d-flex justify-space-between mt-1">
-                    <span class="text-body-2 text-success">Cobrado</span>
-                    <span class="text-success">{{ formatMonto(facturaActiva.monto - saldoPorCobrar) }}</span>
+                    <span class="text-body-2 text-success">Cobrado (banco)</span>
+                    <span class="text-success">{{ formatMonto(facturaActiva.monto - saldoPorCobrar - cobradoTransbank) }}</span>
+                  </div>
+                  <div v-if="cobradoTransbank > 0" class="d-flex justify-space-between mt-1">
+                    <span class="text-body-2 text-info">Cobrado ({{ esTarjeta ? 'Tarjeta' : 'Chipax' }})</span>
+                    <span class="text-info">{{ formatMonto(cobradoTransbank) }}</span>
                   </div>
                   <VDivider class="my-2" />
                   <div class="d-flex justify-space-between">
@@ -994,6 +1010,8 @@ const clienteActivo     = ref(null)
 const asignados         = ref([])
 const disponibles       = ref([])
 const saldoPorCobrar    = ref(0)
+const cobradoTransbank  = ref(0)
+const esTarjeta         = ref(false)
 const buscarMov         = ref('')
 const loadingDisponibles = ref(false)
 const loadingAsignar    = ref({})
@@ -1036,11 +1054,13 @@ const loadingEstado     = ref({})
 // ── Filtros ───────────────────────────────────────────────────────────────────
 const hoy       = new Date().toISOString().slice(0, 10)
 const haceUnAño = new Date(new Date().getFullYear() - 1, 0, 1).toISOString().slice(0, 10)
+const inicioAño = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
 
 const filtros = ref({
-  desde:           haceUnAño,
+  desde:           inicioAño,
   hasta:           hoy,
   buscar:          '',
+  monto:           '',
   solo_pendientes: true,
 })
 
@@ -1097,6 +1117,7 @@ async function cargar() {
       desde:           filtros.value.desde,
       hasta:           filtros.value.hasta,
       buscar:          filtros.value.buscar || undefined,
+      monto:           filtros.value.monto   || undefined,
       solo_pendientes: filtros.value.solo_pendientes,
     }
     const { data } = await axios.get('/api/cuentas-por-cobrar', { params })
@@ -1154,8 +1175,18 @@ async function abrirConciliar(factura, cliente) {
 async function cargarEstadoConciliar() {
   if (!facturaActiva.value) return
   try {
-    const { data } = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos`)
+    let data
+    if (facturaActiva.value.es_boleta_resumen) {
+      const res = await axios.get(`/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/estado`)
+      data = res.data
+      cobradoTransbank.value = data.cobrado_transbank ?? 0
+    } else {
+      const res = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos`)
+      data = res.data
+      cobradoTransbank.value = (data.cobrado_transbank ?? 0) + (data.cobrado_chipax ?? 0)
+    }
     asignados.value      = data.asignados
+    esTarjeta.value      = false
     saldoPorCobrar.value = data.saldo_por_cobrar
   } catch (e) { console.error(e) }
   await cargarDisponibles()
@@ -1165,9 +1196,10 @@ async function cargarDisponibles() {
   if (!facturaActiva.value) return
   loadingDisponibles.value = true
   try {
-    const { data } = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos-disponibles`, {
-      params: { buscar: buscarMov.value || undefined }
-    })
+    const url = facturaActiva.value.es_boleta_resumen
+      ? `/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/movimientos-disponibles`
+      : `/api/ventas/${facturaActiva.value.id}/movimientos-disponibles`
+    const { data } = await axios.get(url, { params: { buscar: buscarMov.value || undefined } })
     disponibles.value = data.data ?? data
   } catch (e) { console.error(e) }
   finally { loadingDisponibles.value = false }
@@ -1177,10 +1209,17 @@ async function asignar(mov) {
   loadingAsignar.value[mov.id] = true
   try {
     const monto = Math.min(mov.saldo_por_asignar, saldoPorCobrar.value)
-    await axios.post(`/api/ventas/${facturaActiva.value.id}/movimientos`, {
-      movimiento_id: mov.id,
-      monto,
-    })
+    if (facturaActiva.value.es_boleta_resumen) {
+      await axios.post(`/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/conciliar`, {
+        movimiento_id: mov.id,
+        monto,
+      })
+    } else {
+      await axios.post(`/api/ventas/${facturaActiva.value.id}/movimientos`, {
+        movimiento_id: mov.id,
+        monto,
+      })
+    }
     await cargarEstadoConciliar()
     await refrescarCliente(clienteActivo.value._row_key)
   } catch (e) {
@@ -1193,13 +1232,17 @@ async function asignar(mov) {
 async function desasignar(pivotId) {
   loadingDesasignar.value[pivotId] = true
   try {
-    await axios.delete(`/api/ventas/${facturaActiva.value.id}/movimientos/${pivotId}`)
+    if (facturaActiva.value.es_boleta_resumen) {
+      await axios.delete(`/api/boletas/resumenes/movimiento/${pivotId}`)
+    } else {
+      await axios.delete(`/api/ventas/${facturaActiva.value.id}/movimientos/${pivotId}`)
+    }
     await cargarEstadoConciliar()
     await refrescarCliente(clienteActivo.value._row_key)
   } catch (e) {
     console.error(e)
   } finally {
-    loadingDesasignar.value[pivotId] = false
+    delete loadingDesasignar.value[pivotId]
   }
 }
 

@@ -20,11 +20,19 @@ class BsaleVentaSyncController extends Controller
     private const FORMA_PAGO_MAP = [
         1  => 'efectivo',
         2  => 'tarjeta_credito',
+        3  => 'nota_credito',
+        4  => 'credito',
         5  => 'cheque',
         6  => 'tarjeta_debito',
+        7  => 'transferencia',    // abono/transferencia interna
         8  => 'transferencia',
+        9  => 'tarjeta_credito',
         10 => 'tarjeta_credito',  // webpay
+        11 => 'tarjeta_credito',
+        12 => 'tarjeta_credito',
         13 => 'tarjeta_credito',  // mercadopago
+        14 => 'efectivo',
+        15 => 'efectivo',
     ];
 
     public function __construct()
@@ -281,13 +289,22 @@ class BsaleVentaSyncController extends Controller
 
             if (!$res->ok()) return $result;
 
-            foreach ($res->json()['items'] ?? [] as $pago) {
+            $items = $res->json()['items'] ?? [];
+
+            // Sin datos de pago en Bsale → sentinel para no reintentar en backfill
+            if (empty($items)) {
+                $result['forma_pago'] = 'sin_informacion';
+                return $result;
+            }
+
+            foreach ($items as $pago) {
                 $typeId = (int) ($pago['payment_type']['id'] ?? 0);
                 if (!$typeId) continue;
 
                 $result['payment_type_id'] = $typeId;
-                $result['forma_pago']      = self::FORMA_PAGO_MAP[$typeId] ?? null;
-                $result['tarjeta']         = in_array($typeId, [2, 6, 10, 13]);
+                // Tipos no mapeados van a 'otros' para no perderse
+                $result['forma_pago']      = self::FORMA_PAGO_MAP[$typeId] ?? 'otros';
+                $result['tarjeta']         = in_array($typeId, [2, 6, 9, 10, 11, 12, 13]);
 
                 if ($result['tarjeta']) {
                     foreach ($pago['attributes'] ?? [] as $attr) {

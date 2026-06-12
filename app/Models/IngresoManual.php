@@ -14,6 +14,7 @@ class IngresoManual extends Model
         'monto',
         'categoria',
         'notas',
+        'transbank_transaccion_id',
     ];
 
     protected $casts = [

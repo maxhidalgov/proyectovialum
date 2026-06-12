@@ -64,6 +64,7 @@ declare module 'vue-router/auto-routes' {
     'productos-producto-form': RouteRecordInfo<'productos-producto-form', '/productos/ProductoForm', Record<never, never>, Record<never, never>>,
     'productos-productos-list': RouteRecordInfo<'productos-productos-list', '/productos/ProductosList', Record<never, never>, Record<never, never>>,
     'proveedores': RouteRecordInfo<'proveedores', '/proveedores', Record<never, never>, Record<never, never>>,
+    'registro-compras': RouteRecordInfo<'registro-compras', '/registro-compras', Record<never, never>, Record<never, never>>,
     'registro-ventas': RouteRecordInfo<'registro-ventas', '/registro-ventas', Record<never, never>, Record<never, never>>,
     'second-page': RouteRecordInfo<'second-page', '/second-page', Record<never, never>, Record<never, never>>,
     'sugerencias-conciliacion': RouteRecordInfo<'sugerencias-conciliacion', '/sugerencias-conciliacion', Record<never, never>, Record<never, never>>,

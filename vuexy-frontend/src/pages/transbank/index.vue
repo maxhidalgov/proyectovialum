@@ -411,156 +411,289 @@
     </div>
 
     <!-- ──────────────────────────────────────────────────── -->
-    <!-- Tab: Documentos                                     -->
+    <!-- Tab: Documentos (vista mensual estilo Chipax)      -->
     <!-- ──────────────────────────────────────────────────── -->
     <div v-if="tab === 'docs'">
-
-      <!-- Resumen inteligente post-vinculación -->
-      <VRow class="mb-4" dense>
-        <VCol cols="6" md="3">
-          <VCard variant="tonal" color="primary">
-            <VCardText class="pa-3">
-              <p class="text-caption text-medium-emphasis mb-1">Total transacciones</p>
-              <p class="text-h6 font-weight-bold mb-0">{{ txFacturas.length }}</p>
-              <p class="text-caption mb-0">{{ fmt(resumenDocs.totalMonto) }}</p>
-            </VCardText>
-          </VCard>
-        </VCol>
-        <VCol cols="6" md="3">
-          <VCard variant="tonal" color="success">
-            <VCardText class="pa-3">
-              <p class="text-caption text-medium-emphasis mb-1">Boletas con tarjeta</p>
-              <p class="text-h6 font-weight-bold mb-0">{{ resumenDocs.boletas.count }}</p>
-              <p class="text-caption mb-0">{{ fmt(resumenDocs.boletas.monto) }}</p>
-            </VCardText>
-          </VCard>
-        </VCol>
-        <VCol cols="6" md="3">
-          <VCard variant="tonal" color="info">
-            <VCardText class="pa-3">
-              <p class="text-caption text-medium-emphasis mb-1">Facturas vinculadas</p>
-              <p class="text-h6 font-weight-bold mb-0">{{ resumenDocs.facturas.count }}</p>
-              <p class="text-caption mb-0">{{ fmt(resumenDocs.facturas.monto) }}</p>
-            </VCardText>
-          </VCard>
-        </VCol>
-        <VCol cols="6" md="3">
-          <VCard variant="tonal" :color="resumenDocs.sinVincular.count > 0 ? 'warning' : 'success'">
-            <VCardText class="pa-3">
-              <p class="text-caption text-medium-emphasis mb-1">Sin vincular</p>
-              <p class="text-h6 font-weight-bold mb-0">{{ resumenDocs.sinVincular.count }}</p>
-              <p class="text-caption mb-0">{{ fmt(resumenDocs.sinVincular.monto) }}</p>
-            </VCardText>
-          </VCard>
-        </VCol>
-      </VRow>
-
-      <!-- Cabecera tabla -->
-      <div class="d-flex align-center mb-3 gap-2 flex-wrap">
-        <!-- Filtros -->
-        <VChipGroup v-model="filtroDoc" mandatory selected-class="text-primary">
-          <VChip value="todos" variant="tonal" size="small">
-            Todos <span class="ml-1 font-weight-bold">{{ txFacturas.length }}</span>
-          </VChip>
-          <VChip value="sin_vincular" variant="tonal" color="warning" size="small">
-            Sin vincular <span class="ml-1 font-weight-bold">{{ resumenDocs.sinVincular.count }}</span>
-          </VChip>
-          <VChip value="vinculados" variant="tonal" color="success" size="small">
-            Vinculados <span class="ml-1 font-weight-bold">{{ txFacturas.length - resumenDocs.sinVincular.count }}</span>
-          </VChip>
-        </VChipGroup>
-
-        <VSpacer />
-
-        <VBtn
-          variant="tonal"
-          color="primary"
-          size="small"
-          prepend-icon="mdi-link-variant-plus"
-          :loading="loadingAutoLink"
-          @click="autoLinkFacturas"
-        >Auto-vincular</VBtn>
-      </div>
 
       <div v-if="loadingDocs" class="d-flex justify-center py-10">
         <VProgressCircular indeterminate color="primary" />
       </div>
 
-      <VCard v-else-if="txFacturas.length === 0">
-        <VCardText class="text-center py-8 text-medium-emphasis">
-          Sin transacciones de venta para este periodo.
-        </VCardText>
-      </VCard>
+      <template v-else-if="resumenMes">
+
+        <!-- ── Balance del mes ── -->
+        <VCard class="mb-4">
+          <VCardText class="pa-4">
+            <VRow dense>
+              <!-- Columna izquierda: Transbank -->
+              <VCol cols="12" md="6">
+                <p class="text-overline text-medium-emphasis mb-2">Transbank (desde .dat)</p>
+                <div class="d-flex justify-space-between text-body-2 mb-1">
+                  <span>Ventas brutas</span>
+                  <span class="font-weight-bold">{{ fmt(resumenMes.ventas_brutas) }}</span>
+                </div>
+                <div class="d-flex justify-space-between text-body-2 mb-1 text-error">
+                  <span>Comisiones</span>
+                  <span class="font-weight-bold">-{{ fmt(resumenMes.comisiones) }}</span>
+                </div>
+                <VDivider class="my-1" />
+                <div class="d-flex justify-space-between text-body-2 font-weight-bold">
+                  <span>Total abonado al banco</span>
+                  <span class="text-success">{{ fmt(resumenMes.total_abonado) }}</span>
+                </div>
+              </VCol>
+
+              <VDivider vertical class="d-none d-md-flex mx-4" />
+
+              <!-- Columna derecha: Documentos -->
+              <VCol cols="12" md="5">
+                <p class="text-overline text-medium-emphasis mb-2">Documentos asignados</p>
+                <div class="d-flex justify-space-between text-body-2 mb-1">
+                  <span>Boletas tarjeta</span>
+                  <span class="font-weight-bold">{{ fmt(resumenMes.boletas_tarjeta.reduce((s,b) => s + Number(b.monto_total), 0)) }}</span>
+                </div>
+                <div class="d-flex justify-space-between text-body-2 mb-1">
+                  <span>Facturas tarjeta</span>
+                  <span class="font-weight-bold">{{ fmt(resumenMes.facturas.reduce((s,f) => s + Number(f.monto), 0)) }}</span>
+                </div>
+                <VDivider class="my-1" />
+                <div class="d-flex justify-space-between text-body-2 font-weight-bold">
+                  <span>Total documentos</span>
+                  <span>{{ fmt(resumenMes.total_documentos) }}</span>
+                </div>
+                <div class="d-flex justify-space-between text-body-2 mt-1">
+                  <span class="text-medium-emphasis">Diferencia vs ventas brutas</span>
+                  <span :class="Math.abs(resumenMes.diferencia) < 1 ? 'text-success font-weight-bold' : 'text-warning font-weight-bold'">
+                    {{ resumenMes.diferencia >= 0 ? '+' : '' }}{{ fmt(resumenMes.diferencia) }}
+                  </span>
+                </div>
+              </VCol>
+            </VRow>
+          </VCardText>
+        </VCard>
+
+        <!-- ── Sección: Boletas Tarjeta ── -->
+        <VCard class="mb-4">
+          <VCardTitle class="d-flex align-center pa-4 pb-2">
+            <VIcon color="warning" class="mr-2">mdi-receipt-text-outline</VIcon>
+            Boletas Tarjeta
+            <VSpacer />
+            <span class="text-body-2 font-weight-bold">
+              {{ fmt(resumenMes.boletas_tarjeta.reduce((s,b) => s + Number(b.monto_total), 0)) }}
+            </span>
+          </VCardTitle>
+          <VDivider />
+          <VCardText v-if="!resumenMes.boletas_tarjeta.length" class="text-center py-4 text-medium-emphasis">
+            Sin boletas de tarjeta en este período. Ejecuta "Backfill Forma Pago" y "Recalcular" en el módulo Boletas.
+          </VCardText>
+          <VTable v-else density="compact">
+            <thead>
+              <tr>
+                <th>Tipo</th><th>Forma de Pago</th>
+                <th class="text-right">N° Boletas</th>
+                <th class="text-right">Monto</th>
+                <th class="text-center">Conciliación CPC</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="b in resumenMes.boletas_tarjeta" :key="b.forma_pago">
+                <td><VChip size="x-small" color="warning" label>BOL-EL</VChip></td>
+                <td>{{ labelFormaPago(b.forma_pago) }}</td>
+                <td class="text-right">{{ b.total_boletas }}</td>
+                <td class="text-right font-weight-bold">{{ fmt(b.monto_total) }}</td>
+                <td class="text-center">
+                  <VBtn
+                    v-if="!b.conciliado_transbank"
+                    size="x-small" variant="tonal" color="success"
+                    prepend-icon="mdi-check"
+                    :loading="loadingConciliarBoleta === b.id"
+                    @click="conciliarBoletaTransbank(b)"
+                  >Conciliar</VBtn>
+                  <VChip v-else size="x-small" color="success" label>
+                    <VIcon start size="12">mdi-check-circle</VIcon>Conciliada
+                    <VBtn size="x-small" variant="text" color="warning" class="ml-1"
+                      :loading="loadingConciliarBoleta === b.id"
+                      @click="conciliarBoletaTransbank(b)"
+                    ><VIcon size="14">mdi-close</VIcon></VBtn>
+                  </VChip>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCard>
+
+        <!-- ── Sección: Facturas Tarjeta ── -->
+        <VCard class="mb-4">
+          <VCardTitle class="d-flex align-center pa-4 pb-2">
+            <VIcon color="info" class="mr-2">mdi-file-document-outline</VIcon>
+            Facturas Tarjeta
+            <VSpacer />
+            <VBtn
+              variant="tonal" color="primary" size="small"
+              prepend-icon="mdi-link-variant-plus"
+              :loading="loadingAutoLink"
+              @click="autoLinkFacturas"
+            >Auto-vincular por Nro Boleta</VBtn>
+            <span class="text-body-2 font-weight-bold ml-4">
+              {{ fmt(resumenMes.facturas.reduce((s,f) => s + Number(f.monto), 0)) }}
+            </span>
+          </VCardTitle>
+          <VDivider />
+          <VCardText v-if="!resumenMes.facturas.length" class="text-center py-4 text-medium-emphasis">
+            Sin facturas con pago por tarjeta en este período.
+          </VCardText>
+          <VTable v-else density="compact">
+            <thead>
+              <tr>
+                <th>Tipo</th><th>N° Doc</th><th>Cliente</th>
+                <th>Fecha</th><th class="text-right">Monto</th>
+                <th>Nro Voucher</th><th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="f in resumenMes.facturas" :key="f.id">
+                <td><VChip size="x-small" color="info" label>FAC-EL</VChip></td>
+                <td class="font-weight-medium">{{ f.numero_documento_bsale }}</td>
+                <td class="text-caption">{{ f.cliente }}</td>
+                <td class="text-caption">{{ formatFecha(f.fecha_emision) }}</td>
+                <td class="text-right font-weight-bold">{{ fmt(f.monto) }}</td>
+                <td class="text-caption text-medium-emphasis">{{ f.nro_comprobante_transbank ?? f.nro_voucher ?? '—' }}</td>
+                <td>
+                  <div v-if="f.transaccion_id" class="d-flex align-center gap-1">
+                    <VChip size="x-small" color="success" label>
+                      <VIcon start size="12">mdi-check</VIcon>Vinculada
+                    </VChip>
+                    <VBtn size="x-small" variant="text" color="warning"
+                      :loading="desvinculandoDoc === f.id"
+                      @click="desasociarDoc(f)"
+                    ><VIcon size="14">mdi-close</VIcon></VBtn>
+                  </div>
+                  <VBtn v-else size="x-small" variant="tonal" color="warning"
+                    @click="abrirVincularDoc(f)"
+                  >Vincular</VBtn>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+
+          <!-- Transacciones sin documento vinculado ni ingreso manual -->
+          <template v-if="resumenMes.sin_doc.count > 0">
+            <VDivider />
+            <VCardTitle class="d-flex align-center pa-4 pb-2">
+              <VIcon color="warning" class="mr-2">mdi-alert-circle-outline</VIcon>
+              Sin documento
+              <VChip color="warning" size="x-small" class="ml-2">{{ resumenMes.sin_doc.count }}</VChip>
+              <VSpacer />
+              <span class="text-body-2 font-weight-bold text-warning">{{ fmt(resumenMes.sin_doc.monto) }}</span>
+            </VCardTitle>
+            <VCardText class="text-caption text-medium-emphasis px-4 py-1">
+              Transacciones Transbank sin factura/boleta asociada en Bsale. Crea un ingreso manual para registrarlas.
+            </VCardText>
+            <VTable density="compact" class="mx-3 mb-3" style="border:1px solid rgba(0,0,0,.12);border-radius:6px">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Monto</th>
+                  <th>Tarjeta</th>
+                  <th>Voucher</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="tx in resumenMes.sin_doc.rows" :key="tx.id">
+                  <td class="text-caption">{{ tx.fecha_movimiento?.slice(0,10) }}</td>
+                  <td class="text-caption font-weight-bold">{{ fmt(tx.monto_original) }}</td>
+                  <td class="text-caption">
+                    <VChip size="x-small" :color="tx.medio_pago === 'credito' ? 'primary' : tx.medio_pago === 'debito' ? 'info' : 'secondary'" label>
+                      {{ tx.medio_pago ?? '—' }}
+                    </VChip>
+                  </td>
+                  <td class="text-caption text-medium-emphasis">{{ tx.nro_voucher ?? '—' }}</td>
+                  <td>
+                    <VBtn size="x-small" variant="tonal" color="success" @click="abrirIngresoManual(tx)">
+                      <VIcon start size="14">mdi-plus</VIcon>Ingreso manual
+                    </VBtn>
+                  </td>
+                </tr>
+              </tbody>
+            </VTable>
+          </template>
+        </VCard>
+
+        <!-- ── Sección: Comisión Transbank ── -->
+        <VCard>
+          <VCardTitle class="d-flex align-center pa-4 pb-2">
+            <VIcon color="error" class="mr-2">mdi-bank-minus</VIcon>
+            Comisión Transbank
+            <VSpacer />
+            <span class="text-body-2 font-weight-bold text-error">-{{ fmt(resumenMes.comisiones) }}</span>
+          </VCardTitle>
+          <VDivider />
+          <VCardText class="text-caption text-medium-emphasis pa-3">
+            La comisión ya está incluida en los archivos .dat y se descuenta del total abonado.
+            Para el Estado de Resultados, vincúlala como gasto en el módulo de Conciliación
+            (el débito "Comisión Transbank" que aparece en la cartola bancaria).
+          </VCardText>
+        </VCard>
+
+      </template>
 
       <VCard v-else>
-        <VCardText v-if="txFacturasFiltradas.length === 0" class="text-center py-8 text-medium-emphasis">
-          No hay transacciones {{ filtroDoc === 'sin_vincular' ? 'sin vincular' : 'vinculadas' }} en este periodo.
+        <VCardText class="text-center py-8 text-medium-emphasis">
+          Sin datos para este período. Sube los archivos .dat primero.
         </VCardText>
-        <VTable v-else density="comfortable">
-          <thead>
-            <tr>
-              <th style="min-width:110px">Fecha venta</th>
-              <th style="min-width:60px">Hora</th>
-              <th class="text-right" style="min-width:110px">Monto</th>
-              <th style="min-width:90px">Tarjeta</th>
-              <th style="min-width:90px">Nro boleta</th>
-              <th style="min-width:200px">Documento Bsale</th>
-              <th class="text-center" style="min-width:90px">Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="tx in txFacturasFiltradas"
-              :key="tx.id"
-              :class="tx.documento_id ? 'doc-linked' : ''"
-            >
-              <td>{{ formatFecha(tx.fecha_movimiento?.slice(0, 10)) }}</td>
-              <td class="text-caption text-medium-emphasis">{{ formatHora(tx.fecha_movimiento) }}</td>
-              <td class="text-right font-weight-medium">{{ fmt(tx.monto_original) }}</td>
-              <td>
-                <VChip :color="tipoColor(tx.medio_pago)" size="x-small" label>
-                  {{ tx.tipo_tarjeta ?? tx.medio_pago }}
-                </VChip>
-              </td>
-              <td class="text-caption text-medium-emphasis">{{ tx.nro_voucher ?? '—' }}</td>
-              <td>
-                <div v-if="tx.documento_id">
-                  <div class="d-flex align-center gap-1 mb-0">
-                    <VChip
-                      size="x-small"
-                      :color="tx.doc_tipo_bsale === 1 ? 'success' : 'info'"
-                      label
-                    >{{ tx.doc_tipo_bsale === 1 ? 'Boleta' : 'Factura' }}</VChip>
-                    <span class="text-body-2 font-weight-medium">N° {{ tx.doc_numero }}</span>
-                  </div>
-                  <p class="text-caption text-medium-emphasis mb-0">
-                    {{ tx.doc_cliente }} · {{ fmt(tx.doc_monto) }}
-                  </p>
-                </div>
-                <VChip v-else size="x-small" color="warning" label>Sin vincular</VChip>
-              </td>
-              <td class="text-center" @click.stop>
-                <VBtn
-                  v-if="!tx.documento_id"
-                  size="x-small"
-                  variant="tonal"
-                  color="primary"
-                  @click="abrirLinkFactura(tx)"
-                >Vincular</VBtn>
-                <VBtn
-                  v-else
-                  size="x-small"
-                  variant="text"
-                  color="warning"
-                  :loading="desvinculando === tx.id"
-                  @click="desasociarFactura(tx)"
-                >Quitar</VBtn>
-              </td>
-            </tr>
-          </tbody>
-        </VTable>
       </VCard>
     </div>
+
+    <!-- ──────────────────────────────────────────────────── -->
+    <!-- Dialog Ingreso Manual desde transacción Transbank   -->
+    <!-- ──────────────────────────────────────────────────── -->
+    <VDialog v-model="dialogIngresoManual" max-width="440" persistent>
+      <VCard>
+        <VCardTitle class="d-flex align-center pa-4">
+          <VIcon color="success" class="mr-2">mdi-plus-circle-outline</VIcon>
+          Crear ingreso manual
+          <VSpacer />
+          <VBtn icon="mdi-close" variant="text" size="small" @click="dialogIngresoManual = false" />
+        </VCardTitle>
+        <VDivider />
+        <VCardText class="pa-4">
+          <VAlert type="info" variant="tonal" density="compact" class="mb-4">
+            <strong>{{ fmt(txParaIngreso?.monto_original) }}</strong>
+            · {{ txParaIngreso?.fecha_movimiento?.slice(0,10) }}
+            · Voucher {{ txParaIngreso?.nro_voucher ?? 'sin número' }}
+          </VAlert>
+          <VTextField
+            v-model="ingresoForm.descripcion"
+            label="Descripción"
+            density="compact"
+            variant="outlined"
+            class="mb-3"
+          />
+          <VTextField
+            v-model="ingresoForm.categoria"
+            label="Categoría"
+            density="compact"
+            variant="outlined"
+            class="mb-3"
+          />
+          <VTextarea
+            v-model="ingresoForm.notas"
+            label="Notas"
+            density="compact"
+            variant="outlined"
+            rows="2"
+            auto-grow
+          />
+        </VCardText>
+        <VDivider />
+        <VCardActions class="pa-4 gap-2">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogIngresoManual = false">Cancelar</VBtn>
+          <VBtn color="success" :loading="loadingIngresoManual" @click="crearIngresoManual">Crear ingreso</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
 
     <!-- ──────────────────────────────────────────────────── -->
     <!-- Dialog Subir archivo                                -->
@@ -799,6 +932,72 @@
     </VDialog>
 
     <!-- ──────────────────────────────────────────────────── -->
+    <!-- Dialog Vincular Doc → Transacción (Documentos tab) -->
+    <!-- ──────────────────────────────────────────────────── -->
+    <VDialog v-model="dialogVincularDoc" max-width="700">
+      <VCard v-if="docParaVincular">
+        <VCardTitle class="d-flex align-center pa-4">
+          Vincular {{ docParaVincular.numero_documento_bsale }} a transacción Transbank
+          <VSpacer />
+          <VBtn icon="mdi-close" variant="text" size="small" @click="dialogVincularDoc = false" />
+        </VCardTitle>
+        <VDivider />
+        <VCardText class="pa-4">
+          <VAlert type="info" variant="tonal" density="compact" class="mb-3">
+            Factura <strong>N° {{ docParaVincular.numero_documento_bsale }}</strong> ·
+            <strong>{{ fmt(docParaVincular.monto) }}</strong> · {{ docParaVincular.cliente }}
+          </VAlert>
+          <VAlert
+            v-if="txDisponibles.length && !txDisponibles.some(tx => tx.monto_original === docParaVincular.monto)"
+            type="warning" variant="tonal" density="compact" class="mb-3"
+          >
+            No hay transacción de <strong>{{ fmt(docParaVincular.monto) }}</strong> sin vincular en este período.
+            Las siguientes son las más cercanas — si FAC {{ docParaVincular.numero_documento_bsale }} fue pagada
+            con tarjeta, puede que la transacción esté en otro período o que el método de pago en Bsale sea incorrecto.
+          </VAlert>
+
+          <div v-if="loadingTxDisponibles" class="d-flex justify-center py-6">
+            <VProgressCircular indeterminate color="primary" />
+          </div>
+          <VCard v-else-if="!txDisponibles.length" variant="tonal">
+            <VCardText class="text-center text-medium-emphasis py-4">
+              No hay transacciones sin vincular en este período.
+            </VCardText>
+          </VCard>
+          <VTable v-else density="compact">
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Tipo</th>
+                <th class="text-right">Monto</th>
+                <th>Voucher</th><th class="text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="tx in txDisponibles" :key="tx.id"
+                :class="Math.abs(tx.monto_original - docParaVincular.monto) < 1 ? 'bg-success-subtle' : ''"
+              >
+                <td class="text-caption">{{ formatFecha(tx.fecha_movimiento?.slice(0,10)) }}</td>
+                <td>
+                  <VChip size="x-small" :color="tipoColor(tx.medio_pago)" label>
+                    {{ tx.tipo_tarjeta ?? tx.medio_pago }}
+                  </VChip>
+                </td>
+                <td class="text-right font-weight-bold">{{ fmt(tx.monto_original) }}</td>
+                <td class="text-caption text-medium-emphasis">{{ tx.nro_voucher ?? '—' }}</td>
+                <td class="text-center">
+                  <VBtn size="x-small" color="primary" variant="tonal"
+                    :loading="vinculandoDoc === tx.id"
+                    @click="confirmarVincularDoc(tx)"
+                  >Vincular</VBtn>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+        </VCardText>
+      </VCard>
+    </VDialog>
+
+    <!-- ──────────────────────────────────────────────────── -->
     <!-- Dialog Importar CSV Chipax                          -->
     <!-- ──────────────────────────────────────────────────── -->
     <VDialog v-model="dialogChipaxCsv" max-width="560" persistent>
@@ -976,13 +1175,29 @@ const txBoletas          = ref(null)
 const loadingDocs        = ref(false)
 const filtroDoc          = ref('todos')
 const loadingAutoLink    = ref(false)
+const resumenMes         = ref(null)
 const dialogLinkFactura  = ref(false)
 const txSeleccionada     = ref(null)
 const facturasDisponibles = ref([])
 const loadingFacturas    = ref(false)
 const busquedaFactura    = ref('')
 const vinculando         = ref(null)
+
+// Vincular doc → tx (tab Documentos)
+const dialogVincularDoc  = ref(false)
+const docParaVincular    = ref(null)
+const txDisponibles      = ref([])
+const loadingTxDisponibles = ref(false)
+const vinculandoDoc      = ref(null)
+const desvinculandoDoc   = ref(null)
+const loadingConciliarBoleta = ref(null)
 const desvinculando      = ref(null)
+
+// Ingreso manual desde transacción Transbank
+const dialogIngresoManual  = ref(false)
+const txParaIngreso        = ref(null)
+const loadingIngresoManual = ref(false)
+const ingresoForm          = ref({ descripcion: '', categoria: 'Ingreso', notas: '' })
 
 const snack = ref({ show: false, msg: '', color: 'success' })
 
@@ -1011,7 +1226,7 @@ const periodoLabel = computed(() => {
 })
 
 const facturasPendientes = computed(() =>
-  txFacturas.value.filter(tx => !tx.documento_id).length
+  resumenMes.value?.sin_doc?.count ?? 0
 )
 
 const txFacturasFiltradas = computed(() => {
@@ -1020,9 +1235,13 @@ const txFacturasFiltradas = computed(() => {
   return txFacturas.value
 })
 
-// Resumen docs: boletas (tipo_bsale=1) vs facturas vs sin vincular
+// Resumen docs: boletas desde backend (agregado mensual) + facturas individuales
 const resumenDocs = computed(() => {
-  const boletas     = { count: 0, monto: 0 }
+  // Boletas: dato agregado del backend (un resumen por mes, no por transacción)
+  const boletas = txBoletas.value
+    ? { count: txBoletas.value.count, monto: txBoletas.value.monto }
+    : { count: 0, monto: 0 }
+
   const facturas    = { count: 0, monto: 0 }
   const sinVincular = { count: 0, monto: 0 }
   let totalMonto    = 0
@@ -1033,9 +1252,6 @@ const resumenDocs = computed(() => {
     if (!tx.documento_id) {
       sinVincular.count++
       sinVincular.monto += m
-    } else if (tx.doc_tipo_bsale === 1) {
-      boletas.count++
-      boletas.monto += m
     } else {
       facturas.count++
       facturas.monto += m
@@ -1076,6 +1292,21 @@ function fmt(v) {
   const num = n(v)
   if (isNaN(num)) return '—'
   return '$' + num.toLocaleString('es-CL')
+}
+
+function labelFormaPago(fp) {
+  const map = {
+    tarjeta_credito: 'Tarjeta Crédito',
+    tarjeta_debito:  'Tarjeta Débito',
+    transferencia:   'Transferencia',
+    efectivo:        'Efectivo',
+    cheque:          'Cheque',
+    credito:         'Crédito',
+    nota_credito:    'Nota Crédito',
+    otros:           'Otros',
+    sin_informacion: 'Sin Información',
+  }
+  return map[fp] ?? fp ?? '—'
 }
 
 function formatFecha(s) {
@@ -1315,9 +1546,13 @@ async function cargarDocumentos() {
   loadingDocs.value = true
   filtroDoc.value   = 'todos'
   try {
-    const { data } = await axios.get('/api/transbank/documentos', { params: { periodo: periodo.value } })
-    txFacturas.value = data.facturas
-    txBoletas.value  = data.boletas
+    const [resDocs, resResumen] = await Promise.all([
+      axios.get('/api/transbank/documentos',         { params: { periodo: periodo.value } }),
+      axios.get('/api/transbank/resumen-documentos', { params: { periodo: periodo.value } }),
+    ])
+    txFacturas.value = resDocs.data.facturas
+    txBoletas.value  = resDocs.data.boletas
+    resumenMes.value = resResumen.data
   } finally {
     loadingDocs.value = false
   }
@@ -1391,6 +1626,68 @@ async function desasociarFactura(tx) {
   }
 }
 
+// ── Vincular doc → transacción (tab Documentos) ───────────────────────────────
+
+async function abrirVincularDoc(factura) {
+  docParaVincular.value    = factura
+  txDisponibles.value      = []
+  dialogVincularDoc.value  = true
+  loadingTxDisponibles.value = true
+  try {
+    const { data } = await axios.get('/api/transbank/transacciones-sin-doc', {
+      params: { periodo: periodo.value, monto: factura.monto },
+    })
+    txDisponibles.value = data
+  } catch {
+    txDisponibles.value = []
+  } finally {
+    loadingTxDisponibles.value = false
+  }
+}
+
+async function confirmarVincularDoc(tx) {
+  vinculandoDoc.value = tx.id
+  try {
+    await axios.post(`/api/transbank/transaccion/${tx.id}/link`, {
+      documento_id: docParaVincular.value.id,
+    })
+    dialogVincularDoc.value = false
+    await cargarDocumentos()
+    toast('Factura vinculada a transacción Transbank')
+  } catch {
+    toast('Error al vincular', 'error')
+  } finally {
+    vinculandoDoc.value = null
+  }
+}
+
+async function desasociarDoc(factura) {
+  desvinculandoDoc.value = factura.id
+  try {
+    await axios.delete(`/api/transbank/transaccion/${factura.transaccion_id}/link`)
+    await cargarDocumentos()
+    toast('Vinculación removida')
+  } catch {
+    toast('Error', 'error')
+  } finally {
+    desvinculandoDoc.value = null
+  }
+}
+
+async function conciliarBoletaTransbank(boleta) {
+  loadingConciliarBoleta.value = boleta.id
+  try {
+    const { data } = await axios.patch(`/api/boletas/resumenes/${boleta.id}/conciliar-transbank`)
+    boleta.conciliado_transbank = data.conciliado_transbank
+    const accion = data.conciliado_transbank ? 'marcada como conciliada' : 'desmarcada'
+    toast(`Boleta ${labelFormaPago(boleta.forma_pago)} ${accion} en CPC`)
+  } catch {
+    toast('Error al actualizar conciliación', 'error')
+  } finally {
+    loadingConciliarBoleta.value = null
+  }
+}
+
 // ── Chipax CSV import ──────────────────────────────────────────────────────────
 
 function cerrarChipaxCsv() {
@@ -1459,6 +1756,34 @@ async function ejecutarChipaxCsv(dryRun) {
     chipaxCsvError.value = e.response?.data?.message ?? 'Error al procesar el archivo'
   } finally {
     chipaxCsvLoading.value = false
+  }
+}
+
+// ── Ingreso manual desde transacción Transbank ────────────────────────────────
+
+function abrirIngresoManual(tx) {
+  txParaIngreso.value = tx
+  ingresoForm.value = {
+    descripcion: `Venta Transbank sin documento · ${tx.nro_voucher ?? 'sin voucher'}`,
+    categoria:   'Ingreso',
+    notas:       '',
+  }
+  dialogIngresoManual.value = true
+}
+
+async function crearIngresoManual() {
+  if (!txParaIngreso.value) return
+  loadingIngresoManual.value = true
+  try {
+    await axios.post(`/api/transbank/transaccion/${txParaIngreso.value.id}/ingreso-manual`, ingresoForm.value)
+    toast('Ingreso manual creado correctamente')
+    dialogIngresoManual.value = false
+    txParaIngreso.value = null
+    await cargarDocumentos()
+  } catch (e) {
+    toast(e.response?.data?.message ?? 'Error al crear ingreso manual', 'error')
+  } finally {
+    loadingIngresoManual.value = false
   }
 }
 </script>

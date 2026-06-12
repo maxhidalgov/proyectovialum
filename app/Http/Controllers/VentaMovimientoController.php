@@ -26,12 +26,40 @@ class VentaMovimientoController extends Controller
             )
             ->get();
 
-        $totalCobrado  = $asignados->sum('monto_asignado');
-        $saldoPorCobrar = max(0, $venta->monto - $totalCobrado);
+        $totalCobrado = $asignados->sum('monto_asignado');
+
+        $totalTransbank = (float) DB::table('transbank_factura as tvf')
+            ->join('transbank_transacciones as tt', 'tt.id', '=', 'tvf.transaccion_id')
+            ->where('tvf.documento_id', $ventaId)
+            ->sum('tt.monto_original');
+
+        $totalManual = (float) ($venta->monto_cobrado_manual ?? 0);
+
+        $totalNC = (float) DB::table('venta_nc_aplicacion')
+            ->where('factura_id', $ventaId)
+            ->sum('monto');
+
+        // Chipax solo aplica cuando no hay ningún pago explícito registrado (misma lógica que efectivoCobradoSub)
+        $hayPagosExplicitos = ($totalCobrado + $totalTransbank + $totalManual) > 0;
+        if (!$hayPagosExplicitos && $venta->chipax_monto_por_cobrar !== null) {
+            $saldoPorCobrar   = max(0, (float) $venta->chipax_monto_por_cobrar);
+            $cobradoChipax    = (float) $venta->monto - $saldoPorCobrar;
+            return response()->json([
+                'asignados'         => $asignados,
+                'cobrado_transbank' => 0,
+                'cobrado_manual'    => 0,
+                'cobrado_chipax'    => $cobradoChipax,
+                'saldo_por_cobrar'  => $saldoPorCobrar,
+            ]);
+        }
+
+        $saldoPorCobrar = max(0, $venta->monto - $totalCobrado - $totalTransbank - $totalManual - $totalNC);
 
         return response()->json([
-            'asignados'      => $asignados,
-            'saldo_por_cobrar' => $saldoPorCobrar,
+            'asignados'         => $asignados,
+            'cobrado_transbank' => $totalTransbank,
+            'cobrado_manual'    => $totalManual,
+            'saldo_por_cobrar'  => $saldoPorCobrar,
         ]);
     }
 
@@ -49,19 +77,23 @@ class VentaMovimientoController extends Controller
                 DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM venta_movimiento GROUP BY movimiento_id) as vm'),
                 'm.id', '=', 'vm.movimiento_id'
             )
+            ->leftJoin(
+                DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM boleta_resumen_movimiento GROUP BY movimiento_id) as brm'),
+                'm.id', '=', 'brm.movimiento_id'
+            )
             ->where('m.tipo', 'C')
             ->where('m.conciliado', 0)
-            ->whereRaw('m.monto - COALESCE(vm.asignado, 0) > 0')
+            ->whereRaw('m.monto - COALESCE(vm.asignado, 0) - COALESCE(brm.asignado, 0) > 0')
             ->select(
                 'm.id',
                 'm.fecha_contable',
                 'm.descripcion',
                 'm.glosa',
                 'm.monto',
-                DB::raw('m.monto - COALESCE(vm.asignado, 0) as saldo_por_asignar')
+                DB::raw('m.monto - COALESCE(vm.asignado, 0) - COALESCE(brm.asignado, 0) as saldo_por_asignar')
             )
             ->when($buscar, fn($q) => $q->where('m.descripcion', 'like', "%$buscar%"))
-            ->orderByRaw('ABS(m.monto - COALESCE(vm.asignado, 0) - ?) ASC', [$saldo])
+            ->orderByRaw('ABS(m.monto - COALESCE(vm.asignado, 0) - COALESCE(brm.asignado, 0) - ?) ASC', [$saldo])
             ->paginate(30);
 
         return response()->json($movs);
@@ -132,6 +164,7 @@ class VentaMovimientoController extends Controller
             ->leftJoin('clientes as cl_cot',   'cl_cot.id', '=', 'c.cliente_id')
             ->leftJoin('clientes as cl_dir',   'cl_dir.id', '=', 'df.cliente_id')
             ->where('vm.movimiento_id', $movimientoId)
+            ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->select(
                 'vm.id as pivot_id',
                 'vm.monto as monto_asignado',
@@ -174,6 +207,7 @@ class VentaMovimientoController extends Controller
                   ->where('vm2.movimiento_id', $movimientoId);
             })
             ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1]) // boletas van por su propio módulo
             ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) > 0')
             ->select(
                 'df.id',

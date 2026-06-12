@@ -166,6 +166,12 @@ const allMenuItems = [
         permission: 'gestionar_usuarios',
       },
       {
+        title: 'Registro de Compras',
+        to: { name: 'registro-compras' },
+        icon: { icon: 'mdi-format-list-bulleted-type' },
+        permission: 'gestionar_usuarios',
+      },
+      {
         title: 'Gastos Generales',
         to: { name: 'gastos-generales' },
         icon: { icon: 'mdi-receipt-text-minus' },

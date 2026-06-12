@@ -437,6 +437,172 @@ class TransbankController extends Controller
 
     // ── Parser interno ────────────────────────────────────────────────────────
 
+    // ── GET /api/transbank/resumen-documentos?periodo=YYYY-MM ────────────────
+    // Vista mensual estilo Chipax: boletas tarjeta + facturas tarjeta + diferencia.
+
+    public function resumenDocumentos(Request $request)
+    {
+        $periodo = $request->get('periodo', now()->format('Y-m'));
+        [$y, $m] = explode('-', $periodo);
+        $desde = "$periodo-01";
+        $hasta = Carbon::create((int) $y, (int) $m, 1)->endOfMonth()->toDateString();
+
+        // 1. Totales del período.
+        //
+        // ventas_brutas: suma por FECHA DE VENTA (fecha_movimiento de la transacción),
+        //   no por período del archivo. Así una venta del 31-ene aparece en enero aunque
+        //   su abono llegue en febrero. Permite comparar peras con peras vs facturas/boletas.
+        //
+        // comisiones / total_abonado: siguen por período del archivo (fecha de liquidación),
+        //   ya que reflejan cuándo Transbank cobró/depositó — números de caja del mes.
+
+        $ventasBrutas = (float) DB::table('transbank_transacciones as tt')
+            ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
+            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+            ->where('tt.tipo', 'Venta')
+            ->whereNotNull('tt.fecha_movimiento')
+            ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
+            ->sum('tt.monto_original');
+
+        $dat = DB::table('transbank_archivos')
+            ->where('periodo', $periodo)
+            ->selectRaw('
+                SUM(total_comision + total_iva_comision + total_servicio + total_iva_servicio) as comisiones,
+                SUM(total_abono) as total_abonado
+            ')
+            ->first();
+
+        // 2. Boletas tarjeta (solo tarjeta_credito + tarjeta_debito)
+        $boletasTarjeta = DB::table('boleta_resumenes')
+            ->where('periodo', $periodo)
+            ->whereIn('forma_pago', ['tarjeta_credito', 'tarjeta_debito'])
+            ->select('id', 'forma_pago', 'total_boletas', 'monto_total', 'conciliado_transbank')
+            ->orderBy('forma_pago')
+            ->get();
+
+        // 3. Facturas tarjeta del período (no boletas, pagadas con tarjeta)
+        $facturas = DB::table('documentos_facturacion as df')
+            ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
+            ->leftJoin('transbank_transacciones as tt', 'tt.id', '=', 'tvf.transaccion_id')
+            ->leftJoin('clientes as cl', 'cl.id', '=', 'df.cliente_id')
+            ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1])
+            ->where('df.pagado_con_tarjeta', 1)
+            ->whereBetween('df.fecha_emision', [$desde, $hasta])
+            ->select(
+                'df.id',
+                'df.numero_documento_bsale',
+                'df.monto',
+                'df.fecha_emision',
+                'df.tipo_documento_bsale_id',
+                'df.nro_comprobante_transbank',
+                DB::raw('COALESCE(cl.razon_social, df.bsale_cliente_nombre) as cliente'),
+                'tvf.transaccion_id',
+                'tt.nro_voucher'
+            )
+            ->orderByDesc('df.fecha_emision')
+            ->get();
+
+        // 4. Transacciones sin documento vinculado.
+        //    Excluye: BOLETA (se concilian a nivel período), ajustes Transbank (cod_autorizacion = '000000'),
+        //    y transacciones que ya tienen un ingreso manual registrado.
+        $sinDocBase = DB::table('transbank_transacciones as tt')
+            ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
+            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+            ->leftJoin('transbank_factura as tvf', 'tvf.transaccion_id', '=', 'tt.id')
+            ->leftJoin('ingresos_manuales as im', 'im.transbank_transaccion_id', '=', 'tt.id')
+            ->where('tt.tipo', 'Venta')
+            ->whereNotNull('tt.fecha_movimiento')
+            ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
+            ->where(fn($q) => $q->whereNull('tt.tipo_documento')->orWhere('tt.tipo_documento', '!=', 'BOLETA'))
+            ->where(fn($q) => $q->whereNull('tt.codigo_autorizacion')->orWhere('tt.codigo_autorizacion', '!=', '000000'))
+            ->whereNull('tvf.transaccion_id')
+            ->whereNull('im.id');
+
+        $sinDocRows = (clone $sinDocBase)
+            ->select(
+                'tt.id',
+                'tt.fecha_movimiento',
+                'tt.monto_original',
+                'tt.tipo_tarjeta',
+                'tt.nro_voucher',
+                'tt.tipo_documento',
+                'tf.tipo as medio_pago'
+            )
+            ->orderByDesc('tt.fecha_movimiento')
+            ->get();
+
+        $totalBoletas  = (float) $boletasTarjeta->sum('monto_total');
+        $totalFacturas = (float) $facturas->sum('monto');
+        $totalDocs     = $totalBoletas + $totalFacturas;
+
+        return response()->json([
+            'ventas_brutas'    => $ventasBrutas,
+            'comisiones'       => (float) ($dat->comisiones ?? 0),
+            'total_abonado'    => (float) ($dat->total_abonado ?? 0),
+            'boletas_tarjeta'  => $boletasTarjeta,
+            'facturas'         => $facturas,
+            'sin_doc'          => [
+                'count' => $sinDocRows->count(),
+                'monto' => (float) $sinDocRows->sum('monto_original'),
+                'rows'  => $sinDocRows,
+            ],
+            'total_documentos' => $totalDocs,
+            'diferencia'       => $ventasBrutas - $totalDocs,
+        ]);
+    }
+
+    // ── GET /api/transbank/transacciones-sin-doc?periodo=YYYY-MM&monto=X ────────
+    // Lista transacciones Venta sin documento vinculado, ordenadas por proximidad a monto.
+
+    public function transaccionesSinDoc(Request $request)
+    {
+        $periodo = $request->get('periodo', now()->format('Y-m'));
+        $monto   = $request->get('monto');
+
+        $base = DB::table('transbank_transacciones as tt')
+            ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
+            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+            ->leftJoin('transbank_factura as tvf', 'tvf.transaccion_id', '=', 'tt.id')
+            ->leftJoin('ingresos_manuales as im', 'im.transbank_transaccion_id', '=', 'tt.id')
+            ->whereNotNull('tt.fecha_movimiento')
+            ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
+            ->where('tt.tipo', 'Venta')
+            ->whereNull('tvf.transaccion_id')
+            ->whereNull('im.id')
+            ->select(
+                'tt.id',
+                'tt.fecha_movimiento',
+                'tt.monto_original',
+                'tt.tipo_tarjeta',
+                'tt.nro_voucher',
+                'tf.tipo as medio_pago'
+            );
+
+        if ($monto) {
+            // Primero intentar match exacto de monto
+            $exactos = (clone $base)
+                ->where('tt.monto_original', (int) $monto)
+                ->orderByDesc('tt.fecha_movimiento')
+                ->limit(20)
+                ->get();
+
+            if ($exactos->isNotEmpty()) {
+                return response()->json($exactos);
+            }
+
+            // Si no hay exactos, mostrar los más cercanos en monto (máximo 10)
+            return response()->json(
+                (clone $base)
+                    ->orderByRaw('ABS(tt.monto_original - ?) ASC', [(int) $monto])
+                    ->limit(10)
+                    ->get()
+            );
+        }
+
+        return response()->json($base->orderByDesc('tt.fecha_movimiento')->limit(50)->get());
+    }
+
     // ── GET /api/transbank/documentos?periodo=YYYY-MM ─────────────────────────
     // Devuelve las transacciones FACTURA/N/A (no BOLETA) con su documento vinculado,
     // más el resumen de boletas del periodo.
@@ -474,9 +640,29 @@ class TransbankController extends Controller
             ->orderBy('tt.fecha_movimiento')
             ->get();
 
+        // Resumen agregado de boletas del período (desde boleta_resumenes)
+        $boletaRow = DB::table('boleta_resumenes')
+            ->where('periodo', $periodo)
+            ->selectRaw('SUM(total_boletas) as count, SUM(monto_total) as monto')
+            ->first();
+
+        $boletaCobrado = DB::table('boleta_periodo_movimiento')
+            ->where('periodo', $periodo)
+            ->sum('monto');
+
+        $boletas = $boletaRow && $boletaRow->count
+            ? [
+                'count'      => (int)   $boletaRow->count,
+                'monto'      => (float) $boletaRow->monto,
+                'cobrado'    => (float) $boletaCobrado,
+                'pendiente'  => max(0, (float) $boletaRow->monto - (float) $boletaCobrado),
+                'conciliado' => (float) $boletaCobrado >= (float) $boletaRow->monto,
+            ]
+            : null;
+
         return response()->json([
             'facturas' => $facturas,
-            'boletas'  => null,
+            'boletas'  => $boletas,
         ]);
     }
 
@@ -491,7 +677,8 @@ class TransbankController extends Controller
             ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
             ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
             ->leftJoin('transbank_factura as tvf', 'tvf.transaccion_id', '=', 'tt.id')
-            ->where('tf.periodo', $periodo)
+            ->whereNotNull('tt.fecha_movimiento')
+            ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
             ->where('tt.tipo', 'Venta')
             ->whereNull('tvf.transaccion_id')
             ->select('tt.id', 'tt.monto_original', 'tt.fecha_movimiento', 'tt.nro_voucher')
@@ -503,12 +690,13 @@ class TransbankController extends Controller
             $doc        = null;
             $fechaVenta = Carbon::parse($tx->fecha_movimiento);
 
-            // 1) Match primario: Nº Comprobante exacto
+            // 1) Match primario: Nº Comprobante exacto (solo facturas, no boletas)
             if (!empty($tx->nro_voucher)) {
                 $doc = DB::table('documentos_facturacion as df')
                     ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
                     ->whereNull('tvf.documento_id')
                     ->where('df.estado', 'emitido')
+                    ->whereNotIn('df.tipo_documento_bsale_id', [1])
                     ->whereNotNull('df.nro_comprobante_transbank')
                     ->whereRaw(
                         'CAST(df.nro_comprobante_transbank AS UNSIGNED) = CAST(? AS UNSIGNED)',
@@ -518,23 +706,29 @@ class TransbankController extends Controller
                     ->first();
             }
 
-            // 2) Fallback seguro: monto exacto + fecha ±2 días
-            //    Solo para docs que Bsale confirma como pago con tarjeta pero sin comprobante digitado.
-            //    Esto evita emparejar con boletas/facturas de efectivo que coincidan en monto.
+            // 2) Fallback: monto exacto + fecha ±7 días, solo si hay match ÚNICO.
+            //    Si hay más de un candidato con ese monto en esa ventana → no auto-vincular
+            //    (ambigüedad, el operador debe hacerlo manualmente).
             if (!$doc) {
-                $doc = DB::table('documentos_facturacion as df')
+                $candidatos = DB::table('documentos_facturacion as df')
                     ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
                     ->whereNull('tvf.documento_id')
                     ->where('df.estado', 'emitido')
+                    ->whereNotIn('df.tipo_documento_bsale_id', [1])
                     ->where('df.pagado_con_tarjeta', 1)
                     ->whereNull('df.nro_comprobante_transbank')
                     ->where('df.monto', (int) $tx->monto_original)
                     ->whereBetween('df.fecha_emision', [
-                        $fechaVenta->copy()->subDays(2)->toDateString(),
-                        $fechaVenta->copy()->addDays(2)->toDateString(),
+                        $fechaVenta->copy()->subDays(7)->toDateString(),
+                        $fechaVenta->copy()->addDays(7)->toDateString(),
                     ])
-                    ->select('df.id')
-                    ->first();
+                    ->select('df.id', 'df.fecha_emision')
+                    ->get();
+
+                // Solo vincular si hay exactamente un candidato (sin ambigüedad)
+                if ($candidatos->count() === 1) {
+                    $doc = $candidatos->first();
+                }
             }
 
             if ($doc) {
@@ -599,6 +793,7 @@ class TransbankController extends Controller
             ->whereNull('tvf.documento_id')
             ->where('df.estado', 'emitido')
             ->whereNotNull('df.numero_documento_bsale')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1])  // boletas van por conciliación mensual
             ->whereBetween('df.fecha_emision', [$desde, $hasta])
             ->select(
                 'df.id',

@@ -206,6 +206,32 @@ class IngresoManualController extends Controller
         return response()->json(null, 204);
     }
 
+    // ── Crear ingreso manual desde transacción Transbank ──────────────────────
+    public function storePorTransaccion(Request $request, int $transaccionId)
+    {
+        $request->validate([
+            'descripcion' => 'nullable|string|max:255',
+            'categoria'   => 'nullable|string|max:100',
+            'notas'       => 'nullable|string',
+        ]);
+
+        $tx = DB::table('transbank_transacciones')->where('id', $transaccionId)->firstOrFail();
+        $fecha = $tx->fecha_movimiento
+            ? \Carbon\Carbon::parse($tx->fecha_movimiento)->toDateString()
+            : now()->toDateString();
+
+        $ingreso = IngresoManual::create([
+            'fecha'                    => $fecha,
+            'descripcion'              => $request->descripcion ?? 'Venta Transbank sin documento',
+            'monto'                    => $tx->monto_original,
+            'categoria'                => $request->categoria ?? 'Ingreso',
+            'notas'                    => $request->notas,
+            'transbank_transaccion_id' => $transaccionId,
+        ]);
+
+        return response()->json($ingreso, 201);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private function recalcularConciliado(int $movimientoId): void

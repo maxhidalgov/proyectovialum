@@ -40,7 +40,7 @@
               @update:modelValue="cargar"
             />
           </VCol>
-          <VCol cols="12" sm="4">
+          <VCol cols="12" sm="3">
             <VTextField
               v-model="filtros.buscar"
               label="Buscar folio, razón social, RUT..."
@@ -53,6 +53,18 @@
             />
           </VCol>
           <VCol cols="12" sm="2">
+            <VTextField
+              v-model="filtros.monto"
+              label="Monto exacto"
+              density="compact"
+              variant="outlined"
+              prepend-inner-icon="mdi-currency-usd"
+              hide-details
+              clearable
+              @update:modelValue="cargar"
+            />
+          </VCol>
+          <VCol cols="12" sm="1">
             <VSwitch
               v-model="filtros.solo_pendientes"
               label="Solo pendientes"
@@ -122,7 +134,10 @@
         <!-- Razón social + RUT -->
         <template #item.razon_social="{ item }">
           <div class="text-body-2">{{ item.razon_social || '—' }}</div>
-          <div class="text-caption text-medium-emphasis">{{ item.identification || '' }}</div>
+          <div class="text-caption text-medium-emphasis">
+            {{ item.es_boleta_resumen ? (item.identification || '') : (item.identification || '') }}
+            <VChip v-if="item.es_boleta_resumen && item.conciliado_transbank" size="x-small" color="info" variant="tonal" class="ml-1">Transbank</VChip>
+          </div>
         </template>
 
         <!-- Fecha -->
@@ -139,19 +154,34 @@
 
         <!-- Por cobrar -->
         <template #item.pendiente="{ item }">
-          <div>
-            <span
-              class="font-weight-bold"
-              :class="(item.pendiente > 0 && !item.es_nc) ? 'text-warning' : 'text-success'"
-            >
-              {{ item.es_nc ? formatMonto(Math.abs(item.pendiente)) : formatMonto(item.pendiente) }}
-            </span>
+          <span
+            class="font-weight-bold"
+            :class="(item.pendiente > 0 && !item.es_nc) ? 'text-warning' : 'text-success'"
+          >
+            {{ item.es_nc ? formatMonto(Math.abs(item.pendiente)) : formatMonto(item.pendiente) }}
+          </span>
+        </template>
+
+        <!-- Tipo de pago -->
+        <template #item.tipo_pago="{ item }">
+          <div class="d-flex flex-wrap" style="gap:3px">
             <VChip
-              v-if="item.chipax_monto_por_cobrar !== null"
+              v-if="formaPagoLabel(item)"
+              size="x-small"
+              :color="formaPagoColor(item)"
+              variant="tonal"
+            >{{ formaPagoLabel(item) }}</VChip>
+            <VChip
+              v-if="item.pagado_con_tarjeta"
+              size="x-small"
+              color="info"
+              variant="tonal"
+            >Transbank</VChip>
+            <VChip
+              v-else-if="item.chipax_monto_por_cobrar !== null"
               size="x-small"
               color="secondary"
               variant="tonal"
-              class="ml-1"
             >Chipax</VChip>
           </div>
         </template>
@@ -160,7 +190,7 @@
         <template #item.acciones="{ item }">
           <div class="d-flex align-center" style="gap:4px">
             <VBtn
-              v-if="!item.es_nc && item.pendiente > 0"
+              v-if="!item.es_nc && item.pendiente > 0 && !item.conciliado_transbank"
               size="x-small"
               variant="tonal"
               color="primary"
@@ -169,16 +199,16 @@
               <VIcon size="13" class="mr-1">mdi-link-variant</VIcon>Conciliar
             </VBtn>
             <VBtn
-              v-else-if="!item.es_nc && item.pendiente <= 0"
+              v-else-if="!item.es_nc && (item.pendiente <= 0 || item.conciliado_transbank)"
               size="x-small"
               variant="text"
               color="success"
-              @click="abrirConciliar(item)"
+              @click="!item.es_boleta_resumen && abrirConciliar(item)"
             >
               <VIcon size="13">mdi-eye-outline</VIcon>
             </VBtn>
             <VTooltip
-              v-if="!item.es_nc && item.pendiente > 0"
+              v-if="!item.es_nc && !item.es_boleta_resumen && item.pendiente > 0"
               location="bottom"
               text="Marcar como cobrada (pago sin mov. bancario)"
             >
@@ -454,6 +484,7 @@ const filtros = ref({
   desde:           haceUnAño,
   hasta:           hoy,
   buscar:          '',
+  monto:           '',
   solo_pendientes: false,
 })
 
@@ -464,6 +495,7 @@ const headers = [
   { title: 'Fecha',        key: 'fecha_emision', sortable: true },
   { title: 'Monto Total',  key: 'monto',         align: 'end', sortable: true },
   { title: 'Por Cobrar',   key: 'pendiente',     align: 'end', sortable: true },
+  { title: 'Tipo pago',    key: 'tipo_pago',     sortable: false, width: '110px' },
   { title: '',             key: 'acciones',      sortable: false, width: '180px' },
 ]
 
@@ -477,8 +509,44 @@ function formatFecha(f) {
   return new Date(f + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+const FORMA_PAGO_LABELS = {
+  efectivo:        'Efectivo',
+  tarjeta_credito: 'T. Crédito',
+  tarjeta_debito:  'T. Débito',
+  transferencia:   'Transferencia',
+  cheque:          'Cheque',
+  credito:         'Crédito',
+  nota_credito:    'Nota Crédito',
+}
+const FORMA_PAGO_COLORS = {
+  efectivo:        'success',
+  tarjeta_credito: 'info',
+  tarjeta_debito:  'cyan',
+  transferencia:   'primary',
+  cheque:          'secondary',
+  credito:         'warning',
+  nota_credito:    'success',
+}
+
+function formaPagoLabel(item) {
+  if (!item) return null
+  const fp = item.forma_pago
+  if (fp && fp !== 'sin_informacion' && FORMA_PAGO_LABELS[fp]) return FORMA_PAGO_LABELS[fp]
+  if (item.chipax_monto_por_cobrar !== null) return 'Chipax'
+  return null
+}
+
+function formaPagoColor(item) {
+  if (!item) return 'secondary'
+  const fp = item.forma_pago
+  if (fp && FORMA_PAGO_COLORS[fp]) return FORMA_PAGO_COLORS[fp]
+  if (item.chipax_monto_por_cobrar !== null) return 'secondary'
+  return 'secondary'
+}
+
 function tipoPrefix(item) {
   if (!item) return '—'
+  if (item.es_boleta_resumen)              return item.numero_documento_bsale || 'BOL'
   if (item.tipo_documento_bsale_id === 2)  return 'NC'
   if (item.tipo_documento_bsale_id === 1)  return 'BOL-EL'
   if (item.tipo_documento_bsale_id === 33) return 'FAC-EL'
@@ -487,6 +555,7 @@ function tipoPrefix(item) {
 
 function tipoColor(item) {
   if (!item) return 'default'
+  if (item.es_boleta_resumen)              return 'deep-purple'
   if (item.tipo_documento_bsale_id === 2)  return 'success'
   if (item.tipo_documento_bsale_id === 1)  return 'deep-purple'
   if (item.tipo_documento_bsale_id === 33) return 'info'
@@ -502,6 +571,7 @@ async function cargar() {
         desde:           filtros.value.desde || undefined,
         hasta:           filtros.value.hasta || undefined,
         buscar:          filtros.value.buscar || undefined,
+        monto:           filtros.value.monto  || undefined,
         solo_pendientes: filtros.value.solo_pendientes,
       },
     })
@@ -527,7 +597,14 @@ async function abrirConciliar(factura) {
 async function cargarEstadoConciliar() {
   if (!facturaActiva.value) return
   try {
-    const { data } = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos`)
+    let data
+    if (facturaActiva.value.es_boleta_resumen) {
+      const res = await axios.get(`/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/estado`)
+      data = res.data
+    } else {
+      const res = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos`)
+      data = res.data
+    }
     asignados.value      = data.asignados
     saldoPorCobrar.value = data.saldo_por_cobrar
   } catch (e) { console.error(e) }
@@ -538,9 +615,10 @@ async function cargarDisponibles() {
   if (!facturaActiva.value) return
   loadingDisponibles.value = true
   try {
-    const { data } = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos-disponibles`, {
-      params: { buscar: buscarMov.value || undefined },
-    })
+    const url = facturaActiva.value.es_boleta_resumen
+      ? `/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/movimientos-disponibles`
+      : `/api/ventas/${facturaActiva.value.id}/movimientos-disponibles`
+    const { data } = await axios.get(url, { params: { buscar: buscarMov.value || undefined } })
     disponibles.value = data.data ?? data
   } catch (e) { console.error(e) }
   finally { loadingDisponibles.value = false }
@@ -550,21 +628,29 @@ async function asignar(mov) {
   loadingAsignar.value[mov.id] = true
   try {
     const monto = Math.min(mov.saldo_por_asignar, saldoPorCobrar.value)
-    await axios.post(`/api/ventas/${facturaActiva.value.id}/movimientos`, {
-      movimiento_id: mov.id,
-      monto,
-    })
-    // Refresh dialog + row
-    await cargarEstadoConciliar()
-    const idx = documentos.value.findIndex(d => d.id === facturaActiva.value.id)
-    if (idx !== -1) {
-      const { data } = await axios.get('/api/registro-ventas', {
-        params: { buscar: facturaActiva.value.numero_documento_bsale, desde: filtros.value.desde, hasta: filtros.value.hasta },
+    if (facturaActiva.value.es_boleta_resumen) {
+      await axios.post(`/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/conciliar`, {
+        movimiento_id: mov.id,
+        monto,
       })
-      const updated = data.documentos.find(d => d.id === facturaActiva.value.id)
-      if (updated) {
-        documentos.value[idx] = updated
-        facturaActiva.value   = { ...updated }
+      await cargarEstadoConciliar()
+      await cargar()
+    } else {
+      await axios.post(`/api/ventas/${facturaActiva.value.id}/movimientos`, {
+        movimiento_id: mov.id,
+        monto,
+      })
+      await cargarEstadoConciliar()
+      const idx = documentos.value.findIndex(d => d.id === facturaActiva.value.id)
+      if (idx !== -1) {
+        const { data } = await axios.get('/api/registro-ventas', {
+          params: { buscar: facturaActiva.value.numero_documento_bsale, desde: filtros.value.desde, hasta: filtros.value.hasta },
+        })
+        const updated = data.documentos.find(d => d.id === facturaActiva.value.id)
+        if (updated) {
+          documentos.value[idx] = updated
+          facturaActiva.value   = { ...updated }
+        }
       }
     }
   } catch (e) {
@@ -578,17 +664,23 @@ async function asignar(mov) {
 async function desasignar(pivotId) {
   loadingDesasignar.value[pivotId] = true
   try {
-    await axios.delete(`/api/ventas/${facturaActiva.value.id}/movimientos/${pivotId}`)
-    await cargarEstadoConciliar()
-    const idx = documentos.value.findIndex(d => d.id === facturaActiva.value.id)
-    if (idx !== -1) {
-      const { data } = await axios.get('/api/registro-ventas', {
-        params: { buscar: facturaActiva.value.numero_documento_bsale, desde: filtros.value.desde, hasta: filtros.value.hasta },
-      })
-      const updated = data.documentos.find(d => d.id === facturaActiva.value.id)
-      if (updated) {
-        documentos.value[idx] = updated
-        facturaActiva.value   = { ...updated }
+    if (facturaActiva.value.es_boleta_resumen) {
+      await axios.delete(`/api/boletas/resumenes/movimiento/${pivotId}`)
+      await cargarEstadoConciliar()
+      await cargar()
+    } else {
+      await axios.delete(`/api/ventas/${facturaActiva.value.id}/movimientos/${pivotId}`)
+      await cargarEstadoConciliar()
+      const idx = documentos.value.findIndex(d => d.id === facturaActiva.value.id)
+      if (idx !== -1) {
+        const { data } = await axios.get('/api/registro-ventas', {
+          params: { buscar: facturaActiva.value.numero_documento_bsale, desde: filtros.value.desde, hasta: filtros.value.hasta },
+        })
+        const updated = data.documentos.find(d => d.id === facturaActiva.value.id)
+        if (updated) {
+          documentos.value[idx] = updated
+          facturaActiva.value   = { ...updated }
+        }
       }
     }
   } catch (e) {

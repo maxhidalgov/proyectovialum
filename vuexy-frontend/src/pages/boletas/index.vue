@@ -385,6 +385,10 @@ function labelFormaPago(fp) {
     transferencia:   'Transferencia',
     efectivo:        'Efectivo',
     cheque:          'Cheque',
+    credito:         'Crédito',
+    nota_credito:    'Nota Crédito',
+    otros:           'Otros',
+    sin_informacion: 'Sin Información',
   }
   return map[fp] ?? fp ?? '—'
 }
@@ -396,6 +400,10 @@ function colorFormaPago(fp) {
     transferencia:   'secondary',
     efectivo:        'success',
     cheque:          'warning',
+    credito:         'purple',
+    nota_credito:    'deep-purple',
+    otros:           'grey',
+    sin_informacion: 'error',
   }
   return map[fp] ?? 'default'
 }
