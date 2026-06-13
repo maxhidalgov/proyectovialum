@@ -44,6 +44,24 @@ async function correrDiagnostico() {
   }
 }
 
+const todasNcsRut = ref('')
+const todasNcsLoading = ref(false)
+const todasNcsResultado = ref(null)
+
+async function vincularTodasNcsXml() {
+  todasNcsLoading.value = true
+  todasNcsResultado.value = null
+  try {
+    const params = todasNcsRut.value ? { rut: todasNcsRut.value } : {}
+    const { data } = await api.post('/api/compras/vincular-todas-ncs-xml', null, { params })
+    todasNcsResultado.value = data
+  } catch (e) {
+    todasNcsResultado.value = { error: e.response?.data?.error || e.message }
+  } finally {
+    todasNcsLoading.value = false
+  }
+}
+
 const debugNcId = ref('')
 const debugNcResultado = ref(null)
 const debugNcLoading = ref(false)
@@ -815,6 +833,55 @@ const getRoleBadgeColor = roleName => {
                   <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;">{{ JSON.stringify(herramientaResultado['vincular-ncs-bsale-debug'].debug, null, 2) }}</pre>
                 </template>
               </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Vincular TODAS las NCs desde XML -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined" color="teal-darken-1">
+            <VCardTitle class="text-subtitle-1">Vincular TODAS las NCs desde XML</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Procesa todas las NCs sin vincular que tienen xml_url: descarga cada XML,
+              extrae el FolioRef (sin filtrar tipo DTE) y linkea a la factura correspondiente.
+              Opcionalmente filtra por RUT para solo un proveedor.
+            </VCardText>
+            <VCardActions>
+              <VTextField
+                v-model="todasNcsRut"
+                label="RUT proveedor (opcional)"
+                density="compact"
+                style="max-width:200px"
+                hide-details
+                placeholder="83935900-4"
+              />
+              <VBtn color="teal-darken-1" :loading="todasNcsLoading" @click="vincularTodasNcsXml" class="ml-2">
+                <VIcon start>mdi-link-variant-plus</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="todasNcsResultado">
+              <VAlert :type="todasNcsResultado.error ? 'error' : 'success'" variant="tonal" density="compact">
+                <template v-if="todasNcsResultado.error">{{ todasNcsResultado.error }}</template>
+                <template v-else>
+                  Procesadas: <strong>{{ todasNcsResultado.procesadas }}</strong> ·
+                  Vinculadas: <strong>{{ todasNcsResultado.vinculadas }}</strong> ·
+                  Sin refs: <strong>{{ todasNcsResultado.sin_refs }}</strong> ·
+                  Sin match: <strong>{{ todasNcsResultado.sin_match }}</strong> ·
+                  Errores: <strong>{{ todasNcsResultado.errores }}</strong>
+                </template>
+              </VAlert>
+              <VTable v-if="todasNcsResultado.detalle?.length" density="compact" style="font-size:12px;margin-top:8px">
+                <thead><tr><th>NC Folio</th><th>Total</th><th>Factura Folio</th><th>TpoDocRef</th></tr></thead>
+                <tbody>
+                  <tr v-for="(d,i) in todasNcsResultado.detalle" :key="i">
+                    <td>{{ d.nc_folio }}</td>
+                    <td>{{ parseInt(d.nc_total).toLocaleString() }}</td>
+                    <td>{{ d.factura_folio }}</td>
+                    <td>{{ d.tipo_dte_ref }}</td>
+                  </tr>
+                </tbody>
+              </VTable>
             </VCardText>
           </VCard>
         </VCol>

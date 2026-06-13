@@ -961,6 +961,98 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/compras/vincular-todas-ncs-xml
+    // Procesa TODAS las NCs con xml_url y sin nc_referencia_id:
+    // descarga cada XML, extrae referencias y vincula. Sin filtro TpoDocRef.
+    // -------------------------------------------------------------------------
+    public function vincularTodasNcsXml(Request $request)
+    {
+        set_time_limit(0);
+        $rut = $request->get('rut'); // opcional: limitar a un proveedor
+
+        $query = DB::table('compras')
+            ->where('tipo_dte', 61)
+            ->whereNull('nc_referencia_id')
+            ->whereNotNull('xml_url')
+            ->select('id', 'folio', 'rut_emisor', 'total', 'fecha_emision', 'xml_url');
+
+        if ($rut) $query->where('rut_emisor', $rut);
+
+        $ncs = $query->get();
+
+        $vinculadas = 0;
+        $sinRefs    = 0;
+        $sinMatch   = 0;
+        $errores    = 0;
+        $detalle    = [];
+
+        foreach ($ncs as $ncRow) {
+            try {
+                $xmlResp = Http::timeout(15)->withHeaders($this->headers())->get($ncRow->xml_url);
+                if (!$xmlResp->successful()) { $errores++; continue; }
+
+                $xml = @simplexml_load_string($xmlResp->body());
+                if (!$xml) { $errores++; continue; }
+
+                $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
+                $refs = $xml->xpath('//sii:Referencia') ?: $xml->xpath('//Referencia');
+                if (empty($refs)) {
+                    $dte = $xml->Documento ?? $xml->DTE ?? $xml;
+                    $doc = $dte->Documento ?? $dte;
+                    $refs = [];
+                    if (isset($doc->Referencia)) {
+                        foreach ($doc->Referencia as $r) $refs[] = $r;
+                    }
+                }
+
+                if (empty($refs)) { $sinRefs++; continue; }
+
+                $encontrado = false;
+                foreach ($refs as $ref) {
+                    $folioRef = (string)($ref->FolioRef ?? '');
+                    $tipoRef  = (string)($ref->TpoDocRef ?? '');
+                    if ($folioRef === '') continue;
+
+                    $factura = DB::table('compras')
+                        ->where('folio', $folioRef)
+                        ->where('rut_emisor', $ncRow->rut_emisor)
+                        ->whereNotIn('tipo_dte', [61])
+                        ->first(['id', 'folio', 'tipo_dte']);
+
+                    if (!$factura) continue;
+
+                    DB::table('compras')->where('id', $ncRow->id)
+                        ->update(['nc_referencia_id' => $factura->id, 'updated_at' => now()]);
+
+                    $detalle[] = [
+                        'nc_folio'      => $ncRow->folio,
+                        'nc_total'      => $ncRow->total,
+                        'factura_folio' => $factura->folio,
+                        'tipo_dte_ref'  => $tipoRef,
+                    ];
+                    $vinculadas++;
+                    $encontrado = true;
+                    break;
+                }
+
+                if (!$encontrado) $sinMatch++;
+
+            } catch (\Throwable $e) {
+                $errores++;
+            }
+        }
+
+        return response()->json([
+            'procesadas' => $ncs->count(),
+            'vinculadas' => $vinculadas,
+            'sin_refs'   => $sinRefs,
+            'sin_match'  => $sinMatch,
+            'errores'    => $errores,
+            'detalle'    => $detalle,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // POST /api/compras/vincular-nc-xml?nc_id=XXX
     // Descarga el XML de la NC, extrae la primera referencia con folio en DB
     // y setea nc_referencia_id (sin filtrar TpoDocRef — acepta cualquier tipo).
