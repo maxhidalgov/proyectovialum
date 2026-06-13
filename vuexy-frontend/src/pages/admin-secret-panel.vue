@@ -44,6 +44,23 @@ async function correrDiagnostico() {
   }
 }
 
+const debugNcId = ref('')
+const debugNcResultado = ref(null)
+const debugNcLoading = ref(false)
+
+async function correrDebugNcXml() {
+  debugNcLoading.value = true
+  debugNcResultado.value = null
+  try {
+    const { data } = await api.get('/api/compras/debug-nc-xml', { params: { nc_id: debugNcId.value } })
+    debugNcResultado.value = data
+  } catch (e) {
+    debugNcResultado.value = { error: e.response?.data?.error || e.message }
+  } finally {
+    debugNcLoading.value = false
+  }
+}
+
 // Estados para gestión de permisos
 const selectedRole = ref(null)
 const rolePermissions = ref([])
@@ -782,6 +799,76 @@ const getRoleBadgeColor = roleName => {
                   <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;">{{ JSON.stringify(herramientaResultado['vincular-ncs-bsale-debug'].debug, null, 2) }}</pre>
                 </template>
               </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Debug XML de NC -->
+        <VCol cols="12">
+          <VCard variant="outlined" color="orange-darken-2">
+            <VCardTitle class="text-subtitle-1">Debug XML de NC (diagnóstico referencias)</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Ingresa el ID interno de una NC (columna <code>id</code> en compras). Descarga su XML y muestra
+              TODAS las Referencias (TpoDocRef, FolioRef) sin filtrar, + prueba <code>expand=references</code> en Bsale.
+              Úsalo para entender por qué una NC no se vincula a su factura.
+            </VCardText>
+            <VCardActions>
+              <VTextField
+                v-model="debugNcId"
+                label="ID de la NC (ej: 38842)"
+                density="compact"
+                style="max-width:200px"
+                hide-details
+              />
+              <VBtn color="orange-darken-2" :loading="debugNcLoading" @click="correrDebugNcXml" class="ml-2">
+                <VIcon start>mdi-xml</VIcon>
+                Analizar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="debugNcResultado">
+              <VAlert v-if="debugNcResultado.error" type="error" variant="tonal">{{ debugNcResultado.error }}</VAlert>
+              <template v-else>
+                <div class="text-body-2 mb-2">
+                  NC {{ debugNcResultado.nc?.folio }} · total {{ parseInt(debugNcResultado.nc?.total||0).toLocaleString() }}
+                  · rut {{ debugNcResultado.nc?.rut_emisor }}
+                  · nc_referencia_id: <strong>{{ debugNcResultado.nc?.nc_referencia_id ?? '(null)' }}</strong>
+                  · xml_url: {{ debugNcResultado.nc?.xml_url ? '✓' : '✗' }}
+                </div>
+
+                <!-- Referencias del XML -->
+                <div class="text-subtitle-2 mt-2 mb-1">
+                  Referencias en XML ({{ debugNcResultado.xml_refs_count ?? 0 }})
+                  <span v-if="debugNcResultado.xml_error" style="color:red"> — Error: {{ debugNcResultado.xml_error }}</span>
+                </div>
+                <VTable v-if="debugNcResultado.xml_referencias?.length" density="compact" style="font-size:12px">
+                  <thead>
+                    <tr>
+                      <th>TpoDocRef</th><th>FolioRef</th><th>RazonRef</th>
+                      <th>En DB (cualquier rut)</th><th>En DB (mismo rut)</th><th>tipo_dte en DB</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(ref, i) in debugNcResultado.xml_referencias" :key="i"
+                        :style="ref.folio_en_db_con_rut ? 'background:#e8f5e9' : 'background:#fce4ec'">
+                      <td><strong>{{ ref.TpoDocRef }}</strong></td>
+                      <td>{{ ref.FolioRef }}</td>
+                      <td>{{ ref.RazonRef }}</td>
+                      <td>{{ ref.folio_en_db ? '✓' : '✗' }}</td>
+                      <td>{{ ref.folio_en_db_con_rut ? '✓' : '✗' }}</td>
+                      <td>{{ ref.tipo_dte_en_db?.join(', ') || '—' }}</td>
+                    </tr>
+                  </tbody>
+                </VTable>
+                <div v-else-if="!debugNcResultado.xml_error" class="text-body-2 text-medium-emphasis">Sin referencias en el XML.</div>
+
+                <!-- Bsale expand=references -->
+                <div class="text-subtitle-2 mt-3 mb-1">
+                  Bsale expand=references
+                  <span v-if="debugNcResultado.bsale_expand_error" style="color:red"> — Error: {{ debugNcResultado.bsale_expand_error }}</span>
+                </div>
+                <pre v-if="debugNcResultado.bsale_expand !== null" style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:#f5f5f5;padding:8px;border-radius:4px">{{ JSON.stringify(debugNcResultado.bsale_expand, null, 2) }}</pre>
+                <pre v-if="debugNcResultado.bsale_single_expand" style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:#f0f4ff;padding:8px;border-radius:4px;margin-top:4px">{{ JSON.stringify(debugNcResultado.bsale_single_expand, null, 2) }}</pre>
+              </template>
             </VCardText>
           </VCard>
         </VCol>
