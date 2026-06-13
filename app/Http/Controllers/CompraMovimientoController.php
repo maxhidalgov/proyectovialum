@@ -234,7 +234,8 @@ class CompraMovimientoController extends Controller
     {
         $mov    = MovimientoBancario::findOrFail($movimientoId);
         $buscar = $request->get('buscar');
-        $orden  = $request->get('orden', 'monto'); // 'monto' | 'fecha'
+        $orden     = $request->get('orden', 'monto');    // 'monto' | 'fecha'
+        $direccion = $request->get('direccion', 'asc'); // 'asc' | 'desc'
 
         $asignadoMov = DB::table('compra_movimiento')
             ->where('movimiento_id', $movimientoId)
@@ -271,7 +272,8 @@ class CompraMovimientoController extends Controller
             ->havingRaw('saldo_por_pagar > 0');
 
         if ($orden === 'fecha') {
-            $q->orderByRaw('ABS(DATEDIFF(compras.fecha_emision, ?)) ASC', [$mov->fecha_contable])
+            $dir = $direccion === 'desc' ? 'DESC' : 'ASC';
+            $q->orderByRaw("compras.fecha_emision $dir")
               ->orderByRaw('ABS(saldo_por_pagar - ?) ASC', [$saldoMov]);
         } else {
             $q->orderByRaw('ABS(saldo_por_pagar - ?) ASC', [$saldoMov]);

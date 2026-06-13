@@ -1076,22 +1076,39 @@
                 <p class="text-overline text-medium-emphasis mb-0">
                   {{ movConciliando?.tipo === 'C' ? 'Ventas / Facturas Emitidas' : 'Documentos de Respaldo' }}
                 </p>
-                <VBtnToggle
-                  v-if="movConciliando?.tipo === 'D'"
-                  v-model="ordenConc"
-                  density="compact"
-                  variant="outlined"
-                  divided
-                  color="primary"
-                  @update:modelValue="recargarDisponiblesOrden"
-                >
-                  <VBtn value="monto" size="x-small">
-                    <VIcon size="14" class="mr-1">mdi-currency-usd</VIcon>Monto
-                  </VBtn>
-                  <VBtn value="fecha" size="x-small">
-                    <VIcon size="14" class="mr-1">mdi-calendar</VIcon>Fecha
-                  </VBtn>
-                </VBtnToggle>
+                <div v-if="movConciliando?.tipo === 'D'" class="d-flex align-center" style="gap:6px">
+                  <VBtnToggle
+                    v-model="ordenConc"
+                    density="compact"
+                    variant="outlined"
+                    divided
+                    color="primary"
+                    @update:modelValue="recargarDisponiblesOrden"
+                  >
+                    <VBtn value="monto" size="x-small">
+                      <VIcon size="14" class="mr-1">mdi-currency-usd</VIcon>Monto
+                    </VBtn>
+                    <VBtn value="fecha" size="x-small">
+                      <VIcon size="14" class="mr-1">mdi-calendar</VIcon>Fecha
+                    </VBtn>
+                  </VBtnToggle>
+                  <VBtnToggle
+                    v-if="ordenConc === 'fecha'"
+                    v-model="direccionFecha"
+                    density="compact"
+                    variant="outlined"
+                    divided
+                    color="secondary"
+                    @update:modelValue="recargarDisponiblesOrden"
+                  >
+                    <VBtn value="asc" size="x-small">
+                      <VIcon size="14">mdi-sort-calendar-ascending</VIcon>
+                    </VBtn>
+                    <VBtn value="desc" size="x-small">
+                      <VIcon size="14">mdi-sort-calendar-descending</VIcon>
+                    </VBtn>
+                  </VBtnToggle>
+                </div>
               </div>
 
               <div v-if="loadingConciliar" class="text-center py-6">
@@ -2099,6 +2116,7 @@ const ingresoManualForm = ref({ descripcion: '', categoria: 'Ingreso por ventas'
 function abrirConciliar(mov) {
   movConciliando.value         = mov
   ordenConc.value              = 'monto'
+  direccionFecha.value         = 'asc'
   buscarCompraDisp.value       = ''
   buscarGastoDisp.value        = ''
   buscarSueldoDisp.value       = ''
@@ -2162,7 +2180,8 @@ async function cargarEstadoConciliar() {
   }
 }
 
-const ordenConc = ref('monto') // 'monto' | 'fecha'
+const ordenConc    = ref('monto') // 'monto' | 'fecha'
+const direccionFecha = ref('asc')  // 'asc' | 'desc'
 
 function recargarDisponiblesOrden() {
   if (concTab.value === 'facturas') cargarDisponibles()
@@ -2173,7 +2192,7 @@ function recargarDisponiblesOrden() {
 async function cargarDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = { orden: ordenConc.value }
+    const params = { orden: ordenConc.value, direccion: direccionFecha.value }
     if (buscarCompraDisp.value) params.buscar = buscarCompraDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/compras-disponibles`, { params }
@@ -2185,7 +2204,7 @@ async function cargarDisponibles() {
 async function cargarGastosDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = { orden: ordenConc.value }
+    const params = { orden: ordenConc.value, direccion: direccionFecha.value }
     if (buscarGastoDisp.value) params.buscar = buscarGastoDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/gastos-disponibles`, { params }
@@ -2263,7 +2282,7 @@ function debounceBuscarGasto() {
 async function cargarSueldosDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = { orden: ordenConc.value }
+    const params = { orden: ordenConc.value, direccion: direccionFecha.value }
     if (buscarSueldoDisp.value) params.buscar = buscarSueldoDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/sueldos-disponibles`, { params }

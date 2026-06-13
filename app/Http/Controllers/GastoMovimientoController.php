@@ -159,7 +159,8 @@ class GastoMovimientoController extends Controller
     {
         $mov    = MovimientoBancario::findOrFail($movimientoId);
         $buscar = $request->get('buscar');
-        $orden  = $request->get('orden', 'monto'); // 'monto' | 'fecha'
+        $orden     = $request->get('orden', 'monto');    // 'monto' | 'fecha'
+        $direccion = $request->get('direccion', 'asc'); // 'asc' | 'desc'
 
         $asignadoMov = DB::table('gasto_movimiento')->where('movimiento_id', $movimientoId)->sum('monto')
                      + DB::table('compra_movimiento')->where('movimiento_id', $movimientoId)->sum('monto');
@@ -191,7 +192,8 @@ class GastoMovimientoController extends Controller
             ->havingRaw('saldo_por_conciliar > 0');
 
         if ($orden === 'fecha') {
-            $q->orderByRaw('ABS(DATEDIFF(gastos.fecha, ?)) ASC', [$mov->fecha_contable])
+            $dir = $direccion === 'desc' ? 'DESC' : 'ASC';
+            $q->orderByRaw("gastos.fecha $dir")
               ->orderByRaw('ABS(saldo_por_conciliar - ?) ASC', [$saldoMov]);
         } else {
             $q->orderByRaw('ABS(saldo_por_conciliar - ?) ASC', [$saldoMov]);
