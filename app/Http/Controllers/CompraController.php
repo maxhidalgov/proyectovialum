@@ -944,6 +944,7 @@ class CompraController extends Controller
                 DB::raw('COALESCE(ncr.monto_nc_ref, 0) as monto_nc_ref'),
                 DB::raw('c.total - COALESCE(cm.monto_banco,0) - COALESCE(nca.monto_nc,0) - COALESCE(ncr.monto_nc_ref,0) as saldo')
             )
+            ->havingRaw('saldo > 0')
             ->orderByDesc('c.fecha_emision')
             ->get();
 
