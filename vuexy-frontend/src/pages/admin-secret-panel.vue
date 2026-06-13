@@ -685,6 +685,41 @@ const getRoleBadgeColor = roleName => {
                     </tr>
                   </tbody>
                 </VTable>
+
+                <!-- NCs del proveedor -->
+                <div class="text-subtitle-2 mt-4 mb-1">
+                  NCs ({{ diagResultado.ncs?.length ?? 0 }}) —
+                  sin referencia: <strong>{{ diagResultado.ncs?.filter(n => !n.nc_referencia_id).length ?? 0 }}</strong>
+                </div>
+                <VTable v-if="diagResultado.ncs?.length" density="compact" style="font-size:12px">
+                  <thead>
+                    <tr>
+                      <th>Folio NC</th>
+                      <th>Fecha</th>
+                      <th>Total</th>
+                      <th>nc_referencia_id</th>
+                      <th>pagado_hist.</th>
+                      <th>xml_url</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="nc in diagResultado.ncs"
+                      :key="nc.id"
+                      :style="!nc.nc_referencia_id ? 'background:#fce4ec' : ''"
+                    >
+                      <td>{{ nc.folio }}</td>
+                      <td>{{ nc.fecha_emision }}</td>
+                      <td>{{ parseInt(nc.total).toLocaleString() }}</td>
+                      <td :style="!nc.nc_referencia_id ? 'color:red;font-weight:bold' : ''">
+                        {{ nc.nc_referencia_id ?? '— sin vincular' }}
+                      </td>
+                      <td>{{ nc.pagado_historico ? 'sí' : 'no' }}</td>
+                      <td>{{ nc.xml_url ? '✓' : '✗' }}</td>
+                    </tr>
+                  </tbody>
+                </VTable>
+                <div v-else class="text-body-2 text-medium-emphasis mt-1">Sin NCs registradas para este proveedor.</div>
               </template>
             </VCardText>
           </VCard>
