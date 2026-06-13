@@ -622,6 +622,15 @@ const getRoleBadgeColor = roleName => {
                 <VIcon start>mdi-cloud-sync</VIcon>
                 Ejecutar
               </VBtn>
+              <VBtn
+                color="deep-purple"
+                variant="tonal"
+                :loading="herramientaLoading['vincular-ncs-bsale-debug']"
+                @click="correrHerramienta('vincular-ncs-bsale-debug', 'post', '/api/compras/vincular-ncs-via-bsale', { debug: true })"
+              >
+                <VIcon start>mdi-bug</VIcon>
+                Debug (5 NCs)
+              </VBtn>
             </VCardActions>
             <VCardText v-if="herramientaResultado['vincular-ncs-bsale']">
               <VAlert
@@ -637,6 +646,19 @@ const getRoleBadgeColor = roleName => {
                   Sin XML: <strong>{{ herramientaResultado['vincular-ncs-bsale'].sin_xml }}</strong> ·
                   Errores: <strong>{{ herramientaResultado['vincular-ncs-bsale'].errores }}</strong> ·
                   Restantes: <strong>{{ herramientaResultado['vincular-ncs-bsale'].restantes }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+            <VCardText v-if="herramientaResultado['vincular-ncs-bsale-debug']">
+              <VAlert
+                :type="herramientaResultado['vincular-ncs-bsale-debug'].error ? 'error' : 'info'"
+                variant="tonal" density="compact"
+              >
+                <template v-if="herramientaResultado['vincular-ncs-bsale-debug'].error">
+                  {{ herramientaResultado['vincular-ncs-bsale-debug'].error }}
+                </template>
+                <template v-else>
+                  <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;">{{ JSON.stringify(herramientaResultado['vincular-ncs-bsale-debug'].debug, null, 2) }}</pre>
                 </template>
               </VAlert>
             </VCardText>
