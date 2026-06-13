@@ -961,6 +961,130 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // GET /api/compras/debug-nc-xml?nc_id=XXX
+    // Descarga el XML de una NC y muestra TODAS sus Referencias sin filtros,
+    // + prueba expand=references en Bsale para ese mismo documento.
+    // -------------------------------------------------------------------------
+    public function debugNcXml(Request $request)
+    {
+        $ncId = (int) $request->get('nc_id');
+        if (!$ncId) return response()->json(['error' => 'Falta nc_id'], 400);
+
+        $nc = DB::table('compras')->where('id', $ncId)->first();
+        if (!$nc) return response()->json(['error' => 'NC no encontrada'], 404);
+
+        $result = [
+            'nc' => [
+                'id'             => $nc->id,
+                'folio'          => $nc->folio,
+                'tipo_dte'       => $nc->tipo_dte,
+                'rut_emisor'     => $nc->rut_emisor,
+                'total'          => $nc->total,
+                'fecha_emision'  => $nc->fecha_emision,
+                'nc_referencia_id' => $nc->nc_referencia_id,
+                'xml_url'        => $nc->xml_url,
+            ],
+            'xml_referencias'   => null,
+            'xml_error'         => null,
+            'bsale_expand'      => null,
+            'bsale_expand_error'=> null,
+        ];
+
+        // ── 1. Parsear XML ────────────────────────────────────────────────────
+        if ($nc->xml_url) {
+            try {
+                $xmlResp = Http::timeout(15)->withHeaders($this->headers())->get($nc->xml_url);
+                if ($xmlResp->successful()) {
+                    $xml = @simplexml_load_string($xmlResp->body());
+                    if ($xml) {
+                        $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
+                        $refs = $xml->xpath('//sii:Referencia') ?: $xml->xpath('//Referencia');
+                        if (empty($refs)) {
+                            $dte = $xml->Documento ?? $xml->DTE ?? $xml;
+                            $doc = $dte->Documento ?? $dte;
+                            $refs = [];
+                            if (isset($doc->Referencia)) {
+                                foreach ($doc->Referencia as $r) $refs[] = $r;
+                            }
+                        }
+
+                        $refsData = [];
+                        foreach ($refs as $ref) {
+                            $tipoRef  = (string)($ref->TpoDocRef ?? '');
+                            $folioRef = (string)($ref->FolioRef  ?? '');
+                            $razon    = (string)($ref->RazonRef  ?? $ref->RznRef ?? '');
+                            $enDB     = $folioRef ? DB::table('compras')->where('folio', $folioRef)->exists() : false;
+                            $enDBconRut = $folioRef ? DB::table('compras')
+                                ->where('folio', $folioRef)->where('rut_emisor', $nc->rut_emisor)->exists() : false;
+                            $tipoDTEenDB = $folioRef ? DB::table('compras')
+                                ->where('folio', $folioRef)->where('rut_emisor', $nc->rut_emisor)
+                                ->pluck('tipo_dte')->all() : [];
+                            $refsData[] = [
+                                'TpoDocRef'      => $tipoRef,
+                                'FolioRef'       => $folioRef,
+                                'RazonRef'       => $razon,
+                                'folio_en_db'    => $enDB,
+                                'folio_en_db_con_rut' => $enDBconRut,
+                                'tipo_dte_en_db' => $tipoDTEenDB,
+                            ];
+                        }
+                        $result['xml_referencias'] = $refsData;
+                        $result['xml_refs_count']  = count($refsData);
+                    } else {
+                        $result['xml_error'] = 'simplexml_load_string falló';
+                    }
+                } else {
+                    $result['xml_error'] = 'HTTP ' . $xmlResp->status();
+                }
+            } catch (\Throwable $e) {
+                $result['xml_error'] = $e->getMessage();
+            }
+        } else {
+            $result['xml_error'] = 'Sin xml_url en DB';
+        }
+
+        // ── 2. Bsale expand=references ────────────────────────────────────────
+        try {
+            // Buscar el documento en Bsale por folio
+            $searchResp = Http::timeout(15)->withHeaders($this->headers())
+                ->get("{$this->baseUrl}third_party_documents.json", [
+                    'number'   => $nc->folio,
+                    'codesii'  => 61,
+                    'limit'    => 5,
+                    'expand'   => 'references',
+                ]);
+
+            if ($searchResp->successful()) {
+                $items = $searchResp->json()['items'] ?? [];
+                $result['bsale_expand'] = $items;
+
+                // Si encontró el doc, también probar el endpoint individual
+                foreach ($items as $item) {
+                    if ((string)($item['number'] ?? '') === (string)$nc->folio) {
+                        $docId = $item['id'] ?? null;
+                        if ($docId) {
+                            $singleResp = Http::timeout(15)->withHeaders($this->headers())
+                                ->get("{$this->baseUrl}third_party_documents/{$docId}.json", [
+                                    'expand' => 'references',
+                                ]);
+                            $result['bsale_single_expand'] = $singleResp->successful()
+                                ? $singleResp->json()
+                                : ['error' => 'HTTP ' . $singleResp->status()];
+                        }
+                        break;
+                    }
+                }
+            } else {
+                $result['bsale_expand_error'] = 'HTTP ' . $searchResp->status();
+            }
+        } catch (\Throwable $e) {
+            $result['bsale_expand_error'] = $e->getMessage();
+        }
+
+        return response()->json($result);
+    }
+
+    // -------------------------------------------------------------------------
     // GET /api/compras/estadisticas?mes=5&anio=2026
     // -------------------------------------------------------------------------
     public function estadisticas(Request $request)
