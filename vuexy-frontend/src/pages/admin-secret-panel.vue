@@ -20,7 +20,11 @@ const permissions = ref([])
 const showDialog = ref(false)
 const editMode = ref(false)
 const currentUser = ref(null)
-const activeTab = ref('users') // 'users' o 'roles'
+const activeTab = ref('users') // 'users' | 'roles' | 'margenes' | 'herramientas'
+
+// ── Herramientas ──────────────────────────────────────────────────
+const herramientaLoading = ref({})
+const herramientaResultado = ref({})
 
 // Estados para gestión de permisos
 const selectedRole = ref(null)
@@ -226,6 +230,19 @@ const deleteUser = async id => {
   }
 }
 
+async function correrHerramienta(key, method, url) {
+  herramientaLoading.value[key] = true
+  herramientaResultado.value[key] = null
+  try {
+    const { data } = await api[method](url)
+    herramientaResultado.value[key] = data
+  } catch (e) {
+    herramientaResultado.value[key] = { error: e.response?.data?.message || e.message }
+  } finally {
+    herramientaLoading.value[key] = false
+  }
+}
+
 const getRoleBadgeColor = roleName => {
   switch (roleName) {
   case 'Admin':
@@ -284,6 +301,10 @@ const getRoleBadgeColor = roleName => {
             <VTab value="margenes">
               <VIcon start icon="tabler-percentage" />
               Márgenes
+            </VTab>
+            <VTab value="herramientas">
+              <VIcon start icon="tabler-tool" />
+              Herramientas
             </VTab>
           </VTabs>
 
@@ -491,6 +512,87 @@ const getRoleBadgeColor = roleName => {
             </VCardActions>
           </VCard>
         </VCol>
+      </VRow>
+    </VCardText>
+
+    <!-- Tab Herramientas -->
+    <VCardText v-show="activeTab === 'herramientas'">
+      <VRow>
+
+        <!-- Vincular NCs pendientes -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined">
+            <VCardTitle class="text-subtitle-1">Vincular Notas de Crédito pendientes</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Lee el XML de cada NC sin referencia y la vincula a su factura original.
+              Esto corrige el saldo pendiente de facturas que tienen NC pero no se aplicaron.
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="warning"
+                :loading="herramientaLoading['vincular-ncs']"
+                @click="correrHerramienta('vincular-ncs', 'post', '/api/compras/vincular-ncs')"
+              >
+                <VIcon start>mdi-link-variant</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['vincular-ncs']">
+              <VAlert
+                :type="herramientaResultado['vincular-ncs'].error ? 'error' : 'success'"
+                variant="tonal"
+                density="compact"
+              >
+                <template v-if="herramientaResultado['vincular-ncs'].error">
+                  {{ herramientaResultado['vincular-ncs'].error }}
+                </template>
+                <template v-else>
+                  Total NCs procesadas: <strong>{{ herramientaResultado['vincular-ncs'].total }}</strong> ·
+                  Vinculadas: <strong>{{ herramientaResultado['vincular-ncs'].vinculadas }}</strong> ·
+                  Errores: <strong>{{ herramientaResultado['vincular-ncs'].errores }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Cargar XMLs pendientes -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined">
+            <VCardTitle class="text-subtitle-1">Cargar XMLs de compras pendientes</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Descarga y parsea los XMLs de compras que aún no tienen líneas de detalle.
+              Necesario antes de vincular NCs si las compras son nuevas.
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="info"
+                :loading="herramientaLoading['cargar-xmls']"
+                @click="correrHerramienta('cargar-xmls', 'post', '/api/compras/cargar-xmls-pendientes')"
+              >
+                <VIcon start>mdi-xml</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['cargar-xmls']">
+              <VAlert
+                :type="herramientaResultado['cargar-xmls'].error ? 'error' : 'success'"
+                variant="tonal"
+                density="compact"
+              >
+                <template v-if="herramientaResultado['cargar-xmls'].error">
+                  {{ herramientaResultado['cargar-xmls'].error }}
+                </template>
+                <template v-else>
+                  Procesadas: <strong>{{ herramientaResultado['cargar-xmls'].procesadas }}</strong> ·
+                  Errores: <strong>{{ herramientaResultado['cargar-xmls'].errores }}</strong> ·
+                  Restantes: <strong>{{ herramientaResultado['cargar-xmls'].restantes }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
       </VRow>
     </VCardText>
 
