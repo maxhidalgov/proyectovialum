@@ -166,15 +166,19 @@ class ChipaxLinkLocal extends Command
 
         // Buscar por folio (puede haber varios con mismo folio de distintos proveedores)
         // Si viene el RUT, usarlo para afinar el match
-        $query = DB::table('compras')->where('folio', $folio);
+        $compra = null;
 
         if (!empty($doc['rut'])) {
             $rutNorm = $this->normalizarRut($doc['rut']);
-            // Intentar match exacto por folio+rut; si no, solo folio
-            $compra = $query->where('rut_emisor', $rutNorm)->first()
-                   ?? $query->first();
-        } else {
-            $compra = $query->first();
+            $compra  = DB::table('compras')
+                ->where('folio', $folio)
+                ->where('rut_emisor', $rutNorm)
+                ->first();
+        }
+
+        // Fallback: solo folio (query separado para no mutar el anterior)
+        if (!$compra) {
+            $compra = DB::table('compras')->where('folio', $folio)->first();
         }
 
         if (!$compra) return 'no_encontradas';
