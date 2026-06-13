@@ -365,6 +365,84 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // POST /api/compras/vincular-ncs-por-monto
+    // Para facturas con saldo parcial: busca NCs del mismo proveedor cuyo total
+    // coincide con el saldo restante y las vincula (nc_referencia_id).
+    // Solo vincula cuando hay match único (misma proveedor + monto exacto).
+    // Si hay ambigüedad de monto, elige la NC con fecha más cercana a la factura.
+    // -------------------------------------------------------------------------
+    public function vincularNcsPorMonto()
+    {
+        set_time_limit(0);
+
+        // Facturas no históricas con pago bancario parcial y saldo > 0
+        $facturas = DB::table('compras as f')
+            ->leftJoin(
+                DB::raw('(SELECT compra_id, SUM(monto) pagado FROM compra_movimiento GROUP BY compra_id) p'),
+                'p.compra_id', '=', 'f.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT factura_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) nca'),
+                'nca.factura_id', '=', 'f.id'
+            )
+            ->where('f.pagado_historico', false)
+            ->whereNotIn('f.tipo_dte', [61])
+            ->whereNotNull('p.pagado')
+            ->select(
+                'f.id', 'f.folio', 'f.rut_emisor', 'f.total', 'f.fecha_emision',
+                DB::raw('f.total - COALESCE(p.pagado,0) - COALESCE(nca.monto_nc,0) as saldo')
+            )
+            ->havingRaw('saldo >= 1')
+            ->get();
+
+        $vinculadas = 0;
+        $ambiguos   = 0;
+        $sinMatch   = 0;
+
+        foreach ($facturas as $factura) {
+            // NCs del mismo proveedor con total == saldo y sin referencia asignada
+            $ncs = DB::table('compras')
+                ->where('tipo_dte', 61)
+                ->where('rut_emisor', $factura->rut_emisor)
+                ->whereNull('nc_referencia_id')
+                ->where('total', (int) round($factura->saldo))
+                ->orderByRaw('ABS(DATEDIFF(fecha_emision, ?))', [$factura->fecha_emision])
+                ->get();
+
+            if ($ncs->isEmpty()) {
+                $sinMatch++;
+                continue;
+            }
+
+            // Tomar la NC con fecha más cercana a la factura
+            $nc = $ncs->first();
+
+            // Si hay más de una con la misma fecha diferencia → ambigüedad real
+            if ($ncs->count() > 1) {
+                $diff0 = abs(strtotime($nc->fecha_emision) - strtotime($factura->fecha_emision));
+                $diff1 = abs(strtotime($ncs[1]->fecha_emision) - strtotime($factura->fecha_emision));
+                if ($diff0 === $diff1) {
+                    $ambiguos++;
+                    continue;
+                }
+            }
+
+            DB::table('compras')
+                ->where('id', $nc->id)
+                ->update(['nc_referencia_id' => $factura->id, 'updated_at' => now()]);
+
+            $vinculadas++;
+        }
+
+        return response()->json([
+            'facturas_con_saldo' => $facturas->count(),
+            'vinculadas'         => $vinculadas,
+            'ambiguos'           => $ambiguos,
+            'sin_match'          => $sinMatch,
+        ]);
+    }
+
     // POST /api/compras/sincronizar-conciliacion-chipax
     // Ejecuta chipax:sync-docs (trae conciliación de Chipax) y luego
     // chipax:link-local (crea compra_movimiento desde linked_docs).
@@ -642,6 +720,133 @@ class CompraController extends Controller
 
             break; // Una sola referencia por NC
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/compras/vincular-ncs-via-bsale
+    // Para NCs en DB sin nc_referencia_id: las busca en Bsale third_party_documents,
+    // descarga su XML y llama vincularReferenciaNC para extraer la factura referenciada.
+    // -------------------------------------------------------------------------
+    public function vincularNcsViaBsale(Request $request)
+    {
+        set_time_limit(0);
+
+        $years = $request->get('years')
+            ? array_unique(array_map('intval', explode(',', $request->get('years'))))
+            : [2024, 2025, (int) date('Y')];
+
+        // Lookup local: folio => registro NC sin nc_referencia_id
+        $ncsLocales = DB::table('compras')
+            ->where('tipo_dte', 61)
+            ->whereNull('nc_referencia_id')
+            ->select('id', 'folio', 'rut_emisor', 'xml_url')
+            ->get()
+            ->keyBy('folio');   // folio es único por emisor; en caso de colisión el rut resuelve
+
+        if ($ncsLocales->isEmpty()) {
+            return response()->json(['ok' => true, 'vinculadas' => 0, 'mensaje' => 'Sin NCs pendientes']);
+        }
+
+        $vinculadas   = 0;
+        $sinXml       = 0;
+        $errores      = 0;
+        $procesados   = 0;
+        $limit        = 50;
+
+        foreach ($years as $year) {
+            $offset = 0;
+
+            do {
+                $resp = Http::timeout(20)->withHeaders($this->headers())
+                    ->get("{$this->baseUrl}third_party_documents.json", [
+                        'year'    => $year,
+                        'codesii' => 61,
+                        'limit'   => $limit,
+                        'offset'  => $offset,
+                    ]);
+
+                if (!$resp->successful()) break;
+
+                $data  = $resp->json();
+                $items = $data['items'] ?? [];
+                $total = (int)($data['count'] ?? 0);
+
+                foreach ($items as $doc) {
+                    if ((int)($doc['codeSii'] ?? 0) !== 61) continue;
+
+                    $folio  = (string)($doc['number']     ?? '');
+                    $rutDoc = (string)($doc['clientCode'] ?? '');
+
+                    if (!isset($ncsLocales[$folio])) continue;
+
+                    $ncLocal = $ncsLocales[$folio];
+
+                    // Verificar rut si ambos están disponibles
+                    if (!empty($rutDoc) && !empty($ncLocal->rut_emisor)) {
+                        $rutNorm = fn($r) => strtolower(preg_replace('/[^0-9kK]/', '', $r));
+                        if ($rutNorm($rutDoc) !== $rutNorm($ncLocal->rut_emisor)) continue;
+                    }
+
+                    $xmlUrl = $doc['urlXml'] ?? null;
+
+                    if (empty($xmlUrl)) {
+                        $sinXml++;
+                        continue;
+                    }
+
+                    // Guardar xml_url si faltaba en DB
+                    if (empty($ncLocal->xml_url)) {
+                        DB::table('compras')->where('id', $ncLocal->id)->update(['xml_url' => $xmlUrl, 'updated_at' => now()]);
+                    }
+
+                    $procesados++;
+
+                    try {
+                        $xmlResp = Http::timeout(15)->withHeaders($this->headers())->get($xmlUrl);
+                        if (!$xmlResp->successful()) { $errores++; continue; }
+
+                        $xml = @simplexml_load_string($xmlResp->body());
+                        if (!$xml) { $errores++; continue; }
+
+                        $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
+
+                        $ncModel = Compra::find($ncLocal->id);
+                        if (!$ncModel) continue;
+
+                        $antesRef = $ncModel->nc_referencia_id;
+                        $this->vincularReferenciaNC($ncModel, $xml);
+                        $ncModel->refresh();
+
+                        if ($ncModel->nc_referencia_id && !$antesRef) {
+                            $vinculadas++;
+                            $ncsLocales->forget($folio); // ya vinculada, no procesar de nuevo
+                        }
+                    } catch (\Throwable $e) {
+                        $errores++;
+                        Log::warning('vincularNcsViaBsale: error procesando NC', [
+                            'nc_folio' => $folio,
+                            'error'    => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                $offset += $limit;
+            } while ($offset < $total && count($items) === $limit);
+        }
+
+        $restantes = DB::table('compras')
+            ->where('tipo_dte', 61)
+            ->whereNull('nc_referencia_id')
+            ->count();
+
+        return response()->json([
+            'ok'         => true,
+            'vinculadas' => $vinculadas,
+            'procesados' => $procesados,
+            'sin_xml'    => $sinXml,
+            'errores'    => $errores,
+            'restantes'  => $restantes,
+        ]);
     }
 
     // -------------------------------------------------------------------------

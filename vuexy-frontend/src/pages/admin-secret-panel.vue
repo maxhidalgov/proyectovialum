@@ -566,6 +566,83 @@ const getRoleBadgeColor = roleName => {
           </VCard>
         </VCol>
 
+        <!-- Vincular NCs por monto -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined" color="orange">
+            <VCardTitle class="text-subtitle-1">Vincular NCs por monto coincidente</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Para facturas con saldo parcial: busca NCs del mismo proveedor cuyo total
+              coincide exactamente con el saldo restante y las vincula. Usa cuando las NCs
+              no tienen XML disponible (fallback sin XML).
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="orange"
+                :loading="herramientaLoading['vincular-ncs-monto']"
+                @click="correrHerramienta('vincular-ncs-monto', 'post', '/api/compras/vincular-ncs-por-monto')"
+              >
+                <VIcon start>mdi-link-variant-plus</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['vincular-ncs-monto']">
+              <VAlert
+                :type="herramientaResultado['vincular-ncs-monto'].error ? 'error' : 'success'"
+                variant="tonal" density="compact"
+              >
+                <template v-if="herramientaResultado['vincular-ncs-monto'].error">
+                  {{ herramientaResultado['vincular-ncs-monto'].error }}
+                </template>
+                <template v-else>
+                  Facturas con saldo: <strong>{{ herramientaResultado['vincular-ncs-monto'].facturas_con_saldo }}</strong> ·
+                  NCs vinculadas: <strong>{{ herramientaResultado['vincular-ncs-monto'].vinculadas }}</strong> ·
+                  Ambiguas: <strong>{{ herramientaResultado['vincular-ncs-monto'].ambiguos }}</strong> ·
+                  Sin match: <strong>{{ herramientaResultado['vincular-ncs-monto'].sin_match }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Vincular NCs vía Bsale API -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined" color="deep-purple">
+            <VCardTitle class="text-subtitle-1">Vincular NCs vía Bsale API</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Para NCs sin nc_referencia_id: las busca en Bsale third_party_documents (incluyendo históricas
+              sin xml_url), descarga su XML y extrae la factura referenciada. Soluciona facturas que siguen
+              apareciendo en conciliación porque su NC histórica (2024) no apunta a la factura 2025.
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="deep-purple"
+                :loading="herramientaLoading['vincular-ncs-bsale']"
+                @click="correrHerramienta('vincular-ncs-bsale', 'post', '/api/compras/vincular-ncs-via-bsale')"
+              >
+                <VIcon start>mdi-cloud-sync</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['vincular-ncs-bsale']">
+              <VAlert
+                :type="herramientaResultado['vincular-ncs-bsale'].error ? 'error' : 'success'"
+                variant="tonal" density="compact"
+              >
+                <template v-if="herramientaResultado['vincular-ncs-bsale'].error">
+                  {{ herramientaResultado['vincular-ncs-bsale'].error }}
+                </template>
+                <template v-else>
+                  Vinculadas: <strong>{{ herramientaResultado['vincular-ncs-bsale'].vinculadas }}</strong> ·
+                  Procesados: <strong>{{ herramientaResultado['vincular-ncs-bsale'].procesados }}</strong> ·
+                  Sin XML: <strong>{{ herramientaResultado['vincular-ncs-bsale'].sin_xml }}</strong> ·
+                  Errores: <strong>{{ herramientaResultado['vincular-ncs-bsale'].errores }}</strong> ·
+                  Restantes: <strong>{{ herramientaResultado['vincular-ncs-bsale'].restantes }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
         <!-- Vincular NCs pendientes -->
         <VCol cols="12" md="6">
           <VCard variant="outlined">
