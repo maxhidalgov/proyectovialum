@@ -38,7 +38,6 @@ class CuentasPorPagarController extends Controller
                 FROM compras nc
                 WHERE nc.tipo_dte IN (61)
                   AND nc.nc_referencia_id IS NOT NULL
-                  AND nc.pagado_historico = 0
                   AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
                 GROUP BY nc.nc_referencia_id
             ) ncref ON ncref.compra_id = c.id

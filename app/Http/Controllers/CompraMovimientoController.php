@@ -254,7 +254,7 @@ class CompraMovimientoController extends Controller
             ->leftJoin(
                 DB::raw('(SELECT nc.nc_referencia_id AS compra_id, SUM(nc.total) AS monto_nc
                           FROM compras nc
-                          WHERE nc.tipo_dte IN (61) AND nc.nc_referencia_id IS NOT NULL AND nc.pagado_historico = 0
+                          WHERE nc.tipo_dte IN (61) AND nc.nc_referencia_id IS NOT NULL
                             AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
                           GROUP BY nc.nc_referencia_id) as nc_ref'),
                 'compras.id', '=', 'nc_ref.compra_id'

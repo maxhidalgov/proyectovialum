@@ -289,7 +289,6 @@ class CompraController extends Controller
         $ncs = Compra::where('tipo_dte', 61)
             ->whereNull('nc_referencia_id')
             ->whereNotNull('xml_url')
-            ->where('pagado_historico', false)
             ->get();
 
         $vinculadas = 0;
