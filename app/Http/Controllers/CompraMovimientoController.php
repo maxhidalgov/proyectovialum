@@ -246,7 +246,6 @@ class CompraMovimientoController extends Controller
                 DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
                 'compras.id', '=', 'pagos.compra_id'
             )
-            ->where('compras.pagado_historico', false)
             ->whereNotExists(function ($q) use ($movimientoId) {
                 $q->from('compra_movimiento')
                   ->whereColumn('compra_movimiento.compra_id', 'compras.id')

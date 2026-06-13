@@ -241,7 +241,6 @@ class CuentasPorPagarController extends Controller
 
         $q = DB::table('compras')
             ->leftJoin($this->efectivoPagadoSub(), 'ef.compra_id', '=', 'compras.id')
-            ->where('compras.pagado_historico', false)
             ->select(
                 'compras.id',
                 'compras.folio',
@@ -254,6 +253,7 @@ class CuentasPorPagarController extends Controller
                 'compras.total',
                 'compras.pdf_url',
                 'compras.nc_revision_estado',
+                'compras.pagado_historico',
                 DB::raw('COALESCE(ef.monto_pagado_efectivo, 0) as monto_pagado'),
                 DB::raw('CASE WHEN compras.tipo_dte IN (61)
                               THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
