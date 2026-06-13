@@ -83,8 +83,8 @@
             {{ clp(item.costo) }}
           </template>
 
-          <template #item.precio="{ item }">
-            {{ clp(item.precio) }}
+          <template #item.precio_unitario="{ item }">
+            {{ clp(item.precio_unitario) }}
           </template>
 
         <template #item.precio_total="{ item }">
@@ -222,7 +222,7 @@ const headers = [
   // { title: 'Vidrio', value: 'producto_vidrio_proveedor.producto.nombre' },
   // { title: 'Vidrio Proveedor', value: 'producto_vidrio_proveedor.proveedor.nombre' },
   { title: 'Costo', value: 'costo' },
-  { title: 'Precio Unitario', value: 'precio' },
+  { title: 'Precio Unitario', value: 'precio_unitario' },
   { title: 'Precio Total', value: 'precio_total' },
 
 ]

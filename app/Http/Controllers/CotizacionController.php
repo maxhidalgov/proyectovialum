@@ -99,12 +99,10 @@ public function store(Request $request)
             ], 400);
         }
 
-        // Calcular total correctamente
+        // precio ya viene como total (precio_unitario × cantidad) desde el frontend
         $totalVentanas = 0;
         if ($request->has('ventanas') && is_array($request->ventanas)) {
-            $totalVentanas = collect($request->ventanas)->sum(function($v) {
-                return ($v['precio'] ?? 0) * ($v['cantidad'] ?? 1);
-            });
+            $totalVentanas = collect($request->ventanas)->sum(fn($v) => $v['precio'] ?? 0);
         }
         
         $totalProductos = 0;
@@ -268,9 +266,9 @@ public function store(Request $request)
     ])->findOrFail($id);
 
 
-    // Calcular precio_total por ventana
+    // precio ya es el total (precio_unitario × cantidad), no multiplicar de nuevo
     $cotizacion->ventanas->transform(function ($ventana) {
-        $ventana->precio_total = ($ventana->precio ?? 0) * ($ventana->cantidad ?? 1);
+        $ventana->precio_total = $ventana->precio ?? 0;
         return $ventana;
     });
 
@@ -500,8 +498,8 @@ public function store(Request $request)
             }
         });
 
-        // Recalcular y guardar el total actualizado
-        $totalVentanas = collect($request->ventanas)->sum(fn($v) => ($v['precio'] ?? 0) * ($v['cantidad'] ?? 1));
+        // precio ya viene como total (precio_unitario × cantidad) desde el frontend
+        $totalVentanas = collect($request->ventanas)->sum(fn($v) => $v['precio'] ?? 0);
         $totalProductos = $request->has('productos') ? collect($request->productos)->sum('total') : 0;
         $cotizacion->update(['total' => $totalVentanas + $totalProductos]);
 
