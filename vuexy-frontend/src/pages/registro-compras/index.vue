@@ -168,26 +168,31 @@
 
         <!-- Por pagar -->
         <template #item.pendiente="{ item }">
-          <span
-            class="font-weight-bold"
-            :class="(item.pendiente > 0 && !item.es_nc) ? 'text-warning' : 'text-success'"
-          >
-            {{ item.es_nc ? fmt(Math.abs(item.pendiente)) : fmt(item.pendiente) }}
-          </span>
-          <VChip
-            v-if="item.nc_revision_estado === 'requiere_revision'"
-            size="x-small"
-            color="warning"
-            variant="tonal"
-            class="ml-1"
-          >NC</VChip>
+          <template v-if="item.pagado_historico && item.monto_pagado == 0">
+            <span class="text-caption text-medium-emphasis">Pagada hist.</span>
+          </template>
+          <template v-else>
+            <span
+              class="font-weight-bold"
+              :class="(item.pendiente > 0 && !item.es_nc) ? 'text-warning' : 'text-success'"
+            >
+              {{ item.es_nc ? fmt(Math.abs(item.pendiente)) : fmt(item.pendiente) }}
+            </span>
+            <VChip
+              v-if="item.nc_revision_estado === 'requiere_revision'"
+              size="x-small"
+              color="warning"
+              variant="tonal"
+              class="ml-1"
+            >NC</VChip>
+          </template>
         </template>
 
         <!-- Acciones -->
         <template #item.acciones="{ item }">
           <div class="d-flex align-center" style="gap:4px">
             <VBtn
-              v-if="!item.es_nc"
+              v-if="!item.es_nc && !(item.pagado_historico && item.monto_pagado == 0)"
               size="x-small"
               variant="tonal"
               :color="item.pendiente > 0 ? 'primary' : 'success'"

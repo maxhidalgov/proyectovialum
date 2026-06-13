@@ -255,9 +255,12 @@ class CuentasPorPagarController extends Controller
                 'compras.nc_revision_estado',
                 'compras.pagado_historico',
                 DB::raw('COALESCE(ef.monto_pagado_efectivo, 0) as monto_pagado'),
-                DB::raw('CASE WHEN compras.tipo_dte IN (61)
-                              THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
-                              ELSE   compras.total - COALESCE(ef.monto_pagado_efectivo,0)
+                DB::raw('CASE
+                              WHEN compras.pagado_historico = 1 AND COALESCE(ef.monto_pagado_efectivo, 0) = 0
+                                  THEN 0
+                              WHEN compras.tipo_dte IN (61)
+                                  THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
+                              ELSE compras.total - COALESCE(ef.monto_pagado_efectivo,0)
                          END as pendiente'),
                 DB::raw('(compras.tipo_dte IN (61)) as es_nc')
             )
