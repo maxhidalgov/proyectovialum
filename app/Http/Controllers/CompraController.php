@@ -376,7 +376,7 @@ class CompraController extends Controller
     {
         set_time_limit(0);
 
-        // Facturas no históricas con pago bancario parcial y saldo > 0
+        // Facturas no históricas con saldo > 0 (incluye facturas sin pago bancario)
         $facturas = DB::table('compras as f')
             ->leftJoin(
                 DB::raw('(SELECT compra_id, SUM(monto) pagado FROM compra_movimiento GROUP BY compra_id) p'),
@@ -386,46 +386,37 @@ class CompraController extends Controller
                 DB::raw('(SELECT factura_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) nca'),
                 'nca.factura_id', '=', 'f.id'
             )
+            ->leftJoin(
+                DB::raw('(SELECT nc_referencia_id, SUM(total) monto_nc_ref FROM compras WHERE tipo_dte=61 AND nc_referencia_id IS NOT NULL GROUP BY nc_referencia_id) ncref'),
+                'ncref.nc_referencia_id', '=', 'f.id'
+            )
             ->where('f.pagado_historico', false)
             ->whereNotIn('f.tipo_dte', [61])
-            ->whereNotNull('p.pagado')
             ->select(
                 'f.id', 'f.folio', 'f.rut_emisor', 'f.total', 'f.fecha_emision',
-                DB::raw('f.total - COALESCE(p.pagado,0) - COALESCE(nca.monto_nc,0) as saldo')
+                DB::raw('f.total - COALESCE(p.pagado,0) - COALESCE(nca.monto_nc,0) - COALESCE(ncref.monto_nc_ref,0) as saldo')
             )
             ->havingRaw('saldo >= 1')
             ->get();
 
         $vinculadas = 0;
-        $ambiguos   = 0;
         $sinMatch   = 0;
 
         foreach ($facturas as $factura) {
             // NCs del mismo proveedor con total == saldo y sin referencia asignada
-            $ncs = DB::table('compras')
+            // Orden: fecha más cercana primero; empate resuelto por ID menor (determinístico)
+            $nc = DB::table('compras')
                 ->where('tipo_dte', 61)
                 ->where('rut_emisor', $factura->rut_emisor)
                 ->whereNull('nc_referencia_id')
                 ->where('total', (int) round($factura->saldo))
                 ->orderByRaw('ABS(DATEDIFF(fecha_emision, ?))', [$factura->fecha_emision])
-                ->get();
+                ->orderBy('id')
+                ->first();
 
-            if ($ncs->isEmpty()) {
+            if (!$nc) {
                 $sinMatch++;
                 continue;
-            }
-
-            // Tomar la NC con fecha más cercana a la factura
-            $nc = $ncs->first();
-
-            // Si hay más de una con la misma fecha diferencia → ambigüedad real
-            if ($ncs->count() > 1) {
-                $diff0 = abs(strtotime($nc->fecha_emision) - strtotime($factura->fecha_emision));
-                $diff1 = abs(strtotime($ncs[1]->fecha_emision) - strtotime($factura->fecha_emision));
-                if ($diff0 === $diff1) {
-                    $ambiguos++;
-                    continue;
-                }
             }
 
             DB::table('compras')
@@ -438,7 +429,6 @@ class CompraController extends Controller
         return response()->json([
             'facturas_con_saldo' => $facturas->count(),
             'vinculadas'         => $vinculadas,
-            'ambiguos'           => $ambiguos,
             'sin_match'          => $sinMatch,
         ]);
     }
