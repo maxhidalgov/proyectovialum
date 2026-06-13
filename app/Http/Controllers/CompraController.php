@@ -319,6 +319,57 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/compras/limpiar-badges-nc
+    // Para facturas con nc_revision_estado='requiere_revision' donde TODAS las NCs
+    // que la referencian ya tienen compra_nc_aplicacion → marca como 'aplicado'.
+    // Para facturas sin ninguna NC apuntando a ellas → limpia el estado (dato obsoleto).
+    // -------------------------------------------------------------------------
+    public function limpiarBadgesNc()
+    {
+        // 1. Facturas con requiere_revision donde todas las NCs ya tienen aplicacion
+        $marcadasAplicado = DB::statement("
+            UPDATE compras f
+            SET f.nc_revision_estado = 'aplicado', f.updated_at = NOW()
+            WHERE f.nc_revision_estado = 'requiere_revision'
+              AND f.pagado_historico = 0
+              -- Existe al menos 1 NC apuntando a esta factura
+              AND EXISTS (
+                  SELECT 1 FROM compras nc
+                  WHERE nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
+              )
+              -- NO existe ninguna NC apuntando sin compra_nc_aplicacion
+              AND NOT EXISTS (
+                  SELECT 1 FROM compras nc
+                  WHERE nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
+                    AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
+              )
+        ");
+
+        // 2. Facturas con requiere_revision sin ninguna NC apuntando → dato obsoleto, limpiar
+        $limpiadas = DB::statement("
+            UPDATE compras f
+            SET f.nc_revision_estado = NULL, f.updated_at = NOW()
+            WHERE f.nc_revision_estado = 'requiere_revision'
+              AND f.pagado_historico = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM compras nc
+                  WHERE nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
+              )
+        ");
+
+        // Contar resultados
+        $restantes = DB::table('compras')
+            ->where('nc_revision_estado', 'requiere_revision')
+            ->where('pagado_historico', false)
+            ->count();
+
+        return response()->json([
+            'ok'        => true,
+            'restantes' => $restantes,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // POST /api/compras/aplicar-ncs-revision
     // Crea compra_nc_aplicacion para todas las NCs con nc_referencia_id seteado
     // que aún no tienen registro en compra_nc_aplicacion, y limpia nc_revision_estado.

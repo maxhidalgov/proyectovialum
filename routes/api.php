@@ -127,6 +127,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/cargar-xmls-pendientes',     [\App\Http\Controllers\CompraController::class, 'cargarXmlsPendientes']);
         Route::post('/vincular-ncs',               [\App\Http\Controllers\CompraController::class, 'vincularNcsPendientes']);
         Route::post('/aplicar-ncs-revision',       [\App\Http\Controllers\CompraController::class, 'aplicarNcsPendientesRevision']);
+        Route::post('/limpiar-badges-nc',          [\App\Http\Controllers\CompraController::class, 'limpiarBadgesNc']);
         Route::patch('/{compraId}/categoria',      [\App\Http\Controllers\ReglaProveedorController::class, 'asignarCategoria']);
         Route::post('/{compra}/cargar-xml',        [\App\Http\Controllers\CompraController::class, 'cargarXml']);
         Route::get('/{compra}',                    [\App\Http\Controllers\CompraController::class, 'show']);

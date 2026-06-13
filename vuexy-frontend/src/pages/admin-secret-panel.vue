@@ -594,6 +594,41 @@ const getRoleBadgeColor = roleName => {
           </VCard>
         </VCol>
 
+        <!-- Limpiar badges NC ya aplicadas -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined" color="success">
+            <VCardTitle class="text-subtitle-1">Limpiar badges ▲ de NCs ya aplicadas</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Marca como "aplicado" las facturas con badge ▲ cuyas NCs ya tienen registro en
+              compra_nc_aplicacion. También limpia estados huérfanos (ninguna NC apunta a esa factura).
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="success"
+                :loading="herramientaLoading['limpiar-badges-nc']"
+                @click="correrHerramienta('limpiar-badges-nc', 'post', '/api/compras/limpiar-badges-nc')"
+              >
+                <VIcon start>mdi-bell-off-outline</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['limpiar-badges-nc']">
+              <VAlert
+                :type="herramientaResultado['limpiar-badges-nc'].error ? 'error' : 'success'"
+                variant="tonal"
+                density="compact"
+              >
+                <template v-if="herramientaResultado['limpiar-badges-nc'].error">
+                  {{ herramientaResultado['limpiar-badges-nc'].error }}
+                </template>
+                <template v-else>
+                  Badges restantes: <strong>{{ herramientaResultado['limpiar-badges-nc'].restantes }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
         <!-- Cargar XMLs pendientes -->
         <VCol cols="12" md="6">
           <VCard variant="outlined">
