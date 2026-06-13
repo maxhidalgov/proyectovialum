@@ -25,6 +25,8 @@ const activeTab = ref('users') // 'users' | 'roles' | 'margenes' | 'herramientas
 // ── Herramientas ──────────────────────────────────────────────────
 const herramientaLoading = ref({})
 const herramientaResultado = ref({})
+const syncChipaxDesde = ref(new Date().getFullYear() + '-01-01')
+const syncChipaxHasta = ref(new Date().toISOString().slice(0, 10))
 
 // Estados para gestión de permisos
 const selectedRole = ref(null)
@@ -230,11 +232,11 @@ const deleteUser = async id => {
   }
 }
 
-async function correrHerramienta(key, method, url) {
+async function correrHerramienta(key, method, url, payload = null) {
   herramientaLoading.value[key] = true
   herramientaResultado.value[key] = null
   try {
-    const { data } = await api[method](url)
+    const { data } = payload ? await api[method](url, payload) : await api[method](url)
     herramientaResultado.value[key] = data
   } catch (e) {
     herramientaResultado.value[key] = { error: e.response?.data?.message || e.message }
@@ -518,6 +520,51 @@ const getRoleBadgeColor = roleName => {
     <!-- Tab Herramientas -->
     <VCardText v-show="activeTab === 'herramientas'">
       <VRow>
+
+        <!-- Sincronizar conciliación desde Chipax -->
+        <VCol cols="12" md="12">
+          <VCard variant="outlined" color="primary">
+            <VCardTitle class="text-subtitle-1">Sincronizar conciliación desde Chipax</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Descarga de Chipax qué facturas de compra ya están conciliadas con movimientos bancarios
+              (sync-docs) y luego crea los registros locales de conciliación (link-local).
+              Usar cuando Chipax muestra $0 pendiente pero nuestra app aún muestra saldo.
+            </VCardText>
+            <VCardText>
+              <VRow dense>
+                <VCol cols="6"><VTextField v-model="syncChipaxDesde" label="Desde" type="date" density="compact" /></VCol>
+                <VCol cols="6"><VTextField v-model="syncChipaxHasta" label="Hasta" type="date" density="compact" /></VCol>
+              </VRow>
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="primary"
+                :loading="herramientaLoading['sync-chipax']"
+                @click="correrHerramienta('sync-chipax', 'post', '/api/compras/sincronizar-conciliacion-chipax', { desde: syncChipaxDesde, hasta: syncChipaxHasta })"
+              >
+                <VIcon start>mdi-cloud-sync-outline</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['sync-chipax']">
+              <VAlert
+                :type="herramientaResultado['sync-chipax'].error ? 'error' : 'success'"
+                variant="tonal"
+                density="compact"
+              >
+                <template v-if="herramientaResultado['sync-chipax'].error">
+                  {{ herramientaResultado['sync-chipax'].error }}
+                </template>
+                <template v-else>
+                  <div><strong>sync-docs:</strong></div>
+                  <pre style="font-size:11px;white-space:pre-wrap">{{ herramientaResultado['sync-chipax'].sync_docs }}</pre>
+                  <div class="mt-2"><strong>link-local:</strong></div>
+                  <pre style="font-size:11px;white-space:pre-wrap">{{ herramientaResultado['sync-chipax'].link_local }}</pre>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
 
         <!-- Vincular NCs pendientes -->
         <VCol cols="12" md="6">

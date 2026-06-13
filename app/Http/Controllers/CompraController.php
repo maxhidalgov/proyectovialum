@@ -366,6 +366,36 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/compras/sincronizar-conciliacion-chipax
+    // Ejecuta chipax:sync-docs (trae conciliación de Chipax) y luego
+    // chipax:link-local (crea compra_movimiento desde linked_docs).
+    // -------------------------------------------------------------------------
+    public function sincronizarConciliacionChipax(Request $request)
+    {
+        set_time_limit(0);
+
+        $desde = $request->get('desde', now()->startOfYear()->format('Y-m-d'));
+        $hasta = $request->get('hasta', now()->format('Y-m-d'));
+
+        // Paso 1: sync-docs — descarga linked_docs de Chipax
+        $exitSync = \Artisan::call('chipax:sync-docs', [
+            '--desde' => $desde,
+            '--hasta' => $hasta,
+        ]);
+        $outputSync = strip_tags(\Artisan::output());
+
+        // Paso 2: link-local — materializa linked_docs en pivotes locales
+        $exitLink = \Artisan::call('chipax:link-local');
+        $outputLink = strip_tags(\Artisan::output());
+
+        return response()->json([
+            'ok'          => $exitSync === 0 && $exitLink === 0,
+            'sync_docs'   => trim($outputSync),
+            'link_local'  => trim($outputLink),
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // POST /api/compras/aplicar-ncs-revision
     // Crea compra_nc_aplicacion para todas las NCs con nc_referencia_id seteado
     // que aún no tienen registro en compra_nc_aplicacion, y limpia nc_revision_estado.
