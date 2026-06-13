@@ -260,6 +260,7 @@ class CompraMovimientoController extends Controller
                 'compras.id', '=', 'nc_ref.compra_id'
             )
             ->where('compras.pagado_historico', false)
+            ->where('compras.tipo_dte', '!=', 61)
             ->whereNotExists(function ($q) use ($movimientoId) {
                 $q->from('compra_movimiento')
                   ->whereColumn('compra_movimiento.compra_id', 'compras.id')
