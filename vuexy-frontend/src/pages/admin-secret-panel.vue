@@ -47,10 +47,13 @@ async function correrDiagnostico() {
 const debugNcId = ref('')
 const debugNcResultado = ref(null)
 const debugNcLoading = ref(false)
+const vincularNcLoading = ref(false)
+const vincularNcResultado = ref(null)
 
 async function correrDebugNcXml() {
   debugNcLoading.value = true
   debugNcResultado.value = null
+  vincularNcResultado.value = null
   try {
     const { data } = await api.get('/api/compras/debug-nc-xml', { params: { nc_id: debugNcId.value } })
     debugNcResultado.value = data
@@ -58,6 +61,19 @@ async function correrDebugNcXml() {
     debugNcResultado.value = { error: e.response?.data?.error || e.message }
   } finally {
     debugNcLoading.value = false
+  }
+}
+
+async function vincularNcDesdeXml() {
+  vincularNcLoading.value = true
+  vincularNcResultado.value = null
+  try {
+    const { data } = await api.post('/api/compras/vincular-nc-xml', null, { params: { nc_id: debugNcId.value } })
+    vincularNcResultado.value = data
+  } catch (e) {
+    vincularNcResultado.value = { error: e.response?.data?.error || e.message }
+  } finally {
+    vincularNcLoading.value = false
   }
 }
 
@@ -824,6 +840,10 @@ const getRoleBadgeColor = roleName => {
                 <VIcon start>mdi-xml</VIcon>
                 Analizar
               </VBtn>
+              <VBtn color="green-darken-2" :loading="vincularNcLoading" @click="vincularNcDesdeXml" class="ml-2">
+                <VIcon start>mdi-link-variant-plus</VIcon>
+                Vincular
+              </VBtn>
             </VCardActions>
             <VCardText v-if="debugNcResultado">
               <VAlert v-if="debugNcResultado.error" type="error" variant="tonal">{{ debugNcResultado.error }}</VAlert>
@@ -860,6 +880,16 @@ const getRoleBadgeColor = roleName => {
                   </tbody>
                 </VTable>
                 <div v-else-if="!debugNcResultado.xml_error" class="text-body-2 text-medium-emphasis">Sin referencias en el XML.</div>
+
+                <!-- Resultado vincular -->
+                <VAlert v-if="vincularNcResultado" class="mt-3"
+                  :type="vincularNcResultado.error ? 'error' : 'success'" variant="tonal" density="compact">
+                  <template v-if="vincularNcResultado.error">{{ vincularNcResultado.error }}</template>
+                  <template v-else>
+                    NC {{ vincularNcResultado.nc_folio }} vinculada a factura {{ vincularNcResultado.factura_folio }}
+                    (tipo {{ vincularNcResultado.factura_tipo_dte }}) · nc_referencia_id = {{ vincularNcResultado.nc_referencia_id }}
+                  </template>
+                </VAlert>
 
                 <!-- Bsale expand=references -->
                 <div class="text-subtitle-2 mt-3 mb-1">

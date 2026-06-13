@@ -961,6 +961,79 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/compras/vincular-nc-xml?nc_id=XXX
+    // Descarga el XML de la NC, extrae la primera referencia con folio en DB
+    // y setea nc_referencia_id (sin filtrar TpoDocRef — acepta cualquier tipo).
+    // -------------------------------------------------------------------------
+    public function vincularNcXml(Request $request)
+    {
+        $input = trim($request->get('nc_id', ''));
+        if (!$input) return response()->json(['error' => 'Falta nc_id'], 400);
+
+        $ncRow = DB::table('compras')->where('id', (int)$input)->first()
+              ?? DB::table('compras')->where('folio', $input)->where('tipo_dte', 61)->first();
+        if (!$ncRow) return response()->json(['error' => "NC no encontrada ($input)"], 404);
+
+        if ($ncRow->nc_referencia_id) {
+            return response()->json(['ok' => true, 'msg' => 'Ya tenía nc_referencia_id: ' . $ncRow->nc_referencia_id, 'nc_referencia_id' => $ncRow->nc_referencia_id]);
+        }
+
+        if (!$ncRow->xml_url) return response()->json(['error' => 'Sin xml_url'], 422);
+
+        $xmlResp = Http::timeout(15)->withHeaders($this->headers())->get($ncRow->xml_url);
+        if (!$xmlResp->successful()) return response()->json(['error' => 'Error al descargar XML: HTTP ' . $xmlResp->status()], 502);
+
+        $xml = @simplexml_load_string($xmlResp->body());
+        if (!$xml) return response()->json(['error' => 'XML inválido'], 422);
+
+        $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
+        $refs = $xml->xpath('//sii:Referencia') ?: $xml->xpath('//Referencia');
+        if (empty($refs)) {
+            $dte = $xml->Documento ?? $xml->DTE ?? $xml;
+            $doc = $dte->Documento ?? $dte;
+            $refs = [];
+            if (isset($doc->Referencia)) {
+                foreach ($doc->Referencia as $r) $refs[] = $r;
+            }
+        }
+
+        foreach ($refs as $ref) {
+            $folioRef = (string)($ref->FolioRef ?? '');
+            $tipoRef  = (string)($ref->TpoDocRef ?? '');
+            if ($folioRef === '') continue;
+
+            $factura = DB::table('compras')
+                ->where('folio', $folioRef)
+                ->where('rut_emisor', $ncRow->rut_emisor)
+                ->whereNotIn('tipo_dte', [61])
+                ->first(['id', 'folio', 'tipo_dte', 'total']);
+
+            if (!$factura) continue;
+
+            $nc = Compra::find($ncRow->id);
+            $this->vincularReferenciaNC($nc, $xml);
+            $nc->refresh();
+
+            if (!$nc->nc_referencia_id) {
+                // vincularReferenciaNC filtró TpoDocRef — forzar link directo
+                $nc->update(['nc_referencia_id' => $factura->id]);
+            }
+
+            return response()->json([
+                'ok'               => true,
+                'nc_folio'         => $ncRow->folio,
+                'factura_id'       => $factura->id,
+                'factura_folio'    => $factura->folio,
+                'factura_tipo_dte' => $factura->tipo_dte,
+                'TpoDocRef'        => $tipoRef,
+                'nc_referencia_id' => $nc->nc_referencia_id,
+            ]);
+        }
+
+        return response()->json(['error' => 'Sin referencias válidas con folio en DB', 'refs_count' => count($refs)], 422);
+    }
+
+    // -------------------------------------------------------------------------
     // GET /api/compras/debug-nc-xml?nc_id=XXX
     // Descarga el XML de una NC y muestra TODAS sus Referencias sin filtros,
     // + prueba expand=references en Bsale para ese mismo documento.
