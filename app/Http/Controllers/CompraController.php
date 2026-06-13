@@ -951,8 +951,7 @@ class CompraController extends Controller
         $ncs = DB::table('compras as nc')
             ->where('nc.rut_emisor', $rut)
             ->where('nc.tipo_dte', 61)
-            ->where('nc.pagado_historico', false)
-            ->select('nc.id', 'nc.folio', 'nc.fecha_emision', 'nc.total', 'nc.nc_referencia_id')
+            ->select('nc.id', 'nc.folio', 'nc.fecha_emision', 'nc.total', 'nc.nc_referencia_id', 'nc.pagado_historico', 'nc.xml_url')
             ->orderByDesc('nc.fecha_emision')
             ->get();
 
