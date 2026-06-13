@@ -326,38 +326,34 @@ class CompraController extends Controller
     // -------------------------------------------------------------------------
     public function limpiarBadgesNc()
     {
-        // 1. Facturas con requiere_revision donde todas las NCs ya tienen aplicacion
-        $marcadasAplicado = DB::statement("
+        // 1. Facturas donde TODAS las NCs que la referencian ya tienen compra_nc_aplicacion
+        //    JOIN con subquery para evitar error MySQL 1093 (no self-reference en UPDATE WHERE)
+        DB::statement("
             UPDATE compras f
+            JOIN (
+                SELECT nc.nc_referencia_id AS factura_id
+                FROM compras nc
+                LEFT JOIN compra_nc_aplicacion ap ON ap.nc_id = nc.id
+                WHERE nc.tipo_dte = 61 AND nc.nc_referencia_id IS NOT NULL
+                GROUP BY nc.nc_referencia_id
+                HAVING COUNT(nc.id) > 0
+                   AND SUM(ap.nc_id IS NULL) = 0
+            ) ncs_ok ON ncs_ok.factura_id = f.id
             SET f.nc_revision_estado = 'aplicado', f.updated_at = NOW()
             WHERE f.nc_revision_estado = 'requiere_revision'
               AND f.pagado_historico = 0
-              -- Existe al menos 1 NC apuntando a esta factura
-              AND EXISTS (
-                  SELECT 1 FROM compras nc
-                  WHERE nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
-              )
-              -- NO existe ninguna NC apuntando sin compra_nc_aplicacion
-              AND NOT EXISTS (
-                  SELECT 1 FROM compras nc
-                  WHERE nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
-                    AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
-              )
         ");
 
-        // 2. Facturas con requiere_revision sin ninguna NC apuntando → dato obsoleto, limpiar
-        $limpiadas = DB::statement("
+        // 2. Facturas con requiere_revision sin ninguna NC apuntando → dato obsoleto
+        DB::statement("
             UPDATE compras f
+            LEFT JOIN compras nc ON nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
             SET f.nc_revision_estado = NULL, f.updated_at = NOW()
             WHERE f.nc_revision_estado = 'requiere_revision'
               AND f.pagado_historico = 0
-              AND NOT EXISTS (
-                  SELECT 1 FROM compras nc
-                  WHERE nc.nc_referencia_id = f.id AND nc.tipo_dte = 61
-              )
+              AND nc.id IS NULL
         ");
 
-        // Contar resultados
         $restantes = DB::table('compras')
             ->where('nc_revision_estado', 'requiere_revision')
             ->where('pagado_historico', false)
