@@ -24,7 +24,7 @@ class CuentasPorPagarController extends Controller
                 COALESCE(pb.monto_banco, 0)
                   + CASE WHEN c.tipo_dte IN (61)
                          THEN COALESCE(ncnc.monto_nc, 0)
-                         ELSE COALESCE(ncf.monto_nc, 0)
+                         ELSE COALESCE(ncf.monto_nc, 0) + COALESCE(ncref.monto_nc, 0)
                     END AS monto_pagado_efectivo
             FROM compras c
             LEFT JOIN (SELECT compra_id, SUM(monto) monto_banco FROM compra_movimiento GROUP BY compra_id) pb
@@ -33,6 +33,15 @@ class CuentasPorPagarController extends Controller
                    ON ncf.compra_id = c.id
             LEFT JOIN (SELECT nc_id AS compra_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY nc_id) ncnc
                    ON ncnc.compra_id = c.id
+            LEFT JOIN (
+                SELECT nc.nc_referencia_id AS compra_id, SUM(nc.total) AS monto_nc
+                FROM compras nc
+                WHERE nc.tipo_dte IN (61)
+                  AND nc.nc_referencia_id IS NOT NULL
+                  AND nc.pagado_historico = 0
+                  AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
+                GROUP BY nc.nc_referencia_id
+            ) ncref ON ncref.compra_id = c.id
         ) AS ef");
     }
 

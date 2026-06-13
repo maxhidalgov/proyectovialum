@@ -247,6 +247,18 @@ class CompraMovimientoController extends Controller
                 DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
                 'compras.id', '=', 'pagos.compra_id'
             )
+            ->leftJoin(
+                DB::raw('(SELECT factura_id AS compra_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) as nc_aplicado'),
+                'compras.id', '=', 'nc_aplicado.compra_id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT nc.nc_referencia_id AS compra_id, SUM(nc.total) AS monto_nc
+                          FROM compras nc
+                          WHERE nc.tipo_dte IN (61) AND nc.nc_referencia_id IS NOT NULL AND nc.pagado_historico = 0
+                            AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
+                          GROUP BY nc.nc_referencia_id) as nc_ref'),
+                'compras.id', '=', 'nc_ref.compra_id'
+            )
             ->where('compras.pagado_historico', false)
             ->whereNotExists(function ($q) use ($movimientoId) {
                 $q->from('compra_movimiento')
@@ -268,7 +280,10 @@ class CompraMovimientoController extends Controller
                 'compras.total',
                 'compras.nombre_emisor',
                 'compras.rut_emisor',
-                DB::raw('compras.total - COALESCE(pagos.pagado, 0) as saldo_por_pagar')
+                DB::raw('compras.total
+                         - COALESCE(pagos.pagado, 0)
+                         - COALESCE(nc_aplicado.monto_nc, 0)
+                         - COALESCE(nc_ref.monto_nc, 0) as saldo_por_pagar')
             )
             ->havingRaw('saldo_por_pagar > 0');
 
