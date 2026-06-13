@@ -908,6 +908,69 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // GET /api/compras/diagnostico-proveedor?rut=83935900-4
+    // Muestra facturas del proveedor con su saldo real y detalle de pagos bancarios
+    // -------------------------------------------------------------------------
+    public function diagnosticoProveedor(Request $request)
+    {
+        $rut = $request->get('rut');
+        if (!$rut) return response()->json(['error' => 'Falta rut'], 400);
+
+        $facturas = DB::table('compras as c')
+            ->where('c.rut_emisor', $rut)
+            ->whereNotIn('c.tipo_dte', [61])
+            ->where('c.pagado_historico', false)
+            ->leftJoin(
+                DB::raw('(SELECT compra_id, SUM(monto) as monto_banco, COUNT(*) as cant_movs FROM compra_movimiento GROUP BY compra_id) cm'),
+                'cm.compra_id', '=', 'c.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT factura_id, SUM(monto) as monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) nca'),
+                'nca.factura_id', '=', 'c.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT nc.nc_referencia_id as compra_id, SUM(nc.total) as monto_nc_ref
+                          FROM compras nc
+                          WHERE nc.tipo_dte = 61 AND nc.nc_referencia_id IS NOT NULL
+                            AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
+                          GROUP BY nc.nc_referencia_id) ncr'),
+                'ncr.compra_id', '=', 'c.id'
+            )
+            ->select(
+                'c.id', 'c.folio', 'c.tipo_dte', 'c.fecha_emision', 'c.total', 'c.nc_revision_estado',
+                DB::raw('COALESCE(cm.monto_banco, 0) as monto_banco'),
+                DB::raw('COALESCE(cm.cant_movs, 0) as cant_movs'),
+                DB::raw('COALESCE(nca.monto_nc, 0) as monto_nc_aplicada'),
+                DB::raw('COALESCE(ncr.monto_nc_ref, 0) as monto_nc_ref'),
+                DB::raw('c.total - COALESCE(cm.monto_banco,0) - COALESCE(nca.monto_nc,0) - COALESCE(ncr.monto_nc_ref,0) as saldo')
+            )
+            ->orderByDesc('c.fecha_emision')
+            ->get();
+
+        $ncs = DB::table('compras as nc')
+            ->where('nc.rut_emisor', $rut)
+            ->where('nc.tipo_dte', 61)
+            ->where('nc.pagado_historico', false)
+            ->select('nc.id', 'nc.folio', 'nc.fecha_emision', 'nc.total', 'nc.nc_referencia_id')
+            ->orderByDesc('nc.fecha_emision')
+            ->get();
+
+        return response()->json([
+            'rut'      => $rut,
+            'facturas' => $facturas,
+            'ncs'      => $ncs,
+            'resumen'  => [
+                'total_facturas'    => $facturas->count(),
+                'total_monto'       => $facturas->sum('total'),
+                'total_banco'       => $facturas->sum('monto_banco'),
+                'total_saldo'       => $facturas->sum('saldo'),
+                'facturas_saldo_0'  => $facturas->filter(fn($f) => (float)$f->saldo <= 0)->count(),
+                'facturas_saldo_pos'=> $facturas->filter(fn($f) => (float)$f->saldo > 0)->count(),
+            ],
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // GET /api/compras/estadisticas?mes=5&anio=2026
     // -------------------------------------------------------------------------
     public function estadisticas(Request $request)

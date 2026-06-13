@@ -27,6 +27,22 @@ const herramientaLoading = ref({})
 const herramientaResultado = ref({})
 const syncChipaxDesde = ref(new Date().getFullYear() + '-01-01')
 const syncChipaxHasta = ref(new Date().toISOString().slice(0, 10))
+const diagRut = ref('83935900-4')
+const diagResultado = ref(null)
+const diagLoading = ref(false)
+
+async function correrDiagnostico() {
+  diagLoading.value = true
+  diagResultado.value = null
+  try {
+    const { data } = await api.get('/api/compras/diagnostico-proveedor', { params: { rut: diagRut.value } })
+    diagResultado.value = data
+  } catch (e) {
+    diagResultado.value = { error: e.response?.data?.message || e.message }
+  } finally {
+    diagLoading.value = false
+  }
+}
 
 // Estados para gestión de permisos
 const selectedRole = ref(null)
@@ -600,6 +616,76 @@ const getRoleBadgeColor = roleName => {
                   Sin match: <strong>{{ herramientaResultado['vincular-ncs-monto'].sin_match }}</strong>
                 </template>
               </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
+        <!-- Diagnóstico proveedor -->
+        <VCol cols="12">
+          <VCard variant="outlined" color="blue-grey">
+            <VCardTitle class="text-subtitle-1">Diagnóstico facturas proveedor</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Muestra facturas pendientes de un proveedor con detalle de pagos bancarios, NCs aplicadas y saldo real.
+            </VCardText>
+            <VCardActions>
+              <VTextField
+                v-model="diagRut"
+                label="RUT proveedor"
+                density="compact"
+                style="max-width:200px"
+                hide-details
+              />
+              <VBtn color="blue-grey" :loading="diagLoading" @click="correrDiagnostico" class="ml-2">
+                <VIcon start>mdi-magnify</VIcon>
+                Consultar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="diagResultado">
+              <template v-if="diagResultado.error">
+                <VAlert type="error" variant="tonal">{{ diagResultado.error }}</VAlert>
+              </template>
+              <template v-else>
+                <div class="text-body-2 mb-2">
+                  Facturas: <strong>{{ diagResultado.resumen.total_facturas }}</strong> ·
+                  Total: <strong>{{ diagResultado.resumen.total_monto?.toLocaleString('es-CL', {style:'currency',currency:'CLP'}) }}</strong> ·
+                  Banco: <strong>{{ diagResultado.resumen.total_banco?.toLocaleString('es-CL', {style:'currency',currency:'CLP'}) }}</strong> ·
+                  Saldo: <strong>{{ diagResultado.resumen.total_saldo?.toLocaleString('es-CL', {style:'currency',currency:'CLP'}) }}</strong> ·
+                  Con saldo 0: <strong>{{ diagResultado.resumen.facturas_saldo_0 }}</strong> ·
+                  Con saldo > 0: <strong>{{ diagResultado.resumen.facturas_saldo_pos }}</strong>
+                </div>
+                <VTable density="compact" style="font-size:12px">
+                  <thead>
+                    <tr>
+                      <th>Folio</th>
+                      <th>Fecha</th>
+                      <th>Total</th>
+                      <th>Banco</th>
+                      <th>Movs</th>
+                      <th>NC aplic.</th>
+                      <th>NC ref.</th>
+                      <th>Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="f in diagResultado.facturas"
+                      :key="f.id"
+                      :style="parseFloat(f.saldo) > 0 ? 'background:#fff3e0' : ''"
+                    >
+                      <td>{{ f.folio }}</td>
+                      <td>{{ f.fecha_emision }}</td>
+                      <td>{{ parseInt(f.total).toLocaleString() }}</td>
+                      <td>{{ parseInt(f.monto_banco).toLocaleString() }}</td>
+                      <td>{{ f.cant_movs }}</td>
+                      <td>{{ parseInt(f.monto_nc_aplicada).toLocaleString() }}</td>
+                      <td>{{ parseInt(f.monto_nc_ref).toLocaleString() }}</td>
+                      <td :style="parseFloat(f.saldo) > 0 ? 'color:red;font-weight:bold' : 'color:green'">
+                        {{ parseInt(f.saldo).toLocaleString() }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </VTable>
+              </template>
             </VCardText>
           </VCard>
         </VCol>

@@ -131,6 +131,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/sincronizar-conciliacion-chipax', [\App\Http\Controllers\CompraController::class, 'sincronizarConciliacionChipax']);
         Route::post('/vincular-ncs-por-monto',         [\App\Http\Controllers\CompraController::class, 'vincularNcsPorMonto']);
         Route::post('/vincular-ncs-via-bsale',         [\App\Http\Controllers\CompraController::class, 'vincularNcsViaBsale']);
+        Route::get('/diagnostico-proveedor',           [\App\Http\Controllers\CompraController::class, 'diagnosticoProveedor']);
         Route::patch('/{compraId}/categoria',      [\App\Http\Controllers\ReglaProveedorController::class, 'asignarCategoria']);
         Route::post('/{compra}/cargar-xml',        [\App\Http\Controllers\CompraController::class, 'cargarXml']);
         Route::get('/{compra}',                    [\App\Http\Controllers\CompraController::class, 'show']);
