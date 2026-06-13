@@ -815,7 +815,7 @@ const getRoleBadgeColor = roleName => {
             <VCardActions>
               <VTextField
                 v-model="debugNcId"
-                label="ID de la NC (ej: 38842)"
+                label="Folio NC (ej: 38842)"
                 density="compact"
                 style="max-width:200px"
                 hide-details

@@ -967,11 +967,13 @@ class CompraController extends Controller
     // -------------------------------------------------------------------------
     public function debugNcXml(Request $request)
     {
-        $ncId = (int) $request->get('nc_id');
-        if (!$ncId) return response()->json(['error' => 'Falta nc_id'], 400);
+        $input = trim($request->get('nc_id', ''));
+        if (!$input) return response()->json(['error' => 'Falta nc_id'], 400);
 
-        $nc = DB::table('compras')->where('id', $ncId)->first();
-        if (!$nc) return response()->json(['error' => 'NC no encontrada'], 404);
+        // Acepta ID interno o folio (ambos numéricos; primero prueba id, luego folio DTE 61)
+        $nc = DB::table('compras')->where('id', (int)$input)->first()
+           ?? DB::table('compras')->where('folio', $input)->where('tipo_dte', 61)->first();
+        if (!$nc) return response()->json(['error' => "NC no encontrada (id/folio: $input)"], 404);
 
         $result = [
             'nc' => [
