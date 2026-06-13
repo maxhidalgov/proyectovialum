@@ -731,6 +731,8 @@ class CompraController extends Controller
     {
         set_time_limit(0);
 
+        $debug = (bool) $request->get('debug', false);
+
         $years = $request->get('years')
             ? array_unique(array_map('intval', explode(',', $request->get('years'))))
             : [2024, 2025, (int) date('Y')];
@@ -741,7 +743,7 @@ class CompraController extends Controller
             ->whereNull('nc_referencia_id')
             ->select('id', 'folio', 'rut_emisor', 'xml_url')
             ->get()
-            ->keyBy('folio');   // folio es único por emisor; en caso de colisión el rut resuelve
+            ->keyBy('folio');
 
         if ($ncsLocales->isEmpty()) {
             return response()->json(['ok' => true, 'vinculadas' => 0, 'mensaje' => 'Sin NCs pendientes']);
@@ -752,6 +754,7 @@ class CompraController extends Controller
         $errores      = 0;
         $procesados   = 0;
         $limit        = 50;
+        $debugInfo    = [];
 
         foreach ($years as $year) {
             $offset = 0;
@@ -810,6 +813,51 @@ class CompraController extends Controller
 
                         $xml->registerXPathNamespace('sii', 'http://www.sii.cl/SiiDte');
 
+                        // ── Modo debug: inspeccionar las primeras 5 NCs ────────
+                        if ($debug && count($debugInfo) < 5) {
+                            $refs = $xml->xpath('//sii:Referencia') ?: $xml->xpath('//Referencia');
+                            if (empty($refs)) {
+                                $dte  = $xml->Documento ?? $xml->DTE ?? $xml;
+                                $docu = $dte->Documento ?? $dte;
+                                $refs = [];
+                                if (isset($docu->Referencia)) {
+                                    foreach ($docu->Referencia as $r) $refs[] = $r;
+                                }
+                            }
+
+                            $refsData = [];
+                            foreach ($refs as $ref) {
+                                $tipoRef  = (int)($ref->TpoDocRef ?? 0);
+                                $folioRef = (string)($ref->FolioRef ?? '');
+                                $existe   = DB::table('compras')
+                                    ->where('folio', $folioRef)
+                                    ->whereIn('tipo_dte', [33, 34])
+                                    ->exists();
+                                $existeConRut = $folioRef ? DB::table('compras')
+                                    ->where('folio', $folioRef)
+                                    ->where('rut_emisor', $ncLocal->rut_emisor)
+                                    ->whereIn('tipo_dte', [33, 34])
+                                    ->exists() : false;
+                                $refsData[] = [
+                                    'TpoDocRef'        => $tipoRef,
+                                    'FolioRef'         => $folioRef,
+                                    'existe_sin_rut'   => $existe,
+                                    'existe_con_rut'   => $existeConRut,
+                                    'rut_nc_local'     => $ncLocal->rut_emisor,
+                                    'rut_bsale_doc'    => $rutDoc,
+                                ];
+                            }
+
+                            $debugInfo[] = [
+                                'nc_folio'     => $folio,
+                                'nc_id'        => $ncLocal->id,
+                                'year'         => $year,
+                                'referencias'  => $refsData,
+                                'refs_count'   => count($refs),
+                            ];
+                        }
+                        // ────────────────────────────────────────────────────────
+
                         $ncModel = Compra::find($ncLocal->id);
                         if (!$ncModel) continue;
 
@@ -819,7 +867,7 @@ class CompraController extends Controller
 
                         if ($ncModel->nc_referencia_id && !$antesRef) {
                             $vinculadas++;
-                            $ncsLocales->forget($folio); // ya vinculada, no procesar de nuevo
+                            $ncsLocales->forget($folio);
                         }
                     } catch (\Throwable $e) {
                         $errores++;
@@ -831,6 +879,10 @@ class CompraController extends Controller
                 }
 
                 $offset += $limit;
+
+                // En modo debug, basta con procesar la primera página
+                if ($debug && count($debugInfo) >= 5) break 2;
+
             } while ($offset < $total && count($items) === $limit);
         }
 
@@ -839,14 +891,20 @@ class CompraController extends Controller
             ->whereNull('nc_referencia_id')
             ->count();
 
-        return response()->json([
+        $result = [
             'ok'         => true,
             'vinculadas' => $vinculadas,
             'procesados' => $procesados,
             'sin_xml'    => $sinXml,
             'errores'    => $errores,
             'restantes'  => $restantes,
-        ]);
+        ];
+
+        if ($debug) {
+            $result['debug'] = $debugInfo;
+        }
+
+        return response()->json($result);
     }
 
     // -------------------------------------------------------------------------
