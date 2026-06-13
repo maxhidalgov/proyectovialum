@@ -556,6 +556,44 @@ const getRoleBadgeColor = roleName => {
           </VCard>
         </VCol>
 
+        <!-- Aplicar NCs en revisión -->
+        <VCol cols="12" md="6">
+          <VCard variant="outlined" color="warning">
+            <VCardTitle class="text-subtitle-1">Aplicar NCs pendientes de revisión</VCardTitle>
+            <VCardText class="text-body-2 text-medium-emphasis">
+              Crea los registros de aplicación para las Notas de Crédito que ya tienen
+              referencia a una factura pero aún no fueron aplicadas (badges naranja ▲).
+              Limpia los avisos de revisión automáticamente.
+            </VCardText>
+            <VCardActions>
+              <VBtn
+                color="warning"
+                :loading="herramientaLoading['aplicar-ncs']"
+                @click="correrHerramienta('aplicar-ncs', 'post', '/api/compras/aplicar-ncs-revision')"
+              >
+                <VIcon start>mdi-check-all</VIcon>
+                Ejecutar
+              </VBtn>
+            </VCardActions>
+            <VCardText v-if="herramientaResultado['aplicar-ncs']">
+              <VAlert
+                :type="herramientaResultado['aplicar-ncs'].error ? 'error' : 'success'"
+                variant="tonal"
+                density="compact"
+              >
+                <template v-if="herramientaResultado['aplicar-ncs'].error">
+                  {{ herramientaResultado['aplicar-ncs'].error }}
+                </template>
+                <template v-else>
+                  Total NCs: <strong>{{ herramientaResultado['aplicar-ncs'].total }}</strong> ·
+                  Aplicadas: <strong>{{ herramientaResultado['aplicar-ncs'].aplicadas }}</strong> ·
+                  Sin saldo (factura ya cubierta): <strong>{{ herramientaResultado['aplicar-ncs'].sin_saldo }}</strong>
+                </template>
+              </VAlert>
+            </VCardText>
+          </VCard>
+        </VCol>
+
         <!-- Cargar XMLs pendientes -->
         <VCol cols="12" md="6">
           <VCard variant="outlined">

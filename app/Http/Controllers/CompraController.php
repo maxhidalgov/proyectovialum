@@ -319,6 +319,67 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/compras/aplicar-ncs-revision
+    // Crea compra_nc_aplicacion para todas las NCs con nc_referencia_id seteado
+    // que aún no tienen registro en compra_nc_aplicacion, y limpia nc_revision_estado.
+    // -------------------------------------------------------------------------
+    public function aplicarNcsPendientesRevision()
+    {
+        $ncs = DB::table('compras as nc')
+            ->join('compras as f', 'f.id', '=', 'nc.nc_referencia_id')
+            ->where('nc.tipo_dte', 61)
+            ->whereNotNull('nc.nc_referencia_id')
+            ->where('nc.pagado_historico', false)
+            ->whereNotExists(fn($q) => $q->from('compra_nc_aplicacion')->whereColumn('compra_nc_aplicacion.nc_id', 'nc.id'))
+            ->select(
+                'nc.id as nc_id',
+                'nc.total as nc_total',
+                'nc.fecha_emision',
+                'f.id as factura_id',
+            )
+            ->get();
+
+        $aplicadas = 0;
+        $sinSaldo  = 0;
+
+        foreach ($ncs as $nc) {
+            // Calcular cuánto saldo queda en la factura después de pagos bancarios y otras NCs
+            $bancoPagado   = DB::table('compra_movimiento')->where('compra_id', $nc->factura_id)->sum('monto');
+            $ncYaAplicado  = DB::table('compra_nc_aplicacion')->where('factura_id', $nc->factura_id)->sum('monto');
+            $facturaTotal  = DB::table('compras')->where('id', $nc->factura_id)->value('total') ?? 0;
+            $saldoRestante = (float) $facturaTotal - (float) $bancoPagado - (float) $ncYaAplicado;
+
+            // Si el saldo restante es negativo o cero, la factura ya está cubierta; aplicamos 0 para limpiar el flag
+            $monto = max(0, min((float) $nc->nc_total, $saldoRestante));
+
+            if ($monto > 0) {
+                DB::table('compra_nc_aplicacion')->insert([
+                    'nc_id'      => $nc->nc_id,
+                    'factura_id' => $nc->factura_id,
+                    'monto'      => $monto,
+                    'fecha'      => $nc->fecha_emision,
+                    'nota'       => 'Auto-aplicado (panel admin)',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $aplicadas++;
+            } else {
+                $sinSaldo++;
+            }
+
+            // Limpiar el flag en la factura siempre (ya sea que se aplicó o no)
+            DB::table('compras')->where('id', $nc->factura_id)
+                ->update(['nc_revision_estado' => null, 'updated_at' => now()]);
+        }
+
+        return response()->json([
+            'total'     => $ncs->count(),
+            'aplicadas' => $aplicadas,
+            'sin_saldo' => $sinSaldo,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // POST /api/compras/cargar-xmls-pendientes  — procesa XMLs en lote
     // -------------------------------------------------------------------------
     public function cargarXmlsPendientes(Request $request)
