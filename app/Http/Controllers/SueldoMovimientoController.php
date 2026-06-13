@@ -44,7 +44,9 @@ class SueldoMovimientoController extends Controller
                      + DB::table('pagos_empleado')->where('movimiento_id', $movimientoId)->sum('monto');
         $saldoMov = max(0, $mov->monto - $asignadoMov);
 
-        $pagos = DB::table('pagos_empleado')
+        $orden = $request->get('orden', 'monto'); // 'monto' | 'fecha'
+
+        $q = DB::table('pagos_empleado')
             ->join('empleados', 'empleados.id', '=', 'pagos_empleado.empleado_id')
             ->whereNull('pagos_empleado.movimiento_id')   // sin vincular
             ->when($buscar, fn($q) => $q->where(function ($sq) use ($buscar) {
@@ -59,11 +61,19 @@ class SueldoMovimientoController extends Controller
                 'pagos_empleado.pagado',
                 'empleados.nombre as empleado_nombre',
                 'empleados.rut as empleado_rut',
-            )
-            ->orderByRaw('ABS(pagos_empleado.monto - ?) ASC', [$saldoMov])
-            ->paginate(30);
+            );
 
-        return response()->json($pagos);
+        if ($orden === 'fecha') {
+            // periodo es 'YYYY-MM'; comparar con fecha_contable del movimiento
+            $q->orderByRaw(
+                'ABS(DATEDIFF(STR_TO_DATE(CONCAT(pagos_empleado.periodo, \'-01\'), \'%Y-%m-%d\'), ?)) ASC',
+                [$mov->fecha_contable]
+            )->orderByRaw('ABS(pagos_empleado.monto - ?) ASC', [$saldoMov]);
+        } else {
+            $q->orderByRaw('ABS(pagos_empleado.monto - ?) ASC', [$saldoMov]);
+        }
+
+        return response()->json($q->paginate(30));
     }
 
     // ── Vincular sueldo a movimiento ──────────────────────────────────────────

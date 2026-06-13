@@ -159,12 +159,13 @@ class GastoMovimientoController extends Controller
     {
         $mov    = MovimientoBancario::findOrFail($movimientoId);
         $buscar = $request->get('buscar');
+        $orden  = $request->get('orden', 'monto'); // 'monto' | 'fecha'
 
         $asignadoMov = DB::table('gasto_movimiento')->where('movimiento_id', $movimientoId)->sum('monto')
                      + DB::table('compra_movimiento')->where('movimiento_id', $movimientoId)->sum('monto');
         $saldoMov    = max(0, $mov->monto - $asignadoMov);
 
-        $gastos = DB::table('gastos')
+        $q = DB::table('gastos')
             ->leftJoin(
                 DB::raw('(SELECT gasto_id, SUM(monto) as pagado FROM gasto_movimiento GROUP BY gasto_id) as pagos'),
                 'gastos.id', '=', 'pagos.gasto_id'
@@ -187,11 +188,16 @@ class GastoMovimientoController extends Controller
                 'gastos.proveedor',
                 DB::raw('gastos.monto - COALESCE(pagos.pagado, 0) as saldo_por_conciliar')
             )
-            ->havingRaw('saldo_por_conciliar > 0')
-            ->orderByRaw('ABS(saldo_por_conciliar - ?) ASC', [$saldoMov])
-            ->paginate(30);
+            ->havingRaw('saldo_por_conciliar > 0');
 
-        return response()->json($gastos);
+        if ($orden === 'fecha') {
+            $q->orderByRaw('ABS(DATEDIFF(gastos.fecha, ?)) ASC', [$mov->fecha_contable])
+              ->orderByRaw('ABS(saldo_por_conciliar - ?) ASC', [$saldoMov]);
+        } else {
+            $q->orderByRaw('ABS(saldo_por_conciliar - ?) ASC', [$saldoMov]);
+        }
+
+        return response()->json($q->paginate(30));
     }
 
     public function storePorMovimiento(Request $request, int $movimientoId)

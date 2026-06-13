@@ -1076,7 +1076,22 @@
                 <p class="text-overline text-medium-emphasis mb-0">
                   {{ movConciliando?.tipo === 'C' ? 'Ventas / Facturas Emitidas' : 'Documentos de Respaldo' }}
                 </p>
-                <span v-if="movConciliando?.tipo === 'D'" class="text-caption text-medium-emphasis">Ordenados por monto más cercano</span>
+                <VBtnToggle
+                  v-if="movConciliando?.tipo === 'D'"
+                  v-model="ordenConc"
+                  density="compact"
+                  variant="outlined"
+                  divided
+                  color="primary"
+                  @update:modelValue="recargarDisponiblesOrden"
+                >
+                  <VBtn value="monto" size="x-small">
+                    <VIcon size="14" class="mr-1">mdi-currency-usd</VIcon>Monto
+                  </VBtn>
+                  <VBtn value="fecha" size="x-small">
+                    <VIcon size="14" class="mr-1">mdi-calendar</VIcon>Fecha
+                  </VBtn>
+                </VBtnToggle>
               </div>
 
               <div v-if="loadingConciliar" class="text-center py-6">
@@ -2083,6 +2098,7 @@ const ingresoManualForm = ref({ descripcion: '', categoria: 'Ingreso por ventas'
 
 function abrirConciliar(mov) {
   movConciliando.value         = mov
+  ordenConc.value              = 'monto'
   buscarCompraDisp.value       = ''
   buscarGastoDisp.value        = ''
   buscarSueldoDisp.value       = ''
@@ -2146,10 +2162,19 @@ async function cargarEstadoConciliar() {
   }
 }
 
+const ordenConc = ref('monto') // 'monto' | 'fecha'
+
+function recargarDisponiblesOrden() {
+  if (concTab.value === 'facturas') cargarDisponibles()
+  else if (concTab.value === 'gastos') cargarGastosDisponibles()
+  else if (concTab.value === 'sueldos') cargarSueldosDisponibles()
+}
+
 async function cargarDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = buscarCompraDisp.value ? { buscar: buscarCompraDisp.value } : {}
+    const params = { orden: ordenConc.value }
+    if (buscarCompraDisp.value) params.buscar = buscarCompraDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/compras-disponibles`, { params }
     )
@@ -2160,7 +2185,8 @@ async function cargarDisponibles() {
 async function cargarGastosDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = buscarGastoDisp.value ? { buscar: buscarGastoDisp.value } : {}
+    const params = { orden: ordenConc.value }
+    if (buscarGastoDisp.value) params.buscar = buscarGastoDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/gastos-disponibles`, { params }
     )
@@ -2237,7 +2263,8 @@ function debounceBuscarGasto() {
 async function cargarSueldosDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = buscarSueldoDisp.value ? { buscar: buscarSueldoDisp.value } : {}
+    const params = { orden: ordenConc.value }
+    if (buscarSueldoDisp.value) params.buscar = buscarSueldoDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/sueldos-disponibles`, { params }
     )

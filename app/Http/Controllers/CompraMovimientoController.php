@@ -234,13 +234,14 @@ class CompraMovimientoController extends Controller
     {
         $mov    = MovimientoBancario::findOrFail($movimientoId);
         $buscar = $request->get('buscar');
+        $orden  = $request->get('orden', 'monto'); // 'monto' | 'fecha'
 
         $asignadoMov = DB::table('compra_movimiento')
             ->where('movimiento_id', $movimientoId)
             ->sum('monto');
         $saldoMov = max(0, $mov->monto - $asignadoMov);
 
-        $compras = DB::table('compras')
+        $q = DB::table('compras')
             ->leftJoin(
                 DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as pagos'),
                 'compras.id', '=', 'pagos.compra_id'
@@ -267,11 +268,16 @@ class CompraMovimientoController extends Controller
                 'compras.rut_emisor',
                 DB::raw('compras.total - COALESCE(pagos.pagado, 0) as saldo_por_pagar')
             )
-            ->havingRaw('saldo_por_pagar > 0')
-            ->orderByRaw('ABS(saldo_por_pagar - ?) ASC', [$saldoMov])
-            ->paginate(30);
+            ->havingRaw('saldo_por_pagar > 0');
 
-        return response()->json($compras);
+        if ($orden === 'fecha') {
+            $q->orderByRaw('ABS(DATEDIFF(compras.fecha_emision, ?)) ASC', [$mov->fecha_contable])
+              ->orderByRaw('ABS(saldo_por_pagar - ?) ASC', [$saldoMov]);
+        } else {
+            $q->orderByRaw('ABS(saldo_por_pagar - ?) ASC', [$saldoMov]);
+        }
+
+        return response()->json($q->paginate(30));
     }
 
     // ── Asignar compra a un movimiento ────────────────────────────────────────
