@@ -341,9 +341,29 @@
           </tr>
         </template>
 
-        <template #bottom>
-          <div class="pa-3 text-caption text-medium-emphasis">
-            {{ proveedores.length }} proveedores
+        <template #bottom="{ page, pageCount, itemsPerPage, setItemsPerPage, prevPage, nextPage }">
+          <div class="d-flex align-center justify-space-between px-3 py-2">
+            <span class="text-caption text-medium-emphasis">{{ proveedores.length }} proveedores</span>
+            <div class="d-flex align-center gap-2">
+              <VSelect
+                :model-value="itemsPerPage"
+                :items="[10, 25, 50, 100, { value: -1, title: 'Todos' }]"
+                density="compact"
+                variant="outlined"
+                hide-details
+                style="width:100px"
+                @update:model-value="setItemsPerPage"
+              />
+              <span class="text-caption text-medium-emphasis">
+                Pág {{ page }} de {{ pageCount }}
+              </span>
+              <VBtn icon size="x-small" variant="text" :disabled="page <= 1" @click="prevPage">
+                <VIcon size="16">mdi-chevron-left</VIcon>
+              </VBtn>
+              <VBtn icon size="x-small" variant="text" :disabled="page >= pageCount" @click="nextPage">
+                <VIcon size="16">mdi-chevron-right</VIcon>
+              </VBtn>
+            </div>
           </div>
         </template>
       </VDataTable>

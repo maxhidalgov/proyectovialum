@@ -15,14 +15,50 @@ class DashboardFinancieroController extends Controller
 
         // ── KPIs ──────────────────────────────────────────────────────────────
 
+        // Misma lógica que CuentasPorCobrarController::efectivoCobradoSub()
+        $efectivoCobradoSub = DB::raw("(
+            SELECT
+                df.id AS df_id,
+                CASE
+                  WHEN df.chipax_monto_por_cobrar IS NOT NULL
+                   AND COALESCE(vm.monto_cobrado, 0) = 0
+                   AND COALESCE(tbk.monto_tbk, 0) = 0
+                   AND COALESCE(df.monto_cobrado_manual, 0) = 0
+                    THEN df.monto - df.chipax_monto_por_cobrar
+                  ELSE
+                    COALESCE(vm.monto_cobrado, 0)
+                      + COALESCE(tbk.monto_tbk, 0)
+                      + COALESCE(df.monto_cobrado_manual, 0)
+                      + CASE WHEN df.tipo_documento_bsale_id = 2
+                             THEN COALESCE(ncnc.monto_nc, 0)
+                             ELSE COALESCE(ncf.monto_nc, 0)
+                        END
+                END AS monto_cobrado_efectivo
+            FROM documentos_facturacion df
+            LEFT JOIN (SELECT venta_id, SUM(monto) monto_cobrado FROM venta_movimiento GROUP BY venta_id) vm
+                   ON vm.venta_id = df.id
+            LEFT JOIN (SELECT tf.documento_id, SUM(tt.monto_original) monto_tbk
+                       FROM transbank_factura tf
+                       JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
+                       GROUP BY tf.documento_id) tbk
+                   ON tbk.documento_id = df.id
+            LEFT JOIN (SELECT factura_id AS df_id, SUM(monto) monto_nc FROM venta_nc_aplicacion GROUP BY factura_id) ncf
+                   ON ncf.df_id = df.id
+            LEFT JOIN (SELECT nc_id AS df_id, SUM(monto) monto_nc FROM venta_nc_aplicacion GROUP BY nc_id) ncnc
+                   ON ncnc.df_id = df.id
+        ) AS ec");
+
         $porCobrar = DB::table('documentos_facturacion as df')
-            ->leftJoin(
-                DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
-                'vm.venta_id', '=', 'df.id'
-            )
+            ->leftJoin($efectivoCobradoSub, 'ec.df_id', '=', 'df.id')
             ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->whereRaw("LOWER(COALESCE(df.bsale_cliente_nombre, '')) NOT LIKE '%consumidor%'")
-            ->selectRaw('COALESCE(SUM(df.monto - COALESCE(vm.cobrado, 0)), 0) as pendiente')
+            ->selectRaw("COALESCE(SUM(
+                CASE WHEN df.tipo_documento_bsale_id = 2
+                     THEN -(df.monto - COALESCE(ec.monto_cobrado_efectivo,0))
+                     ELSE  (df.monto - COALESCE(ec.monto_cobrado_efectivo,0))
+                END
+            ), 0) as pendiente")
             ->value('pendiente');
 
         // Misma lógica que CuentasPorPagarController::efectivoPagadoSub()
@@ -85,17 +121,17 @@ class DashboardFinancieroController extends Controller
             ->leftJoin('cotizaciones as c',     'c.id',      '=', 'df.cotizacion_id')
             ->leftJoin('clientes as cl_cot',    'cl_cot.id', '=', 'c.cliente_id')
             ->leftJoin('clientes as cl_dir',    'cl_dir.id', '=', 'df.cliente_id')
-            ->leftJoin(
-                DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
-                'vm.venta_id', '=', 'df.id'
-            )
+            ->leftJoin($efectivoCobradoSub, 'ec.df_id', '=', 'df.id')
             ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->whereRaw("LOWER(COALESCE(df.bsale_cliente_nombre, '')) NOT LIKE '%consumidor%'")
             ->select(
                 DB::raw("COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre, 'Sin nombre') as nombre"),
                 DB::raw("COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut"),
                 DB::raw('COUNT(df.id) as documentos'),
-                DB::raw('SUM(df.monto) - COALESCE(SUM(vm.cobrado), 0) as pendiente')
+                DB::raw("SUM(CASE WHEN df.tipo_documento_bsale_id = 2
+                                  THEN -(df.monto - COALESCE(ec.monto_cobrado_efectivo,0))
+                                  ELSE  (df.monto - COALESCE(ec.monto_cobrado_efectivo,0)) END) as pendiente")
             )
             ->groupBy(
                 DB::raw("COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre, 'Sin nombre')"),
