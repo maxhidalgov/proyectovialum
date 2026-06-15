@@ -270,39 +270,54 @@ const chartSeries = computed(() => [
   },
   {
     name: 'Egresos',
-    data: data.value.flujo_caja.map(r => -Math.round(r.egresos / 1000)),
+    data: data.value.flujo_caja.map(r => Math.round(r.egresos / 1000)),
   },
 ])
 
 const chartOpts = computed(() => ({
   chart: {
-    type: 'bar',
+    type: 'area',
     toolbar: { show: false },
     background: 'transparent',
     fontFamily: 'inherit',
+    zoom: { enabled: false },
   },
   theme: { mode: 'dark' },
   colors: ['#56CA00', '#FF4C51'],
-  plotOptions: {
-    bar: {
-      columnWidth: '55%',
-      borderRadius: 4,
+  stroke: {
+    curve: 'smooth',
+    width: 2,
+  },
+  fill: {
+    type: 'gradient',
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.45,
+      opacityTo: 0.05,
+      stops: [0, 100],
     },
+  },
+  markers: {
+    size: 0,
   },
   dataLabels: { enabled: false },
   xaxis: {
     categories: data.value.flujo_caja.map(r => fmtMes(r.mes)),
     labels: { style: { fontSize: '11px' } },
+    axisBorder: { show: false },
+    axisTicks: { show: false },
   },
   yaxis: {
     labels: {
-      formatter: v => (v >= 0 ? '+' : '') + v.toLocaleString('es-CL') + 'K',
+      formatter: v => v.toLocaleString('es-CL') + 'K',
       style: { fontSize: '11px' },
     },
   },
   tooltip: {
+    shared: true,
+    intersect: false,
     y: {
-      formatter: v => clp(Math.abs(v) * 1000),
+      formatter: v => clp(v * 1000),
     },
   },
   legend: {
@@ -311,6 +326,7 @@ const chartOpts = computed(() => ({
   },
   grid: {
     borderColor: 'rgba(255,255,255,0.08)',
+    strokeDashArray: 3,
   },
 }))
 

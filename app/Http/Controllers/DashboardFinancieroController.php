@@ -21,25 +21,45 @@ class DashboardFinancieroController extends Controller
                 'vm.venta_id', '=', 'df.id'
             )
             ->where('df.estado', 'emitido')
-            ->selectRaw('COALESCE(SUM(df.monto) - SUM(COALESCE(vm.cobrado, 0)), 0) as pendiente')
+            ->whereRaw("LOWER(COALESCE(df.bsale_cliente_nombre, '')) NOT LIKE '%consumidor%'")
+            ->selectRaw('COALESCE(SUM(df.monto - COALESCE(vm.cobrado, 0)), 0) as pendiente')
             ->value('pendiente');
 
+        // Misma lógica que CuentasPorPagarController::efectivoPagadoSub()
+        $efectivoPagadoSub = DB::raw("(
+            SELECT
+                c.id AS compra_id,
+                COALESCE(pb.monto_banco, 0)
+                  + CASE WHEN c.tipo_dte IN (61)
+                         THEN COALESCE(ncnc.monto_nc, 0)
+                         ELSE COALESCE(ncf.monto_nc, 0) + COALESCE(ncref.monto_nc, 0)
+                    END AS monto_pagado_efectivo
+            FROM compras c
+            LEFT JOIN (SELECT compra_id, SUM(monto) monto_banco FROM compra_movimiento GROUP BY compra_id) pb
+                   ON pb.compra_id = c.id
+            LEFT JOIN (SELECT factura_id AS compra_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) ncf
+                   ON ncf.compra_id = c.id
+            LEFT JOIN (SELECT nc_id AS compra_id, SUM(monto) monto_nc FROM compra_nc_aplicacion GROUP BY nc_id) ncnc
+                   ON ncnc.compra_id = c.id
+            LEFT JOIN (
+                SELECT nc.nc_referencia_id AS compra_id, SUM(nc.total) AS monto_nc
+                FROM compras nc
+                WHERE nc.tipo_dte IN (61)
+                  AND nc.nc_referencia_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM compra_nc_aplicacion ap WHERE ap.nc_id = nc.id)
+                GROUP BY nc.nc_referencia_id
+            ) ncref ON ncref.compra_id = c.id
+        ) AS ef");
+
         $porPagar = DB::table('compras')
-            ->leftJoin(
-                DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as cm'),
-                'cm.compra_id', '=', 'compras.id'
-            )
-            ->leftJoin(
-                DB::raw('(SELECT nc_referencia_id, SUM(total) as monto_nc FROM compras WHERE tipo_dte=61 AND nc_referencia_id IS NOT NULL GROUP BY nc_referencia_id) as ncref'),
-                'ncref.nc_referencia_id', '=', 'compras.id'
-            )
-            ->leftJoin(
-                DB::raw('(SELECT factura_id, SUM(monto) as monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) as nca'),
-                'nca.factura_id', '=', 'compras.id'
-            )
+            ->leftJoin($efectivoPagadoSub, 'ef.compra_id', '=', 'compras.id')
             ->where('compras.pagado_historico', false)
-            ->whereNotIn('compras.tipo_dte', [61])
-            ->selectRaw('COALESCE(SUM(compras.total - COALESCE(cm.pagado,0) - COALESCE(ncref.monto_nc,0) - COALESCE(nca.monto_nc,0)), 0) as pendiente')
+            ->selectRaw("COALESCE(SUM(
+                CASE WHEN compras.tipo_dte IN (61)
+                     THEN -(compras.total - COALESCE(ef.monto_pagado_efectivo,0))
+                     ELSE   compras.total - COALESCE(ef.monto_pagado_efectivo,0)
+                END
+            ), 0) as pendiente")
             ->value('pendiente');
 
         $ultimoMov = DB::table('movimientos_bancarios')
@@ -70,6 +90,7 @@ class DashboardFinancieroController extends Controller
                 'vm.venta_id', '=', 'df.id'
             )
             ->where('df.estado', 'emitido')
+            ->whereRaw("LOWER(COALESCE(df.bsale_cliente_nombre, '')) NOT LIKE '%consumidor%'")
             ->select(
                 DB::raw("COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre, 'Sin nombre') as nombre"),
                 DB::raw("COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut"),
