@@ -127,7 +127,7 @@ class DashboardFinancieroController extends Controller
 
         $remuMes = DB::table('pagos_empleado')
             ->where('periodo', '>=', $hace4m->toDateString())
-            ->selectRaw("DATE_FORMAT(periodo, '%Y-%m') as mes, SUM(monto_liquido) as total")
+            ->selectRaw("DATE_FORMAT(periodo, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy(DB::raw("DATE_FORMAT(periodo, '%Y-%m')"))
             ->pluck('total', 'mes');
 
