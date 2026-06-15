@@ -6,6 +6,18 @@
         <h4 class="text-h5 font-weight-bold">Registro de Ventas</h4>
         <p class="text-body-2 text-medium-emphasis mb-0">Listado de documentos de venta emitidos (fuente: Bsale)</p>
       </VCol>
+      <VCol cols="auto">
+        <VBtn
+          color="success"
+          variant="tonal"
+          size="small"
+          :disabled="!documentos.length"
+          @click="exportarCSV"
+        >
+          <VIcon start size="16">mdi-download</VIcon>
+          Exportar CSV
+        </VBtn>
+      </VCol>
     </VRow>
 
     <!-- Snackbar -->
@@ -532,7 +544,6 @@ function formaPagoLabel(item) {
   if (!item) return null
   const fp = item.forma_pago
   if (fp && fp !== 'sin_informacion' && FORMA_PAGO_LABELS[fp]) return FORMA_PAGO_LABELS[fp]
-  if (item.chipax_monto_por_cobrar !== null) return 'Chipax'
   return null
 }
 
@@ -582,6 +593,35 @@ async function cargar() {
   } finally {
     loading.value = false
   }
+}
+
+// ── Export CSV ────────────────────────────────────────────────────────────────
+function exportarCSV() {
+  const cols = [
+    ['Folio',        d => d.numero_documento_bsale || ''],
+    ['Tipo',         d => d.tipo_documento_bsale_id === 2 ? 'NC' : d.tipo_documento_bsale_id === 33 ? 'Factura' : 'Boleta'],
+    ['Razón Social', d => d.razon_social || ''],
+    ['RUT',          d => d.identification || ''],
+    ['Fecha',        d => d.fecha_emision || ''],
+    ['Monto',        d => d.monto || 0],
+    ['Por Cobrar',   d => d.pendiente || 0],
+    ['Forma Pago',   d => formaPagoLabel(d) || (d.chipax_monto_por_cobrar !== null ? 'Chipax' : '')],
+  ]
+  const header = cols.map(([h]) => h).join(';')
+  const rows = documentos.value.map(d =>
+    cols.map(([, fn]) => {
+      const v = fn(d)
+      return typeof v === 'string' && v.includes(';') ? `"${v}"` : v
+    }).join(';')
+  )
+  const bom = '﻿'
+  const blob = new Blob([bom + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `registro-ventas-${filtros.value.desde || 'inicio'}-${filtros.value.hasta || 'hoy'}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ── Conciliar ─────────────────────────────────────────────────────────────────

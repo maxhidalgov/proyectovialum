@@ -11,6 +11,11 @@
       </v-btn>
     </div>
 
+    <!-- Error de carga -->
+    <v-alert v-if="errorMsg" type="error" variant="tonal" class="mb-5" closable @click:close="errorMsg = null">
+      <strong>Error al cargar el dashboard:</strong> {{ errorMsg }}
+    </v-alert>
+
     <!-- ── KPI cards ────────────────────────────────────────────────────── -->
     <v-row class="mb-5" dense>
       <!-- Por Cobrar -->
@@ -231,7 +236,8 @@ import VueApexCharts from 'vue3-apexcharts'
 import api from '@/axiosInstance'
 
 // ── Estado ──────────────────────────────────────────────────────────────
-const cargando = ref(true)
+const cargando  = ref(true)
+const errorMsg  = ref(null)
 const data = ref({
   kpis: { por_cobrar: 0, por_pagar: 0, saldo_cta_corriente: 0, promedio_dias_cobro: 0 },
   top_clientes: [],
@@ -242,11 +248,13 @@ const data = ref({
 // ── Carga ────────────────────────────────────────────────────────────────
 async function cargar() {
   cargando.value = true
+  errorMsg.value = null
   try {
     const { data: res } = await api.get('/api/dashboard-financiero')
     data.value = res
   } catch (e) {
     console.error('Error cargando dashboard financiero', e)
+    errorMsg.value = e?.response?.data?.message || e?.message || 'Error desconocido al cargar el dashboard'
   } finally {
     cargando.value = false
   }

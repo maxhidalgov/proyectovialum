@@ -155,6 +155,8 @@
         :loading="loading"
         item-value="_row_key"
         density="compact"
+        :items-per-page="25"
+        :items-per-page-options="[10, 25, 50, 100, { value: -1, title: 'Todos' }]"
         :expanded="expanded"
         show-expand
         @update:expanded="onExpand"

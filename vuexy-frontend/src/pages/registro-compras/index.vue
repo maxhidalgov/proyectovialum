@@ -6,6 +6,18 @@
         <h4 class="text-h5 font-weight-bold">Registro de Compras</h4>
         <p class="text-body-2 text-medium-emphasis mb-0">Listado de documentos de compra (fuente: Chipax)</p>
       </VCol>
+      <VCol cols="auto">
+        <VBtn
+          color="success"
+          variant="tonal"
+          size="small"
+          :disabled="!compras.length"
+          @click="exportarCSV"
+        >
+          <VIcon start size="16">mdi-download</VIcon>
+          Exportar CSV
+        </VBtn>
+      </VCol>
     </VRow>
 
     <!-- Snackbar -->
@@ -497,6 +509,35 @@ async function cargar() {
   } finally {
     loading.value = false
   }
+}
+
+// ── Export CSV ────────────────────────────────────────────────────────────────
+function exportarCSV() {
+  const cols = [
+    ['Folio',      c => c.folio || ''],
+    ['Tipo',       c => tipoLabel(c)],
+    ['Proveedor',  c => c.nombre_emisor || ''],
+    ['RUT',        c => c.rut_emisor || ''],
+    ['Fecha',      c => c.fecha_emision || ''],
+    ['Total',      c => c.es_nc ? -Number(c.total) : Number(c.total)],
+    ['Por Pagar',  c => Number(c.pendiente) || 0],
+    ['Histórica',  c => c.pagado_historico ? 'Sí' : 'No'],
+  ]
+  const header = cols.map(([h]) => h).join(';')
+  const rows = compras.value.map(c =>
+    cols.map(([, fn]) => {
+      const v = fn(c)
+      return typeof v === 'string' && v.includes(';') ? `"${v}"` : v
+    }).join(';')
+  )
+  const bom = '﻿'
+  const blob = new Blob([bom + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `registro-compras-${filtros.value.desde || 'inicio'}-${filtros.value.hasta || 'hoy'}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ── Conciliar ─────────────────────────────────────────────────────────────────

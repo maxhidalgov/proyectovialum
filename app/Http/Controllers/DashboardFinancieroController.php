@@ -29,8 +29,17 @@ class DashboardFinancieroController extends Controller
                 DB::raw('(SELECT compra_id, SUM(monto) as pagado FROM compra_movimiento GROUP BY compra_id) as cm'),
                 'cm.compra_id', '=', 'compras.id'
             )
+            ->leftJoin(
+                DB::raw('(SELECT nc_referencia_id, SUM(total) as monto_nc FROM compras WHERE tipo_dte=61 AND nc_referencia_id IS NOT NULL GROUP BY nc_referencia_id) as ncref'),
+                'ncref.nc_referencia_id', '=', 'compras.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT factura_id, SUM(monto) as monto_nc FROM compra_nc_aplicacion GROUP BY factura_id) as nca'),
+                'nca.factura_id', '=', 'compras.id'
+            )
             ->where('compras.pagado_historico', false)
-            ->selectRaw('COALESCE(SUM(compras.total) - SUM(COALESCE(cm.pagado, 0)), 0) as pendiente')
+            ->whereNotIn('compras.tipo_dte', [61])
+            ->selectRaw('COALESCE(SUM(compras.total - COALESCE(cm.pagado,0) - COALESCE(ncref.monto_nc,0) - COALESCE(nca.monto_nc,0)), 0) as pendiente')
             ->value('pendiente');
 
         $ultimoMov = DB::table('movimientos_bancarios')
