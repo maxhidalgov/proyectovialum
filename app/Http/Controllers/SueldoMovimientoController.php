@@ -23,6 +23,7 @@ class SueldoMovimientoController extends Controller
                 'pagos_empleado.monto',
                 'pagos_empleado.periodo',
                 'pagos_empleado.tipo',
+                'pagos_empleado.notas as nota',
                 'empleados.nombre as empleado_nombre',
                 'empleados.rut as empleado_rut',
             )
@@ -95,6 +96,7 @@ class SueldoMovimientoController extends Controller
             'movimiento_id' => $movimientoId,
             'pagado'        => true,
             'fecha_pago'    => $mov->fecha_contable,
+            'notas'         => $request->nota ?: $pago->notas,
         ]);
 
         // Marcar movimiento como conciliado si no queda saldo libre

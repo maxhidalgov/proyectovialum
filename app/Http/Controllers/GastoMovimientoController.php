@@ -143,6 +143,7 @@ class GastoMovimientoController extends Controller
             ->select(
                 'gasto_movimiento.id as pivot_id',
                 'gasto_movimiento.monto as monto_asignado',
+                'gasto_movimiento.nota',
                 'gastos.id',
                 'gastos.fecha',
                 'gastos.descripcion',
@@ -236,6 +237,7 @@ class GastoMovimientoController extends Controller
             'gasto_id'      => $request->gasto_id,
             'movimiento_id' => $movimientoId,
             'monto'         => $monto,
+            'nota'          => $request->nota ?: null,
             'created_at'    => now(),
             'updated_at'    => now(),
         ]);

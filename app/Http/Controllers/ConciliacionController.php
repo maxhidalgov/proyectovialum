@@ -380,7 +380,7 @@ class ConciliacionController extends Controller
     {
         $mov = MovimientoBancario::findOrFail($id);
         $mov->update($request->only([
-            'categoria', 'conciliado', 'compra_id', 'cotizacion_id',
+            'categoria', 'conciliado', 'compra_id', 'cotizacion_id', 'nota',
         ]));
         return response()->json($mov);
     }

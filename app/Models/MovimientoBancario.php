@@ -13,7 +13,7 @@ class MovimientoBancario extends Model
         'cuenta', 'fecha_contable', 'fecha_hora_mov', 'fecha_valor', 'descripcion', 'glosa',
         'monto', 'tipo', 'numero_documento', 'saldo_disponible',
         'bch_codigo', 'raw', 'compra_id', 'cotizacion_id',
-        'categoria', 'conciliado',
+        'categoria', 'conciliado', 'nota',
     ];
 
     protected $casts = [

@@ -208,6 +208,7 @@ class CompraMovimientoController extends Controller
             ->select(
                 'compra_movimiento.id as pivot_id',
                 'compra_movimiento.monto as monto_asignado',
+                'compra_movimiento.nota',
                 'compras.id',
                 'compras.folio',
                 'compras.tipo_dte',
@@ -334,6 +335,7 @@ class CompraMovimientoController extends Controller
             'compra_id'     => $request->compra_id,
             'movimiento_id' => $movimientoId,
             'monto'         => $monto,
+            'nota'          => $request->nota ?: null,
             'created_at'    => now(),
             'updated_at'    => now(),
         ]);

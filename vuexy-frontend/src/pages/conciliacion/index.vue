@@ -943,6 +943,21 @@
                 </VCardText>
               </VCard>
 
+              <!-- Nota del movimiento -->
+              <div class="mb-3">
+                <VTextarea
+                  v-model="movNota"
+                  label="Nota del movimiento (opcional)"
+                  density="compact"
+                  variant="outlined"
+                  rows="2"
+                  auto-grow
+                  hide-details
+                  @blur="guardarNotaMovimiento"
+                />
+                <div v-if="guardandoNota" class="text-caption text-medium-emphasis mt-1">Guardando...</div>
+              </div>
+
               <!-- Chipax linked docs (aparece tras correr chipax:sync-docs) -->
               <template v-if="movConciliando?.raw?.linked_docs?.length">
                 <p class="text-overline text-medium-emphasis mb-2">
@@ -998,6 +1013,7 @@
                       <div class="text-caption font-weight-bold">{{ a.nombre_receptor }}</div>
                       <div class="text-caption text-medium-emphasis">F. {{ a.folio }} · {{ formatFecha(a.fecha_emision) }}</div>
                       <div class="text-caption">Asignado: <strong>{{ formatMonto(a.monto_asignado) }}</strong></div>
+                      <div v-if="a.nota" class="text-caption text-medium-emphasis mt-1 font-italic">{{ a.nota }}</div>
                     </div>
                     <VBtn icon size="x-small" variant="text" color="error" :loading="loadingDesasignar === 'v'+a.pivot_id" @click="desasignarVenta(a.pivot_id)">
                       <VIcon size="16">mdi-close-circle</VIcon>
@@ -1033,6 +1049,7 @@
                       <div class="text-caption font-weight-bold">{{ a.nombre_emisor }}</div>
                       <div class="text-caption text-medium-emphasis">F. {{ a.folio }} · {{ formatFecha(a.fecha_emision) }}</div>
                       <div class="text-caption">Asignado: <strong>{{ formatMonto(a.monto_asignado) }}</strong></div>
+                      <div v-if="a.nota" class="text-caption text-medium-emphasis mt-1 font-italic">{{ a.nota }}</div>
                     </div>
                     <VBtn icon size="x-small" variant="text" color="error" :loading="loadingDesasignar === 'c'+a.pivot_id" @click="desasignarCompra(a.pivot_id)">
                       <VIcon size="16">mdi-close-circle</VIcon>
@@ -1047,6 +1064,7 @@
                       <div class="text-caption font-weight-bold">{{ a.empleado_nombre }}</div>
                       <div class="text-caption text-medium-emphasis">{{ a.periodo?.slice(0,7) }} · {{ a.tipo }}</div>
                       <div class="text-caption">{{ formatMonto(a.monto) }}</div>
+                      <div v-if="a.nota" class="text-caption text-medium-emphasis mt-1 font-italic">{{ a.nota }}</div>
                     </div>
                     <VBtn icon size="x-small" variant="text" color="error" :loading="loadingDesasignar === 's'+a.pago_id" @click="desasignarSueldo(a.pago_id)">
                       <VIcon size="16">mdi-close-circle</VIcon>
@@ -1061,6 +1079,7 @@
                       <div class="text-caption font-weight-bold">{{ a.descripcion }}</div>
                       <div class="text-caption text-medium-emphasis">{{ a.fecha }} · {{ a.categoria }}</div>
                       <div class="text-caption">Asignado: <strong>{{ formatMonto(a.monto_asignado) }}</strong></div>
+                      <div v-if="a.nota" class="text-caption text-medium-emphasis mt-1 font-italic">{{ a.nota }}</div>
                     </div>
                     <VBtn icon size="x-small" variant="text" color="error" :loading="loadingDesasignar === 'g'+a.pivot_id" @click="desasignarGasto(a.pivot_id)">
                       <VIcon size="16">mdi-close-circle</VIcon>
@@ -1110,6 +1129,18 @@
                   </VBtnToggle>
                 </div>
               </div>
+
+              <!-- Nota para la asignación -->
+              <VTextarea
+                v-model="notaAsignacion"
+                label="Nota para la asignación (opcional)"
+                density="compact"
+                variant="outlined"
+                rows="1"
+                auto-grow
+                hide-details
+                class="mb-3"
+              />
 
               <div v-if="loadingConciliar" class="text-center py-6">
                 <VProgressCircular indeterminate color="primary" />
@@ -2081,6 +2112,9 @@ async function cargarFlujo() {
 
 const dialogConciliar       = ref(false)
 const movConciliando        = ref(null)
+const movNota               = ref('')
+const notaAsignacion        = ref('')
+const guardandoNota         = ref(false)
 const concAsignadas         = ref([])
 const concDisponibles       = ref([])
 const concGastosAsignados   = ref([])
@@ -2115,6 +2149,8 @@ const ingresoManualForm = ref({ descripcion: '', categoria: 'Ingreso por ventas'
 
 function abrirConciliar(mov) {
   movConciliando.value         = mov
+  movNota.value                = mov.nota ?? ''
+  notaAsignacion.value         = ''
   ordenConc.value              = 'monto'
   direccionFecha.value         = 'asc'
   buscarCompraDisp.value       = ''
@@ -2136,6 +2172,19 @@ function abrirConciliar(mov) {
   concTab.value                = mov.tipo === 'C' ? 'boletas' : 'facturas'
   dialogConciliar.value        = true
   cargarEstadoConciliar()
+}
+
+async function guardarNotaMovimiento() {
+  if (!movConciliando.value || movNota.value === (movConciliando.value.nota ?? '')) return
+  guardandoNota.value = true
+  try {
+    await axios.put(`/api/conciliacion/movimientos/${movConciliando.value.id}`, { nota: movNota.value })
+    movConciliando.value.nota = movNota.value
+  } catch (e) {
+    console.error(e)
+  } finally {
+    guardandoNota.value = false
+  }
 }
 
 async function cargarEstadoConciliar() {
@@ -2219,7 +2268,9 @@ async function asignarCompra(compra) {
     await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/compras`, {
       compra_id: compra.id,
       monto: Math.min(concSaldoPorAsignar.value, compra.saldo_por_pagar),
+      nota: notaAsignacion.value || null,
     })
+    notaAsignacion.value = ''
     await cargarEstadoConciliar()
   } catch (e) {
     console.error(e)
@@ -2234,7 +2285,9 @@ async function asignarGasto(gasto) {
     await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/gastos`, {
       gasto_id: gasto.id,
       monto: Math.min(concSaldoPorAsignar.value, gasto.saldo_por_conciliar),
+      nota: notaAsignacion.value || null,
     })
+    notaAsignacion.value = ''
     await cargarEstadoConciliar()
   } catch (e) {
     console.error(e)
@@ -2296,7 +2349,9 @@ async function asignarSueldo(pago) {
   try {
     await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/sueldos`, {
       pago_id: pago.pago_id,
+      nota: notaAsignacion.value || null,
     })
+    notaAsignacion.value = ''
     await cargarEstadoConciliar()
   } catch (e) {
     console.error(e)
@@ -2342,7 +2397,9 @@ async function asignarVenta(venta) {
     await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/ventas`, {
       venta_id: venta.id,
       monto: Math.min(concSaldoPorAsignar.value, venta.saldo_por_cobrar),
+      nota: notaAsignacion.value || null,
     })
+    notaAsignacion.value = ''
     await cargarEstadoConciliar()
   } catch (e) {
     console.error(e)

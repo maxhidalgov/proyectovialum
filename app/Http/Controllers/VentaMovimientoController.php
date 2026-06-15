@@ -168,6 +168,7 @@ class VentaMovimientoController extends Controller
             ->select(
                 'vm.id as pivot_id',
                 'vm.monto as monto_asignado',
+                'vm.nota',
                 'df.id as venta_id',
                 DB::raw('df.numero_documento_bsale as folio'),
                 'df.fecha_emision',
@@ -242,7 +243,7 @@ class VentaMovimientoController extends Controller
 
         DB::table('venta_movimiento')->updateOrInsert(
             ['venta_id' => $request->venta_id, 'movimiento_id' => $movimientoId],
-            ['monto' => $request->monto, 'updated_at' => now(), 'created_at' => now()]
+            ['monto' => $request->monto, 'nota' => $request->nota ?: null, 'updated_at' => now(), 'created_at' => now()]
         );
 
         // Marcar conciliado si el movimiento queda totalmente cubierto
