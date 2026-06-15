@@ -404,6 +404,45 @@
                     <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorMov[item.id].monto_sugerido) }}</div>
                   </div>
                 </VTooltip>
+                <!-- Nota rápida -->
+                <VMenu
+                  :model-value="notaPopoverItemId === item.id"
+                  :close-on-content-click="false"
+                  location="bottom end"
+                  @update:model-value="v => { if (!v) notaPopoverItemId = null }"
+                >
+                  <template #activator="{ props: np }">
+                    <VBtn
+                      v-bind="np"
+                      size="x-small"
+                      icon
+                      variant="text"
+                      :color="item.nota ? 'warning' : undefined"
+                      style="min-width:26px;height:26px"
+                      @click.stop="notaPopoverItemId = item.id; notaPopoverTemp = item.nota ?? ''"
+                    >
+                      <VIcon size="15">{{ item.nota ? 'mdi-note-text' : 'mdi-note-text-outline' }}</VIcon>
+                    </VBtn>
+                  </template>
+                  <VCard min-width="260" elevation="4">
+                    <VCardText class="pa-3">
+                      <VTextarea
+                        v-model="notaPopoverTemp"
+                        label="Nota rápida"
+                        density="compact"
+                        variant="outlined"
+                        rows="2"
+                        auto-grow
+                        hide-details
+                        autofocus
+                      />
+                      <div class="d-flex justify-end mt-2" style="gap:6px">
+                        <VBtn size="x-small" variant="text" @click="notaPopoverItemId = null">Cancelar</VBtn>
+                        <VBtn size="x-small" color="primary" variant="flat" :loading="guardandoNotaRapida" @click="guardarNotaRapida(item)">Guardar</VBtn>
+                      </div>
+                    </VCardText>
+                  </VCard>
+                </VMenu>
                 <div class="d-flex">
                   <VBtn
                     size="x-small"
@@ -476,6 +515,45 @@
                     <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorMov[item.id].monto_sugerido) }}</div>
                   </div>
                 </VTooltip>
+                <!-- Nota rápida -->
+                <VMenu
+                  :model-value="notaPopoverItemId === item.id"
+                  :close-on-content-click="false"
+                  location="bottom end"
+                  @update:model-value="v => { if (!v) notaPopoverItemId = null }"
+                >
+                  <template #activator="{ props: np }">
+                    <VBtn
+                      v-bind="np"
+                      size="x-small"
+                      icon
+                      variant="text"
+                      :color="item.nota ? 'warning' : undefined"
+                      style="min-width:26px;height:26px"
+                      @click.stop="notaPopoverItemId = item.id; notaPopoverTemp = item.nota ?? ''"
+                    >
+                      <VIcon size="15">{{ item.nota ? 'mdi-note-text' : 'mdi-note-text-outline' }}</VIcon>
+                    </VBtn>
+                  </template>
+                  <VCard min-width="260" elevation="4">
+                    <VCardText class="pa-3">
+                      <VTextarea
+                        v-model="notaPopoverTemp"
+                        label="Nota rápida"
+                        density="compact"
+                        variant="outlined"
+                        rows="2"
+                        auto-grow
+                        hide-details
+                        autofocus
+                      />
+                      <div class="d-flex justify-end mt-2" style="gap:6px">
+                        <VBtn size="x-small" variant="text" @click="notaPopoverItemId = null">Cancelar</VBtn>
+                        <VBtn size="x-small" color="primary" variant="flat" :loading="guardandoNotaRapida" @click="guardarNotaRapida(item)">Guardar</VBtn>
+                      </div>
+                    </VCardText>
+                  </VCard>
+                </VMenu>
                 <div class="d-flex">
                   <VBtn
                     size="x-small"
@@ -2115,6 +2193,9 @@ const movConciliando        = ref(null)
 const movNota               = ref('')
 const notaAsignacion        = ref('')
 const guardandoNota         = ref(false)
+const notaPopoverItemId     = ref(null)
+const notaPopoverTemp       = ref('')
+const guardandoNotaRapida   = ref(false)
 const concAsignadas         = ref([])
 const concDisponibles       = ref([])
 const concGastosAsignados   = ref([])
@@ -2174,11 +2255,24 @@ function abrirConciliar(mov) {
   cargarEstadoConciliar()
 }
 
+async function guardarNotaRapida(item) {
+  guardandoNotaRapida.value = true
+  try {
+    await axios.patch(`/api/conciliacion/movimientos/${item.id}`, { nota: notaPopoverTemp.value || null })
+    item.nota = notaPopoverTemp.value || null
+    notaPopoverItemId.value = null
+  } catch (e) {
+    console.error(e)
+  } finally {
+    guardandoNotaRapida.value = false
+  }
+}
+
 async function guardarNotaMovimiento() {
   if (!movConciliando.value || movNota.value === (movConciliando.value.nota ?? '')) return
   guardandoNota.value = true
   try {
-    await axios.put(`/api/conciliacion/movimientos/${movConciliando.value.id}`, { nota: movNota.value })
+    await axios.patch(`/api/conciliacion/movimientos/${movConciliando.value.id}`, { nota: movNota.value })
     movConciliando.value.nota = movNota.value
   } catch (e) {
     console.error(e)
