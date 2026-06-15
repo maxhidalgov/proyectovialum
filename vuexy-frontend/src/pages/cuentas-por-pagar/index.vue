@@ -112,8 +112,8 @@
         :loading="loading"
         item-value="rut_emisor"
         density="compact"
-        :items-per-page="25"
-        :items-per-page-options="[10, 25, 50, 100, { value: -1, title: 'Todos' }]"
+        v-model:page="tablePage"
+        v-model:items-per-page="tablePageSize"
         :expanded="expanded"
         show-expand
         @update:expanded="onExpand"
@@ -341,26 +341,26 @@
           </tr>
         </template>
 
-        <template #bottom="{ page, pageCount, itemsPerPage, setItemsPerPage, prevPage, nextPage }">
+        <template #bottom>
           <div class="d-flex align-center justify-space-between px-3 py-2">
             <span class="text-caption text-medium-emphasis">{{ proveedores.length }} proveedores</span>
             <div class="d-flex align-center gap-2">
               <VSelect
-                :model-value="itemsPerPage"
+                v-model="tablePageSize"
                 :items="[10, 25, 50, 100, { value: -1, title: 'Todos' }]"
                 density="compact"
                 variant="outlined"
                 hide-details
                 style="width:100px"
-                @update:model-value="setItemsPerPage"
+                @update:model-value="tablePage = 1"
               />
               <span class="text-caption text-medium-emphasis">
-                Pág {{ page }} de {{ pageCount }}
+                Pág {{ tablePage }} de {{ tablePageSize === -1 ? 1 : Math.ceil(proveedores.length / tablePageSize) }}
               </span>
-              <VBtn icon size="x-small" variant="text" :disabled="page <= 1" @click="prevPage">
+              <VBtn icon size="x-small" variant="text" :disabled="tablePage <= 1" @click="tablePage--">
                 <VIcon size="16">mdi-chevron-left</VIcon>
               </VBtn>
-              <VBtn icon size="x-small" variant="text" :disabled="page >= pageCount" @click="nextPage">
+              <VBtn icon size="x-small" variant="text" :disabled="tablePage >= (tablePageSize === -1 ? 1 : Math.ceil(proveedores.length / tablePageSize))" @click="tablePage++">
                 <VIcon size="16">mdi-chevron-right</VIcon>
               </VBtn>
             </div>
@@ -806,6 +806,8 @@ const loading        = ref(false)
 const proveedores    = ref([])
 const totales        = ref({})
 const expanded       = ref([])
+const tablePage      = ref(1)
+const tablePageSize  = ref(25)
 const facturasProveedor  = ref({})
 const loadingFacturas    = ref({})
 

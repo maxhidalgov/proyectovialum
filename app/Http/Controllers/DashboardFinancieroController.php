@@ -61,6 +61,17 @@ class DashboardFinancieroController extends Controller
             ), 0) as pendiente")
             ->value('pendiente');
 
+        // Sumar boletas por período (igual que CuentasPorCobrarController::boletaPeriodosResumen)
+        $boletaTotal   = (float) DB::table('boleta_resumenes')->sum('monto_total');
+        $boletaCobrado = (float) DB::table('boleta_periodo_movimiento')->sum('monto')
+            + (float) DB::table('boleta_resumenes as br')
+                ->join('boleta_resumen_movimiento as brm', 'brm.boleta_resumen_id', '=', 'br.id')
+                ->sum('brm.monto')
+            + (float) DB::table('boleta_resumenes')
+                ->where('conciliado_transbank', true)
+                ->sum('monto_total');
+        $porCobrar = ($porCobrar ?? 0) + max(0.0, $boletaTotal - min($boletaTotal, $boletaCobrado));
+
         // Misma lógica que CuentasPorPagarController::efectivoPagadoSub()
         $efectivoPagadoSub = DB::raw("(
             SELECT
