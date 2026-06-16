@@ -215,6 +215,18 @@ class ConciliacionController extends Controller
                 continue;
             }
 
+            // El BCH a veces exporta el mismo depósito con descripción distinta en el mismo CSV
+            // (ej: "Dep.cheq.otros Bancos" y "Dep. Docto Otro Bco Autoservicio" para el mismo N°)
+            // → deduplicar también por cuenta+fecha+tipo+numero_documento
+            if ($doctoNum && MovimientoBancario::where('cuenta', $cuenta)
+                ->where('fecha_contable', $fechaContable)
+                ->where('tipo', $tipo)
+                ->where('numero_documento', $doctoNum)
+                ->exists()) {
+                $duplicados++;
+                continue;
+            }
+
             $categoria = ReglaConciliacion::categorizar(mb_substr($detalleTrim, 0, 100), $tipo);
 
             try {
