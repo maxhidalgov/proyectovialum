@@ -26,7 +26,7 @@
           prepend-icon="mdi-cloud-sync"
           @click="sincronizarDesdeChipax"
         >
-          Sincronizar Chipax
+          Sincronizar desde Bsale
         </VBtn>
         <!-- Vincular NCs pendientes -->
         <VBtn
@@ -941,15 +941,15 @@ const ncRevisionLabel = (e) => ({ requiere_revision: 'Revisar NC', reembolso_pen
 async function sincronizarDesdeChipax() {
   sincronizando.value = true
   try {
-    const { data } = await axios.post('/api/compras/sincronizar')
+    const { data } = await axios.post('/api/compras/sincronizar', { smart: true })
     syncSnack.value = {
       show: true,
-      color: data.ok ? 'success' : 'warning',
-      text: data.ok ? 'Sync completado: compras y gastos actualizados desde Chipax' : 'Sync con advertencias — revisa el log',
+      color: 'success',
+      text: `Sync completado: ${data.nuevas ?? 0} nuevas, ${data.omitidas ?? 0} ya existían${data.errores ? `, ${data.errores} errores` : ''}`,
     }
     await cargar()
   } catch (e) {
-    syncSnack.value = { show: true, color: 'error', text: 'Error al sincronizar con Chipax' }
+    syncSnack.value = { show: true, color: 'error', text: 'Error al sincronizar con Bsale' }
   } finally {
     sincronizando.value = false
   }

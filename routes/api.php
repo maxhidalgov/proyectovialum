@@ -129,7 +129,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/aplicar-ncs-revision',       [\App\Http\Controllers\CompraController::class, 'aplicarNcsPendientesRevision']);
         Route::post('/limpiar-badges-nc',          [\App\Http\Controllers\CompraController::class, 'limpiarBadgesNc']);
         Route::post('/sincronizar-conciliacion-chipax', [\App\Http\Controllers\CompraController::class, 'sincronizarConciliacionChipax']);
-        Route::post('/sincronizar',                      [\App\Http\Controllers\CompraController::class, 'sincronizarDesdeChipax']);
+        Route::post('/sincronizar',                      [\App\Http\Controllers\CompraController::class, 'sincronizar']);
         Route::post('/vincular-ncs-por-monto',         [\App\Http\Controllers\CompraController::class, 'vincularNcsPorMonto']);
         Route::post('/vincular-ncs-via-bsale',         [\App\Http\Controllers\CompraController::class, 'vincularNcsViaBsale']);
         Route::get('/diagnostico-proveedor',           [\App\Http\Controllers\CompraController::class, 'diagnosticoProveedor']);

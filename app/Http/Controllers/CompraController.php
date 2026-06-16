@@ -462,26 +462,6 @@ class CompraController extends Controller
         ]);
     }
 
-    // POST /api/compras/sincronizar
-    // Ejecuta chipax:importar (compras) + chipax:importar-gastos
-    // -------------------------------------------------------------------------
-    public function sincronizarDesdeChipax()
-    {
-        set_time_limit(0);
-
-        $exitCompras = \Artisan::call('chipax:importar');
-        $outputCompras = strip_tags(\Artisan::output());
-
-        $exitGastos = \Artisan::call('chipax:importar-gastos');
-        $outputGastos = strip_tags(\Artisan::output());
-
-        return response()->json([
-            'ok'      => $exitCompras === 0 && $exitGastos === 0,
-            'compras' => trim($outputCompras),
-            'gastos'  => trim($outputGastos),
-        ]);
-    }
-
     // -------------------------------------------------------------------------
     // POST /api/compras/aplicar-ncs-revision
     // Crea compra_nc_aplicacion para todas las NCs con nc_referencia_id seteado
