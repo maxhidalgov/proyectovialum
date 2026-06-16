@@ -17,6 +17,17 @@
           <VIcon start size="16">mdi-tag-multiple</VIcon>
           Reglas
         </VBtn>
+        <!-- Sincronizar desde Chipax -->
+        <VBtn
+          color="primary"
+          variant="tonal"
+          size="small"
+          :loading="sincronizando"
+          prepend-icon="mdi-cloud-sync"
+          @click="sincronizarDesdeChipax"
+        >
+          Sincronizar Chipax
+        </VBtn>
         <!-- Vincular NCs pendientes -->
         <VBtn
           color="secondary"
@@ -41,6 +52,12 @@
         </VBtn>
       </VCol>
     </VRow>
+
+    <!-- Snackbar sync -->
+    <VSnackbar v-model="syncSnack.show" :color="syncSnack.color" location="top right" :timeout="6000">
+      {{ syncSnack.text }}
+      <template #actions><VBtn variant="text" @click="syncSnack.show = false">Cerrar</VBtn></template>
+    </VSnackbar>
 
     <!-- Filtros -->
     <VCard class="mb-4">
@@ -838,6 +855,8 @@ const loadingVincular     = ref(false)
 const loadingVincularBtn  = ref({})
 const loadingDesvincular  = ref(false)
 const loadingVincularNcs  = ref(false)
+const sincronizando       = ref(false)
+const syncSnack           = ref({ show: false, color: 'success', text: '' })
 
 // ── Modal Aplicar NC (Escenario B) ───────────────────────────────────────────
 const dialogAplicar     = ref(false)
@@ -919,6 +938,23 @@ const ncRevisionIcon  = (e) => ({ requiere_revision: 'mdi-alert', reembolso_pend
 const ncRevisionLabel = (e) => ({ requiere_revision: 'Revisar NC', reembolso_pendiente: 'Reembolso', aplicado: 'NC aplicada', ignorado: 'Ignorado' }[e] ?? e)
 
 // ── Carga principal ──────────────────────────────────────────────────────────
+async function sincronizarDesdeChipax() {
+  sincronizando.value = true
+  try {
+    const { data } = await axios.post('/api/compras/sincronizar')
+    syncSnack.value = {
+      show: true,
+      color: data.ok ? 'success' : 'warning',
+      text: data.ok ? 'Sync completado: compras y gastos actualizados desde Chipax' : 'Sync con advertencias — revisa el log',
+    }
+    await cargar()
+  } catch (e) {
+    syncSnack.value = { show: true, color: 'error', text: 'Error al sincronizar con Chipax' }
+  } finally {
+    sincronizando.value = false
+  }
+}
+
 async function cargar() {
   loading.value = true
   try {
