@@ -2931,10 +2931,22 @@ function descLimpia(desc) {
   return desc.split(/\s*[•·]\s*/).filter(p => !/^banco\s/i.test(p.trim())).join(' • ').trim()
 }
 
-// Celda descripción: "descripcion • categoria" — RUT queda solo en el hover
+// Extrae el campo "Comentario: ..." del glosa del banco
+function extraerComentario(glosa) {
+  if (!glosa) return null
+  for (const p of glosa.split(/\s*·\s*/)) {
+    if (p.toLowerCase().startsWith('comentario:')) {
+      return p.split(':').slice(1).join(':').trim()
+    }
+  }
+  return null
+}
+
+// Celda descripción: "descripcion • comentario_banco_o_categoria"
 function descCelda(desc, glosa, categoria) {
   const base = desc || descLimpia(glosa || '')
-  return categoria ? `${base} • ${categoria}` : base
+  const addon = extraerComentario(glosa) || categoria || null
+  return addon ? `${base} • ${addon}` : base
 }
 
 // Tooltip: muestra glosa completa incluyendo RUT (omite solo cuentas e IDs de transacción)
