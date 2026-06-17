@@ -290,7 +290,7 @@
                     <span
                       v-bind="props"
                       style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default"
-                    >{{ descCelda(item.descripcion, item.glosa) }}</span>
+                    >{{ descCelda(item.descripcion, item.glosa, item.categoria) }}</span>
                   </template>
                   <div style="font-size:11px;line-height:1.8">
                     <div v-for="(parte, i) in glosaTipoFiltrada(item.glosa || item.descripcion)" :key="i">{{ parte }}</div>
@@ -2931,23 +2931,20 @@ function descLimpia(desc) {
   return desc.split(/\s*[•·]\s*/).filter(p => !/^banco\s/i.test(p.trim())).join(' • ').trim()
 }
 
-// Para movimientos BCH portal: descripcion limpia + comentario si existe
-function descCelda(desc, glosa) {
-  const comentario = extraerComentario(glosa)
-  const base = desc || ''
-  return comentario ? base + ' — ' + comentario : descLimpia(glosa || base)
+// Celda descripción: "descripcion • categoria" — RUT queda solo en el hover
+function descCelda(desc, glosa, categoria) {
+  const base = desc || descLimpia(glosa || '')
+  return categoria ? `${base} • ${categoria}` : base
 }
 
-function extraerComentario(glosa) {
-  if (!glosa) return ''
-  const parte = glosa.split(/\s*·\s*/).find(p => /^comentario:\s*/i.test(p.trim()))
-  return parte ? parte.replace(/^comentario:\s*/i, '').trim() : ''
-}
-
-// Partes del glosa para el tooltip, sin RUT ni Cuenta ni Banco
+// Tooltip: muestra glosa completa incluyendo RUT (omite solo cuentas e IDs de transacción)
 function glosaTipoFiltrada(glosa) {
   if (!glosa) return []
-  return glosa.split(/\s*·\s*/).filter(p => !/^(rut|cuenta|banco)/i.test(p.trim()) && p.trim())
+  const OMITIR = ['cuenta origen', 'cuenta destinatario', 'id transaccion', 'id transacción']
+  return glosa.split(/\s*·\s*/).filter(p => {
+    const clave = p.split(':')[0].toLowerCase().trim()
+    return !OMITIR.includes(clave) && p.trim()
+  })
 }
 
 // Glosa corta: oculta campos ruidosos (cuentas e IDs de transacción)

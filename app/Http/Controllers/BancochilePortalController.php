@@ -178,13 +178,13 @@ class BancochilePortalController extends Controller
             try {
                 $tipo        = (($m['tipo'] ?? 'cargo') === 'abono') ? 'C' : 'D';
                 $monto       = abs((float) ($m['monto'] ?? 0));
-                $descripcion = mb_substr($m['descripcion'] ?? '', 0, 255);
                 $fecha       = $this->parseFecha($m['fecha'] ?? '');
                 $fechaHora   = $this->parseFechaHora($m['fecha'] ?? '');
                 $saldo       = isset($m['saldoMovimiento']) ? (float) $m['saldoMovimiento'] : null;
                 $nroDoc      = isset($m['numeroDocumento']) && $m['numeroDocumento'] !== '' ? (string) $m['numeroDocumento'] : null;
                 $glosaRaw    = $this->construirGlosa($m['detalleGlosa'] ?? [], $tipo);
                 $glosa       = $glosaRaw ? mb_substr($glosaRaw, 0, 2000) : null;
+                $descripcion = mb_substr($this->construirDescripcion($m, $tipo), 0, 255);
                 $bchCodigo   = 'PORTAL-' . md5($m['id'] ?? ($descripcion . ($m['fecha'] ?? '') . $monto));
 
                 if (!$fecha) {
@@ -242,6 +242,41 @@ class BancochilePortalController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Construye una descripción legible para guardar en DB.
+     * - Cargos: usa descripcion del banco (ya trae nombre destinatario).
+     * - Abonos: si hay "Nombre Origen" en detalleGlosa, lo usa en lugar del
+     *   texto genérico del banco (ej: "Dep.cheq.otros Bancos" → nombre real).
+     */
+    private function construirDescripcion(array $m, string $tipo): string
+    {
+        $raw = $m['descripcion'] ?? '';
+
+        if ($tipo === 'C') {
+            $glosaMap = $this->parsearGlosaMap($m['detalleGlosa'] ?? []);
+            $nombreOrigen = $glosaMap['nombre origen'] ?? null;
+            if ($nombreOrigen) {
+                return 'Nombre Origen: ' . $nombreOrigen;
+            }
+        }
+
+        return $raw;
+    }
+
+    private function parsearGlosaMap(array $detalleGlosa): array
+    {
+        $map = [];
+        foreach ($detalleGlosa as $linea) {
+            $colonPos = strpos($linea, ':');
+            if ($colonPos !== false) {
+                $clave = strtolower(trim(substr($linea, 0, $colonPos)));
+                $valor = trim(substr($linea, $colonPos + 1));
+                if ($valor !== '') $map[$clave] = $valor;
+            }
+        }
+        return $map;
+    }
 
     /**
      * Construye la glosa completa a partir del detalleGlosa del banco.
