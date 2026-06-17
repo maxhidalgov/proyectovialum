@@ -294,7 +294,7 @@ class ConciliacionController extends Controller
             $q->where('cuenta', $request->cuenta);
         }
 
-        $movs = $q->paginate(150);
+        $movs = $q->paginate(500);
 
         // Enriquecer con montos asignados (compras + gastos + sueldos + ventas + ingresos + boletas)
         $ids = $movs->pluck('id');
