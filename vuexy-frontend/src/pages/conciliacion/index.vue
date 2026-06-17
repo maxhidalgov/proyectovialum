@@ -45,8 +45,20 @@
           :loading="loadingPortal"
           @click="dialogPortal = true"
         >Portal BCH</VBtn>
+        <VBtn
+          variant="tonal"
+          color="purple"
+          prepend-icon="mdi-cloud-sync"
+          :loading="sincronizandoTodo"
+          @click="sincronizarTodo"
+        >Sincronizar Bsale</VBtn>
       </VCol>
     </VRow>
+
+    <!-- Snackbar progreso sync todo -->
+    <VSnackbar v-model="syncTodoSnack.show" :color="syncTodoSnack.color" timeout="6000" location="bottom end">
+      {{ syncTodoSnack.texto }}
+    </VSnackbar>
 
     <!-- Cards resumen -->
     <VRow class="mb-4">
@@ -1864,6 +1876,8 @@ const loadingImport = ref(false)
 const loadingCartola = ref(false)
 const loadingMatch = ref(false)
 const loadingReglas = ref(false)
+const sincronizandoTodo = ref(false)
+const syncTodoSnack = ref({ show: false, color: 'success', texto: '' })
 const loadingAplicar = ref(false)
 const savingRegla = ref(false)
 
@@ -2006,6 +2020,37 @@ async function cargarMovimientos() {
     console.error(e)
   } finally {
     loadingTable.value = false
+  }
+}
+
+async function sincronizarTodo() {
+  sincronizandoTodo.value = true
+  const info = (texto, color = 'info') => {
+    syncTodoSnack.value = { show: true, color, texto }
+  }
+  try {
+    info('1/4 Sincronizando compras (CxP)...')
+    await axios.post('/api/compras/sincronizar', { smart: true })
+
+    info('2/4 Sincronizando ventas y facturas (CxC)...')
+    await axios.post('/api/ventas/sincronizar')
+
+    info('3/4 Procesando boletas...')
+    let pendientes = 1
+    while (pendientes > 0) {
+      const { data } = await axios.post('/api/ventas/backfill-forma-pago', { limit: 200 })
+      pendientes = data.pendientes ?? 0
+    }
+
+    info('4/4 Recalculando resúmenes de boletas...')
+    await axios.post('/api/boletas/resumenes/recalcular')
+
+    info('✓ Bsale sincronizado correctamente', 'success')
+    await cargarMovimientos()
+  } catch (e) {
+    info('Error al sincronizar: ' + (e.response?.data?.error || e.message), 'error')
+  } finally {
+    sincronizandoTodo.value = false
   }
 }
 
