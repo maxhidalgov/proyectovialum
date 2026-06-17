@@ -210,6 +210,13 @@ class VentaMovimientoController extends Controller
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [1]) // boletas van por su propio módulo
             ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) > 0')
+            // Excluir facturas que Chipax considera cobradas (ningún pago en sistema propio)
+            ->whereRaw('NOT (
+                df.chipax_monto_por_cobrar IS NOT NULL
+                AND COALESCE(vm.cobrado, 0) = 0
+                AND COALESCE(df.monto_cobrado_manual, 0) = 0
+                AND df.monto - df.chipax_monto_por_cobrar <= 0
+            )')
             ->select(
                 'df.id',
                 DB::raw('df.numero_documento_bsale as folio'),
