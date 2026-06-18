@@ -413,6 +413,7 @@
                     <div class="font-weight-bold mb-1">⚡ Conciliar directamente</div>
                     <div>{{ sugerenciasPorMov[item.id].documento.nombre_emisor }}</div>
                     <div class="text-medium-emphasis">Folio {{ sugerenciasPorMov[item.id].documento.folio }}</div>
+                    <div v-if="extraerComentario(item.glosa)" class="text-medium-emphasis" style="font-style:italic">💬 {{ extraerComentario(item.glosa) }}</div>
                     <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorMov[item.id].monto_sugerido) }}</div>
                   </div>
                 </VTooltip>
@@ -524,6 +525,7 @@
                     <div class="font-weight-bold mb-1">⚡ Conciliar directamente</div>
                     <div>{{ sugerenciasPorMov[item.id].documento.nombre_cliente }}</div>
                     <div class="text-medium-emphasis">{{ sugerenciasPorMov[item.id].documento.tipo }} · Doc {{ sugerenciasPorMov[item.id].documento.numero_documento_bsale || '—' }}</div>
+                    <div v-if="extraerComentario(item.glosa)" class="text-medium-emphasis" style="font-style:italic">💬 {{ extraerComentario(item.glosa) }}</div>
                     <div class="font-weight-bold mt-1">{{ formatMonto(sugerenciasPorMov[item.id].monto_sugerido) }}</div>
                   </div>
                 </VTooltip>
