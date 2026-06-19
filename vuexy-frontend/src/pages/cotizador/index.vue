@@ -98,7 +98,130 @@
             Productos
           </v-btn>
         </v-col>
+        <v-col cols="auto">
+          <v-btn color="orange" variant="tonal" @click="mostrarFormItemLibre = !mostrarFormItemLibre">
+            <v-icon start>mdi-text-box-plus-outline</v-icon>
+            Item libre
+          </v-btn>
+        </v-col>
       </v-row>
+
+      <!-- Formulario inline para agregar item libre -->
+      <v-expand-transition>
+        <v-card v-if="mostrarFormItemLibre" class="mb-4" variant="outlined" color="orange">
+          <v-card-text>
+            <div class="text-subtitle-2 font-weight-bold mb-3 text-orange">Agregar item personalizado</div>
+            <v-row dense align="center">
+              <v-col cols="12" md="5">
+                <v-text-field
+                  v-model="nuevoItemLibre.descripcion"
+                  label="Descripción"
+                  placeholder="Ej: Retiro de cristal existente"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  autofocus
+                  @keyup.enter="agregarItemLibre"
+                />
+              </v-col>
+              <v-col cols="6" md="2">
+                <v-text-field
+                  v-model.number="nuevoItemLibre.cantidad"
+                  label="Cantidad"
+                  type="number"
+                  min="1"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                />
+              </v-col>
+              <v-col cols="6" md="3">
+                <v-text-field
+                  v-model.number="nuevoItemLibre.precio_unitario"
+                  label="Precio unitario (neto)"
+                  type="number"
+                  min="0"
+                  prefix="$"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  @keyup.enter="agregarItemLibre"
+                />
+              </v-col>
+              <v-col cols="12" md="2">
+                <v-btn
+                  color="orange"
+                  variant="flat"
+                  block
+                  :disabled="!nuevoItemLibre.descripcion || nuevoItemLibre.precio_unitario == null"
+                  @click="agregarItemLibre"
+                >
+                  <v-icon start>mdi-plus</v-icon>
+                  Agregar
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+      </v-expand-transition>
+
+      <!-- Tabla de items libres -->
+      <v-data-table
+        v-if="cotizacion.itemsLibres.length > 0"
+        :headers="headersItemsLibres"
+        :items="cotizacion.itemsLibres"
+        class="mt-4"
+        :items-per-page="-1"
+        hide-default-footer
+      >
+        <template #top>
+          <v-toolbar flat color="transparent">
+            <v-toolbar-title class="text-subtitle-1 text-orange">Items personalizados</v-toolbar-title>
+          </v-toolbar>
+        </template>
+        <template #item.descripcion="{ item, index }">
+          <v-text-field
+            v-model="cotizacion.itemsLibres[index].descripcion"
+            variant="plain"
+            density="compact"
+            hide-details
+            class="text-body-2"
+          />
+        </template>
+        <template #item.cantidad="{ item, index }">
+          <v-text-field
+            v-model.number="cotizacion.itemsLibres[index].cantidad"
+            type="number"
+            min="1"
+            variant="plain"
+            density="compact"
+            hide-details
+            style="width:70px"
+            @update:model-value="recalcularItemLibre(index)"
+          />
+        </template>
+        <template #item.precio_unitario="{ item, index }">
+          <v-text-field
+            v-model.number="cotizacion.itemsLibres[index].precio_unitario"
+            type="number"
+            min="0"
+            variant="plain"
+            density="compact"
+            hide-details
+            style="width:110px"
+            prefix="$"
+            @update:model-value="recalcularItemLibre(index)"
+          />
+        </template>
+        <template #item.total="{ item }">
+          ${{ formatearNumero(item.total) }}
+        </template>
+        <template #item.acciones="{ index }">
+          <v-btn icon size="x-small" color="error" variant="text" @click="eliminarItemLibre(index)">
+            <v-icon>mdi-delete</v-icon>
+          </v-btn>
+        </template>
+      </v-data-table>
 
       <!-- Sección colapsable de pre-configuración de ventanas -->
       <v-expand-transition>
@@ -269,7 +392,7 @@
       <v-divider class="my-4" />
 
       <!-- Ajuste de precio prorateado -->
-      <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0" class="mb-2" justify="end">
+      <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0 || cotizacion.itemsLibres.length > 0" class="mb-2" justify="end">
         <v-col cols="12" md="5">
           <v-card variant="outlined" color="warning" rounded="lg">
             <v-card-text class="pa-3">
@@ -346,7 +469,7 @@
       </v-row>
 
       <!-- Total en tiempo real -->
-      <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0" class="mb-2" justify="end">
+      <v-row v-if="cotizacion.ventanas.length > 0 || cotizacion.productos.length > 0 || cotizacion.itemsLibres.length > 0" class="mb-2" justify="end">
         <v-col cols="auto">
           <v-card variant="tonal" color="primary" rounded="lg" min-width="260">
             <v-card-text class="pa-3">
@@ -354,6 +477,7 @@
                 <v-col>
                   <div class="text-caption text-medium-emphasis">Subtotal ventanas</div>
                   <div class="text-caption text-medium-emphasis mt-1">Subtotal productos</div>
+                  <div v-if="cotizacion.itemsLibres.length > 0" class="text-caption text-medium-emphasis mt-1">Subtotal items libres</div>
                   <v-divider class="my-2" />
                   <div class="text-subtitle-2 font-weight-bold">Total neto</div>
                   <div class="text-caption text-medium-emphasis">IVA (19%)</div>
@@ -362,6 +486,7 @@
                 <v-col cols="auto" class="text-right">
                   <div class="text-caption">${{ formatearNumero(totalVentanas) }}</div>
                   <div class="text-caption mt-1">${{ formatearNumero(totalProductos) }}</div>
+                  <div v-if="cotizacion.itemsLibres.length > 0" class="text-caption mt-1">${{ formatearNumero(totalItemsLibres) }}</div>
                   <v-divider class="my-2" />
                   <div class="text-subtitle-2 font-weight-bold">${{ formatearNumero(totalNeto) }}</div>
                   <div class="text-caption">${{ formatearNumero(totalIva) }}</div>
@@ -831,9 +956,13 @@ const cotizacion = reactive({
   tipoVidrio: '',
   productoVidrioProveedor: '',
   ventanas: [],
-  productos: [], // Productos agregados a la cotización
-       
+  productos: [],
+  itemsLibres: [],
 })
+
+// Item libre
+const mostrarFormItemLibre = ref(false)
+const nuevoItemLibre = ref({ descripcion: '', cantidad: 1, precio_unitario: 0 })
 
 const tiposVentanaBayKonva = [
   { id: 1, nombre: 'Fija' },
@@ -1157,6 +1286,17 @@ const cargarCotizacionExistente = async () => {
       console.log('✅ Ventanas cargadas:', cotizacion.ventanas.length)
     }
     
+    // Poblar items libres
+    cotizacion.itemsLibres = (cotizacionData.detalles || [])
+      .filter(d => d.tipo_item === 'item_libre')
+      .map(d => ({
+        id: d.id,
+        descripcion: d.descripcion,
+        cantidad: Number(d.cantidad),
+        precio_unitario: Number(d.precio_unitario),
+        total: Number(d.total),
+      }))
+
     // Poblar productos
     if (cotizacionData.detalles && cotizacionData.detalles.length > 0) {
       cotizacion.productos = cotizacionData.detalles
@@ -1247,6 +1387,35 @@ const headersProductos = [
   { title: 'Precio Venta (Neto)', key: 'precio_venta', align: 'end' },
   { title: 'Acciones', key: 'acciones', sortable: false },
 ]
+
+const headersItemsLibres = [
+  { title: 'Descripción', key: 'descripcion', sortable: false },
+  { title: 'Cantidad', key: 'cantidad', sortable: false, width: '90px' },
+  { title: 'Precio unitario', key: 'precio_unitario', sortable: false, width: '140px' },
+  { title: 'Total', key: 'total', sortable: false, align: 'end', width: '110px' },
+  { title: '', key: 'acciones', sortable: false, width: '50px' },
+]
+
+const agregarItemLibre = () => {
+  const { descripcion, cantidad, precio_unitario } = nuevoItemLibre.value
+  if (!descripcion || precio_unitario == null) return
+  cotizacion.itemsLibres.push({
+    descripcion: descripcion.trim(),
+    cantidad: Number(cantidad) || 1,
+    precio_unitario: Number(precio_unitario) || 0,
+    total: (Number(cantidad) || 1) * (Number(precio_unitario) || 0),
+  })
+  nuevoItemLibre.value = { descripcion: '', cantidad: 1, precio_unitario: 0 }
+}
+
+const recalcularItemLibre = (index) => {
+  const item = cotizacion.itemsLibres[index]
+  item.total = (Number(item.cantidad) || 1) * (Number(item.precio_unitario) || 0)
+}
+
+const eliminarItemLibre = (index) => {
+  cotizacion.itemsLibres.splice(index, 1)
+}
 
 const abrirModalVentana = () => {
   console.log('➕ ABRIENDO MODAL PARA NUEVA VENTANA')
@@ -1372,7 +1541,10 @@ const totalVentanas = computed(() =>
 const totalProductos = computed(() =>
   cotizacion.productos.reduce((sum, p) => sum + (Number(p.precio_venta) * Number(p.cantidad) || 0), 0)
 )
-const totalNeto = computed(() => totalVentanas.value + totalProductos.value)
+const totalItemsLibres = computed(() =>
+  cotizacion.itemsLibres.reduce((sum, i) => sum + (Number(i.total) || 0), 0)
+)
+const totalNeto = computed(() => totalVentanas.value + totalProductos.value + totalItemsLibres.value)
 const totalIva = computed(() => Math.round(totalNeto.value * 0.19))
 const totalConIva = computed(() => totalNeto.value + totalIva.value)
 
@@ -1400,9 +1572,14 @@ const aplicarAjusteAItems = () => {
   preciosOriginales.value = {
     ventanas: cotizacion.ventanas.map(v => ({ id: v.id ?? null, precio: v.precio })),
     productos: cotizacion.productos.map(p => ({ id: p.id ?? null, precio_venta: p.precio_venta })),
+    itemsLibres: cotizacion.itemsLibres.map(i => ({ precio_unitario: i.precio_unitario, total: i.total })),
   }
   cotizacion.ventanas.forEach(v => { v.precio = Math.round(Number(v.precio) * f) })
   cotizacion.productos.forEach(p => { p.precio_venta = Math.round(Number(p.precio_venta) * f) })
+  cotizacion.itemsLibres.forEach(i => {
+    i.precio_unitario = Math.round(Number(i.precio_unitario) * f)
+    i.total = i.precio_unitario * (Number(i.cantidad) || 1)
+  })
   ajuste.value.valor = null // resetear tras aplicar
 }
 
@@ -1415,6 +1592,12 @@ const quitarAjuste = () => {
     })
     preciosOriginales.value.productos.forEach((orig, i) => {
       if (cotizacion.productos[i]) cotizacion.productos[i].precio_venta = orig.precio_venta
+    })
+    preciosOriginales.value.itemsLibres?.forEach((orig, i) => {
+      if (cotizacion.itemsLibres[i]) {
+        cotizacion.itemsLibres[i].precio_unitario = orig.precio_unitario
+        cotizacion.itemsLibres[i].total = orig.total
+      }
     })
     preciosOriginales.value = null
   }
@@ -2063,19 +2246,25 @@ const guardarCotizacion = async (express = false) => {
         return ventanaMapeada
       }),
       productos: (cotizacion.productos || []).map(p => ({
-        id: p.id, // ✅ Incluir ID para actualización
+        id: p.id,
         producto_lista_id: p.producto_lista_id,
         lista_precio_id: p.lista_precio_id,
         descripcion: p.descripcion || p.nombre || '',
         cantidad: p.cantidad,
         precio_unitario: p.precio_venta,
         total: p.precio_venta * p.cantidad,
-        // Campos adicionales para vidrios
         esVidrio: p.esVidrio || false,
         ancho_mm: p.ancho_mm || null,
         alto_mm: p.alto_mm || null,
         m2: p.m2 || null,
         pulido: p.pulido || false
+      })),
+      items_libres: (cotizacion.itemsLibres || []).map(i => ({
+        id: i.id ?? undefined,
+        descripcion: i.descripcion,
+        cantidad: Number(i.cantidad) || 1,
+        precio_unitario: Number(i.precio_unitario) || 0,
+        total: Number(i.total) || 0,
       })),
     }
         // ✅ AGREGAR ESTE LOG

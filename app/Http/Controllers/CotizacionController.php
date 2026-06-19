@@ -193,6 +193,20 @@ public function store(Request $request)
             }
         }
 
+        // Guardar items libres (texto + precio manual)
+        if ($request->has('items_libres') && is_array($request->items_libres)) {
+            foreach ($request->items_libres as $item) {
+                \App\Models\CotizacionDetalle::create([
+                    'cotizacion_id'  => $cotizacion->id,
+                    'tipo_item'      => 'item_libre',
+                    'descripcion'    => $item['descripcion'] ?? '',
+                    'cantidad'       => $item['cantidad'] ?? 1,
+                    'precio_unitario'=> $item['precio_unitario'] ?? 0,
+                    'total'          => $item['total'] ?? 0,
+                ]);
+            }
+        }
+
         // Guardar imágenes con mejor manejo de errores
             if ($request->has('imagenes_ventanas') && is_array($request->imagenes_ventanas)) {
                 foreach ($request->imagenes_ventanas as $index => $base64) {
@@ -458,6 +472,41 @@ public function store(Request $request)
                 }
             }
 
+            // ========== MANEJAR ITEMS LIBRES (EDICIÓN) ==========
+            if ($request->has('items_libres')) {
+                $idsRecibidos = collect($request->items_libres)->pluck('id')->filter()->all();
+
+                $cotizacion->detalles()
+                    ->where('tipo_item', 'item_libre')
+                    ->whereNotIn('id', $idsRecibidos)
+                    ->delete();
+
+                foreach ($request->items_libres as $itemData) {
+                    if (isset($itemData['id'])) {
+                        $detalle = $cotizacion->detalles()
+                            ->where('id', $itemData['id'])
+                            ->where('tipo_item', 'item_libre')
+                            ->first();
+                        if ($detalle) {
+                            $detalle->update([
+                                'descripcion'     => $itemData['descripcion'],
+                                'cantidad'        => $itemData['cantidad'],
+                                'precio_unitario' => $itemData['precio_unitario'],
+                                'total'           => $itemData['total'],
+                            ]);
+                        }
+                    } else {
+                        $cotizacion->detalles()->create([
+                            'tipo_item'       => 'item_libre',
+                            'descripcion'     => $itemData['descripcion'],
+                            'cantidad'        => $itemData['cantidad'],
+                            'precio_unitario' => $itemData['precio_unitario'],
+                            'total'           => $itemData['total'],
+                        ]);
+                    }
+                }
+            }
+
             // ========== MANEJAR IMÁGENES DE VENTANAS (EDICIÓN) ==========
             if ($request->has('imagenes_ventanas') && is_array($request->imagenes_ventanas)) {
                 foreach ($request->imagenes_ventanas as $index => $base64) {
@@ -499,9 +548,10 @@ public function store(Request $request)
         });
 
         // precio ya viene como total (precio_unitario × cantidad) desde el frontend
-        $totalVentanas = collect($request->ventanas)->sum(fn($v) => $v['precio'] ?? 0);
-        $totalProductos = $request->has('productos') ? collect($request->productos)->sum('total') : 0;
-        $cotizacion->update(['total' => $totalVentanas + $totalProductos]);
+        $totalVentanas    = collect($request->ventanas)->sum(fn($v) => $v['precio'] ?? 0);
+        $totalProductos   = $request->has('productos')    ? collect($request->productos)->sum('total')    : 0;
+        $totalItemsLibres = $request->has('items_libres') ? collect($request->items_libres)->sum('total') : 0;
+        $cotizacion->update(['total' => $totalVentanas + $totalProductos + $totalItemsLibres]);
 
         return response()->json(['message' => 'Cotización actualizada correctamente']);
     }
