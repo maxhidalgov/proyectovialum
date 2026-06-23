@@ -71,8 +71,8 @@
               <p class="text-body-2 font-weight-medium mb-1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
                 {{ sug.movimiento.descripcion }}
               </p>
-              <p v-if="sug.movimiento.glosa" class="text-caption text-medium-emphasis mb-1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                {{ sug.movimiento.glosa }}
+              <p v-if="extraerComentario(sug.movimiento.glosa)" class="text-caption text-medium-emphasis mb-1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic">
+                💬 {{ extraerComentario(sug.movimiento.glosa) }}
               </p>
               <div class="d-flex justify-space-between align-center mt-2">
                 <span class="text-caption text-medium-emphasis">{{ fmtFecha(sug.movimiento.fecha_contable) }}</span>
@@ -263,6 +263,16 @@ function labelRazon(razon) {
 
 function mostrarSnack(text, color = 'success') {
   snack.value = { show: true, text, color }
+}
+
+function extraerComentario(glosa) {
+  if (!glosa) return null
+  for (const p of glosa.split(/\s*·\s*/)) {
+    if (p.toLowerCase().startsWith('comentario:')) {
+      return p.split(':').slice(1).join(':').trim()
+    }
+  }
+  return null
 }
 
 cargar()
