@@ -69,60 +69,49 @@ class CompraMovimientoController extends Controller
         $ncPagado    = DB::table('compra_nc_aplicacion')->where('factura_id', $compraId)->sum('monto');
         $saldoPendiente = max(0, (float) $compra->total - (float) $bancoPagado - (float) $ncPagado);
 
-        // Saldo por asignar por movimiento = monto - SUM ya asignado en pivot
-        $movimientos = DB::table('movimientos_bancarios')
+        // Saldo real = monto − lo asignado en TODAS las tablas de asignación de débitos
+        $movimientos = DB::table('movimientos_bancarios as m')
             ->leftJoin(
-                DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM compra_movimiento GROUP BY movimiento_id) as asig'),
-                'movimientos_bancarios.id', '=', 'asig.movimiento_id'
+                DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM compra_movimiento GROUP BY movimiento_id) as cm'),
+                'm.id', '=', 'cm.movimiento_id'
             )
-            ->where('movimientos_bancarios.tipo', 'D') // solo débitos (egresos)
-            ->whereNull('movimientos_bancarios.fecha_contable') // placeholder; eliminamos esta condición
-            ->select(
-                'movimientos_bancarios.id',
-                'movimientos_bancarios.fecha_contable',
-                'movimientos_bancarios.descripcion',
-                'movimientos_bancarios.glosa',
-                'movimientos_bancarios.monto',
-                DB::raw('movimientos_bancarios.monto - COALESCE(asig.asignado, 0) as saldo_por_asignar')
-            )
-            ->havingRaw('saldo_por_asignar > 0')
-            ->orderByDesc('movimientos_bancarios.fecha_contable');
-
-        // Quitar el whereNull placeholder (fue un error) — reconstruimos la query limpia
-        $movimientos = DB::table('movimientos_bancarios')
             ->leftJoin(
-                DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM compra_movimiento GROUP BY movimiento_id) as asig'),
-                'movimientos_bancarios.id', '=', 'asig.movimiento_id'
+                DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM gasto_movimiento GROUP BY movimiento_id) as gm'),
+                'm.id', '=', 'gm.movimiento_id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT movimiento_id, SUM(monto) as asignado FROM pagos_empleado WHERE movimiento_id IS NOT NULL GROUP BY movimiento_id) as pe'),
+                'm.id', '=', 'pe.movimiento_id'
             )
             // Excluir el movimiento ya asignado a ESTA compra
             ->whereNotExists(function ($q) use ($compraId) {
                 $q->from('compra_movimiento')
-                  ->whereColumn('compra_movimiento.movimiento_id', 'movimientos_bancarios.id')
+                  ->whereColumn('compra_movimiento.movimiento_id', 'm.id')
                   ->where('compra_movimiento.compra_id', $compraId);
             })
-            ->where('movimientos_bancarios.tipo', 'D')
-            ->where('movimientos_bancarios.conciliado', false)
+            ->where('m.tipo', 'D')
+            ->where('m.conciliado', false)
             ->when($buscar, function ($q) use ($buscar) {
                 $q->where(function ($sq) use ($buscar) {
-                    $sq->where('movimientos_bancarios.descripcion', 'like', "%$buscar%")
-                       ->orWhere('movimientos_bancarios.glosa', 'like', "%$buscar%");
+                    $sq->where('m.descripcion', 'like', "%$buscar%")
+                       ->orWhere('m.glosa', 'like', "%$buscar%");
                 });
             })
             ->when($monto, function ($q) use ($monto) {
                 $montoNum = (int) preg_replace('/[^0-9]/', '', $monto);
-                if ($montoNum > 0) $q->whereRaw('ROUND(movimientos_bancarios.monto) = ?', [$montoNum]);
+                if ($montoNum > 0) $q->whereRaw('ROUND(m.monto) = ?', [$montoNum]);
             })
             ->select(
-                'movimientos_bancarios.id',
-                'movimientos_bancarios.fecha_contable',
-                'movimientos_bancarios.descripcion',
-                'movimientos_bancarios.glosa',
-                'movimientos_bancarios.monto',
-                DB::raw('movimientos_bancarios.monto - COALESCE(asig.asignado, 0) as saldo_por_asignar')
+                'm.id',
+                'm.fecha_contable',
+                'm.descripcion',
+                'm.glosa',
+                'm.monto',
+                DB::raw('m.monto - COALESCE(cm.asignado, 0) - COALESCE(gm.asignado, 0) - COALESCE(pe.asignado, 0) as saldo_por_asignar')
             )
             ->havingRaw('saldo_por_asignar > 0')
-            ->orderByRaw('ABS(movimientos_bancarios.monto - COALESCE(asig.asignado, 0) - ?) ASC', [$saldoPendiente])
-            ->orderByDesc('movimientos_bancarios.fecha_contable')
+            ->orderByRaw('ABS(m.monto - COALESCE(cm.asignado, 0) - COALESCE(gm.asignado, 0) - COALESCE(pe.asignado, 0) - ?) ASC', [$saldoPendiente])
+            ->orderByDesc('m.fecha_contable')
             ->paginate(50);
 
         return response()->json($movimientos);
