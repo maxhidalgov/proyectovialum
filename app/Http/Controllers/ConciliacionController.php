@@ -462,7 +462,9 @@ class ConciliacionController extends Controller
             ->get()
             ->filter(fn($c) => $c->saldo_pendiente > 0);
 
-        // Ventas (documentos_facturacion) con saldo pendiente
+        // Ventas (documentos_facturacion) con saldo pendiente — excluye boletas
+        // Las boletas se concilian por su propio módulo (boleta_periodo_movimiento)
+        // y nunca via venta_movimiento para evitar doble conteo con los grupos BOL-*
         $ventasPendientes = DB::table('documentos_facturacion as df')
             ->leftJoin('cotizaciones as cot', 'cot.id', '=', 'df.cotizacion_id')
             ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
@@ -472,6 +474,7 @@ class ConciliacionController extends Controller
                 'vm.venta_id', '=', 'df.id'
             )
             ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1]) // boletas van por su propio módulo
             ->selectRaw("
                 df.id, df.tipo, df.monto, df.fecha_emision, df.numero_documento_bsale,
                 df.bsale_cliente_rut, df.bsale_cliente_nombre, df.cotizacion_id,
