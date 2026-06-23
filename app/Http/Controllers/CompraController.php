@@ -249,8 +249,9 @@ class CompraController extends Controller
         $rutEmisor = $doc['clientCode'] ?? null;
         $categoria = null;
         if ($rutEmisor) {
+            $rutNorm = mb_strtolower(str_replace(['.', ' '], '', $rutEmisor));
             $regla = DB::table('reglas_categoria_proveedor')
-                ->where('rut_emisor', mb_strtolower($rutEmisor))
+                ->whereRaw('REPLACE(REPLACE(LOWER(rut_emisor), \'.\', \'\'), \' \', \'\') = ?', [$rutNorm])
                 ->value('categoria');
             $categoria = $regla ?: null;
         }

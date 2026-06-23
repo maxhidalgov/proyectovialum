@@ -29,7 +29,7 @@ class ReglaProveedorController extends Controller
             'categoria'     => 'required|string|max:100',
         ]);
 
-        $rut = mb_strtolower(trim($request->rut_emisor));
+        $rut = mb_strtolower(str_replace(['.', ' '], '', trim($request->rut_emisor)));
 
         $id = DB::table('reglas_categoria_proveedor')->updateOrInsert(
             ['rut_emisor' => $rut],
@@ -116,7 +116,7 @@ class ReglaProveedorController extends Controller
 
         if ($request->boolean('crear_regla') && $compra->rut_emisor) {
             DB::table('reglas_categoria_proveedor')->updateOrInsert(
-                ['rut_emisor' => mb_strtolower($compra->rut_emisor)],
+                ['rut_emisor' => mb_strtolower(str_replace(['.', ' '], '', $compra->rut_emisor))],
                 [
                     'nombre_emisor' => $compra->nombre_emisor,
                     'categoria'     => $request->categoria,
