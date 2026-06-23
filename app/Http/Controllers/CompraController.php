@@ -121,6 +121,59 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/compras/sincronizar-folio?folio=2789420
+    // Importa un documento específico de Bsale por número de folio.
+    // Útil para recuperar docs que el sync automático saltó.
+    // -------------------------------------------------------------------------
+    public function sincronizarFolio(Request $request)
+    {
+        $folio = trim($request->input('folio', ''));
+        if (!$folio) {
+            return response()->json(['error' => 'Falta el parámetro folio'], 400);
+        }
+
+        $resp = Http::timeout(20)->withHeaders($this->headers())
+            ->get("{$this->baseUrl}third_party_documents.json", [
+                'number' => $folio,
+                'limit'  => 5,
+            ]);
+
+        if (!$resp->successful()) {
+            return response()->json(['error' => 'Error al consultar Bsale: HTTP ' . $resp->status()], 502);
+        }
+
+        $items = $resp->json()['items'] ?? [];
+        $match = collect($items)->firstWhere('number', (string) $folio)
+              ?? collect($items)->first();
+
+        if (!$match) {
+            return response()->json(['error' => "Folio $folio no encontrado en Bsale"], 404);
+        }
+
+        $yaExiste = Compra::where('bsale_id', (int)$match['id'])->first();
+        if ($yaExiste) {
+            return response()->json([
+                'ok'      => true,
+                'nuevo'   => false,
+                'mensaje' => "El folio $folio ya está en la base de datos (id={$yaExiste->id})",
+                'compra'  => $yaExiste,
+            ]);
+        }
+
+        try {
+            $resultado = $this->procesarDocumento($match, true);
+            $compra = Compra::where('bsale_id', (int)$match['id'])->first();
+            return response()->json([
+                'ok'    => true,
+                'nuevo' => $resultado === 1,
+                'compra'=> $compra,
+            ], 201);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // POST /api/compras/sincronizar
     // -------------------------------------------------------------------------
     public function sincronizar(Request $request)
@@ -152,8 +205,11 @@ class CompraController extends Controller
             if ($totalYear === 0) continue;
 
             if ($smart) {
-                // Empezar desde el final, parar al primer doc ya existente
+                // Escanear siempre los últimos 300 docs (≈60 días) para no perder
+                // documentos que llegan con retraso al SII/Bsale después del último sync.
                 $offset = max(0, $totalYear - $batchSize);
+                $paginasEscaneadas = 0;
+                $maxPaginas = (int) ceil(300 / $batchSize); // ~6 páginas de 50
                 do {
                     $resp = Http::timeout(15)->withHeaders($this->headers())
                         ->get("{$this->baseUrl}third_party_documents.json", [
@@ -164,19 +220,18 @@ class CompraController extends Controller
                     if (!$resp->successful()) break;
 
                     $items = $resp->json()['items'] ?? [];
-                    $foundExisting = false;
+                    $paginasEscaneadas++;
 
                     foreach (array_reverse($items) as $doc) {
                         try {
                             $resultado = $this->procesarDocumento($doc, true);
-                            if ($resultado === 0) { $foundExisting = true; break; }
-                            $nuevas++;
+                            if ($resultado === 1) $nuevas++;
                         } catch (\Throwable $e) {
                             $errores++;
                         }
                     }
 
-                    if ($foundExisting || $offset === 0) break;
+                    if ($offset === 0 || $paginasEscaneadas >= $maxPaginas) break;
                     $offset = max(0, $offset - $batchSize);
                 } while (true);
 
