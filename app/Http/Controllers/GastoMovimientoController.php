@@ -114,18 +114,39 @@ class GastoMovimientoController extends Controller
             'updated_at'    => now(),
         ]);
 
+        // Marcar conciliado verificando TODAS las tablas de asignación
+        $totalAsignado = DB::table('compra_movimiento')->where('movimiento_id', $request->movimiento_id)->sum('monto')
+                       + DB::table('gasto_movimiento')->where('movimiento_id', $request->movimiento_id)->sum('monto')
+                       + DB::table('pagos_empleado')->where('movimiento_id', $request->movimiento_id)->sum('monto');
+        if ($totalAsignado >= $mov->monto) {
+            $mov->update(['conciliado' => true]);
+        }
+
         return response()->json(['pivot_id' => $pivot, 'monto_asignado' => $monto], 201);
     }
 
     public function destroy(int $gastoId, int $pivotId)
     {
-        $deleted = DB::table('gasto_movimiento')
+        $pivot = DB::table('gasto_movimiento')
             ->where('id', $pivotId)
             ->where('gasto_id', $gastoId)
-            ->delete();
+            ->first();
 
-        if (!$deleted) {
+        if (!$pivot) {
             return response()->json(['error' => 'No encontrado'], 404);
+        }
+
+        $movimientoId = $pivot->movimiento_id;
+        DB::table('gasto_movimiento')->where('id', $pivotId)->delete();
+
+        $movObj = \App\Models\MovimientoBancario::find($movimientoId);
+        if ($movObj) {
+            $totalAsignado = DB::table('compra_movimiento')->where('movimiento_id', $movimientoId)->sum('monto')
+                           + DB::table('gasto_movimiento')->where('movimiento_id', $movimientoId)->sum('monto')
+                           + DB::table('pagos_empleado')->where('movimiento_id', $movimientoId)->sum('monto');
+            if ($totalAsignado < $movObj->monto) {
+                $movObj->update(['conciliado' => false]);
+            }
         }
 
         return response()->json(null, 204);
