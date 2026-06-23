@@ -101,6 +101,7 @@ class CompraMovimientoController extends Controller
                   ->where('compra_movimiento.compra_id', $compraId);
             })
             ->where('movimientos_bancarios.tipo', 'D')
+            ->where('movimientos_bancarios.conciliado', false)
             ->when($buscar, function ($q) use ($buscar) {
                 $q->where(function ($sq) use ($buscar) {
                     $sq->where('movimientos_bancarios.descripcion', 'like', "%$buscar%")
