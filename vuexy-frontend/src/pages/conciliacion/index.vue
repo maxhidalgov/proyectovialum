@@ -1194,6 +1194,7 @@
                     variant="outlined"
                     divided
                     color="primary"
+                    mandatory
                     @update:modelValue="recargarDisponiblesOrden"
                   >
                     <VBtn value="monto" size="x-small">
@@ -1384,13 +1385,27 @@
 
                 <!-- Tab Facturas -->
                 <div v-if="concTab === 'facturas'">
-                  <VTextField
-                    v-model="buscarCompraDisp"
-                    placeholder="Buscar por proveedor, RUT o folio..."
-                    density="compact" variant="outlined" hide-details
-                    prepend-inner-icon="mdi-magnify" clearable class="mb-3"
-                    @update:modelValue="debounceBuscarDisp"
-                  />
+                  <VRow dense class="mb-3">
+                    <VCol cols="8">
+                      <VTextField
+                        v-model="buscarCompraDisp"
+                        placeholder="Buscar por proveedor, RUT o folio..."
+                        density="compact" variant="outlined" hide-details
+                        prepend-inner-icon="mdi-magnify" clearable
+                        @update:modelValue="debounceBuscarDisp"
+                      />
+                    </VCol>
+                    <VCol cols="4">
+                      <VTextField
+                        v-model="montoFiltroDisp"
+                        placeholder="Monto exacto"
+                        density="compact" variant="outlined" hide-details
+                        prepend-inner-icon="mdi-currency-usd" clearable
+                        type="number"
+                        @update:modelValue="debounceFiltroMonto"
+                      />
+                    </VCol>
+                  </VRow>
                   <div v-if="!concDisponibles.length" class="text-caption text-medium-emphasis text-center py-4">
                     No hay facturas con saldo pendiente
                   </div>
@@ -2263,6 +2278,7 @@ const loadingAsignarBoleta   = ref(null)
 const loadingDesasignar     = ref(null)
 const savingIngresoManual   = ref(false)
 const buscarCompraDisp      = ref('')
+const montoFiltroDisp       = ref('')
 const buscarGastoDisp       = ref('')
 const buscarSueldoDisp      = ref('')
 const buscarVentaDisp       = ref('')
@@ -2282,6 +2298,7 @@ function abrirConciliar(mov) {
   ordenConc.value              = 'monto'
   direccionFecha.value         = 'asc'
   buscarCompraDisp.value       = ''
+  montoFiltroDisp.value        = ''
   buscarGastoDisp.value        = ''
   buscarSueldoDisp.value       = ''
   buscarVentaDisp.value        = ''
@@ -2384,6 +2401,7 @@ async function cargarDisponibles() {
   try {
     const params = { orden: ordenConc.value, direccion: direccionFecha.value }
     if (buscarCompraDisp.value) params.buscar = buscarCompraDisp.value
+    if (montoFiltroDisp.value) params.monto = montoFiltroDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/compras-disponibles`, { params }
     )
@@ -2465,6 +2483,12 @@ let buscarDispTimer = null
 function debounceBuscarDisp() {
   clearTimeout(buscarDispTimer)
   buscarDispTimer = setTimeout(cargarDisponibles, 350)
+}
+
+let montoFiltroTimer = null
+function debounceFiltroMonto() {
+  clearTimeout(montoFiltroTimer)
+  montoFiltroTimer = setTimeout(cargarDisponibles, 350)
 }
 
 let buscarGastoTimer = null

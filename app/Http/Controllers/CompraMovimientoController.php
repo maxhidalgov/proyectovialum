@@ -294,6 +294,14 @@ class CompraMovimientoController extends Controller
             )
             ->havingRaw('saldo_por_pagar > 0');
 
+        $montoFiltro = $request->get('monto');
+        if ($montoFiltro) {
+            $montoNum = (int) preg_replace('/[^0-9]/', '', $montoFiltro);
+            if ($montoNum > 0) {
+                $q->havingRaw('ROUND(saldo_por_pagar) = ?', [$montoNum]);
+            }
+        }
+
         if ($orden === 'fecha') {
             $dir = $direccion === 'desc' ? 'DESC' : 'ASC';
             $q->orderByRaw("compras.fecha_emision $dir")
