@@ -1,6 +1,6 @@
 # Documentación Completa — Proyecto Vialum
 
-> Última actualización: 28 Abril 2026
+> Última actualización: 24 Junio 2026
 
 ---
 
@@ -884,23 +884,18 @@ barras = ceil(metros_necesarios / largo_total_barra_m)
 
 ## 22. Pendientes / Trabajo Futuro
 
-- [ ] **SQL en producción:** Ejecutar `ALTER TABLE tipos_material ADD COLUMN margen DECIMAL(5,4) NOT NULL DEFAULT 0.50;`
-- [ ] **Agente IA — WhatsApp:** Integrar con Twilio WhatsApp Business API. Requiere: endpoint `POST /api/whatsapp/webhook`, tabla `agente_conversaciones` (telefono, messages JSON, updated_at) para persistir historial por número, cuenta Twilio (~$15 USD/mes) o Meta Business API (gratis, más burocrático).
-- [ ] **Agente IA — Gmail:** Integrar con Gmail API para que el agente lea correos entrantes y responda automáticamente. Requiere: Google Cloud Console + OAuth2, comando artisan o job que sondee inbox, lógica para detectar solicitudes de cotización vs otros correos.
-- [ ] **CortesService:** Agregar soporte de hoja de cortes para tipos: 45 (Proyectante S60), 46 (Corredera Andes), 47 (Bay Window), 49 (Abatir S60), 50 (Puerta S60), 51 (Puerta 2 Hojas), 52 (Sliding 98), 53 (Monorriel), 57 (Compuesta AL42), 58 (Universal)
-- [ ] **produccion/[id].vue:** Verificar si se debe quitar la tabla inline de "Resumen de Materiales" (ya existe página separada)
-- [ ] **Roles producción/bodega:** Definir permisos específicos
-- [ ] **Módulo Bodega:** Control de stock de perfiles (barras disponibles vs. a pedir)
-- [ ] **Integración Bsale:** Revisar flujo completo de facturación
 - [ ] **Token Bsale:** Regenerar en Railway (token fue expuesto en git history)
+- [ ] **Módulo Asistencia:** Calcular sueldos variables según asistencia mensual (el usuario confirmó que los sueldos varían mes a mes)
+- [ ] **CortesService:** Agregar soporte para tipos: 45, 46, 47, 49, 50, 51, 52, 53, 57, 58
+- [ ] **Chipax — eliminar completamente:** Toda sincronización debe venir de Bsale. Chipax se usa solo como referencia histórica transitoria.
+- [ ] **Roles producción/bodega:** Definir permisos específicos
+- [ ] **Módulo Bodega:** Control de stock de perfiles
 - [ ] **CotizacionController:** Sin validación de request en `store()` / `update()`
-- [ ] **Performance:** `Log::info` de debug en `CotizacionController` (remover o bajar a nivel debug)
-- [ ] **Imágenes:** Base64 dentro del JSON de cotización (payloads gigantes — migrar a storage)
-- [ ] **Menú nav:** No reactivo post-login (permisos leídos una vez al cargar módulo)
-- [ ] **Modelos:** Sin SoftDeletes en modelos principales
-- [ ] **Comandos:** Implementar `ActualizarRazonSocialClientes` y `MigrarClientesLocalesABsale`
+- [ ] **Performance:** `Log::info` de debug en `CotizacionController`
+- [ ] **Imágenes:** Base64 dentro del JSON de cotización — migrar a storage
+- [ ] **Menú nav:** No reactivo post-login
 - [ ] **Archivos muertos:** `cotizacion-editarELIMINARPARECE.vue`, `routereliminarparece/`, `cotizador2.vue`
-- [ ] **EditarVentanaModal:** tipos 54 (Compuesta Dinámica) y 58 (Universal/Armador) no tienen render en el modal de edición (requieren lógica especial — omitidos intencionalmente)
+- [ ] **EditarVentanaModal:** tipos 54 y 58 sin render
 
 ---
 
@@ -1035,3 +1030,264 @@ async function recalcularCostos() {
 | `vuexy-frontend/src/pages/produccion/index.vue` | Dos botones por cotización |
 | `vuexy-frontend/src/pages/produccion/[id].vue` | `fetchData()`, `watch`, actualizar, warning |
 | `vuexy-frontend/src/pages/produccion/materiales/[id].vue` | NUEVO — página de materiales |
+
+---
+
+### Sesión 2026-04-30 a 2026-05-07 — Cotizador, Facturación, Lista Precios
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/cotizador/index.vue` | Agente IA cotizador; botón "Guardar y Facturar" para cliente Mesón (ID 1639) que guarda, auto-aprueba y redirige a Facturación en un paso |
+| `vuexy-frontend/src/pages/facturacion/index.vue` | Columna "Cobrado" renombrada a "Facturado"; fix boleta sin cliente; dialog mejorado para detalles boleta |
+| `app/Http/Controllers/BsaleController.php` | Elimina creación automática de abono al emitir documento (Facturado ≠ Abonado) |
+| `vuexy-frontend/src/pages/lista-precios/index.vue` | Múltiples arreglos UI; fix IVA Bsale |
+| `vuexy-frontend/src/pages/crm/index.vue` | Fix nombre clientes persona natural (`first_name + last_name`) |
+
+---
+
+### Sesión 2026-05-12 a 2026-05-18 — Tipos de Ventana + PDF
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/EditarVentanaModal.vue` | +Ventana Compuesta AL (tipo 57); fix imagen PDF en tipos 54 y 57 |
+| `app/Services/CalculoVentanaService.php` | Constructor de Marco (tipos 59/60): cálculo de costos, captura imagen PDF; +junquillo en AL; fix doble conteo Subtotal |
+| `resources/views/cotizaciones/pdf.blade.php` | Fix imágenes no aparecían en PDF; Valor Neto por ventana; fix doble conteo en Subtotal |
+
+**Tipos 59/60 — Constructor de Marco:**
+- Tipo 59: Marco AL con medidas personalizadas
+- Tipo 60: Marco PVC con medidas personalizadas
+- Cálculo de costos y captura de imagen igual que otros tipos
+
+---
+
+### Sesión 2026-05-19 a 2026-05-22 — Módulo Conciliación Bancaria (base)
+
+| Archivo | Cambio |
+|---|---|
+| `app/Http/Controllers/ConciliacionController.php` | NUEVO — importar movimientos BCH API, listar movimientos con filtros, totales, flujo de caja |
+| `app/Services/BancochileService.php` | NUEVO — cliente HTTP para API Banco de Chile |
+| `database/migrations/2026_05_22_*` | Tabla `movimientos_bancarios` (`id`, `cuenta`, `fecha_contable`, `fecha_valor`, `descripcion`, `glosa`, `monto`, `tipo` C/D, `numero_documento`, `saldo_disponible`, `conciliado`, `nota`, `secuencial`) |
+| `vuexy-frontend/src/pages/conciliacion/index.vue` | NUEVO — módulo completo de conciliación bancaria |
+| `app/Http/Controllers/CompraMovimientoController.php` | NUEVO — pivot `compra_movimiento` con perspectiva desde compra y desde movimiento |
+| `app/Http/Controllers/GastoMovimientoController.php` | NUEVO — pivot `gasto_movimiento` |
+| `routes/api.php` | +rutas `/api/conciliacion/*`, `/api/movimientos/*` |
+
+**Tablas pivot de conciliación (débitos → documentos):**
+- `compra_movimiento` (`compra_id`, `movimiento_id`, `monto`)
+- `gasto_movimiento` (`gasto_id`, `movimiento_id`, `monto`, `nota`)
+- `pagos_empleado` tiene columna `movimiento_id` (FK opcional)
+
+**Tablas pivot de conciliación (créditos → documentos):**
+- `venta_movimiento` (`venta_id`, `movimiento_id`, `monto`, `nota`)
+- `boleta_periodo_movimiento` (`boleta_resumen_id`, `movimiento_id`, `monto`)
+
+**Flag `conciliado`:** se activa en `movimientos_bancarios` cuando `SUM(monto asignado en todas las tablas pivot) >= movimiento.monto`. Se revierte al desasignar.
+
+---
+
+### Sesión 2026-05-23 a 2026-05-28 — EERR, Remuneraciones, Chipax cartolas
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/eerr/index.vue` | NUEVO — Estado de Resultados jerárquico por categorías; combina ingresos Bsale + gastos + sueldos |
+| `app/Http/Controllers/EerrController.php` | NUEVO — EERR con categorías de gastos e ingresos |
+| `vuexy-frontend/src/pages/cotizaciones/importar-pvc.vue` | Fix: ACEPTADO=F mapea a Evaluación (no a Rechazada) |
+| `app/Console/Commands/ChipaxImportarCartolas.php` | Importar cartolas Chipax 2026 (CSV) |
+| `resources/views/cotizaciones/pdf.blade.php` | Textura de vidrio real en PDF WINPERFIL (canvg + pattern extraction) |
+| EERR | Excluye impuestos (IVA, PPM, retenciones); Previred va en Remuneraciones |
+
+---
+
+### Sesión 2026-05-30 — Nav Finanzas, Facturación huérfanos
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/layouts/components/NavItems.vue` | Módulos financieros agrupados bajo "Finanzas" colapsable; Finanzas y Empleados solo visibles para admin (`gestionar_usuarios`) |
+| `vuexy-frontend/src/pages/facturacion/index.vue` | Dialog para vincular documento Bsale huérfano a cotización existente |
+
+---
+
+### Sesión 2026-06-01 a 2026-06-04 — Dashboard Financiero, Sugerencias, NCs, bsale:sync
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/dashboard-financiero/index.vue` | NUEVO — KPIs (ingresos, gastos, resultado), top clientes, flujo de caja mensual, resultado operacional |
+| `app/Http/Controllers/DashboardFinancieroController.php` | NUEVO — agrega CxC, CxP, sueldos, gastos por período |
+| `app/Http/Controllers/ConciliacionController.php` | +`sugerencias()`: matching RUT+monto+descripción entre movimientos y documentos; score 40–90pts |
+| `vuexy-frontend/src/pages/sugerencias-conciliacion/index.vue` | NUEVO — panel de sugerencias automáticas |
+| `app/Console/Commands/BsaleSync.php` | NUEVO — artisan `bsale:sync` que sincroniza compras + ventas; scheduler cada 4h |
+| `app/Http/Controllers/CompraController.php` | +procesamiento NCs (tipo 61): vincula a factura referenciada via XML Bsale; `compra_nc_aplicacion` pivot |
+| Operaciones | `abonado` calculado desde `venta_movimiento`; eliminados abonos manuales |
+
+**Tabla `compra_nc_aplicacion`:**
+- `nc_id` (FK compras, tipo_dte=61)
+- `factura_id` (FK compras)
+- `monto` aplicado
+
+**Algoritmo sugerencias (`sugerencias()`):**
+1. Carga débitos no conciliados + compras pendientes
+2. Carga créditos no conciliados + ventas pendientes (excluye boletas tipo 1 y NCs tipo 2)
+3. Para cada movimiento: busca mejor match por RUT+monto (90pts) > RUT (50pts) > monto (40pts) > descripción+monto (60pts)
+4. Solo sugiere si score ≥ 40
+5. Ordena: monto exacto primero, luego por días de diferencia, luego por score
+
+---
+
+### Sesión 2026-06-08 — Cuentas por Cobrar completo
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/cuentas-por-cobrar/index.vue` | NUEVO — CxC expandible por cliente; chip "Cobrada" clickeable muestra detalle de cobros |
+| `app/Http/Controllers/CuentasPorCobrarController.php` | NUEVO — agrupa facturas Bsale por cliente; calcula cobrado desde `venta_movimiento` + `pagado_con_tarjeta` + `chipax_monto_por_cobrar`; cobro manual sin movimiento bancario |
+| `app/Http/Controllers/VentaMovimientoController.php` | NUEVO — pivot ventas ↔ movimientos; `disponiblesPorMovimiento()` excluye boletas (1) y NCs (2) |
+| `app/Http/Controllers/BsaleVentaSyncController.php` | NUEVO — sync ventas desde Bsale API; guarda `url_pdf_bsale`, `tipo_documento_bsale_id`, `pagado_con_tarjeta`, `forma_pago` |
+| `database/migrations/2026_06_08_*` | +`monto_cobrado_manual`, `chipax_monto_por_cobrar`, `forma_pago` en `documentos_facturacion` |
+| `app/Http/Middleware/HandleCors.php` | Movido a middleware global (cubría 401/500 sin CORS headers) |
+
+**Campos clave `documentos_facturacion`:**
+| Campo | Descripción |
+|---|---|
+| `tipo_documento_bsale_id` | 1=Boleta, 2=NC, 3=Factura, 4-6=otros |
+| `pagado_con_tarjeta` | bool — pago Transbank sin link `.dat` |
+| `forma_pago` | 'efectivo', 'tarjeta', 'transferencia', etc. |
+| `chipax_monto_por_cobrar` | Saldo según Chipax (transitorio hasta eliminar Chipax) |
+| `monto_cobrado_manual` | Cobro registrado sin movimiento bancario |
+| `nc_referencia_id` | FK a compra padre (para NCs de compras) |
+| `monto` | SIEMPRE positivo — `abs(totalAmount)` — incluso para NCs |
+
+---
+
+### Sesión 2026-06-09 a 2026-06-10 — Boletas, Transbank, Registro Ventas
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/boletas/index.vue` | NUEVO — resúmenes mensuales de boletas por forma de pago; backfill forma_pago |
+| `app/Http/Controllers/BoletaResumenController.php` | NUEVO — `boleta_resumenes` agrupa boletas por período+forma_pago; vincula a movimientos bancarios via `boleta_periodo_movimiento` |
+| `database/migrations/2026_06_10_*` | Tabla `boleta_resumenes` (`periodo` YYYY-MM, `forma_pago`, `total_boletas`, `monto_total`, `saldo_por_cobrar`) |
+| `vuexy-frontend/src/pages/registro-ventas/index.vue` | NUEVO — lista plana de documentos de venta con filtros, conciliación, exportar CSV |
+| `vuexy-frontend/src/pages/transbank/index.vue` | NUEVO — importador de XLSX Chipax para Transbank; SheetJS client-side; vincula transacciones a movimientos bancarios |
+| `app/Http/Controllers/TransbankController.php` | NUEVO — procesa XLSX Transbank; 3 estrategias de búsqueda de movimiento (fecha+monto, periodo+abonos, monto solo) |
+
+**Regla boletas:** Las boletas NUNCA se concilian via `venta_movimiento`. Solo via `boleta_periodo_movimiento` (resumen mensual por forma de pago). Esto evita doble conteo con los grupos BOL-TRANSFERENCIA/EFECTIVO/TARJETA.
+
+---
+
+### Sesión 2026-06-12 a 2026-06-13 — EERR por categorías, NCs proveedores, Admin herramientas
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/eerr/index.vue` | Rewrite: EERR jerárquico por categorías de gastos; sistema de reglas proveedor para auto-categorizar |
+| `app/Http/Controllers/ReglaProveedorController.php` | NUEVO — CRUD `reglas_categoria_proveedor` (RUT → categoría); `aplicar()` retroactivo; `asignarCategoria()` actualiza compra + opcionalmente crea regla |
+| `database/migrations/*reglas_categoria*` | Tabla `reglas_categoria_proveedor` (`rut_emisor` normalizado sin puntos, `nombre_emisor`, `categoria`) |
+| `app/Http/Controllers/CompraController.php` | `procesarDocumento()`: aplica regla de categoría al sync; normaliza RUT quitando puntos; +`sincronizarFolio()`: importa doc específico de Bsale por número de folio |
+| `vuexy-frontend/src/pages/admin-secret-panel.vue` | +tab "Herramientas": botones vincular NCs vía Bsale, diagnóstico por proveedor (facturas + NCs con estado), panel debug-nc-xml, vincular-todas-ncs-xml bulk |
+| `app/Http/Controllers/CompraController.php` | `vincularNcsViaBsale()`: llama API Bsale para obtener XML de NC, extrae referencia, vincula a factura; `vincularTodasNcsXml()`: bulk |
+| Fix conciliación modal | Excluye `pagado_historico=true` de disponibles; excluye NCs (tipo_dte=61) de modal compras |
+| Fix cotizador | Total cotización cuando ventana tiene `cantidad > 1` |
+
+**`reglas_categoria_proveedor`:** RUT se normaliza siempre sin puntos ni espacios en minúsculas. Al sincronizar desde Bsale, el `clientCode` puede venir con puntos — se normaliza antes de buscar la regla.
+
+---
+
+### Sesión 2026-06-15 a 2026-06-17 — Conciliación mejoras, CxP sync Bsale, Dashboard fixes
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/conciliacion/index.vue` | +Nota rápida por fila (PATCH inline); +campo comentario/nota por movimiento; +botón "Sincronizar Bsale" (CxP + CxC + boletas); descripción muestra glosa + comentario; normalización cuenta en import cartola (quita guiones/ceros) |
+| `app/Http/Controllers/ConciliacionController.php` | `index()`: paginate 500→5000; +filtro `monto` exacto; celda descripción muestra categoría; deduplicar cartola por numero_documento+fecha+tipo+cuenta |
+| `app/Http/Controllers/CompraController.php` | `sincronizar()` smart mode: sync desde Bsale en vez de Chipax |
+| `app/Http/Controllers/CuentasPorPagarController.php` | Excluye facturas cobradas por Chipax (`chipax_monto_por_cobrar=0`); excluye movimientos ya conciliados de panel disponibles |
+| `app/Http/Controllers/DashboardFinancieroController.php` | Fix porCobrar exacto; fix monto_liquido → monto en pagos_empleado; fix paginación |
+
+---
+
+### Sesión 2026-06-19 — Items Libres en Cotizador
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/cotizador/index.vue` | +Items libres: líneas de texto/precio libre sin cálculo de materiales (descripción + precio manual) |
+| `app/Http/Controllers/CotizacionController.php` | Soporta `tipo_item = 'libre'` en `cotizacion_detalles` |
+
+---
+
+### Sesión 2026-06-23 a 2026-06-24 — Conciliación fixes críticos + smart sync fix
+
+| Archivo | Cambio |
+|---|---|
+| `vuexy-frontend/src/pages/sugerencias-conciliacion/index.vue` | +`extraerComentario(glosa)`: muestra campo "Comentario:" del glosa bancario con 💬; VBtnToggle `mandatory` fix |
+| `app/Http/Controllers/CompraMovimientoController.php` | `store()` y `destroy()`: flag `conciliado` verifica TODAS las tablas pivot (compra+gasto+pagos_empleado); +`disponiblesPorMovimiento()`: filtro por monto exacto |
+| `app/Http/Controllers/GastoMovimientoController.php` | `store()`: ahora actualiza `conciliado`; `destroy()`: revierte `conciliado` |
+| `app/Http/Controllers/ConciliacionController.php` | `sugerencias()`: excluye boletas (tipo 1) y NCs (tipo 2) de ventasPendientes |
+| `app/Http/Controllers/VentaMovimientoController.php` | `disponiblesPorMovimiento()`: excluye tipo 1 y 2 |
+| `app/Http/Controllers/CompraController.php` | `sincronizar()` smart mode: ya NO para al primer doc existente; escanea siempre los últimos 300 docs (≈6 páginas); +`sincronizarFolio()`: endpoint para recuperar doc específico por folio |
+| `vuexy-frontend/src/pages/conciliacion/index.vue` | +campo "Monto exacto" en tab Facturas del modal; debounce 350ms |
+| `routes/api.php` | +`POST /api/compras/sincronizar-folio` |
+
+**SQL retroactivo — fix conciliados:**
+```sql
+SET SQL_SAFE_UPDATES = 0;
+UPDATE movimientos_bancarios mb
+LEFT JOIN (SELECT movimiento_id, SUM(monto) as total FROM compra_movimiento GROUP BY movimiento_id) cm ON cm.movimiento_id = mb.id
+LEFT JOIN (SELECT movimiento_id, SUM(monto) as total FROM gasto_movimiento GROUP BY movimiento_id) gm ON gm.movimiento_id = mb.id
+LEFT JOIN (SELECT movimiento_id, SUM(monto) as total FROM pagos_empleado WHERE movimiento_id IS NOT NULL GROUP BY movimiento_id) pe ON pe.movimiento_id = mb.id
+SET mb.conciliado = TRUE
+WHERE mb.conciliado = FALSE AND mb.tipo = 'D'
+  AND mb.monto <= COALESCE(cm.total, 0) + COALESCE(gm.total, 0) + COALESCE(pe.total, 0);
+SET SQL_SAFE_UPDATES = 1;
+```
+
+**SQL retroactivo — aplicar reglas de categoría:**
+```sql
+SET SQL_SAFE_UPDATES = 0;
+UPDATE compras c
+JOIN reglas_categoria_proveedor r
+  ON REPLACE(REPLACE(LOWER(c.rut_emisor), '.', ''), ' ', '') = REPLACE(REPLACE(LOWER(r.rut_emisor), '.', ''), ' ', '')
+SET c.categoria = r.categoria
+WHERE c.categoria IS NULL OR c.categoria = '';
+SET SQL_SAFE_UPDATES = 1;
+```
+
+---
+
+## 24. Módulo Financiero — Arquitectura General
+
+### Páginas del módulo (bajo nav "Finanzas", solo admin)
+
+| Página | Ruta | Descripción |
+|---|---|---|
+| `conciliacion/index.vue` | `/conciliacion` | Movimientos bancarios ↔ documentos; Import BCH/Cartola/Portal; Auto-conciliar; Sincronizar Bsale |
+| `sugerencias-conciliacion/index.vue` | `/sugerencias-conciliacion` | Sugerencias automáticas de matching |
+| `cuentas-por-cobrar/index.vue` | `/cuentas-por-cobrar` | Clientes con facturas Bsale impagadas; modal conciliar créditos |
+| `cuentas-por-pagar/index.vue` | `/cuentas-por-pagar` | Proveedores con facturas impagadas; modal conciliar débitos |
+| `registro-ventas/index.vue` | `/registro-ventas` | Vista plana de todas las ventas Bsale con estado de cobro |
+| `boletas/index.vue` | `/boletas` | Resúmenes mensuales de boletas por forma de pago |
+| `transbank/index.vue` | `/transbank` | Importador XLSX Chipax para vincular transacciones Transbank |
+| `eerr/index.vue` | `/eerr` | Estado de Resultados (ingresos - gastos - sueldos) por período |
+| `dashboard-financiero/index.vue` | `/dashboard-financiero` | KPIs: ingresos, gastos, resultado operacional, top clientes, flujo de caja |
+
+### Flujo de conciliación por tipo de movimiento
+
+**Débito (egreso bancario):**
+```
+movimiento.tipo = 'D'
+  → Factura de compra (compra_movimiento)
+  → Gasto general (gasto_movimiento)
+  → Sueldo empleado (pagos_empleado.movimiento_id)
+```
+
+**Crédito (ingreso bancario):**
+```
+movimiento.tipo = 'C'
+  → Venta/Factura Bsale (venta_movimiento) — excluye boletas y NCs
+  → Resumen boletas por período (boleta_periodo_movimiento)
+  → Ingreso manual sin doc SII (ingresos_manuales)
+```
+
+### Regla clave: NCs no se concilian directamente
+Las NCs (`tipo_documento_bsale_id = 2`) se almacenan con `monto = abs(totalAmount)` (siempre positivo). Se aplican a facturas via `compra_nc_aplicacion` o `nc_referencia_id`. NUNCA aparecen en los disponibles de conciliación.
+
+### Comando artisan `bsale:sync`
+Corre cada 4h via Laravel Scheduler. Sincroniza:
+1. Compras desde `third_party_documents.json` (smart mode: últimos 300 docs)
+2. Ventas desde `documents.json`
+3. Aplica reglas de categoría proveedor automáticamente
