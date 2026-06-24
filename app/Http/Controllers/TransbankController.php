@@ -519,14 +519,19 @@ class TransbankController extends Controller
             ->whereNull('im.id');
 
         $sinDocRows = (clone $sinDocBase)
+            // Intenta inferir el tipo buscando un doc de Bsale con voucher coincidente (no vinculado aún)
+            ->leftJoin('documentos_facturacion as df_inf', function ($j) {
+                $j->whereRaw('CAST(df_inf.nro_comprobante_transbank AS UNSIGNED) = CAST(tt.nro_voucher AS UNSIGNED)')
+                  ->whereRaw('tt.nro_voucher IS NOT NULL AND tt.nro_voucher != ""');
+            })
             ->select(
                 'tt.id',
                 'tt.fecha_movimiento',
                 'tt.monto_original',
                 'tt.tipo_tarjeta',
                 'tt.nro_voucher',
-                'tt.tipo_documento',
-                'tf.tipo as medio_pago'
+                'tf.tipo as medio_pago',
+                DB::raw('df_inf.tipo_documento_bsale_id as bsale_tipo_inferido')
             )
             ->orderByDesc('tt.fecha_movimiento')
             ->get();

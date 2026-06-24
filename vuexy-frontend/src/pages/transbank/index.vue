@@ -609,8 +609,11 @@
               <tbody>
                 <tr v-for="tx in resumenMes.sin_doc.rows" :key="tx.id">
                   <td>
-                    <VChip size="x-small" :color="tx.tipo_documento === 'BOLETA' ? 'warning' : 'info'" label>
-                      {{ tx.tipo_documento === 'BOLETA' ? 'BOL' : (tx.tipo_documento ?? 'FAC') }}
+                    <VChip size="x-small"
+                      :color="tx.bsale_tipo_inferido === 1 ? 'warning' : tx.bsale_tipo_inferido ? 'info' : 'secondary'"
+                      label
+                    >
+                      {{ tx.bsale_tipo_inferido === 1 ? 'BOL' : tx.bsale_tipo_inferido ? 'FAC' : '?' }}
                     </VChip>
                   </td>
                   <td class="text-caption">{{ tx.fecha_movimiento?.slice(0,10) }}</td>
