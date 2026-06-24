@@ -889,16 +889,27 @@
             </span>
           </VAlert>
 
-          <VTextField
-            v-model="busquedaFactura"
-            placeholder="Buscar por número de documento o cliente…"
-            prepend-inner-icon="mdi-magnify"
-            density="compact"
-            variant="outlined"
-            clearable
-            class="mb-3"
-            @update:modelValue="buscarFacturas"
-          />
+          <div class="d-flex gap-3 mb-3 align-center">
+            <VTextField
+              v-model="busquedaFactura"
+              placeholder="Buscar por número de documento o cliente…"
+              prepend-inner-icon="mdi-magnify"
+              density="compact"
+              variant="outlined"
+              clearable
+              hide-details
+              style="flex:1"
+              @update:modelValue="buscarFacturas"
+            />
+            <VSwitch
+              v-model="soloTarjetaFiltro"
+              label="Solo tarjeta"
+              density="compact"
+              hide-details
+              color="primary"
+              @update:modelValue="buscarFacturas"
+            />
+          </div>
 
           <div v-if="loadingFacturas" class="d-flex justify-center py-6">
             <VProgressCircular indeterminate size="24" />
@@ -911,13 +922,14 @@
                 <th>Cliente</th>
                 <th>Fecha emisión</th>
                 <th class="text-right">Monto</th>
+                <th>Pago</th>
                 <th>Comprobante</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="facturasDisponibles.length === 0">
-                <td colspan="6" class="text-center py-4 text-disabled">
+                <td colspan="7" class="text-center py-4 text-disabled">
                   No hay documentos disponibles para vincular
                 </td>
               </tr>
@@ -933,6 +945,11 @@
                 <td class="text-body-2">{{ doc.bsale_cliente_nombre ?? '—' }}</td>
                 <td class="text-caption">{{ formatFecha(doc.fecha_emision) }}</td>
                 <td class="text-right font-weight-medium">{{ fmt(doc.monto) }}</td>
+                <td>
+                  <VChip size="x-small" :color="doc.pagado_con_tarjeta ? 'success' : 'secondary'" label>
+                    {{ doc.pagado_con_tarjeta ? 'Tarjeta' : 'Otro' }}
+                  </VChip>
+                </td>
                 <td class="text-caption text-medium-emphasis">{{ doc.nro_comprobante_transbank ?? '—' }}</td>
                 <td>
                   <VBtn
@@ -1200,6 +1217,7 @@ const txSeleccionada     = ref(null)
 const facturasDisponibles = ref([])
 const loadingFacturas    = ref(false)
 const busquedaFactura    = ref('')
+const soloTarjetaFiltro  = ref(true)
 const vinculando         = ref(null)
 
 // Vincular doc → tx (tab Documentos)
@@ -1608,10 +1626,11 @@ async function autoLinkBoletas() {
 }
 
 function abrirLinkFactura(tx) {
-  txSeleccionada.value     = tx
+  txSeleccionada.value      = tx
   facturasDisponibles.value = []
-  busquedaFactura.value    = ''
-  dialogLinkFactura.value  = true
+  busquedaFactura.value     = ''
+  soloTarjetaFiltro.value   = true
+  dialogLinkFactura.value   = true
   buscarFacturas()
 }
 
@@ -1620,9 +1639,10 @@ async function buscarFacturas() {
   try {
     const { data } = await axios.get('/api/transbank/facturas-disponibles', {
       params: {
-        q:       busquedaFactura.value,
-        monto:   txSeleccionada.value?.monto_original,
-        periodo: periodo.value,
+        q:            busquedaFactura.value,
+        monto:        txSeleccionada.value?.monto_original,
+        periodo:      periodo.value,
+        solo_tarjeta: soloTarjetaFiltro.value ? '1' : '0',
       },
     })
     facturasDisponibles.value = data

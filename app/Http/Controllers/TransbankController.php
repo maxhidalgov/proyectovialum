@@ -872,12 +872,15 @@ class TransbankController extends Controller
         $desde = Carbon::create((int) $y, (int) $m, 1)->subMonth()->startOfMonth()->toDateString();
         $hasta = Carbon::create((int) $y, (int) $m, 1)->addMonth()->endOfMonth()->toDateString();
 
+        $soloTarjeta = $request->get('solo_tarjeta', '1') === '1';
+
         $query = DB::table('documentos_facturacion as df')
             ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
             ->whereNull('tvf.documento_id')
             ->where('df.estado', 'emitido')
             ->whereNotNull('df.numero_documento_bsale')
             ->whereBetween('df.fecha_emision', [$desde, $hasta])
+            ->when($soloTarjeta, fn($q2) => $q2->where('df.pagado_con_tarjeta', 1))
             ->select(
                 'df.id',
                 'df.numero_documento_bsale',
@@ -885,7 +888,8 @@ class TransbankController extends Controller
                 'df.monto',
                 'df.fecha_emision',
                 'df.tipo_documento_bsale_id',
-                'df.nro_comprobante_transbank'
+                'df.nro_comprobante_transbank',
+                'df.pagado_con_tarjeta'
             );
 
         if ($q) {
