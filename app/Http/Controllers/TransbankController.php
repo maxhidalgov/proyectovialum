@@ -514,7 +514,6 @@ class TransbankController extends Controller
             ->where('tt.tipo', 'Venta')
             ->whereNotNull('tt.fecha_movimiento')
             ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
-            ->where(fn($q) => $q->whereNull('tt.tipo_documento')->orWhere('tt.tipo_documento', '!=', 'BOLETA'))
             ->where(fn($q) => $q->whereNull('tt.codigo_autorizacion')->orWhere('tt.codigo_autorizacion', '!=', '000000'))
             ->whereNull('tvf.transaccion_id')
             ->whereNull('im.id');
@@ -873,7 +872,6 @@ class TransbankController extends Controller
             ->whereNull('tvf.documento_id')
             ->where('df.estado', 'emitido')
             ->whereNotNull('df.numero_documento_bsale')
-            ->whereNotIn('df.tipo_documento_bsale_id', [1])  // boletas van por conciliación mensual
             ->whereBetween('df.fecha_emision', [$desde, $hasta])
             ->select(
                 'df.id',

@@ -593,11 +593,12 @@
               <span class="text-body-2 font-weight-bold text-warning">{{ fmt(resumenMes.sin_doc.monto) }}</span>
             </VCardTitle>
             <VCardText class="text-caption text-medium-emphasis px-4 py-1">
-              Transacciones Transbank sin factura/boleta asociada en Bsale. Crea un ingreso manual para registrarlas.
+              Transacciones Transbank sin boleta ni factura vinculada. Usa "Vincular" para asignar un documento de Bsale o "Ingreso manual" si no hay documento.
             </VCardText>
             <VTable density="compact" class="mx-3 mb-3" style="border:1px solid rgba(0,0,0,.12);border-radius:6px">
               <thead>
                 <tr>
+                  <th>Tipo</th>
                   <th>Fecha</th>
                   <th>Monto</th>
                   <th>Tarjeta</th>
@@ -607,6 +608,11 @@
               </thead>
               <tbody>
                 <tr v-for="tx in resumenMes.sin_doc.rows" :key="tx.id">
+                  <td>
+                    <VChip size="x-small" :color="tx.tipo_documento === 'BOLETA' ? 'warning' : 'info'" label>
+                      {{ tx.tipo_documento === 'BOLETA' ? 'BOL' : (tx.tipo_documento ?? 'FAC') }}
+                    </VChip>
+                  </td>
                   <td class="text-caption">{{ tx.fecha_movimiento?.slice(0,10) }}</td>
                   <td class="text-caption font-weight-bold">{{ fmt(tx.monto_original) }}</td>
                   <td class="text-caption">
@@ -615,9 +621,12 @@
                     </VChip>
                   </td>
                   <td class="text-caption text-medium-emphasis">{{ tx.nro_voucher ?? '—' }}</td>
-                  <td>
-                    <VBtn size="x-small" variant="tonal" color="success" @click="abrirIngresoManual(tx)">
-                      <VIcon start size="14">mdi-plus</VIcon>Ingreso manual
+                  <td class="d-flex gap-1 align-center">
+                    <VBtn size="x-small" variant="tonal" color="warning" @click="abrirLinkFactura(tx)">
+                      <VIcon start size="14">mdi-link-variant</VIcon>Vincular
+                    </VBtn>
+                    <VBtn size="x-small" variant="text" color="success" @click="abrirIngresoManual(tx)">
+                      <VIcon size="14">mdi-plus</VIcon>
                     </VBtn>
                   </td>
                 </tr>
