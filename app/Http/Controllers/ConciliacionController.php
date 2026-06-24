@@ -474,7 +474,7 @@ class ConciliacionController extends Controller
                 'vm.venta_id', '=', 'df.id'
             )
             ->where('df.estado', 'emitido')
-            ->whereNotIn('df.tipo_documento_bsale_id', [1]) // boletas van por su propio módulo
+            ->whereNotIn('df.tipo_documento_bsale_id', [1, 2]) // boletas (1) y NCs (2) nunca via venta_movimiento
             ->selectRaw("
                 df.id, df.tipo, df.monto, df.fecha_emision, df.numero_documento_bsale,
                 df.bsale_cliente_rut, df.bsale_cliente_nombre, df.cotizacion_id,

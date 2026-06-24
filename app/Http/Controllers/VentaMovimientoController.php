@@ -208,7 +208,7 @@ class VentaMovimientoController extends Controller
                   ->where('vm2.movimiento_id', $movimientoId);
             })
             ->where('df.estado', 'emitido')
-            ->whereNotIn('df.tipo_documento_bsale_id', [1]) // boletas van por su propio módulo
+            ->whereNotIn('df.tipo_documento_bsale_id', [1, 2]) // boletas (1) y NCs (2) nunca via venta_movimiento
             ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) > 0')
             // Excluir facturas que Chipax considera cobradas: chipax_monto_por_cobrar=0 → sin saldo pendiente
             ->whereRaw('NOT (
