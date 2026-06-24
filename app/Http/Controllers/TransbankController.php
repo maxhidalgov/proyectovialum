@@ -749,6 +749,86 @@ class TransbankController extends Controller
         ]);
     }
 
+    // ── POST /api/transbank/auto-link-boletas?periodo=YYYY-MM ─────────────────
+    // Auto-vincula boletas pagadas con tarjeta a transacciones Transbank.
+    // Estrategia 1: voucher exacto (nro_comprobante_transbank = nro_voucher).
+    // Estrategia 2: monto exacto + fecha ±1 día, solo si el candidato es único.
+
+    public function autoLinkBoletas(Request $request)
+    {
+        $periodo = $request->get('periodo', now()->format('Y-m'));
+
+        $boletas = DB::table('documentos_facturacion as df')
+            ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
+            ->whereNull('tvf.documento_id')
+            ->where('df.estado', 'emitido')
+            ->whereIn('df.tipo_documento_bsale_id', [1])
+            ->where('df.pagado_con_tarjeta', 1)
+            ->whereRaw("DATE_FORMAT(df.fecha_emision, '%Y-%m') = ?", [$periodo])
+            ->select('df.id', 'df.monto', 'df.fecha_emision', 'df.nro_comprobante_transbank')
+            ->get();
+
+        $linked = 0;
+
+        foreach ($boletas as $boleta) {
+            $tx           = null;
+            $fechaEmision = Carbon::parse($boleta->fecha_emision);
+
+            // 1) Match por voucher
+            if (!empty($boleta->nro_comprobante_transbank)) {
+                $tx = DB::table('transbank_transacciones as tt')
+                    ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
+                    ->leftJoin('transbank_factura as tvf2', 'tvf2.transaccion_id', '=', 'tt.id')
+                    ->whereNull('tvf2.transaccion_id')
+                    ->where('tt.tipo', 'Venta')
+                    ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
+                    ->whereRaw(
+                        'CAST(tt.nro_voucher AS UNSIGNED) = CAST(? AS UNSIGNED)',
+                        [$boleta->nro_comprobante_transbank]
+                    )
+                    ->select('tt.id')
+                    ->first();
+            }
+
+            // 2) Fallback: monto exacto + fecha ±1 día, solo si candidato es ÚNICO
+            if (!$tx) {
+                $candidatos = DB::table('transbank_transacciones as tt')
+                    ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
+                    ->leftJoin('transbank_factura as tvf2', 'tvf2.transaccion_id', '=', 'tt.id')
+                    ->whereNull('tvf2.transaccion_id')
+                    ->where('tt.tipo', 'Venta')
+                    ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
+                    ->where('tt.monto_original', (int) $boleta->monto)
+                    ->whereBetween('tt.fecha_movimiento', [
+                        $fechaEmision->copy()->subDay()->toDateString(),
+                        $fechaEmision->copy()->addDays(2)->toDateString(),
+                    ])
+                    ->select('tt.id')
+                    ->get();
+
+                if ($candidatos->count() === 1) {
+                    $tx = $candidatos->first();
+                }
+            }
+
+            if ($tx) {
+                DB::table('transbank_factura')->insertOrIgnore([
+                    'transaccion_id' => $tx->id,
+                    'documento_id'   => $boleta->id,
+                    'created_at'     => now(),
+                    'updated_at'     => now(),
+                ]);
+                $linked++;
+            }
+        }
+
+        return response()->json([
+            'success'   => true,
+            'revisadas' => $boletas->count(),
+            'linked'    => $linked,
+        ]);
+    }
+
     // ── POST /api/transbank/transaccion/{id}/link ─────────────────────────────
 
     public function linkDocumento(Request $request, int $id)

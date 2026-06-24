@@ -132,6 +132,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/sincronizar',                      [\App\Http\Controllers\CompraController::class, 'sincronizar']);
         Route::post('/vincular-ncs-por-monto',         [\App\Http\Controllers\CompraController::class, 'vincularNcsPorMonto']);
         Route::post('/vincular-ncs-via-bsale',         [\App\Http\Controllers\CompraController::class, 'vincularNcsViaBsale']);
+        Route::post('/sincronizar-folio',              [\App\Http\Controllers\CompraController::class, 'sincronizarFolio']);
         Route::get('/diagnostico-proveedor',           [\App\Http\Controllers\CompraController::class, 'diagnosticoProveedor']);
         Route::get('/debug-nc-xml',                    [\App\Http\Controllers\CompraController::class, 'debugNcXml']);
         Route::post('/vincular-nc-xml',                [\App\Http\Controllers\CompraController::class, 'vincularNcXml']);
@@ -381,6 +382,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/documentos',                   [\App\Http\Controllers\TransbankController::class, 'documentos']);
         Route::get('/resumen-documentos',           [\App\Http\Controllers\TransbankController::class, 'resumenDocumentos']);
         Route::post('/auto-link',                   [\App\Http\Controllers\TransbankController::class, 'autoLink']);
+        Route::post('/auto-link-boletas',           [\App\Http\Controllers\TransbankController::class, 'autoLinkBoletas']);
         Route::get('/facturas-disponibles',         [\App\Http\Controllers\TransbankController::class, 'facturasDisponibles']);
         Route::post('/transaccion/{id}/link',       [\App\Http\Controllers\TransbankController::class, 'linkDocumento']);
         Route::delete('/transaccion/{id}/link',     [\App\Http\Controllers\TransbankController::class, 'unlinkDocumento']);

@@ -478,7 +478,13 @@
             <VIcon color="warning" class="mr-2">mdi-receipt-text-outline</VIcon>
             Boletas Tarjeta
             <VSpacer />
-            <span class="text-body-2 font-weight-bold">
+            <VBtn
+              variant="tonal" color="warning" size="small"
+              prepend-icon="mdi-link-variant-plus"
+              :loading="loadingAutoLinkBoletas"
+              @click="autoLinkBoletas"
+            >Auto-vincular boletas</VBtn>
+            <span class="text-body-2 font-weight-bold ml-4">
               {{ fmt(resumenMes.boletas_tarjeta.reduce((s,b) => s + Number(b.monto_total), 0)) }}
             </span>
           </VCardTitle>
@@ -1174,7 +1180,8 @@ const txFacturas         = ref([])
 const txBoletas          = ref(null)
 const loadingDocs        = ref(false)
 const filtroDoc          = ref('todos')
-const loadingAutoLink    = ref(false)
+const loadingAutoLink        = ref(false)
+const loadingAutoLinkBoletas = ref(false)
 const resumenMes         = ref(null)
 const dialogLinkFactura  = ref(false)
 const txSeleccionada     = ref(null)
@@ -1570,6 +1577,21 @@ async function autoLinkFacturas() {
     toast('Error en auto-vinculación', 'error')
   } finally {
     loadingAutoLink.value = false
+  }
+}
+
+async function autoLinkBoletas() {
+  loadingAutoLinkBoletas.value = true
+  try {
+    const { data } = await axios.post('/api/transbank/auto-link-boletas', null, {
+      params: { periodo: periodo.value },
+    })
+    await cargarDocumentos()
+    toast(`Boletas vinculadas: ${data.linked} de ${data.revisadas} revisadas`)
+  } catch {
+    toast('Error en auto-vinculación de boletas', 'error')
+  } finally {
+    loadingAutoLinkBoletas.value = false
   }
 }
 
