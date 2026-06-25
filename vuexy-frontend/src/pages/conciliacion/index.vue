@@ -367,8 +367,11 @@
                       <VIcon start size="11">mdi-alert-outline</VIcon>Parcial
                     </VChip>
                   </div>
+                  <VChip v-else-if="item.conciliado && item.categoria === 'Transbank'" size="x-small" color="primary" variant="tonal">
+                    <VIcon start size="11">mdi-credit-card-check-outline</VIcon>Transbank ✓
+                  </VChip>
                   <VChip v-else-if="item.conciliado" size="x-small" color="info" variant="tonal">
-                    <VIcon start size="11">mdi-check-circle-outline</VIcon>Chipax ✓
+                    <VIcon start size="11">mdi-check-circle-outline</VIcon>Conciliado ✓
                   </VChip>
                   <span v-else class="text-caption text-warning font-weight-bold">
                     {{ item.tipo === 'D' ? formatMonto(item.saldo_por_asignar) : 'Pendiente' }}
@@ -1077,11 +1080,50 @@
                 <VDivider class="mb-3" />
               </template>
 
+              <!-- ── Panel Transbank (cuando el movimiento es depósito Transbank) ── -->
+              <template v-if="movConciliando?.categoria === 'Transbank'">
+                <VCard variant="tonal" color="primary" class="mb-4">
+                  <VCardText class="pa-3">
+                    <div class="d-flex align-center gap-2 mb-2">
+                      <VIcon color="primary" size="18">mdi-credit-card-check-outline</VIcon>
+                      <span class="text-body-2 font-weight-semibold">Depósito conciliado vía Transbank</span>
+                    </div>
+                    <div v-if="loadingTransbankDet" class="text-caption text-medium-emphasis">Cargando...</div>
+                    <template v-else-if="transbankDetalle?.abono">
+                      <div class="text-caption text-medium-emphasis mb-2">
+                        Abono {{ transbankDetalle.abono.fecha_abono }} · Período {{ transbankDetalle.abono.periodo }}
+                      </div>
+                      <div v-if="!transbankDetalle.transacciones.length" class="text-caption text-medium-emphasis">
+                        Sin transacciones vinculadas a documentos aún — gestiona desde el módulo Transbank.
+                      </div>
+                      <div v-for="tx in transbankDetalle.transacciones" :key="tx.id" class="d-flex justify-space-between align-center py-1" style="border-bottom:1px solid rgba(255,255,255,.1)">
+                        <div>
+                          <VChip size="x-small" color="primary" variant="flat" class="mr-1">
+                            {{ tx.tipo_tarjeta ?? 'Tarjeta' }}
+                          </VChip>
+                          <span class="text-caption">{{ tx.fecha_movimiento }}</span>
+                          <span v-if="tx.doc_id" class="text-caption text-medium-emphasis ml-2">
+                            → {{ tx.tipo_documento_bsale_id === 1 ? 'Boleta' : 'Factura' }} N°{{ tx.numero_documento_bsale }}
+                            <span v-if="tx.bsale_cliente_nombre">({{ tx.bsale_cliente_nombre }})</span>
+                          </span>
+                          <span v-else class="text-caption text-warning ml-2">sin doc vinculado</span>
+                        </div>
+                        <span class="text-caption font-weight-bold">{{ formatMonto(tx.monto_original) }}</span>
+                      </div>
+                    </template>
+                    <div v-else class="text-caption text-medium-emphasis">
+                      Sin abono Transbank vinculado a este movimiento. Usa el módulo Transbank → Depósitos para vincular.
+                    </div>
+                  </VCardText>
+                </VCard>
+                <VDivider class="mb-3" />
+              </template>
+
               <p class="text-overline text-medium-emphasis mb-2">Documentos asignados</p>
 
               <!-- ── CRÉDITO: ventas vinculadas + boletas + ingresos manuales ── -->
               <template v-if="movConciliando?.tipo === 'C'">
-                <p v-if="!concVentasAsignadas.length && !concIngresosAsignados.length && !concBoletasAsignadas.length" class="text-caption text-medium-emphasis mb-4">
+                <p v-if="!concVentasAsignadas.length && !concIngresosAsignados.length && !concBoletasAsignadas.length && movConciliando?.categoria !== 'Transbank'" class="text-caption text-medium-emphasis mb-4">
                   Ningún documento asignado aún
                 </p>
                 <!-- boletas asignadas (un documento por mes) -->
@@ -2285,6 +2327,9 @@ const buscarVentaDisp       = ref('')
 const concSaldoPorAsignar   = ref(0)
 const concTab               = ref('facturas')
 
+const transbankDetalle      = ref(null)
+const loadingTransbankDet   = ref(false)
+
 const categoriasIngreso = [
   'Ingreso por ventas', 'Servicios prestados', 'Honorarios recibidos',
   'Arriendo cobrado', 'Comisión cobrada', 'Transferencia recibida', 'Otro',
@@ -2348,6 +2393,19 @@ async function guardarNotaMovimiento() {
 async function cargarEstadoConciliar() {
   if (!movConciliando.value) return
   loadingConciliar.value = true
+  transbankDetalle.value = null
+
+  // Si es movimiento Transbank, cargar detalle del depósito
+  if (movConciliando.value.categoria === 'Transbank') {
+    loadingTransbankDet.value = true
+    try {
+      const { data } = await axios.get(`/api/transbank/movimiento/${movConciliando.value.id}/detalle`)
+      transbankDetalle.value = data
+    } catch { /* silencioso */ } finally {
+      loadingTransbankDet.value = false
+    }
+  }
+
   try {
     if (movConciliando.value.tipo === 'C') {
       // ── Crédito: cargar ventas + boletas + ingresos asignados ──

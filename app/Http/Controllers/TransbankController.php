@@ -883,6 +883,46 @@ class TransbankController extends Controller
         return response()->json(['success' => true, 'deleted' => $deleted]);
     }
 
+    // GET /api/transbank/movimiento/{id}/detalle
+    // Devuelve el abono Transbank vinculado a un movimiento bancario y sus transacciones con documentos.
+    public function detalleMovimiento(int $id)
+    {
+        $abono = DB::table('transbank_abonos as ta')
+            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+            ->where('ta.movimiento_bancario_id', $id)
+            ->select('ta.id', 'ta.fecha_abono', 'ta.total_abono', 'ta.total_ventas', 'tf.tipo as tipo_archivo', 'tf.periodo')
+            ->first();
+
+        if (!$abono) {
+            return response()->json(['abono' => null, 'transacciones' => []]);
+        }
+
+        $transacciones = DB::table('transbank_transacciones as tt')
+            ->where('tt.abono_id', $abono->id)
+            ->where('tt.tipo', 'Venta')
+            ->leftJoin('transbank_factura as tvf', 'tvf.transaccion_id', '=', 'tt.id')
+            ->leftJoin('documentos_facturacion as df', 'df.id', '=', 'tvf.documento_id')
+            ->select(
+                'tt.id',
+                'tt.fecha_movimiento',
+                'tt.monto_original',
+                'tt.tipo_tarjeta',
+                'tt.nro_voucher',
+                'df.id as doc_id',
+                'df.numero_documento_bsale',
+                'df.tipo_documento_bsale_id',
+                'df.monto as doc_monto',
+                'df.bsale_cliente_nombre'
+            )
+            ->orderByDesc('tt.fecha_movimiento')
+            ->get();
+
+        return response()->json([
+            'abono'         => $abono,
+            'transacciones' => $transacciones,
+        ]);
+    }
+
     // ── GET /api/transbank/facturas-disponibles ───────────────────────────────
     // Documentos de facturación emitidos que aún no están vinculados a ninguna transacción Transbank.
 

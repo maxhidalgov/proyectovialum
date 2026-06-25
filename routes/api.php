@@ -387,6 +387,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/transaccion/{id}/link',       [\App\Http\Controllers\TransbankController::class, 'linkDocumento']);
         Route::delete('/transaccion/{id}/link',     [\App\Http\Controllers\TransbankController::class, 'unlinkDocumento']);
         Route::delete('/documento/{id}/links',      [\App\Http\Controllers\TransbankController::class, 'unlinkDocumentoLinks']);
+        Route::get('/movimiento/{id}/detalle',      [\App\Http\Controllers\TransbankController::class, 'detalleMovimiento']);
         Route::get('/transacciones-sin-doc',               [\App\Http\Controllers\TransbankController::class, 'transaccionesSinDoc']);
         Route::post('/transaccion/{id}/ingreso-manual',    [\App\Http\Controllers\IngresoManualController::class, 'storePorTransaccion']);
         Route::post('/auto-match',     [\App\Http\Controllers\TransbankController::class, 'autoMatch']);
