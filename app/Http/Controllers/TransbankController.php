@@ -480,10 +480,9 @@ class TransbankController extends Controller
             ->orderBy('forma_pago')
             ->get();
 
-        // 3. Facturas tarjeta del período (no boletas, pagadas con tarjeta)
+        // 3. Facturas tarjeta del período — agrupadas por documento para evitar duplicados
+        //    cuando un documento tiene múltiples transacciones Transbank vinculadas.
         $facturas = DB::table('documentos_facturacion as df')
-            ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
-            ->leftJoin('transbank_transacciones as tt', 'tt.id', '=', 'tvf.transaccion_id')
             ->leftJoin('clientes as cl', 'cl.id', '=', 'df.cliente_id')
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [1])
@@ -498,8 +497,18 @@ class TransbankController extends Controller
                 'df.nro_comprobante_transbank',
                 'df.url_pdf_bsale',
                 DB::raw('COALESCE(cl.razon_social, df.bsale_cliente_nombre) as cliente'),
-                'tvf.transaccion_id',
-                'tt.nro_voucher'
+                DB::raw('COALESCE((
+                    SELECT SUM(tt2.monto_original)
+                    FROM transbank_factura tvf2
+                    JOIN transbank_transacciones tt2 ON tt2.id = tvf2.transaccion_id
+                    WHERE tvf2.documento_id = df.id
+                ), 0) as monto_vinculado'),
+                DB::raw('(
+                    SELECT GROUP_CONCAT(tt2.nro_voucher ORDER BY tt2.id SEPARATOR ", ")
+                    FROM transbank_factura tvf2
+                    JOIN transbank_transacciones tt2 ON tt2.id = tvf2.transaccion_id
+                    WHERE tvf2.documento_id = df.id
+                ) as vouchers_vinculados')
             )
             ->orderByDesc('df.fecha_emision')
             ->get();
@@ -867,6 +876,13 @@ class TransbankController extends Controller
     {
         DB::table('transbank_factura')->where('transaccion_id', $id)->delete();
         return response()->json(['success' => true]);
+    }
+
+    // DELETE /api/transbank/documento/{id}/links — elimina TODOS los vínculos Transbank de un documento
+    public function unlinkDocumentoLinks(int $id)
+    {
+        $deleted = DB::table('transbank_factura')->where('documento_id', $id)->delete();
+        return response()->json(['success' => true, 'deleted' => $deleted]);
     }
 
     // ── GET /api/transbank/facturas-disponibles ───────────────────────────────

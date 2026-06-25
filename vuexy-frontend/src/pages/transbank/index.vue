@@ -563,19 +563,31 @@
                 <td class="text-caption">{{ f.cliente }}</td>
                 <td class="text-caption">{{ formatFecha(f.fecha_emision) }}</td>
                 <td class="text-right font-weight-bold">{{ fmt(f.monto) }}</td>
-                <td class="text-caption text-medium-emphasis">{{ f.nro_comprobante_transbank ?? f.nro_voucher ?? '—' }}</td>
+                <td class="text-caption text-medium-emphasis">{{ f.vouchers_vinculados ?? f.nro_comprobante_transbank ?? '—' }}</td>
                 <td>
                   <div class="d-flex align-center gap-1">
-                    <VChip v-if="f.transaccion_id" size="x-small" color="success" label>
+                    <!-- Totalmente vinculada -->
+                    <VChip v-if="f.monto_vinculado >= f.monto" size="x-small" color="success" label>
                       <VIcon start size="12">mdi-check</VIcon>Vinculada
                     </VChip>
+                    <!-- Parcialmente vinculada -->
+                    <template v-else-if="f.monto_vinculado > 0">
+                      <VChip size="x-small" color="warning" label>
+                        <VIcon start size="12">mdi-progress-clock</VIcon>
+                        Parcial {{ fmt(f.monto_vinculado) }}/{{ fmt(f.monto) }}
+                      </VChip>
+                      <VBtn size="x-small" variant="tonal" color="primary"
+                        @click="abrirVincularDoc(f)"
+                      ><VIcon start size="12">mdi-plus</VIcon>+ Tx</VBtn>
+                    </template>
+                    <!-- Sin vincular -->
                     <VBtn v-else size="x-small" variant="tonal" color="warning"
                       @click="abrirVincularDoc(f)"
                     >Vincular</VBtn>
                     <VBtn v-if="f.url_pdf_bsale" size="x-small" variant="text" color="error"
                       :href="f.url_pdf_bsale" target="_blank" icon
                     ><VIcon size="16">mdi-file-pdf-box</VIcon></VBtn>
-                    <VBtn v-if="f.transaccion_id" size="x-small" variant="text" color="warning"
+                    <VBtn v-if="f.monto_vinculado > 0" size="x-small" variant="text" color="warning"
                       :loading="desvinculandoDoc === f.id"
                       @click="desasociarDoc(f)"
                     ><VIcon size="14">mdi-close</VIcon></VBtn>
@@ -1726,7 +1738,7 @@ async function confirmarVincularDoc(tx) {
 async function desasociarDoc(factura) {
   desvinculandoDoc.value = factura.id
   try {
-    await axios.delete(`/api/transbank/transaccion/${factura.transaccion_id}/link`)
+    await axios.delete(`/api/transbank/documento/${factura.id}/links`)
     await cargarDocumentos()
     toast('Vinculación removida')
   } catch {
