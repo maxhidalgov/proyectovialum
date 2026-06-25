@@ -2420,7 +2420,9 @@ async function cargarEstadoConciliar() {
       const totalAsignado = concVentasAsignadas.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
                           + concIngresosAsignados.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
                           + concBoletasAsignadas.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
-      concSaldoPorAsignar.value = Math.max(0, (movConciliando.value?.monto ?? 0) - totalAsignado)
+      // Movimientos Transbank conciliados no requieren asignación manual de documentos aquí
+      const esTransbankConciliado = movConciliando.value?.categoria === 'Transbank' && movConciliando.value?.conciliado
+      concSaldoPorAsignar.value = esTransbankConciliado ? 0 : Math.max(0, (movConciliando.value?.monto ?? 0) - totalAsignado)
       await Promise.all([cargarVentasDisponibles(), cargarBoletasDisponibles()])
     } else {
       // ── Débito: cargar compras / gastos / sueldos ──

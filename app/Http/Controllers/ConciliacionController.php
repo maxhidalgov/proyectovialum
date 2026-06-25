@@ -342,9 +342,16 @@ class ConciliacionController extends Controller
             ->selectRaw('movimiento_id, SUM(monto) as asignado')
             ->pluck('asignado', 'movimiento_id');
 
+        // Transbank: monto cubierto por abono vinculado (matchDeposito)
+        $asignadosTransbank = DB::table('transbank_abonos')
+            ->whereIn('movimiento_bancario_id', $ids)
+            ->groupBy('movimiento_bancario_id')
+            ->selectRaw('movimiento_bancario_id, SUM(total_abono) as asignado')
+            ->pluck('asignado', 'movimiento_bancario_id');
+
         $movs->getCollection()->transform(function ($mov) use (
             $asignadosCompra, $asignadosGasto, $asignadosSueldo, $asignadosVenta,
-            $asignadosIngreso, $asignadosBolResumen, $asignadosBolPeriodo
+            $asignadosIngreso, $asignadosBolResumen, $asignadosBolPeriodo, $asignadosTransbank
         ) {
             $asignado = (float) ($asignadosCompra[$mov->id]     ?? 0)
                       + (float) ($asignadosGasto[$mov->id]      ?? 0)
@@ -352,7 +359,15 @@ class ConciliacionController extends Controller
                       + (float) ($asignadosVenta[$mov->id]      ?? 0)
                       + (float) ($asignadosIngreso[$mov->id]    ?? 0)
                       + (float) ($asignadosBolResumen[$mov->id] ?? 0)
-                      + (float) ($asignadosBolPeriodo[$mov->id] ?? 0);
+                      + (float) ($asignadosBolPeriodo[$mov->id] ?? 0)
+                      + (float) ($asignadosTransbank[$mov->id]  ?? 0);
+
+            // Movimiento Transbank marcado como conciliado sin abono vinculado aún:
+            // tratar como completamente cubierto para evitar mostrar saldo falso.
+            if ($mov->conciliado && $mov->categoria === 'Transbank' && $asignado === 0.0) {
+                $asignado = (float) $mov->monto;
+            }
+
             $mov->monto_asignado    = $asignado;
             $mov->saldo_por_asignar = max(0, $mov->monto - $asignado);
             return $mov;
