@@ -1243,7 +1243,7 @@
                       <VIcon size="14" class="mr-1">mdi-currency-usd</VIcon>Monto
                     </VBtn>
                     <VBtn value="fecha" size="x-small">
-                      <VIcon size="14" class="mr-1">mdi-calendar</VIcon>Fecha
+                      <VIcon size="14" class="mr-1">mdi-calendar</VIcon>Fecha + Monto
                     </VBtn>
                   </VBtnToggle>
                   <VBtnToggle
@@ -1473,6 +1473,16 @@
                         </tr>
                       </tbody>
                     </VTable>
+                    <!-- Paginación compras -->
+                    <div v-if="metaCompras && metaCompras.last_page > 1" class="d-flex align-center justify-center gap-2 mt-2">
+                      <VBtn icon size="x-small" variant="text" :disabled="pageCompras <= 1" @click="pageCompras--; cargarDisponibles()">
+                        <VIcon size="16">mdi-chevron-left</VIcon>
+                      </VBtn>
+                      <span class="text-caption">{{ pageCompras }} / {{ metaCompras.last_page }} &nbsp;({{ metaCompras.total }} registros)</span>
+                      <VBtn icon size="x-small" variant="text" :disabled="pageCompras >= metaCompras.last_page" @click="pageCompras++; cargarDisponibles()">
+                        <VIcon size="16">mdi-chevron-right</VIcon>
+                      </VBtn>
+                    </div>
                   </div>
                 </div>
 
@@ -1548,6 +1558,16 @@
                         </tr>
                       </tbody>
                     </VTable>
+                    <!-- Paginación gastos -->
+                    <div v-if="metaGastos && metaGastos.last_page > 1" class="d-flex align-center justify-center gap-2 mt-2">
+                      <VBtn icon size="x-small" variant="text" :disabled="pageGastos <= 1" @click="pageGastos--; cargarGastosDisponibles()">
+                        <VIcon size="16">mdi-chevron-left</VIcon>
+                      </VBtn>
+                      <span class="text-caption">{{ pageGastos }} / {{ metaGastos.last_page }} &nbsp;({{ metaGastos.total }} registros)</span>
+                      <VBtn icon size="x-small" variant="text" :disabled="pageGastos >= metaGastos.last_page" @click="pageGastos++; cargarGastosDisponibles()">
+                        <VIcon size="16">mdi-chevron-right</VIcon>
+                      </VBtn>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -2330,6 +2350,16 @@ const concTab               = ref('facturas')
 const transbankDetalle      = ref(null)
 const loadingTransbankDet   = ref(false)
 
+// Paginación por tab del modal
+const pageCompras   = ref(1)
+const metaCompras   = ref(null)
+const pageGastos    = ref(1)
+const metaGastos    = ref(null)
+const pageSueldos   = ref(1)
+const metaSueldos   = ref(null)
+const pageVentas    = ref(1)
+const metaVentas    = ref(null)
+
 const categoriasIngreso = [
   'Ingreso por ventas', 'Servicios prestados', 'Honorarios recibidos',
   'Arriendo cobrado', 'Comisión cobrada', 'Transferencia recibida', 'Otro',
@@ -2347,6 +2377,10 @@ function abrirConciliar(mov) {
   buscarGastoDisp.value        = ''
   buscarSueldoDisp.value       = ''
   buscarVentaDisp.value        = ''
+  pageCompras.value = 1; metaCompras.value = null
+  pageGastos.value  = 1; metaGastos.value  = null
+  pageSueldos.value = 1; metaSueldos.value = null
+  pageVentas.value  = 1; metaVentas.value  = null
   concAsignadas.value          = []
   concDisponibles.value        = []
   concGastosAsignados.value    = []
@@ -2451,6 +2485,7 @@ const ordenConc    = ref('monto') // 'monto' | 'fecha'
 const direccionFecha = ref('asc')  // 'asc' | 'desc'
 
 function recargarDisponiblesOrden() {
+  pageCompras.value = 1; pageGastos.value = 1; pageSueldos.value = 1
   if (concTab.value === 'facturas') cargarDisponibles()
   else if (concTab.value === 'gastos') cargarGastosDisponibles()
   else if (concTab.value === 'sueldos') cargarSueldosDisponibles()
@@ -2459,25 +2494,27 @@ function recargarDisponiblesOrden() {
 async function cargarDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = { orden: ordenConc.value, direccion: direccionFecha.value }
+    const params = { orden: ordenConc.value, direccion: direccionFecha.value, page: pageCompras.value }
     if (buscarCompraDisp.value) params.buscar = buscarCompraDisp.value
     if (montoFiltroDisp.value) params.monto = montoFiltroDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/compras-disponibles`, { params }
     )
     concDisponibles.value = data.data ?? data
+    metaCompras.value = data.last_page ? data : null
   } catch (e) { console.error(e) }
 }
 
 async function cargarGastosDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = { orden: ordenConc.value, direccion: direccionFecha.value }
+    const params = { orden: ordenConc.value, direccion: direccionFecha.value, page: pageGastos.value }
     if (buscarGastoDisp.value) params.buscar = buscarGastoDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/gastos-disponibles`, { params }
     )
     concGastosDisponibles.value = data.data ?? data
+    metaGastos.value = data.last_page ? data : null
   } catch (e) { console.error(e) }
 }
 
@@ -2542,12 +2579,14 @@ async function desasignarGasto(pivotId) {
 let buscarDispTimer = null
 function debounceBuscarDisp() {
   clearTimeout(buscarDispTimer)
+  pageCompras.value = 1
   buscarDispTimer = setTimeout(cargarDisponibles, 350)
 }
 
 let montoFiltroTimer = null
 function debounceFiltroMonto() {
   clearTimeout(montoFiltroTimer)
+  pageCompras.value = 1
   montoFiltroTimer = setTimeout(cargarDisponibles, 350)
 }
 
@@ -2560,12 +2599,13 @@ function debounceBuscarGasto() {
 async function cargarSueldosDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = { orden: ordenConc.value, direccion: direccionFecha.value }
+    const params = { orden: ordenConc.value, direccion: direccionFecha.value, page: pageSueldos.value }
     if (buscarSueldoDisp.value) params.buscar = buscarSueldoDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/sueldos-disponibles`, { params }
     )
     concSueldosDisponibles.value = data.data ?? data
+    metaSueldos.value = data.last_page ? data : null
   } catch (e) { console.error(e) }
 }
 
@@ -2608,11 +2648,13 @@ function debounceBuscarSueldo() {
 async function cargarVentasDisponibles() {
   if (!movConciliando.value) return
   try {
-    const params = buscarVentaDisp.value ? { buscar: buscarVentaDisp.value } : {}
+    const params = { page: pageVentas.value }
+    if (buscarVentaDisp.value) params.buscar = buscarVentaDisp.value
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/ventas-disponibles`, { params }
     )
     concVentasDisponibles.value = data.data ?? data
+    metaVentas.value = data.last_page ? data : null
   } catch (e) { console.error(e) }
 }
 
