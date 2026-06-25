@@ -890,7 +890,7 @@ class TransbankController extends Controller
         $abono = DB::table('transbank_abonos as ta')
             ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
             ->where('ta.movimiento_bancario_id', $id)
-            ->select('ta.id', 'ta.fecha_abono', 'ta.total_abono', 'ta.total_ventas', 'tf.tipo as tipo_archivo', 'tf.periodo')
+            ->select('ta.id', 'ta.fecha_abono', 'ta.net_abono', 'ta.total_venta_bruta', 'tf.tipo as tipo_archivo', 'tf.periodo')
             ->first();
 
         if (!$abono) {

@@ -346,7 +346,7 @@ class ConciliacionController extends Controller
         $asignadosTransbank = DB::table('transbank_abonos')
             ->whereIn('movimiento_bancario_id', $ids)
             ->groupBy('movimiento_bancario_id')
-            ->selectRaw('movimiento_bancario_id, SUM(total_abono) as asignado')
+            ->selectRaw('movimiento_bancario_id, SUM(net_abono) as asignado')
             ->pluck('asignado', 'movimiento_bancario_id');
 
         $movs->getCollection()->transform(function ($mov) use (
