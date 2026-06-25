@@ -941,7 +941,12 @@
                     || (!doc.nro_comprobante_transbank && Math.abs(n(doc.monto) - n(txSeleccionada?.monto_original)) < 10)
                 }"
               >
-                <td class="font-weight-medium">{{ doc.numero_documento_bsale }}</td>
+                <td class="font-weight-medium">
+                  {{ doc.numero_documento_bsale }}
+                  <VChip v-if="doc.tx_linked_count > 0" size="x-small" color="warning" label class="ml-1">
+                    +{{ doc.tx_linked_count }} tx
+                  </VChip>
+                </td>
                 <td class="text-body-2">{{ doc.bsale_cliente_nombre ?? '—' }}</td>
                 <td class="text-caption">{{ formatFecha(doc.fecha_emision) }}</td>
                 <td class="text-right font-weight-medium">{{ fmt(doc.monto) }}</td>

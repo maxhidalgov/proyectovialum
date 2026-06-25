@@ -869,14 +869,12 @@ class TransbankController extends Controller
         $periodo = $request->get('periodo', now()->format('Y-m'));
 
         [$y, $m] = explode('-', $periodo);
-        $desde = Carbon::create((int) $y, (int) $m, 1)->subMonth()->startOfMonth()->toDateString();
-        $hasta = Carbon::create((int) $y, (int) $m, 1)->addMonth()->endOfMonth()->toDateString();
+        $desde = Carbon::create((int) $y, (int) $m, 1)->subMonths(2)->startOfMonth()->toDateString();
+        $hasta = Carbon::create((int) $y, (int) $m, 1)->addMonths(2)->endOfMonth()->toDateString();
 
         $soloTarjeta = $request->get('solo_tarjeta', '1') === '1';
 
         $query = DB::table('documentos_facturacion as df')
-            ->leftJoin('transbank_factura as tvf', 'tvf.documento_id', '=', 'df.id')
-            ->whereNull('tvf.documento_id')
             ->where('df.estado', 'emitido')
             ->whereNotNull('df.numero_documento_bsale')
             ->whereBetween('df.fecha_emision', [$desde, $hasta])
@@ -889,7 +887,8 @@ class TransbankController extends Controller
                 'df.fecha_emision',
                 'df.tipo_documento_bsale_id',
                 'df.nro_comprobante_transbank',
-                'df.pagado_con_tarjeta'
+                'df.pagado_con_tarjeta',
+                DB::raw('(SELECT COUNT(*) FROM transbank_factura WHERE documento_id = df.id) as tx_linked_count')
             );
 
         if ($q) {
