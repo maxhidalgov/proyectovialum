@@ -388,6 +388,7 @@ class CuentasPorCobrarController extends Controller
         $buscar         = $request->get('buscar');
         $monto          = $request->get('monto');
         $soloPendientes = filter_var($request->get('solo_pendientes', false), FILTER_VALIDATE_BOOLEAN);
+        $tipoPago       = $request->get('tipo_pago'); // 'tarjeta' | 'efectivo' | null
 
         $q = DB::table('documentos_facturacion as df')
             ->leftJoin('cotizaciones as c',  'c.id',      '=', 'df.cotizacion_id')
@@ -421,8 +422,10 @@ class CuentasPorCobrarController extends Controller
             ->orderByDesc('df.fecha_emision')
             ->orderByDesc('df.id');
 
-        if ($desde)  $q->where('df.fecha_emision', '>=', $desde);
-        if ($hasta)  $q->where('df.fecha_emision', '<=', $hasta);
+        if ($desde)     $q->where('df.fecha_emision', '>=', $desde);
+        if ($hasta)     $q->where('df.fecha_emision', '<=', $hasta);
+        if ($tipoPago === 'tarjeta')  $q->where('df.pagado_con_tarjeta', 1);
+        if ($tipoPago === 'efectivo') $q->where(fn($sq) => $sq->where('df.pagado_con_tarjeta', 0)->orWhereNull('df.pagado_con_tarjeta'));
         if ($buscar) {
             $q->where(function ($sq) use ($buscar) {
                 $sq->where('cl_dir.razon_social',    'like', "%$buscar%")

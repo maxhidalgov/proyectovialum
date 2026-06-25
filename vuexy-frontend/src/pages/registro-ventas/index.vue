@@ -76,6 +76,17 @@
               @update:modelValue="cargar"
             />
           </VCol>
+          <VCol cols="12" sm="2">
+            <VSelect
+              v-model="filtros.tipo_pago"
+              :items="[{ title: 'Todos', value: '' }, { title: 'Tarjeta', value: 'tarjeta' }, { title: 'Efectivo/Otro', value: 'efectivo' }]"
+              label="Forma de pago"
+              density="compact"
+              variant="outlined"
+              hide-details
+              @update:modelValue="cargar"
+            />
+          </VCol>
           <VCol cols="12" sm="1">
             <VSwitch
               v-model="filtros.solo_pendientes"
@@ -497,6 +508,7 @@ const filtros = ref({
   hasta:           hoy,
   buscar:          '',
   monto:           '',
+  tipo_pago:       '',
   solo_pendientes: false,
 })
 
@@ -579,10 +591,11 @@ async function cargar() {
   try {
     const { data } = await axios.get('/api/registro-ventas', {
       params: {
-        desde:           filtros.value.desde || undefined,
-        hasta:           filtros.value.hasta || undefined,
-        buscar:          filtros.value.buscar || undefined,
-        monto:           filtros.value.monto  || undefined,
+        desde:           filtros.value.desde     || undefined,
+        hasta:           filtros.value.hasta     || undefined,
+        buscar:          filtros.value.buscar    || undefined,
+        monto:           filtros.value.monto     || undefined,
+        tipo_pago:       filtros.value.tipo_pago || undefined,
         solo_pendientes: filtros.value.solo_pendientes,
       },
     })

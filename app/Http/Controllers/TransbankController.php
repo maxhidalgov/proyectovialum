@@ -496,6 +496,7 @@ class TransbankController extends Controller
                 'df.fecha_emision',
                 'df.tipo_documento_bsale_id',
                 'df.nro_comprobante_transbank',
+                'df.url_pdf_bsale',
                 DB::raw('COALESCE(cl.razon_social, df.bsale_cliente_nombre) as cliente'),
                 'tvf.transaccion_id',
                 'tt.nro_voucher'

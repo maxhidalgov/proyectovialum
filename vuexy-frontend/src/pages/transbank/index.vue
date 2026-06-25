@@ -569,6 +569,9 @@
                     <VChip size="x-small" color="success" label>
                       <VIcon start size="12">mdi-check</VIcon>Vinculada
                     </VChip>
+                    <VBtn v-if="f.url_pdf_bsale" size="x-small" variant="text" color="error"
+                      :href="f.url_pdf_bsale" target="_blank" icon
+                    ><VIcon size="16">mdi-file-pdf-box</VIcon></VBtn>
                     <VBtn size="x-small" variant="text" color="warning"
                       :loading="desvinculandoDoc === f.id"
                       @click="desasociarDoc(f)"
