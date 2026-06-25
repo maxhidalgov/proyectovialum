@@ -947,7 +947,7 @@
                 <td class="font-weight-medium">
                   {{ doc.numero_documento_bsale }}
                   <VChip v-if="doc.tx_linked_count > 0" size="x-small" color="warning" label class="ml-1">
-                    +{{ doc.tx_linked_count }} tx
+                    {{ fmt(doc.monto - doc.monto_ya_vinculado) }} pend.
                   </VChip>
                 </td>
                 <td class="text-body-2">{{ doc.bsale_cliente_nombre ?? '—' }}</td>

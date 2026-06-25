@@ -889,6 +889,14 @@ class TransbankController extends Controller
             ->whereNotNull('df.numero_documento_bsale')
             ->whereBetween('df.fecha_emision', [$desde, $hasta])
             ->when($soloTarjeta, fn($q2) => $q2->where('df.pagado_con_tarjeta', 1))
+            // Solo mostrar documentos donde el monto Transbank ya vinculado < monto del documento
+            // (permite multi-tx pero excluye los que ya tienen cobertura completa)
+            ->whereRaw('df.monto > COALESCE((
+                SELECT SUM(tt2.monto_original)
+                FROM transbank_factura tvf2
+                JOIN transbank_transacciones tt2 ON tt2.id = tvf2.transaccion_id
+                WHERE tvf2.documento_id = df.id
+            ), 0)')
             ->select(
                 'df.id',
                 'df.numero_documento_bsale',
@@ -898,7 +906,13 @@ class TransbankController extends Controller
                 'df.tipo_documento_bsale_id',
                 'df.nro_comprobante_transbank',
                 'df.pagado_con_tarjeta',
-                DB::raw('(SELECT COUNT(*) FROM transbank_factura WHERE documento_id = df.id) as tx_linked_count')
+                DB::raw('(SELECT COUNT(*) FROM transbank_factura WHERE documento_id = df.id) as tx_linked_count'),
+                DB::raw('COALESCE((
+                    SELECT SUM(tt2.monto_original)
+                    FROM transbank_factura tvf2
+                    JOIN transbank_transacciones tt2 ON tt2.id = tvf2.transaccion_id
+                    WHERE tvf2.documento_id = df.id
+                ), 0) as monto_ya_vinculado')
             );
 
         if ($q) {
