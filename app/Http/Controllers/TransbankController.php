@@ -571,8 +571,7 @@ class TransbankController extends Controller
 
     public function transaccionesSinDoc(Request $request)
     {
-        $periodo = $request->get('periodo', now()->format('Y-m'));
-        $monto   = $request->get('monto');
+        $monto = $request->get('monto');
 
         $base = DB::table('transbank_transacciones as tt')
             ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
@@ -580,7 +579,6 @@ class TransbankController extends Controller
             ->leftJoin('transbank_factura as tvf', 'tvf.transaccion_id', '=', 'tt.id')
             ->leftJoin('ingresos_manuales as im', 'im.transbank_transaccion_id', '=', 'tt.id')
             ->whereNotNull('tt.fecha_movimiento')
-            ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
             ->where('tt.tipo', 'Venta')
             ->whereNull('tvf.transaccion_id')
             ->whereNull('im.id')
