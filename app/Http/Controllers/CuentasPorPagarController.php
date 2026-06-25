@@ -245,6 +245,7 @@ class CuentasPorPagarController extends Controller
         $hasta          = $request->get('hasta');
         $buscar         = $request->get('buscar');
         $monto          = $request->get('monto');
+        $categoria      = $request->get('categoria');
         $soloPendientes = filter_var($request->get('solo_pendientes', false), FILTER_VALIDATE_BOOLEAN);
 
         $q = DB::table('compras')
@@ -259,6 +260,7 @@ class CuentasPorPagarController extends Controller
                 'compras.neto',
                 'compras.iva',
                 'compras.total',
+                'compras.categoria',
                 'compras.pdf_url',
                 'compras.nc_revision_estado',
                 'compras.pagado_historico',
@@ -275,8 +277,9 @@ class CuentasPorPagarController extends Controller
             ->orderByDesc('compras.fecha_emision')
             ->orderByDesc('compras.id');
 
-        if ($desde) $q->where('compras.fecha_emision', '>=', $desde);
-        if ($hasta) $q->where('compras.fecha_emision', '<=', $hasta);
+        if ($desde)     $q->where('compras.fecha_emision', '>=', $desde);
+        if ($hasta)     $q->where('compras.fecha_emision', '<=', $hasta);
+        if ($categoria) $q->where('compras.categoria', $categoria);
         if ($buscar) {
             $q->where(function ($sq) use ($buscar) {
                 $sq->where('compras.nombre_emisor', 'like', "%$buscar%")

@@ -76,6 +76,19 @@
               @update:modelValue="cargar"
             />
           </VCol>
+          <VCol cols="12" sm="2">
+            <VSelect
+              v-model="filtros.categoria"
+              :items="['', ...categoriasDisponibles]"
+              label="Categoría"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              placeholder="Todas"
+              @update:modelValue="cargar"
+            />
+          </VCol>
           <VCol cols="12" sm="1">
             <VSwitch
               v-model="filtros.solo_pendientes"
@@ -169,6 +182,14 @@
         <!-- Fecha -->
         <template #item.fecha_emision="{ item }">
           <span class="text-caption">{{ fmtFecha(item.fecha_emision) }}</span>
+        </template>
+
+        <!-- Categoría -->
+        <template #item.categoria="{ item }">
+          <VChip v-if="item.categoria" size="x-small" color="secondary" variant="tonal">
+            {{ item.categoria }}
+          </VChip>
+          <span v-else class="text-caption text-disabled">—</span>
         </template>
 
         <!-- Total -->
@@ -445,15 +466,19 @@ const filtros = ref({
   hasta:              hoy,
   buscar:             '',
   monto:              '',
+  categoria:          '',
   solo_pendientes:    false,
   ocultar_historicas: false,
 })
+
+const categoriasDisponibles = ref([])
 
 // ── Headers ───────────────────────────────────────────────────────────────────
 const headers = [
   { title: 'Folio',      key: 'folio',         sortable: false },
   { title: 'Proveedor',  key: 'nombre_emisor',  sortable: true  },
   { title: 'Fecha',      key: 'fecha_emision',  sortable: true  },
+  { title: 'Categoría',  key: 'categoria',      sortable: true  },
   { title: 'Total',      key: 'total',          align: 'end', sortable: true },
   { title: 'Por Pagar',  key: 'pendiente',      align: 'end', sortable: true },
   { title: '',           key: 'acciones',       sortable: false, width: '140px' },
@@ -491,10 +516,11 @@ async function cargar() {
   try {
     const { data } = await axios.get('/api/registro-compras', {
       params: {
-        desde:           filtros.value.desde || undefined,
-        hasta:           filtros.value.hasta || undefined,
-        buscar:          filtros.value.buscar || undefined,
-        monto:           filtros.value.monto  || undefined,
+        desde:           filtros.value.desde     || undefined,
+        hasta:           filtros.value.hasta     || undefined,
+        buscar:          filtros.value.buscar    || undefined,
+        monto:           filtros.value.monto     || undefined,
+        categoria:       filtros.value.categoria || undefined,
         solo_pendientes: filtros.value.solo_pendientes,
       },
     })
@@ -631,5 +657,11 @@ async function desasignar(pivotId) {
   }
 }
 
-onMounted(cargar)
+onMounted(async () => {
+  cargar()
+  try {
+    const { data } = await axios.get('/api/compras/categorias')
+    categoriasDisponibles.value = data
+  } catch { /* silencioso */ }
+})
 </script>
