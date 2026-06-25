@@ -839,14 +839,23 @@ class TransbankController extends Controller
     {
         $request->validate(['documento_id' => 'required|exists:documentos_facturacion,id']);
 
-        DB::table('transbank_factura')->updateOrInsert(
-            ['transaccion_id' => $id],
-            [
-                'documento_id' => $request->input('documento_id'),
-                'updated_at'   => now(),
-                'created_at'   => now(),
-            ]
-        );
+        $docId = $request->input('documento_id');
+
+        // Si ya existe un vínculo para esta transacción, actualizarlo.
+        // Si no, insertar uno nuevo (documento_id ya no es unique → permite multi-tx por doc).
+        $existing = DB::table('transbank_factura')->where('transaccion_id', $id)->first();
+        if ($existing) {
+            DB::table('transbank_factura')
+                ->where('transaccion_id', $id)
+                ->update(['documento_id' => $docId, 'updated_at' => now()]);
+        } else {
+            DB::table('transbank_factura')->insert([
+                'transaccion_id' => $id,
+                'documento_id'   => $docId,
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ]);
+        }
 
         return response()->json(['success' => true]);
     }
