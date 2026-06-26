@@ -18,25 +18,15 @@ class CuentasPorCobrarController extends Controller
         return DB::raw("(
             SELECT
                 df.id AS df_id,
-                CASE
-                  -- Chipax solo aplica como fallback cuando no hay ningún pago explícito
-                  -- (banco, Transbank, manual, NI NC aplicada explícitamente)
-                  WHEN df.chipax_monto_por_cobrar IS NOT NULL
-                   AND COALESCE(vm.monto_cobrado, 0) = 0
-                   AND COALESCE(tbk.monto_tbk, 0) = 0
-                   AND COALESCE(df.monto_cobrado_manual, 0) = 0
-                   AND COALESCE(ncf.monto_nc, 0) = 0
-                   AND COALESCE(ncnc.monto_nc, 0) = 0
-                    THEN df.monto - df.chipax_monto_por_cobrar
-                  ELSE
-                    COALESCE(vm.monto_cobrado, 0)
-                      + COALESCE(tbk.monto_tbk, 0)
-                      + COALESCE(df.monto_cobrado_manual, 0)
-                      + CASE WHEN df.tipo_documento_bsale_id = 2
-                             THEN COALESCE(ncnc.monto_nc, 0)
-                             ELSE COALESCE(ncf.monto_nc, 0)
-                        END
-                END AS monto_cobrado_efectivo
+                COALESCE(vm.monto_cobrado, 0)
+                  + COALESCE(tbk.monto_tbk, 0)
+                  + COALESCE(df.monto_cobrado_manual, 0)
+                  + CASE WHEN df.tipo_documento_bsale_id = 2
+                         -- NC: cuánto de su monto ya fue aplicado a facturas (venta_nc_aplicacion)
+                         THEN COALESCE(ncnc.monto_nc, 0)
+                         -- Factura normal: NC aplicada manualmente + NC de Bsale que la referencia
+                         ELSE COALESCE(ncf.monto_nc, 0) + COALESCE(ncref.monto_nc, 0)
+                    END AS monto_cobrado_efectivo
             FROM documentos_facturacion df
             LEFT JOIN (SELECT venta_id, SUM(monto) monto_cobrado FROM venta_movimiento GROUP BY venta_id) vm
                    ON vm.venta_id = df.id
@@ -45,10 +35,23 @@ class CuentasPorCobrarController extends Controller
                        JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
                        GROUP BY tf.documento_id) tbk
                    ON tbk.documento_id = df.id
+            -- NC aplicada manualmente (venta_nc_aplicacion donde esta doc es la factura destino)
             LEFT JOIN (SELECT factura_id AS df_id, SUM(monto) monto_nc FROM venta_nc_aplicacion GROUP BY factura_id) ncf
                    ON ncf.df_id = df.id
+            -- NC usada como crédito (venta_nc_aplicacion donde esta doc es la NC origen)
             LEFT JOIN (SELECT nc_id AS df_id, SUM(monto) monto_nc FROM venta_nc_aplicacion GROUP BY nc_id) ncnc
                    ON ncnc.df_id = df.id
+            -- NC de Bsale que referencia esta factura (nc_referencia_df_id) y aún no tiene venta_nc_aplicacion
+            LEFT JOIN (
+                SELECT nc_ref.nc_referencia_df_id AS df_id, SUM(nc_ref.monto) monto_nc
+                FROM documentos_facturacion nc_ref
+                WHERE nc_ref.tipo_documento_bsale_id = 2
+                  AND nc_ref.nc_referencia_df_id IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM venta_nc_aplicacion vnca WHERE vnca.nc_id = nc_ref.id
+                  )
+                GROUP BY nc_ref.nc_referencia_df_id
+            ) ncref ON ncref.df_id = df.id
         ) AS ec");
     }
 

@@ -35,30 +35,25 @@ class VentaMovimientoController extends Controller
 
         $totalManual = (float) ($venta->monto_cobrado_manual ?? 0);
 
+        // NC aplicadas explícitamente (venta_nc_aplicacion)
         $totalNC = (float) DB::table('venta_nc_aplicacion')
             ->where('factura_id', $ventaId)
             ->sum('monto');
 
-        // Chipax solo aplica cuando no hay ningún pago explícito registrado (misma lógica que efectivoCobradoSub)
-        $hayPagosExplicitos = ($totalCobrado + $totalTransbank + $totalManual + $totalNC) > 0;
-        if (!$hayPagosExplicitos && $venta->chipax_monto_por_cobrar !== null) {
-            $saldoPorCobrar   = max(0, (float) $venta->chipax_monto_por_cobrar);
-            $cobradoChipax    = (float) $venta->monto - $saldoPorCobrar;
-            return response()->json([
-                'asignados'         => $asignados,
-                'cobrado_transbank' => 0,
-                'cobrado_manual'    => 0,
-                'cobrado_chipax'    => $cobradoChipax,
-                'saldo_por_cobrar'  => $saldoPorCobrar,
-            ]);
-        }
+        // NC de Bsale que referencian esta factura (nc_referencia_df_id), sin doble conteo
+        $totalNCRef = (float) DB::table('documentos_facturacion as nc')
+            ->where('nc.tipo_documento_bsale_id', 2)
+            ->where('nc.nc_referencia_df_id', $ventaId)
+            ->whereNotExists(fn($q) => $q->from('venta_nc_aplicacion')->whereColumn('venta_nc_aplicacion.nc_id', 'nc.id'))
+            ->sum('nc.monto');
 
-        $saldoPorCobrar = max(0, $venta->monto - $totalCobrado - $totalTransbank - $totalManual - $totalNC);
+        $saldoPorCobrar = max(0, $venta->monto - $totalCobrado - $totalTransbank - $totalManual - $totalNC - $totalNCRef);
 
         return response()->json([
             'asignados'         => $asignados,
             'cobrado_transbank' => $totalTransbank,
             'cobrado_manual'    => $totalManual,
+            'cobrado_nc'        => $totalNC + $totalNCRef,
             'saldo_por_cobrar'  => $saldoPorCobrar,
         ]);
     }
@@ -206,7 +201,6 @@ class VentaMovimientoController extends Controller
                 DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
                 'df.id', '=', 'vm.venta_id'
             )
-            // Descuenta lo ya cubierto por Transbank (transbank_factura)
             ->leftJoin(
                 DB::raw('(SELECT tvf.documento_id, SUM(tt.monto_original) as cobrado_transbank
                           FROM transbank_factura tvf
@@ -214,22 +208,29 @@ class VentaMovimientoController extends Controller
                           GROUP BY tvf.documento_id) as tb'),
                 'df.id', '=', 'tb.documento_id'
             )
-            // Excluir ventas ya vinculadas a este movimiento
+            // NC aplicadas manualmente (venta_nc_aplicacion)
+            ->leftJoin(
+                DB::raw('(SELECT factura_id, SUM(monto) as cobrado_nc FROM venta_nc_aplicacion GROUP BY factura_id) as vnca'),
+                'df.id', '=', 'vnca.factura_id'
+            )
+            // NC de Bsale que referencian esta factura (sin doble conteo con vnca)
+            ->leftJoin(
+                DB::raw('(SELECT nc_ref.nc_referencia_df_id AS doc_id, SUM(nc_ref.monto) AS cobrado_nc_ref
+                          FROM documentos_facturacion nc_ref
+                          WHERE nc_ref.tipo_documento_bsale_id = 2
+                            AND nc_ref.nc_referencia_df_id IS NOT NULL
+                            AND NOT EXISTS (SELECT 1 FROM venta_nc_aplicacion vnca2 WHERE vnca2.nc_id = nc_ref.id)
+                          GROUP BY nc_ref.nc_referencia_df_id) as ncref'),
+                'df.id', '=', 'ncref.doc_id'
+            )
             ->whereNotExists(function ($q) use ($movimientoId) {
                 $q->from('venta_movimiento as vm2')
                   ->whereColumn('vm2.venta_id', 'df.id')
                   ->where('vm2.movimiento_id', $movimientoId);
             })
             ->where('df.estado', 'emitido')
-            ->whereNotIn('df.tipo_documento_bsale_id', [1, 2]) // boletas (1) y NCs (2) nunca via venta_movimiento
-            ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) - COALESCE(tb.cobrado_transbank, 0) > 0')
-            // Excluir facturas que Chipax considera cobradas: chipax_monto_por_cobrar=0 → sin saldo pendiente
-            ->whereRaw('NOT (
-                df.chipax_monto_por_cobrar IS NOT NULL
-                AND COALESCE(vm.cobrado, 0) = 0
-                AND COALESCE(df.monto_cobrado_manual, 0) = 0
-                AND df.chipax_monto_por_cobrar <= 0
-            )')
+            ->whereNotIn('df.tipo_documento_bsale_id', [1, 2])
+            ->whereRaw('df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) > 0')
             ->select(
                 'df.id',
                 DB::raw('df.numero_documento_bsale as folio'),
@@ -238,7 +239,7 @@ class VentaMovimientoController extends Controller
                 DB::raw('COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut_receptor'),
                 'df.monto',
                 DB::raw('df.tipo as tipo_doc'),
-                DB::raw('df.monto - COALESCE(vm.cobrado, 0) - COALESCE(tb.cobrado_transbank, 0) as saldo_por_cobrar')
+                DB::raw('df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) as saldo_por_cobrar')
             )
             ->when($buscar, fn($q) => $q->where(function ($q2) use ($buscar) {
                 $q2->where('df.numero_documento_bsale', 'like', "%$buscar%")
@@ -246,8 +247,7 @@ class VentaMovimientoController extends Controller
                    ->orWhere('cl_cot.razon_social',       'like', "%$buscar%")
                    ->orWhere('cl_dir.razon_social',       'like', "%$buscar%");
             }))
-            // Ordenar por monto más cercano al saldo del movimiento
-            ->orderByRaw('ABS(df.monto - COALESCE(vm.cobrado, 0) - COALESCE(tb.cobrado_transbank, 0) - ?) ASC', [$saldoMov])
+            ->orderByRaw('ABS(df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) - ?) ASC', [$saldoMov])
             ->paginate(30);
 
         return response()->json($ventas);
