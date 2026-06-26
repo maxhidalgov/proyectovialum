@@ -510,14 +510,16 @@
               <div class="pa-4">
                 <p class="text-subtitle-2 font-weight-bold mb-3 text-primary">Ingresos Bancarios (Créditos)</p>
 
-                <!-- Asignados ya -->
-                <div v-if="asignados.length" class="mb-4">
-                  <p class="text-caption text-medium-emphasis mb-2">Asignados a esta factura:</p>
+                <!-- Cobros ya registrados -->
+                <div v-if="asignados.length || ncsAplicadas.length" class="mb-4">
+                  <p class="text-caption text-medium-emphasis mb-2">Cobros registrados en esta factura:</p>
                   <VTable density="compact">
                     <tbody>
+                      <!-- Movimientos bancarios asignados -->
                       <tr v-for="a in asignados" :key="a.pivot_id">
+                        <td><VIcon size="13" color="success">mdi-bank</VIcon></td>
                         <td class="text-caption">{{ formatFecha(a.fecha_contable) }}</td>
-                        <td class="text-caption" style="max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                        <td class="text-caption" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
                           {{ a.descripcion }}
                         </td>
                         <td class="text-end text-caption font-weight-bold text-success">{{ formatMonto(a.monto_asignado) }}</td>
@@ -528,6 +530,16 @@
                             <VIcon size="14">mdi-close</VIcon>
                           </VBtn>
                         </td>
+                      </tr>
+                      <!-- NCs que cubren esta factura -->
+                      <tr v-for="nc in ncsAplicadas" :key="'nc-' + nc.id">
+                        <td><VIcon size="13" color="info">mdi-file-document-minus</VIcon></td>
+                        <td class="text-caption">{{ formatFecha(nc.fecha) }}</td>
+                        <td class="text-caption text-info">
+                          Nota de Crédito N° {{ nc.numero }}
+                        </td>
+                        <td class="text-end text-caption font-weight-bold text-info">{{ formatMonto(nc.monto) }}</td>
+                        <td></td>
                       </tr>
                     </tbody>
                   </VTable>
@@ -641,13 +653,17 @@
                     <span class="text-body-2">Total factura</span>
                     <span class="font-weight-bold">{{ formatMonto(facturaActiva.monto) }}</span>
                   </div>
-                  <div class="d-flex justify-space-between mt-1">
+                  <div v-if="facturaActiva.monto - saldoPorCobrar - cobradoTransbank - cobradoNC > 0" class="d-flex justify-space-between mt-1">
                     <span class="text-body-2 text-success">Cobrado (banco)</span>
-                    <span class="text-success">{{ formatMonto(facturaActiva.monto - saldoPorCobrar - cobradoTransbank) }}</span>
+                    <span class="text-success">{{ formatMonto(facturaActiva.monto - saldoPorCobrar - cobradoTransbank - cobradoNC) }}</span>
                   </div>
                   <div v-if="cobradoTransbank > 0" class="d-flex justify-space-between mt-1">
-                    <span class="text-body-2 text-info">Cobrado ({{ esTarjeta ? 'Tarjeta' : 'Chipax' }})</span>
+                    <span class="text-body-2 text-info">Cobrado (Transbank)</span>
                     <span class="text-info">{{ formatMonto(cobradoTransbank) }}</span>
+                  </div>
+                  <div v-if="cobradoNC > 0" class="d-flex justify-space-between mt-1">
+                    <span class="text-body-2 text-purple">Cobrado (Nota de Crédito)</span>
+                    <span class="text-purple">{{ formatMonto(cobradoNC) }}</span>
                   </div>
                   <VDivider class="my-2" />
                   <div class="d-flex justify-space-between">
@@ -1062,9 +1078,11 @@ const dialogConciliar   = ref(false)
 const facturaActiva     = ref(null)
 const clienteActivo     = ref(null)
 const asignados         = ref([])
+const ncsAplicadas      = ref([])
 const disponibles       = ref([])
 const saldoPorCobrar    = ref(0)
 const cobradoTransbank  = ref(0)
+const cobradoNC         = ref(0)
 const esTarjeta         = ref(false)
 const buscarMov         = ref('')
 const buscarMontoMov    = ref('')
@@ -1242,6 +1260,8 @@ async function abrirConciliar(factura, cliente) {
   pageDisponibles.value = 1
   metaDisponibles.value = { last_page: 1, total: 0 }
   asignados.value      = []
+  ncsAplicadas.value   = []
+  cobradoNC.value      = 0
   disponibles.value    = []
   dialogConciliar.value = true
   await cargarEstadoConciliar()
@@ -1258,7 +1278,9 @@ async function cargarEstadoConciliar() {
     } else {
       const res = await axios.get(`/api/ventas/${facturaActiva.value.id}/movimientos`)
       data = res.data
-      cobradoTransbank.value = (data.cobrado_transbank ?? 0) + (data.cobrado_chipax ?? 0)
+      cobradoTransbank.value = (data.cobrado_transbank ?? 0)
+      cobradoNC.value        = data.cobrado_nc ?? 0
+      ncsAplicadas.value     = data.ncs_aplicadas ?? []
     }
     asignados.value      = data.asignados
     esTarjeta.value      = false
