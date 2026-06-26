@@ -222,6 +222,10 @@ class CuentasPorCobrarController extends Controller
         $facturas = DB::table('documentos_facturacion as df')
             ->leftJoin('cotizaciones as c', 'c.id', '=', 'df.cotizacion_id')
             ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
+            ->leftJoin(
+                DB::raw('(SELECT nc_id, SUM(monto) as monto_nc_aplicado FROM venta_nc_aplicacion GROUP BY nc_id) as ncap'),
+                'ncap.nc_id', '=', 'df.id'
+            )
             ->where(function ($sq) use ($clienteId) {
                 if (is_numeric($clienteId)) {
                     $sq->where('c.cliente_id', (int) $clienteId)
@@ -244,7 +248,12 @@ class CuentasPorCobrarController extends Controller
                               THEN -(df.monto - COALESCE(ec.monto_cobrado_efectivo,0))
                               ELSE   df.monto - COALESCE(ec.monto_cobrado_efectivo,0)
                          END as pendiente'),
-                DB::raw('(df.tipo_documento_bsale_id = 2) as es_nc')
+                DB::raw('(df.tipo_documento_bsale_id = 2) as es_nc'),
+                // Saldo real de la NC para aplicar: monto bruto menos lo ya aplicado via venta_nc_aplicacion
+                // Ignora el fallback Chipax, que puede mostrar la NC como "cobrada" sin haberla aplicado explícitamente
+                DB::raw('CASE WHEN df.tipo_documento_bsale_id = 2
+                              THEN df.monto - COALESCE(ncap.monto_nc_aplicado, 0)
+                              ELSE NULL END as saldo_nc_aplicar')
             )
             ->when($desde, fn($q) => $q->where('df.fecha_emision', '>=', $desde))
             ->when($hasta, fn($q) => $q->where('df.fecha_emision', '<=', $hasta))

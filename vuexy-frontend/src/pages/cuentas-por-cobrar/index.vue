@@ -785,7 +785,7 @@
           <VAlert type="info" variant="tonal" density="compact" class="mb-3">
             <div class="text-caption">
               <strong>NC N° {{ ncActivo.numero_documento_bsale }}</strong>
-              · Saldo disponible: <strong>{{ formatMonto(Math.abs(ncActivo.pendiente)) }}</strong>
+              · Saldo disponible: <strong>{{ formatMonto(ncActivo.saldo_nc_aplicar ?? Math.abs(ncActivo.pendiente)) }}</strong>
             </div>
           </VAlert>
           <VAlert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-information">
@@ -815,7 +815,7 @@
                 :key="fac.id"
                 :class="{ 'bg-info-subtle': facturaSeleccionadaAplicar === fac.id }"
                 style="cursor:pointer"
-                @click="facturaSeleccionadaAplicar = fac.id; montoAplicar = Math.min(Math.abs(ncActivo.pendiente), fac.pendiente)"
+                @click="facturaSeleccionadaAplicar = fac.id; montoAplicar = Math.min(ncActivo.saldo_nc_aplicar ?? Math.abs(ncActivo.pendiente), fac.pendiente)"
               >
                 <td class="font-weight-medium">{{ fac.numero_documento_bsale || '—' }}</td>
                 <td class="text-caption">{{ formatFecha(fac.fecha_emision) }}</td>
@@ -838,7 +838,7 @@
                 v-model.number="montoAplicar"
                 label="Monto a aplicar"
                 type="number"
-                :max="Math.abs(ncActivo?.pendiente || 0)"
+                :max="ncActivo?.saldo_nc_aplicar ?? Math.abs(ncActivo?.pendiente || 0)"
                 min="1"
                 density="compact"
                 variant="outlined"
