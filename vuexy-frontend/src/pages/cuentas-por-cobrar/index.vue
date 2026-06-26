@@ -534,18 +534,33 @@
                   <VDivider class="my-3" />
                 </div>
 
-                <!-- Buscador -->
-                <VTextField
-                  v-model="buscarMov"
-                  placeholder="Buscar por descripción del ingreso..."
-                  density="compact"
-                  variant="outlined"
-                  prepend-inner-icon="mdi-magnify"
-                  hide-details
-                  class="mb-3"
-                  clearable
-                  @update:modelValue="cargarDisponibles"
-                />
+                <!-- Buscadores -->
+                <VRow dense class="mb-3">
+                  <VCol cols="8">
+                    <VTextField
+                      v-model="buscarMov"
+                      placeholder="Buscar por descripción..."
+                      density="compact"
+                      variant="outlined"
+                      prepend-inner-icon="mdi-magnify"
+                      hide-details
+                      clearable
+                      @update:modelValue="pageDisponibles = 1; cargarDisponibles()"
+                    />
+                  </VCol>
+                  <VCol cols="4">
+                    <VTextField
+                      v-model="buscarMontoMov"
+                      placeholder="Monto exacto"
+                      density="compact"
+                      variant="outlined"
+                      prepend-inner-icon="mdi-currency-usd"
+                      hide-details
+                      clearable
+                      @update:modelValue="pageDisponibles = 1; cargarDisponibles()"
+                    />
+                  </VCol>
+                </VRow>
 
                 <!-- Lista movimientos crédito disponibles -->
                 <div v-if="loadingDisponibles" class="text-center py-6">
@@ -589,6 +604,19 @@
                       </tr>
                     </tbody>
                   </VTable>
+                  <!-- Paginación -->
+                  <div v-if="metaDisponibles.last_page > 1" class="d-flex align-center justify-space-between mt-2 px-1">
+                    <span class="text-caption text-medium-emphasis">{{ metaDisponibles.total }} resultados</span>
+                    <div class="d-flex align-center" style="gap:4px">
+                      <VBtn icon size="x-small" variant="text" :disabled="pageDisponibles <= 1" @click="pageDisponibles--; cargarDisponibles()">
+                        <VIcon size="16">mdi-chevron-left</VIcon>
+                      </VBtn>
+                      <span class="text-caption">{{ pageDisponibles }} / {{ metaDisponibles.last_page }}</span>
+                      <VBtn icon size="x-small" variant="text" :disabled="pageDisponibles >= metaDisponibles.last_page" @click="pageDisponibles++; cargarDisponibles()">
+                        <VIcon size="16">mdi-chevron-right</VIcon>
+                      </VBtn>
+                    </div>
+                  </div>
                 </div>
               </div>
             </VCol>
@@ -1039,6 +1067,9 @@ const saldoPorCobrar    = ref(0)
 const cobradoTransbank  = ref(0)
 const esTarjeta         = ref(false)
 const buscarMov         = ref('')
+const buscarMontoMov    = ref('')
+const pageDisponibles   = ref(1)
+const metaDisponibles   = ref({ last_page: 1, total: 0 })
 const loadingDisponibles = ref(false)
 const loadingAsignar    = ref({})
 const loadingDesasignar = ref({})
@@ -1192,6 +1223,9 @@ async function abrirConciliar(factura, cliente) {
   facturaActiva.value  = factura
   clienteActivo.value  = cliente
   buscarMov.value      = ''
+  buscarMontoMov.value = ''
+  pageDisponibles.value = 1
+  metaDisponibles.value = { last_page: 1, total: 0 }
   asignados.value      = []
   disponibles.value    = []
   dialogConciliar.value = true
@@ -1225,8 +1259,16 @@ async function cargarDisponibles() {
     const url = facturaActiva.value.es_boleta_resumen
       ? `/api/boletas/resumenes/${facturaActiva.value.boleta_resumen_id}/movimientos-disponibles`
       : `/api/ventas/${facturaActiva.value.id}/movimientos-disponibles`
-    const { data } = await axios.get(url, { params: { buscar: buscarMov.value || undefined } })
+    const params = {
+      buscar: buscarMov.value || undefined,
+      monto:  buscarMontoMov.value || undefined,
+      page:   pageDisponibles.value,
+    }
+    const { data } = await axios.get(url, { params })
     disponibles.value = data.data ?? data
+    if (data.last_page !== undefined) {
+      metaDisponibles.value = { last_page: data.last_page, total: data.total }
+    }
   } catch (e) { console.error(e) }
   finally { loadingDisponibles.value = false }
 }

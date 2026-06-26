@@ -71,6 +71,7 @@ class VentaMovimientoController extends Controller
         $cobrado = DB::table('venta_movimiento')->where('venta_id', $ventaId)->sum('monto');
         $saldo   = max(0, $venta->monto - $cobrado);
         $buscar  = $request->get('buscar');
+        $monto   = $request->get('monto');
 
         $movs = DB::table('movimientos_bancarios as m')
             ->leftJoin(
@@ -93,6 +94,10 @@ class VentaMovimientoController extends Controller
                 DB::raw('m.monto - COALESCE(vm.asignado, 0) - COALESCE(brm.asignado, 0) as saldo_por_asignar')
             )
             ->when($buscar, fn($q) => $q->where('m.descripcion', 'like', "%$buscar%"))
+            ->when($monto, function ($q) use ($monto) {
+                $montoNum = (int) preg_replace('/[^0-9]/', '', $monto);
+                if ($montoNum > 0) $q->where('m.monto', $montoNum);
+            })
             ->orderByRaw('ABS(m.monto - COALESCE(vm.asignado, 0) - COALESCE(brm.asignado, 0) - ?) ASC', [$saldo])
             ->paginate(30);
 
