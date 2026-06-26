@@ -567,7 +567,7 @@
                         <td class="font-weight-bold text-success">{{ formatMonto(mov.saldo_por_asignar) }}</td>
                         <td>{{ formatMonto(mov.monto) }}</td>
                         <td class="text-caption">{{ formatFecha(mov.fecha_contable) }}</td>
-                        <td class="text-caption" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                        <td class="text-caption" style="max-width:320px; word-break:break-word">
                           {{ mov.descripcion }}
                           <span v-if="mov.glosa" class="text-medium-emphasis d-block">{{ mov.glosa }}</span>
                         </td>
