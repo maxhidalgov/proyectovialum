@@ -785,7 +785,7 @@
           <VAlert type="info" variant="tonal" density="compact" class="mb-3">
             <div class="text-caption">
               <strong>NC N° {{ ncActivo.numero_documento_bsale }}</strong>
-              · Saldo disponible: <strong>{{ formatMonto(ncActivo.saldo_nc_aplicar ?? Math.abs(ncActivo.pendiente)) }}</strong>
+              · Saldo disponible: <strong>{{ formatMonto(saldoNcParaAplicar) }}</strong>
             </div>
           </VAlert>
           <VAlert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-information">
@@ -815,7 +815,7 @@
                 :key="fac.id"
                 :class="{ 'bg-info-subtle': facturaSeleccionadaAplicar === fac.id }"
                 style="cursor:pointer"
-                @click="facturaSeleccionadaAplicar = fac.id; montoAplicar = Math.min(ncActivo.saldo_nc_aplicar ?? Math.abs(ncActivo.pendiente), fac.pendiente)"
+                @click="facturaSeleccionadaAplicar = fac.id; montoAplicar = Math.min(saldoNcParaAplicar, fac.pendiente)"
               >
                 <td class="font-weight-medium">{{ fac.numero_documento_bsale || '—' }}</td>
                 <td class="text-caption">{{ formatFecha(fac.fecha_emision) }}</td>
@@ -838,7 +838,7 @@
                 v-model.number="montoAplicar"
                 label="Monto a aplicar"
                 type="number"
-                :max="ncActivo?.saldo_nc_aplicar ?? Math.abs(ncActivo?.pendiente || 0)"
+                :max="saldoNcParaAplicar"
                 min="1"
                 density="compact"
                 variant="outlined"
@@ -875,7 +875,7 @@
           <VBtn
             color="info"
             variant="flat"
-            :disabled="!facturaSeleccionadaAplicar || !montoAplicar || montoAplicar <= 0"
+            :disabled="!facturaSeleccionadaAplicar || !montoAplicar || montoAplicar <= 0 || saldoNcParaAplicar <= 0"
             :loading="loadingAplicar"
             @click="aplicarNC"
           >
@@ -1132,6 +1132,21 @@ const headers = [
 ]
 
 // ── Computed ──────────────────────────────────────────────────────────────────
+
+// Saldo real de la NC para el modal Aplicar.
+// Prioridad:
+//  1. saldo_nc_aplicar del backend (monto - ya_aplicado, ignora Chipax)
+//  2. |pendiente| si es > 0 (NC sin fallback Chipax)
+//  3. |monto| como último recurso (NC "cobrada" solo por Chipax, sin aplicación explícita)
+const saldoNcParaAplicar = computed(() => {
+  const nc = ncActivo.value
+  if (!nc) return 0
+  if (nc.saldo_nc_aplicar != null && nc.saldo_nc_aplicar > 0) return nc.saldo_nc_aplicar
+  const pendienteAbs = Math.abs(nc.pendiente || 0)
+  if (pendienteAbs > 0) return pendienteAbs
+  return Math.abs(nc.monto || 0)
+})
+
 const facturasParaVincularFiltradas = computed(() => {
   if (!buscarVincular.value) return facturasParaVincular.value
   const q = buscarVincular.value.toLowerCase()
