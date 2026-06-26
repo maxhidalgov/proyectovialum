@@ -201,6 +201,14 @@ class VentaMovimientoController extends Controller
                 DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
                 'df.id', '=', 'vm.venta_id'
             )
+            // Descuenta lo ya cubierto por Transbank (transbank_factura)
+            ->leftJoin(
+                DB::raw('(SELECT tvf.documento_id, SUM(tt.monto_original) as cobrado_transbank
+                          FROM transbank_factura tvf
+                          JOIN transbank_transacciones tt ON tt.id = tvf.transaccion_id
+                          GROUP BY tvf.documento_id) as tb'),
+                'df.id', '=', 'tb.documento_id'
+            )
             // Excluir ventas ya vinculadas a este movimiento
             ->whereNotExists(function ($q) use ($movimientoId) {
                 $q->from('venta_movimiento as vm2')
@@ -209,7 +217,7 @@ class VentaMovimientoController extends Controller
             })
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [1, 2]) // boletas (1) y NCs (2) nunca via venta_movimiento
-            ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) > 0')
+            ->whereRaw('df.monto - COALESCE(vm.cobrado, 0) - COALESCE(tb.cobrado_transbank, 0) > 0')
             // Excluir facturas que Chipax considera cobradas: chipax_monto_por_cobrar=0 → sin saldo pendiente
             ->whereRaw('NOT (
                 df.chipax_monto_por_cobrar IS NOT NULL
@@ -225,7 +233,7 @@ class VentaMovimientoController extends Controller
                 DB::raw('COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut_receptor'),
                 'df.monto',
                 DB::raw('df.tipo as tipo_doc'),
-                DB::raw('df.monto - COALESCE(vm.cobrado, 0) as saldo_por_cobrar')
+                DB::raw('df.monto - COALESCE(vm.cobrado, 0) - COALESCE(tb.cobrado_transbank, 0) as saldo_por_cobrar')
             )
             ->when($buscar, fn($q) => $q->where(function ($q2) use ($buscar) {
                 $q2->where('df.numero_documento_bsale', 'like', "%$buscar%")
@@ -233,8 +241,8 @@ class VentaMovimientoController extends Controller
                    ->orWhere('cl_cot.razon_social',       'like', "%$buscar%")
                    ->orWhere('cl_dir.razon_social',       'like', "%$buscar%");
             }))
-            // Ordenar por monto más cercano al saldo del movimiento (igual que compras)
-            ->orderByRaw('ABS(df.monto - COALESCE(vm.cobrado, 0) - ?) ASC', [$saldoMov])
+            // Ordenar por monto más cercano al saldo del movimiento
+            ->orderByRaw('ABS(df.monto - COALESCE(vm.cobrado, 0) - COALESCE(tb.cobrado_transbank, 0) - ?) ASC', [$saldoMov])
             ->paginate(30);
 
         return response()->json($ventas);
