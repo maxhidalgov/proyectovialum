@@ -20,10 +20,13 @@ class CuentasPorCobrarController extends Controller
                 df.id AS df_id,
                 CASE
                   -- Chipax solo aplica como fallback cuando no hay ningún pago explícito
+                  -- (banco, Transbank, manual, NI NC aplicada explícitamente)
                   WHEN df.chipax_monto_por_cobrar IS NOT NULL
                    AND COALESCE(vm.monto_cobrado, 0) = 0
                    AND COALESCE(tbk.monto_tbk, 0) = 0
                    AND COALESCE(df.monto_cobrado_manual, 0) = 0
+                   AND COALESCE(ncf.monto_nc, 0) = 0
+                   AND COALESCE(ncnc.monto_nc, 0) = 0
                     THEN df.monto - df.chipax_monto_por_cobrar
                   ELSE
                     COALESCE(vm.monto_cobrado, 0)

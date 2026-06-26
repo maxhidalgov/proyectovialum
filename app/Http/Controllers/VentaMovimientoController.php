@@ -40,7 +40,7 @@ class VentaMovimientoController extends Controller
             ->sum('monto');
 
         // Chipax solo aplica cuando no hay ningún pago explícito registrado (misma lógica que efectivoCobradoSub)
-        $hayPagosExplicitos = ($totalCobrado + $totalTransbank + $totalManual) > 0;
+        $hayPagosExplicitos = ($totalCobrado + $totalTransbank + $totalManual + $totalNC) > 0;
         if (!$hayPagosExplicitos && $venta->chipax_monto_por_cobrar !== null) {
             $saldoPorCobrar   = max(0, (float) $venta->chipax_monto_por_cobrar);
             $cobradoChipax    = (float) $venta->monto - $saldoPorCobrar;
