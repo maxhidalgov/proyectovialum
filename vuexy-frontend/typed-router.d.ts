@@ -49,6 +49,7 @@ declare module 'vue-router/auto-routes' {
     'empleados': RouteRecordInfo<'empleados', '/empleados', Record<never, never>, Record<never, never>>,
     'facturacion': RouteRecordInfo<'facturacion', '/facturacion', Record<never, never>, Record<never, never>>,
     'gastos-generales': RouteRecordInfo<'gastos-generales', '/gastos-generales', Record<never, never>, Record<never, never>>,
+    'ia-produccion': RouteRecordInfo<'ia-produccion', '/ia-produccion', Record<never, never>, Record<never, never>>,
     'importador': RouteRecordInfo<'importador', '/importador', Record<never, never>, Record<never, never>>,
     'ingresos-manuales': RouteRecordInfo<'ingresos-manuales', '/ingresos-manuales', Record<never, never>, Record<never, never>>,
     'lista-precios': RouteRecordInfo<'lista-precios', '/lista-precios', Record<never, never>, Record<never, never>>,

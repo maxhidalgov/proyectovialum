@@ -36,7 +36,13 @@ return [
     ],
 
     'anthropic' => [
-        'key' => env('ANTHROPIC_API_KEY'),
+        'key'     => env('ANTHROPIC_API_KEY'),
+        'api_key' => env('ANTHROPIC_API_KEY'),
+    ],
+
+    'workera' => [
+        'api_user' => env('WORKERA_API_USER'),
+        'api_key'  => env('WORKERA_API_KEY'),
     ],
 
     'bch' => [

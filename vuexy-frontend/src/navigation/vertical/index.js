@@ -125,6 +125,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Asistente IA',
+    to: { name: 'ia-produccion' },
+    icon: { icon: 'mdi-robot' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Finanzas',
     icon: { icon: 'mdi-bank' },
     permission: 'gestionar_usuarios', // Solo admin

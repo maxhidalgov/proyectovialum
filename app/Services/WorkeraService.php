@@ -1,0 +1,270 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\AusenciaEmpleado;
+use App\Models\Empleado;
+use App\Models\HorasExtra;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * Cliente para la API de Workera (reloj control de asistencia).
+ *
+ * Configura en .env:
+ *   WORKERA_API_USER=tu_usuario
+ *   WORKERA_API_KEY=tu_clave
+ */
+class WorkeraService
+{
+    private string $baseUrl = 'https://api.workera.com/apiClient/v1';
+
+    private function headers(): array
+    {
+        return [
+            'API_USER'     => config('services.workera.api_user'),
+            'API_KEY'      => config('services.workera.api_key'),
+            'Content-Type' => 'application/json',
+            'Accept'       => 'application/json',
+        ];
+    }
+
+    private function get(string $endpoint, array $params = []): array
+    {
+        $response = Http::withHeaders($this->headers())
+            ->timeout(15)
+            ->get("{$this->baseUrl}/{$endpoint}", $params);
+
+        if ($response->failed()) {
+            Log::error("WorkeraService GET /{$endpoint} falló", [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+            return [];
+        }
+
+        return $response->json() ?? [];
+    }
+
+    private function post(string $endpoint, array $data): array
+    {
+        $response = Http::withHeaders($this->headers())
+            ->timeout(15)
+            ->post("{$this->baseUrl}/{$endpoint}", $data);
+
+        if ($response->failed()) {
+            Log::error("WorkeraService POST /{$endpoint} falló", [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+            return [];
+        }
+
+        return $response->json() ?? [];
+    }
+
+    // ── Empleados ─────────────────────────────────────────────────────────────
+
+    public function getEmpleados(int $page = 1): array
+    {
+        return $this->get('employee', ['page' => $page]);
+    }
+
+    /**
+     * Sincroniza empleados de Workera a la tabla local.
+     * Usa RUT como clave de cruce. Actualiza workera_code y telefono.
+     */
+    public function syncEmpleados(): array
+    {
+        $synced  = 0;
+        $skipped = 0;
+        $page    = 1;
+
+        do {
+            $data     = $this->getEmpleados($page);
+            $empleados = $data['data'] ?? $data ?? [];
+
+            if (empty($empleados)) {
+                break;
+            }
+
+            foreach ($empleados as $w) {
+                $rut = $this->limpiarRut($w['identification'] ?? '');
+
+                if (!$rut) {
+                    $skipped++;
+                    continue;
+                }
+
+                $local = Empleado::where('rut', $rut)->first();
+
+                if (!$local) {
+                    $skipped++;
+                    continue;
+                }
+
+                $local->update([
+                    'workera_code' => (string) ($w['code'] ?? $w['id'] ?? ''),
+                    'telefono'     => $w['phone'] ?? null,
+                ]);
+
+                $synced++;
+            }
+
+            $page++;
+            $hasMore = isset($data['next_page_url']) && $data['next_page_url'];
+        } while ($hasMore);
+
+        return ['synced' => $synced, 'skipped' => $skipped];
+    }
+
+    // ── Asistencia ────────────────────────────────────────────────────────────
+
+    /**
+     * Retorna marcaciones del día indicado.
+     * date: 'Y-m-d'
+     */
+    public function getAsistencia(string $date): array
+    {
+        return $this->get('attendanceData', [
+            'startDate' => $date,
+            'endDate'   => $date,
+        ]);
+    }
+
+    /**
+     * Lee asistencia del día y detecta ausentes e impuntuales.
+     * Compara contra turnos esperados (workshift/schedules).
+     *
+     * Retorna:
+     *   ausentes    → empleados sin marcación
+     *   tarde       → llegaron después de 15 min del inicio del turno
+     *   presentes   → marcaron dentro del margen
+     */
+    public function analizarAsistenciaHoy(): array
+    {
+        $hoy       = now()->toDateString();
+        $registros = $this->getAsistencia($hoy);
+
+        $marcaciones = [];
+        foreach ($registros as $r) {
+            $code = (string) ($r['employeeCode'] ?? $r['employee_code'] ?? '');
+            if ($code) {
+                $marcaciones[$code] = $r;
+            }
+        }
+
+        $ausentes  = [];
+        $tarde     = [];
+        $presentes = [];
+
+        $empleados = Empleado::whereNotNull('workera_code')->where('activo', true)->get();
+
+        foreach ($empleados as $emp) {
+            $code = $emp->workera_code;
+
+            if (!isset($marcaciones[$code])) {
+                $ausentes[] = ['empleado_id' => $emp->id, 'nombre' => $emp->nombre];
+                continue;
+            }
+
+            $entrada = $marcaciones[$code]['checkIn'] ?? $marcaciones[$code]['startTime'] ?? null;
+
+            if ($entrada) {
+                $horaEntrada = Carbon::parse($entrada);
+                $turnoInicio = Carbon::parse($hoy . ' 08:00:00');
+
+                if ($horaEntrada->diffInMinutes($turnoInicio, false) < -15) {
+                    $tarde[] = [
+                        'empleado_id' => $emp->id,
+                        'nombre'      => $emp->nombre,
+                        'hora_entrada' => $horaEntrada->format('H:i'),
+                        'minutos_tarde' => abs($horaEntrada->diffInMinutes($turnoInicio)),
+                    ];
+                    continue;
+                }
+            }
+
+            $presentes[] = ['empleado_id' => $emp->id, 'nombre' => $emp->nombre];
+        }
+
+        return compact('ausentes', 'tarde', 'presentes');
+    }
+
+    // ── Horas extra ───────────────────────────────────────────────────────────
+
+    public function getHorasExtra(string $startDate, string $endDate): array
+    {
+        return $this->get('overtimeAuthorization', [
+            'startDate' => $startDate,
+            'endDate'   => $endDate,
+        ]);
+    }
+
+    /**
+     * Registra autorización de horas extra en Workera.
+     */
+    public function autorizarHorasExtra(string $workeraCode, string $fecha, float $horas, string $motivo = ''): array
+    {
+        return $this->post('overtimeAuthorization', [
+            'employeeCode' => $workeraCode,
+            'date'         => $fecha,
+            'hours'        => $horas,
+            'reason'       => $motivo,
+        ]);
+    }
+
+    // ── Permisos / Ausencias ──────────────────────────────────────────────────
+
+    public function getPermisos(string $startDate, string $endDate): array
+    {
+        return $this->get('permission', [
+            'startDate' => $startDate,
+            'endDate'   => $endDate,
+        ]);
+    }
+
+    /**
+     * Registra una ausencia/permiso en Workera y la guarda localmente.
+     */
+    public function registrarPermiso(int $empleadoId, string $fecha, string $tipo, string $motivo = ''): array
+    {
+        $empleado = Empleado::find($empleadoId);
+
+        if (!$empleado || !$empleado->workera_code) {
+            return ['error' => 'Empleado sin workera_code configurado'];
+        }
+
+        $tipoWorkera = match ($tipo) {
+            'dia_completo'  => 'FULL_DAY',
+            'media_manana'  => 'HALF_DAY_AM',
+            'media_tarde'   => 'HALF_DAY_PM',
+            'llegada_tarde' => 'LATE_ARRIVAL',
+            default         => 'FULL_DAY',
+        };
+
+        $respuesta = $this->post('permission', [
+            'employeeCode' => $empleado->workera_code,
+            'date'         => $fecha,
+            'type'         => $tipoWorkera,
+            'reason'       => $motivo,
+        ]);
+
+        $workeraId = $respuesta['id'] ?? $respuesta['data']['id'] ?? null;
+
+        AusenciaEmpleado::updateOrCreate(
+            ['empleado_id' => $empleadoId, 'fecha' => $fecha, 'tipo' => $tipo],
+            ['motivo' => $motivo, 'workera_permission_id' => $workeraId]
+        );
+
+        return ['ok' => true, 'workera_id' => $workeraId];
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private function limpiarRut(string $rut): string
+    {
+        return preg_replace('/[^0-9kK]/', '', strtolower($rut));
+    }
+}

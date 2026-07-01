@@ -30,6 +30,10 @@ class Cotizacion extends Model
         'winperfil_numero',
         'winperfil_serie',
         'winperfil_synced_at',
+        'fecha_entrega_real',
+        'tipo_vidrio',
+        'fabricar_termopanel',
+        'cortar_vidrio_cnc',
     ];
 
     protected $casts = [
@@ -54,6 +58,21 @@ class Cotizacion extends Model
     public function ventanas()
     {
         return $this->hasMany(Ventana::class);
+    }
+
+    public function etapas()
+    {
+        return $this->hasMany(EtapaProduccion::class);
+    }
+
+    public function incidentes()
+    {
+        return $this->hasMany(IncidenteProduccion::class);
+    }
+
+    public function visitas()
+    {
+        return $this->hasMany(VisitaCliente::class);
     }
     public function estado()
 {

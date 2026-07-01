@@ -25,6 +25,7 @@ use App\Http\Controllers\OperacionesController;
 use App\Http\Controllers\DocumentoFacturacionController;
 use App\Http\Controllers\Api\AgenteController;
 use App\Http\Controllers\WinperfilController;
+use App\Http\Controllers\IaProduccionController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -47,6 +48,15 @@ Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin'
 });
 
 Route::middleware('auth:api')->group(function () {
+    // IA Producción
+    Route::prefix('ia')->group(function () {
+        Route::post('/chat',            [IaProduccionController::class, 'chat']);
+        Route::get('/historial',        [IaProduccionController::class, 'historial']);
+        Route::get('/contexto',         [IaProduccionController::class, 'contexto']);
+        Route::post('/workera/sync',    [IaProduccionController::class, 'syncWorkera']);
+        Route::get('/workera/asistencia-hoy', [IaProduccionController::class, 'asistenciaHoy']);
+    });
+
     // Agente cotizador IA
     Route::post('/agente/cotizar', [AgenteController::class, 'cotizar']);
 
