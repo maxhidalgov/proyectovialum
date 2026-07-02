@@ -82,8 +82,9 @@ class WorkeraService
         $page    = 1;
 
         do {
-            $data     = $this->getEmpleados($page);
-            $empleados = $data['data'] ?? $data ?? [];
+            $data      = $this->getEmpleados($page);
+            $empleados = $data['data'] ?? [];
+            $totalPages = (int) ($data['totalPages'] ?? 1);
 
             if (empty($empleados)) {
                 break;
@@ -116,8 +117,7 @@ class WorkeraService
             }
 
             $page++;
-            $hasMore = isset($data['next_page_url']) && $data['next_page_url'];
-        } while ($hasMore);
+        } while ($page <= $totalPages);
 
         return ['synced' => $synced, 'skipped' => $skipped];
     }
@@ -130,11 +130,19 @@ class WorkeraService
      */
     public function getAsistencia(string $date, ?string $endDate = null): array
     {
-        return $this->get('attendanceData', [
-            'start' => $date,
-            'end'   => $endDate ?? $date,
-            'page'  => 1,
-        ]);
+        $end   = $endDate ?? $date;
+        $todos = [];
+        $page  = 1;
+
+        do {
+            $resp      = $this->get('attendanceData', ['start' => $date, 'end' => $end, 'page' => $page]);
+            $registros = $resp['data'] ?? [];
+            $todos     = array_merge($todos, $registros);
+            $totalPages = (int) ($resp['totalPages'] ?? 1);
+            $page++;
+        } while ($page <= $totalPages && !empty($registros));
+
+        return ['data' => $todos];
     }
 
     /**
