@@ -12,7 +12,12 @@ use App\Models\IncidenteProduccion;
 use App\Models\Recordatorio;
 use App\Models\VisitaCliente;
 use App\Services\WorkeraService;
+use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\CompraController;
+use App\Http\Controllers\CuentasPorCobrarController;
+use App\Http\Controllers\CuentasPorPagarController;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -164,7 +169,10 @@ Tu rol es:
 - Responder preguntas sobre el estado de la producción, entregas pendientes e incidentes.
 - Ayudar a planificar y estimar fechas de entrega basándote en la carga actual y el historial.
 - Funcionar como agenda: crear recordatorios y eventos cuando el usuario pida recordar, agendar o programar algo (llamadas, reuniones, pagos, seguimientos). También consultar qué hay agendado.
+- Responder consultas comerciales y financieras usando las tools: datos de clientes, cuentas por cobrar (deudas de clientes), cuentas por pagar (deudas a proveedores), compras y ventas/facturación.
 - Ser proactivo: si detectas un problema (entrega próxima sin avance, incidente abierto antiguo), mencionarlo.
+
+Sobre montos: son pesos chilenos (CLP). Formatéalos legibles (ej. $1.234.567). Si una consulta no devuelve datos, dilo claramente en vez de inventar.
 
 Reglas:
 - Cuando el usuario mencione un evento, usa las tools disponibles para registrarlo en la base de datos antes de responder.
@@ -417,6 +425,61 @@ PROMPT;
                     'required' => ['recordatorio_id', 'estado'],
                 ],
             ],
+            [
+                'name'        => 'consultar_cliente',
+                'description' => 'Busca un cliente por nombre o RUT y devuelve sus datos de contacto y sus cotizaciones. Úsalo cuando pregunten por un cliente específico.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'busqueda' => ['type' => 'string', 'description' => 'Nombre, razón social o RUT del cliente'],
+                    ],
+                    'required' => ['busqueda'],
+                ],
+            ],
+            [
+                'name'        => 'consultar_cuentas_por_cobrar',
+                'description' => 'Consulta las cuentas por cobrar (facturas de clientes impagas). Úsalo para saber cuánto deben los clientes, quién debe más, o el pendiente de un cliente.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'cliente' => ['type' => 'string', 'description' => 'Filtrar por nombre o RUT de un cliente (opcional)'],
+                    ],
+                ],
+            ],
+            [
+                'name'        => 'consultar_cuentas_por_pagar',
+                'description' => 'Consulta las cuentas por pagar (facturas de proveedores impagas). Úsalo para saber cuánto se debe a proveedores o a quién se le debe más.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'proveedor' => ['type' => 'string', 'description' => 'Filtrar por nombre o RUT de un proveedor (opcional)'],
+                    ],
+                ],
+            ],
+            [
+                'name'        => 'consultar_compras',
+                'description' => 'Consulta facturas de compra a proveedores, opcionalmente filtradas por proveedor o rango de fechas. Úsalo para ver qué se compró, a quién, y montos.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'proveedor' => ['type' => 'string', 'description' => 'Nombre o RUT del proveedor (opcional)'],
+                        'desde'     => ['type' => 'string', 'description' => 'Fecha inicial YYYY-MM-DD (opcional)'],
+                        'hasta'     => ['type' => 'string', 'description' => 'Fecha final YYYY-MM-DD (opcional)'],
+                    ],
+                ],
+            ],
+            [
+                'name'        => 'consultar_ventas',
+                'description' => 'Consulta el registro de ventas / facturación emitida (facturas y notas de crédito), opcionalmente por período o cliente. Úsalo para ver ventas, facturas emitidas y montos cobrados/pendientes.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'buscar' => ['type' => 'string', 'description' => 'Cliente o número de documento (opcional)'],
+                        'desde'  => ['type' => 'string', 'description' => 'Fecha inicial YYYY-MM-DD (opcional)'],
+                        'hasta'  => ['type' => 'string', 'description' => 'Fecha final YYYY-MM-DD (opcional)'],
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -436,6 +499,11 @@ PROMPT;
             'crear_recordatorio'         => $this->toolCrearRecordatorio($input),
             'consultar_recordatorios'    => $this->toolConsultarRecordatorios($input),
             'completar_recordatorio'     => $this->toolCompletarRecordatorio($input),
+            'consultar_cliente'          => $this->toolConsultarCliente($input),
+            'consultar_cuentas_por_cobrar' => $this->toolConsultarCxC($input),
+            'consultar_cuentas_por_pagar'  => $this->toolConsultarCxP($input),
+            'consultar_compras'          => $this->toolConsultarCompras($input),
+            'consultar_ventas'           => $this->toolConsultarVentas($input),
             default                      => ['error' => "Tool desconocida: {$tool}"],
         };
     }
@@ -707,6 +775,132 @@ PROMPT;
         return [
             'ok'      => true,
             'mensaje' => "Recordatorio \"{$recordatorio->titulo}\" marcado como {$input['estado']}",
+        ];
+    }
+
+    // ── Consultas financieras / comerciales (wrappers de controllers) ──────────
+
+    private function toolConsultarCliente(array $input): array
+    {
+        $q = trim($input['busqueda'] ?? '');
+        if ($q === '') {
+            return ['error' => 'Debes indicar un nombre o RUT'];
+        }
+
+        $clientes = app(ClienteController::class)->buscar(new Request(['q' => $q]))->getData(true);
+
+        if (empty($clientes)) {
+            return ['encontrados' => 0, 'mensaje' => "No se encontró ningún cliente con \"{$q}\""];
+        }
+
+        $resultado = collect($clientes)->take(5)->map(function ($c) {
+            $cotizaciones = Cotizacion::where('cliente_id', $c['id'])
+                ->orderByDesc('id')
+                ->get(['id', 'total', 'estado_produccion', 'fecha']);
+
+            return [
+                'id'       => $c['id'],
+                'nombre'   => $c['razon_social'] ?: trim(($c['first_name'] ?? '') . ' ' . ($c['last_name'] ?? '')),
+                'rut'      => $c['identification'] ?? null,
+                'email'    => $c['email'] ?? null,
+                'telefono' => $c['phone'] ?? null,
+                'ciudad'   => $c['ciudad'] ?? null,
+                'total_cotizaciones' => $cotizaciones->count(),
+                'ultimas_cotizaciones' => $cotizaciones->take(5)->map(fn($x) => [
+                    'id'     => $x->id,
+                    'fecha'  => $x->fecha,
+                    'total'  => $x->total,
+                    'estado_produccion' => $x->estado_produccion,
+                ])->values(),
+            ];
+        })->values();
+
+        return ['encontrados' => count($clientes), 'clientes' => $resultado];
+    }
+
+    private function toolConsultarCxC(array $input): array
+    {
+        $req  = new Request(['buscar' => $input['cliente'] ?? null, 'solo_pendientes' => true]);
+        $data = app(CuentasPorCobrarController::class)->index($req)->getData(true);
+
+        $clientes = collect($data['clientes'] ?? []);
+
+        return [
+            'totales' => $data['totales'] ?? null,
+            'top_deudores' => $clientes->take(10)->map(fn($c) => [
+                'cliente'   => $c['razon_social'] ?? null,
+                'rut'       => $c['identification'] ?? null,
+                'pendiente' => (float) ($c['total_pendiente'] ?? 0),
+                'facturado' => (float) ($c['total_facturado'] ?? 0),
+                'docs'      => $c['cantidad_docs'] ?? null,
+            ])->values(),
+        ];
+    }
+
+    private function toolConsultarCxP(array $input): array
+    {
+        $req  = new Request(['buscar' => $input['proveedor'] ?? null, 'solo_pendientes' => true]);
+        $data = app(CuentasPorPagarController::class)->index($req)->getData(true);
+
+        $proveedores = collect($data['proveedores'] ?? []);
+
+        return [
+            'totales' => $data['totales'] ?? null,
+            'top_acreedores' => $proveedores->take(10)->map(fn($p) => [
+                'proveedor' => $p['nombre_emisor'] ?? null,
+                'rut'       => $p['rut_emisor'] ?? null,
+                'pendiente' => (float) ($p['total_pendiente'] ?? 0),
+                'docs'      => $p['cantidad_docs'] ?? null,
+            ])->values(),
+        ];
+    }
+
+    private function toolConsultarCompras(array $input): array
+    {
+        $req = new Request([
+            'search' => $input['proveedor'] ?? null,
+            'desde'  => $input['desde'] ?? null,
+            'hasta'  => $input['hasta'] ?? null,
+        ]);
+        $data = app(CompraController::class)->index($req)->getData(true);
+
+        $items = collect($data['data'] ?? []);
+
+        return [
+            'total_facturas'  => $data['total'] ?? $items->count(),
+            'suma_pagina'     => $items->sum(fn($c) => (float) ($c['total'] ?? 0)),
+            'nota'            => ($data['total'] ?? 0) > count($items) ? 'Mostrando primeras ' . count($items) . ' de ' . $data['total'] : null,
+            'compras' => $items->take(15)->map(fn($c) => [
+                'folio'     => $c['folio'] ?? null,
+                'proveedor' => $c['nombre_emisor'] ?? null,
+                'fecha'     => $c['fecha_emision'] ?? null,
+                'total'     => (float) ($c['total'] ?? 0),
+                'tipo_dte'  => $c['tipo_dte'] ?? null,
+            ])->values(),
+        ];
+    }
+
+    private function toolConsultarVentas(array $input): array
+    {
+        $req = new Request([
+            'desde'  => $input['desde'] ?? null,
+            'hasta'  => $input['hasta'] ?? null,
+            'buscar' => $input['buscar'] ?? null,
+        ]);
+        $data = app(CuentasPorCobrarController::class)->registroVentas($req)->getData(true);
+
+        $docs = collect($data['documentos'] ?? []);
+
+        return [
+            'totales' => $data['totales'] ?? null,
+            'documentos' => $docs->take(15)->map(fn($d) => [
+                'numero'    => $d['numero_documento_bsale'] ?? null,
+                'cliente'   => $d['razon_social'] ?? null,
+                'fecha'     => $d['fecha_emision'] ?? null,
+                'monto'     => (float) ($d['monto'] ?? 0),
+                'pendiente' => (float) ($d['pendiente'] ?? 0),
+                'es_nc'     => (bool) ($d['es_nc'] ?? false),
+            ])->values(),
         ];
     }
 
