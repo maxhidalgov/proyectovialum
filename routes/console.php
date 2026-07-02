@@ -41,3 +41,14 @@ Schedule::command('workera:check-diario')
     ->withoutOverlapping(5)
     ->appendOutputTo(storage_path('logs/workera-asistencia.log'));
 
+// ──────────────────────────────────────────────────────────────────────────────
+//  Sincronización automática con Winperfil
+//  Cada 2 horas → detecta presupuestos aceptados y los mete al pipeline de
+//  producción (estado "En Espera de Medidas"). Requiere túnel Winperfil activo.
+// ──────────────────────────────────────────────────────────────────────────────
+Schedule::command('winperfil:sync')
+    ->everyTwoHours()
+    ->withoutOverlapping(15)
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/winperfil-sync.log'));
+

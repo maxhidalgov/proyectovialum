@@ -127,6 +127,29 @@
               hide-details
             />
           </VCol>
+          <VCol cols="12" sm="3" md="2">
+            <VTextField
+              v-model="filtroCliente"
+              label="Cliente"
+              placeholder="Nombre o RUT"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              prepend-inner-icon="mdi-magnify"
+            />
+          </VCol>
+          <VCol cols="12" sm="3" md="2">
+            <VSelect
+              v-model="filtroEstado"
+              :items="estadosDisponibles"
+              label="Estado"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+          </VCol>
           <VCol cols="auto">
             <VBtn variant="tonal" size="small" prepend-icon="mdi-eye" @click="cargarPresupuestos">
               Previsualizar
@@ -190,7 +213,7 @@
         <VCard>
           <VDataTable
             :headers="headersWin"
-            :items="presupuestosWin"
+            :items="presupuestosFiltrados"
             :loading="loadingWin"
             density="compact"
             class="text-no-wrap"
@@ -284,18 +307,6 @@
         <VCard>
           <VCardText class="pb-0">
             <VRow dense align="center">
-              <VCol cols="12" sm="5">
-                <VTextField
-                  v-model="filtroSync"
-                  label="Buscar cliente o referencia..."
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                  clearable
-                  prepend-inner-icon="mdi-magnify"
-                  @update:modelValue="cargarSync"
-                />
-              </VCol>
               <VCol cols="auto">
                 <VBtn variant="tonal" size="small" prepend-icon="mdi-refresh" @click="cargarSync">
                   Actualizar
@@ -332,7 +343,7 @@
 
           <VDataTable
             :headers="headersSync"
-            :items="cotizacionesSync"
+            :items="cotizacionesFiltradas"
             :loading="loadingSync"
             density="compact"
             class="text-no-wrap"
@@ -418,7 +429,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from '@/axiosInstance'
 
 // ── Estado de conexión ─────────────────────────────────────────────────────────
@@ -448,6 +459,10 @@ const filtros = ref({
   hasta: ultimoDiaMes,
   serie: 'A',
 })
+
+// Filtros client-side (aplican sobre los datos ya cargados, en ambos tabs)
+const filtroCliente = ref('')
+const filtroEstado  = ref(null)
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const tab = ref('preview')
@@ -511,8 +526,38 @@ async function syncUno(item) {
 // ── Tab 2: Cotizaciones sincronizadas ─────────────────────────────────────────
 const loadingSync      = ref(false)
 const cotizacionesSync = ref([])
-const filtroSync       = ref('')
 const cotizSyncCount   = computed(() => cotizacionesSync.value.length)
+
+// Estados disponibles para el select (según el tab activo)
+const estadosDisponibles = computed(() => {
+  if (tab.value === 'preview') {
+    return [...new Set(presupuestosWin.value.map(p => labelAceptado(p.ACEPTADO)))].filter(Boolean)
+  }
+  return [...new Set(cotizacionesSync.value.map(c => c.estado).filter(Boolean))]
+})
+
+// Tablas filtradas client-side por cliente + estado
+const presupuestosFiltrados = computed(() =>
+  presupuestosWin.value.filter(p => {
+    if (filtroCliente.value) {
+      const hay = `${p.NOMBRECLIENTE ?? ''} ${p.CIFCLIENTE ?? ''}`.toLowerCase()
+      if (!hay.includes(filtroCliente.value.toLowerCase())) return false
+    }
+    if (filtroEstado.value && labelAceptado(p.ACEPTADO) !== filtroEstado.value) return false
+    return true
+  }),
+)
+
+const cotizacionesFiltradas = computed(() =>
+  cotizacionesSync.value.filter(c => {
+    if (filtroCliente.value) {
+      const hay = `${c.cliente_nombre ?? ''} ${c.cliente_rut ?? ''} ${c.observaciones ?? ''}`.toLowerCase()
+      if (!hay.includes(filtroCliente.value.toLowerCase())) return false
+    }
+    if (filtroEstado.value && (c.estado ?? '') !== filtroEstado.value) return false
+    return true
+  }),
+)
 
 const headersSync = [
   { title: 'Nº Winperfil',  key: 'winperfil_numero',   sortable: true  },
@@ -533,7 +578,6 @@ async function cargarSync() {
         serie:  filtros.value.serie,
         desde:  filtros.value.desde,
         hasta:  filtros.value.hasta,
-        buscar: filtroSync.value || undefined,
       },
     })
     cotizacionesSync.value = Array.isArray(data) ? data : []
@@ -733,6 +777,24 @@ function labelAceptado(v) {
 const clp = n => new Intl.NumberFormat('es-CL', {
   style: 'currency', currency: 'CLP', maximumFractionDigits: 0,
 }).format(Number(n) || 0)
+
+// Recargar automáticamente al cambiar filtros de fecha o serie (con debounce
+// para no disparar dos llamadas cuando cambian desde+hasta seguidos).
+let filtroTimeout = null
+watch(
+  () => [filtros.value.desde, filtros.value.hasta, filtros.value.serie],
+  () => {
+    clearTimeout(filtroTimeout)
+    filtroTimeout = setTimeout(() => {
+      if (tab.value === 'preview') {
+        // El tab Live consulta Winperfil directamente; solo si no está caída la conexión
+        if (conexion.value.ok !== false) cargarPresupuestos()
+      } else {
+        cargarSync()
+      }
+    }, 300)
+  },
+)
 
 onMounted(async () => {
   await testConexion()

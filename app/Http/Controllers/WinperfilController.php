@@ -699,6 +699,13 @@ class WinperfilController extends Controller
                 'winperfil_synced_at' => now(),
             ];
 
+            // Al aceptarse en Winperfil (ACEPTADO='T'), la cotización entra al pipeline
+            // de producción en su etapa inicial. No pisa el avance manual: solo lo setea
+            // si es nueva o aún no tiene estado_produccion.
+            if ($aceptado === 'T' && (!$existing || empty($existing->estado_produccion))) {
+                $payload['estado_produccion'] = 'En Espera de Medidas';
+            }
+
             if ($existing) {
                 $existing->update($payload);
                 $cotizacion = $existing;
