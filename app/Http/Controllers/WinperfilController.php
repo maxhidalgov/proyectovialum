@@ -706,6 +706,14 @@ class WinperfilController extends Controller
                 $payload['estado_produccion'] = 'En Espera de Medidas';
             }
 
+            // Candado de precio: si el precio fue ajustado manualmente en la app,
+            // la sync NO debe sobreescribir el total ni las líneas (precio acordado
+            // con el cliente que Winperfil no permite editar estando aprobado).
+            $precioLock = $existing && $existing->winperfil_precio_lock;
+            if ($precioLock) {
+                unset($payload['total']);
+            }
+
             if ($existing) {
                 $existing->update($payload);
                 $cotizacion = $existing;
@@ -714,6 +722,12 @@ class WinperfilController extends Controller
                 $payload['vendedor_id'] = auth()->id() ?? 1;
                 $cotizacion = Cotizacion::create($payload);
                 $action = 'created';
+            }
+
+            // Si el precio está bloqueado, preservar las líneas ajustadas y no re-importar.
+            if ($precioLock) {
+                DB::commit();
+                return $action;
             }
 
             // ─── Detalles ────────────────────────────────────────────────────

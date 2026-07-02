@@ -128,7 +128,69 @@
         <v-chip size="small" color="deep-purple" variant="tonal" class="ml-1">
           {{ winperfilDetalles.length }} ítem{{ winperfilDetalles.length !== 1 ? 's' : '' }}
         </v-chip>
+        <v-chip v-if="cotizacion?.winperfil_precio_lock" size="small" color="amber-darken-2" variant="tonal" class="ml-1">
+          <v-icon start size="14">mdi-lock</v-icon> Precio ajustado
+        </v-chip>
       </v-card-title>
+
+      <!-- ── Ajuste de precio (distribución proporcional) ── -->
+      <v-card-text class="pb-0">
+        <v-alert
+          v-if="cotizacion?.winperfil_precio_lock"
+          type="info" variant="tonal" density="compact" class="mb-3"
+        >
+          <v-icon size="16" class="mr-1">mdi-lock-check</v-icon>
+          Precio ajustado manualmente — la sincronización con Winperfil ya no lo modificará.
+        </v-alert>
+
+        <v-row dense align="center" class="bg-grey-lighten-4 rounded pa-2">
+          <v-col cols="6" sm="3">
+            <div class="text-caption text-medium-emphasis">Neto actual</div>
+            <div class="font-weight-bold">{{ clp(netoWinperfil) }}</div>
+          </v-col>
+          <v-col cols="6" sm="3">
+            <div class="text-caption text-medium-emphasis">Total (c/IVA)</div>
+            <div class="font-weight-bold">{{ clp(cotizacion?.total) }}</div>
+          </v-col>
+          <v-col cols="7" sm="3">
+            <v-text-field
+              v-model.number="ajuste.total"
+              label="Nuevo total"
+              type="number"
+              density="compact"
+              variant="outlined"
+              hide-details
+              prefix="$"
+            />
+          </v-col>
+          <v-col cols="5" sm="2">
+            <v-select
+              v-model="ajuste.tipo"
+              :items="[{ title: 'Neto', value: 'neto' }, { title: 'Bruto', value: 'bruto' }]"
+              label="Tipo"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" sm="1">
+            <v-btn
+              color="deep-purple"
+              size="small"
+              block
+              :loading="ajuste.loading"
+              :disabled="!ajuste.total || ajuste.total <= 0"
+              @click="aplicarAjustePrecio"
+            >
+              Aplicar
+            </v-btn>
+          </v-col>
+        </v-row>
+        <div class="text-caption text-medium-emphasis mt-1">
+          El nuevo total se reparte proporcionalmente entre las {{ winperfilDetalles.length }} ventanas.
+        </div>
+      </v-card-text>
+
       <v-card-text>
         <v-row>
           <v-col
@@ -249,6 +311,33 @@ const winperfilDetalles = computed(() => {
 // Dialog para ampliar SVG
 const dialogSvg  = ref(false)
 const svgAmpliado = ref('')
+
+// ── Ajuste de precio Winperfil ──────────────────────────────────
+const ajuste = ref({ total: null, tipo: 'bruto', loading: false })
+
+const netoWinperfil = computed(() =>
+  winperfilDetalles.value.reduce((s, d) => s + Number(d.total || 0), 0),
+)
+
+async function aplicarAjustePrecio() {
+  if (!ajuste.value.total || ajuste.value.total <= 0) return
+  ajuste.value.loading = true
+  try {
+    const { data } = await api.patch(`/api/cotizaciones/${cotizacion.value.id}/ajustar-precio`, {
+      total: ajuste.value.total,
+      tipo:  ajuste.value.tipo,
+    })
+    // Recargar la cotización con los precios recalculados
+    const { data: fresca } = await api.get(`/api/cotizaciones/${cotizacion.value.id}`)
+    cotizacion.value = fresca
+    ajuste.value.total = null
+    alert(data.message)
+  } catch (e) {
+    alert(e.response?.data?.message || 'Error al ajustar el precio')
+  } finally {
+    ajuste.value.loading = false
+  }
+}
 
 const getEstadoColor = (estado) => {
   switch (estado) {

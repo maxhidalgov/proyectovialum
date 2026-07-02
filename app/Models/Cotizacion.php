@@ -30,6 +30,7 @@ class Cotizacion extends Model
         'winperfil_numero',
         'winperfil_serie',
         'winperfil_synced_at',
+        'winperfil_precio_lock',
         'fecha_entrega_real',
         'tipo_vidrio',
         'fabricar_termopanel',
@@ -37,7 +38,8 @@ class Cotizacion extends Model
     ];
 
     protected $casts = [
-        'pedido_proveedor' => 'boolean',
+        'pedido_proveedor'      => 'boolean',
+        'winperfil_precio_lock' => 'boolean',
     ];
 
     public function cliente()

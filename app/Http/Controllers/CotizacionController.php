@@ -885,6 +885,83 @@ public function store(Request $request)
         ]);
     }
 
+    /**
+     * Ajusta el precio total de una cotización Winperfil y lo distribuye
+     * proporcionalmente entre sus ventanas. Marca el candado para que la
+     * sincronización automática no lo revierta.
+     *
+     * Body: { total: number, tipo: 'neto'|'bruto' }
+     */
+    public function ajustarPrecioWinperfil(Request $request, $id)
+    {
+        $data = $request->validate([
+            'total' => 'required|numeric|min:0',
+            'tipo'  => 'required|in:neto,bruto',
+        ]);
+
+        $cotizacion = Cotizacion::with('detalles')->findOrFail($id);
+        $lineas = $cotizacion->detalles->where('tipo_item', 'winperfil')->values();
+
+        if ($lineas->isEmpty()) {
+            return response()->json(['message' => 'La cotización no tiene ventanas Winperfil para ajustar.'], 422);
+        }
+
+        $netoActual = (float) $lineas->sum('total');
+        if ($netoActual <= 0) {
+            return response()->json(['message' => 'Las ventanas no tienen precio base para distribuir el ajuste.'], 422);
+        }
+
+        // Ratio de IVA implícito actual (total bruto guardado / neto de las líneas)
+        $ivaRatio = $cotizacion->total > 0 ? ((float) $cotizacion->total / $netoActual) : 1.19;
+        if ($ivaRatio <= 0) {
+            $ivaRatio = 1.19;
+        }
+
+        $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / $ivaRatio) : (float) $data['total'];
+        $factor    = $nuevoNeto / $netoActual;
+
+        \DB::beginTransaction();
+        try {
+            // Ajuste proporcional por línea. La última línea absorbe el redondeo
+            // para que la suma cuadre exactamente con el nuevo neto.
+            $acumulado = 0;
+            $ultimoIdx = $lineas->count() - 1;
+
+            foreach ($lineas as $idx => $linea) {
+                if ($idx === $ultimoIdx) {
+                    $nuevoTotalLinea = round($nuevoNeto) - $acumulado;
+                } else {
+                    $nuevoTotalLinea = round((float) $linea->total * $factor);
+                    $acumulado += $nuevoTotalLinea;
+                }
+                $cantidad = max((float) $linea->cantidad, 1);
+                $linea->update([
+                    'total'           => $nuevoTotalLinea,
+                    'precio_unitario' => round($nuevoTotalLinea / $cantidad),
+                ]);
+            }
+
+            $cotizacion->update([
+                'total'                 => round($nuevoNeto * $ivaRatio),
+                'winperfil_precio_lock' => true,
+            ]);
+
+            \DB::commit();
+        } catch (\Throwable $e) {
+            \DB::rollBack();
+            return response()->json(['message' => 'Error al ajustar el precio: ' . $e->getMessage()], 500);
+        }
+
+        $cotizacion->load('detalles');
+
+        return response()->json([
+            'message'    => 'Precio ajustado y bloqueado ante futuras sincronizaciones.',
+            'neto'       => round($nuevoNeto),
+            'total'      => $cotizacion->total,
+            'cotizacion' => $cotizacion,
+        ]);
+    }
+
     public function subirImagenes(Request $request, $id)
     {
         $cotizacion = Cotizacion::findOrFail($id);
