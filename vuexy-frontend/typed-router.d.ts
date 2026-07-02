@@ -26,6 +26,7 @@ declare module 'vue-router/auto-routes' {
     'agregar-ventana-modal': RouteRecordInfo<'agregar-ventana-modal', '/AgregarVentanaModal', Record<never, never>, Record<never, never>>,
     'agregar-ventana-modal2': RouteRecordInfo<'agregar-ventana-modal2', '/AgregarVentanaModal2', Record<never, never>, Record<never, never>>,
     'boletas': RouteRecordInfo<'boletas', '/boletas', Record<never, never>, Record<never, never>>,
+    'calendario': RouteRecordInfo<'calendario', '/calendario', Record<never, never>, Record<never, never>>,
     'clientes': RouteRecordInfo<'clientes', '/clientes', Record<never, never>, Record<never, never>>,
     'clientes-id': RouteRecordInfo<'clientes-id', '/clientes/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'cliente-table': RouteRecordInfo<'cliente-table', '/ClienteTable', Record<never, never>, Record<never, never>>,

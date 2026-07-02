@@ -9,6 +9,7 @@ class Empleado extends Model
     protected $fillable = [
         'nombre', 'rut', 'cargo', 'sueldo_base', 'fecha_ingreso',
         'fecha_egreso', 'activo', 'banco', 'cuenta_bancaria', 'tipo_cuenta', 'notas',
+        'workera_code', 'telefono',
     ];
 
     protected $casts = [

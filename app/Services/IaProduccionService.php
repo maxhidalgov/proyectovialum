@@ -9,7 +9,9 @@ use App\Models\EtapaProduccion;
 use App\Models\HorasExtra;
 use App\Models\IaMensaje;
 use App\Models\IncidenteProduccion;
+use App\Models\Recordatorio;
 use App\Models\VisitaCliente;
+use App\Services\WorkeraService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -161,6 +163,7 @@ Tu rol es:
 - Registrar eventos de producción que el usuario te comunica en lenguaje natural (ausencias, horas extra, incidentes, visitas, avances de etapas).
 - Responder preguntas sobre el estado de la producción, entregas pendientes e incidentes.
 - Ayudar a planificar y estimar fechas de entrega basándote en la carga actual y el historial.
+- Funcionar como agenda: crear recordatorios y eventos cuando el usuario pida recordar, agendar o programar algo (llamadas, reuniones, pagos, seguimientos). También consultar qué hay agendado.
 - Ser proactivo: si detectas un problema (entrega próxima sin avance, incidente abierto antiguo), mencionarlo.
 
 Reglas:
@@ -362,6 +365,58 @@ PROMPT;
                     'required' => ['cotizacion_id'],
                 ],
             ],
+            [
+                'name'        => 'consultar_asistencia_workera',
+                'description' => 'Consulta en tiempo real la asistencia del día desde Workera. Úsalo cuando pregunten quién vino, a qué hora marcó alguien, quién faltó hoy.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'fecha' => ['type' => 'string', 'description' => 'Fecha a consultar en YYYY-MM-DD. Si no se especifica usa hoy.'],
+                    ],
+                ],
+            ],
+            [
+                'name'        => 'crear_recordatorio',
+                'description' => 'Crea un recordatorio o evento en el calendario/agenda. Úsalo cuando el usuario pida recordar algo, agendar una tarea, llamada, reunión o pago para una fecha.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'titulo'        => ['type' => 'string', 'description' => 'Título corto del recordatorio'],
+                        'fecha'         => ['type' => 'string', 'description' => 'Fecha en formato YYYY-MM-DD'],
+                        'hora'          => ['type' => 'string', 'description' => 'Hora en formato HH:MM (opcional)'],
+                        'tipo'          => ['type' => 'string', 'enum' => ['llamada', 'reunion', 'tarea', 'pago', 'seguimiento', 'entrega', 'otro']],
+                        'descripcion'   => ['type' => 'string', 'description' => 'Detalle adicional (opcional)'],
+                        'cotizacion_id' => ['type' => 'integer', 'description' => 'ID de cotización relacionada (opcional)'],
+                        'cliente_id'    => ['type' => 'integer', 'description' => 'ID de cliente relacionado (opcional)'],
+                        'empleado_id'   => ['type' => 'integer', 'description' => 'ID del empleado asignado (opcional)'],
+                    ],
+                    'required' => ['titulo', 'fecha'],
+                ],
+            ],
+            [
+                'name'        => 'consultar_recordatorios',
+                'description' => 'Consulta los recordatorios/eventos agendados. Úsalo cuando pregunten qué hay agendado, qué tareas hay pendientes o qué toca hoy/esta semana.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'desde' => ['type' => 'string', 'description' => 'Fecha inicial YYYY-MM-DD (opcional, por defecto hoy)'],
+                        'hasta' => ['type' => 'string', 'description' => 'Fecha final YYYY-MM-DD (opcional, por defecto +7 días)'],
+                        'solo_pendientes' => ['type' => 'boolean', 'description' => 'Si true, solo muestra pendientes (por defecto true)'],
+                    ],
+                ],
+            ],
+            [
+                'name'        => 'completar_recordatorio',
+                'description' => 'Marca un recordatorio como completado o cancelado.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'recordatorio_id' => ['type' => 'integer', 'description' => 'ID del recordatorio'],
+                        'estado'          => ['type' => 'string', 'enum' => ['completado', 'cancelado']],
+                    ],
+                    'required' => ['recordatorio_id', 'estado'],
+                ],
+            ],
         ];
     }
 
@@ -370,14 +425,18 @@ PROMPT;
     private function ejecutarTool(string $tool, array $input): array
     {
         return match ($tool) {
-            'registrar_ausencia'      => $this->toolRegistrarAusencia($input),
-            'registrar_horas_extra'   => $this->toolRegistrarHorasExtra($input),
-            'registrar_incidente'     => $this->toolRegistrarIncidente($input),
-            'registrar_visita'        => $this->toolRegistrarVisita($input),
-            'actualizar_etapa'        => $this->toolActualizarEtapa($input),
-            'get_contexto_produccion' => $this->toolGetContexto($input),
-            'estimar_fecha_entrega'   => $this->toolEstimarFecha($input),
-            default                   => ['error' => "Tool desconocida: {$tool}"],
+            'registrar_ausencia'         => $this->toolRegistrarAusencia($input),
+            'registrar_horas_extra'      => $this->toolRegistrarHorasExtra($input),
+            'registrar_incidente'        => $this->toolRegistrarIncidente($input),
+            'registrar_visita'           => $this->toolRegistrarVisita($input),
+            'actualizar_etapa'           => $this->toolActualizarEtapa($input),
+            'get_contexto_produccion'    => $this->toolGetContexto($input),
+            'estimar_fecha_entrega'      => $this->toolEstimarFecha($input),
+            'consultar_asistencia_workera' => $this->toolConsultarAsistencia($input),
+            'crear_recordatorio'         => $this->toolCrearRecordatorio($input),
+            'consultar_recordatorios'    => $this->toolConsultarRecordatorios($input),
+            'completar_recordatorio'     => $this->toolCompletarRecordatorio($input),
+            default                      => ['error' => "Tool desconocida: {$tool}"],
         };
     }
 
@@ -512,6 +571,143 @@ PROMPT;
         }
 
         return ['contexto' => $this->buildContexto()];
+    }
+
+    private function toolConsultarAsistencia(array $input): array
+    {
+        $fecha   = $input['fecha'] ?? now()->toDateString();
+        $workera = app(WorkeraService::class);
+
+        try {
+            $data = $workera->getAsistencia($fecha);
+            $registros = $data['data'] ?? $data;
+
+            // Indexar entradas y salidas por employee.code
+            $entradas = [];
+            $salidas  = [];
+            foreach ($registros as $r) {
+                $code   = (string) ($r['employee']['code'] ?? '');
+                $nombre = trim(($r['employee']['name'] ?? '') . ' ' . ($r['employee']['lastName'] ?? ''));
+                $hora   = isset($r['attendanceDate']) ? Carbon::parse($r['attendanceDate'])->format('H:i') : null;
+
+                if (!$code) {
+                    continue;
+                }
+                if (($r['attendanceType'] ?? -1) === 0 && !isset($entradas[$code])) {
+                    $entradas[$code] = ['nombre' => $nombre, 'hora' => $hora];
+                }
+                if (($r['attendanceType'] ?? -1) === 1) {
+                    $salidas[$code] = ['nombre' => $nombre, 'hora' => $hora];
+                }
+            }
+
+            // Cruzar con empleados locales
+            $empleados = Empleado::whereNotNull('workera_code')->where('activo', true)->get();
+            $resultado = [];
+
+            foreach ($empleados as $emp) {
+                $code = (string) $emp->workera_code;
+                $resultado[] = [
+                    'empleado'    => $emp->nombre,
+                    'entrada'     => $entradas[$code]['hora'] ?? null,
+                    'salida'      => $salidas[$code]['hora'] ?? null,
+                    'presente'    => isset($entradas[$code]),
+                ];
+            }
+
+            $presentes = array_filter($resultado, fn($r) => $r['presente']);
+            $ausentes  = array_filter($resultado, fn($r) => !$r['presente']);
+
+            return [
+                'fecha'    => $fecha,
+                'total'    => count($resultado),
+                'presentes' => array_values($presentes),
+                'ausentes'  => array_values($ausentes),
+            ];
+        } catch (\Throwable $e) {
+            return ['error' => 'No se pudo consultar Workera: ' . $e->getMessage()];
+        }
+    }
+
+    private function toolCrearRecordatorio(array $input): array
+    {
+        $recordatorio = Recordatorio::create([
+            'titulo'        => $input['titulo'],
+            'descripcion'   => $input['descripcion'] ?? null,
+            'fecha'         => $input['fecha'],
+            'hora'          => $input['hora'] ?? null,
+            'tipo'          => $input['tipo'] ?? 'tarea',
+            'estado'        => 'pendiente',
+            'cotizacion_id' => $input['cotizacion_id'] ?? null,
+            'cliente_id'    => $input['cliente_id'] ?? null,
+            'empleado_id'   => $input['empleado_id'] ?? null,
+            'origen'        => 'ia',
+        ]);
+
+        $cuando = Carbon::parse($input['fecha'])->locale('es')->isoFormat('dddd D [de] MMMM');
+        if (!empty($input['hora'])) {
+            $cuando .= " a las {$input['hora']}";
+        }
+
+        return [
+            'ok'      => true,
+            'id'      => $recordatorio->id,
+            'mensaje' => "Recordatorio creado: \"{$input['titulo']}\" para el {$cuando}",
+        ];
+    }
+
+    private function toolConsultarRecordatorios(array $input): array
+    {
+        $desde = $input['desde'] ?? now()->toDateString();
+        $hasta = $input['hasta'] ?? now()->addDays(7)->toDateString();
+        $soloPendientes = $input['solo_pendientes'] ?? true;
+
+        $query = Recordatorio::with(['cliente', 'cotizacion', 'empleado'])
+            ->whereBetween('fecha', [$desde, $hasta])
+            ->orderBy('fecha')
+            ->orderBy('hora');
+
+        if ($soloPendientes) {
+            $query->where('estado', 'pendiente');
+        }
+
+        $recordatorios = $query->get()->map(fn($r) => [
+            'id'        => $r->id,
+            'titulo'    => $r->titulo,
+            'fecha'     => $r->fecha->toDateString(),
+            'hora'      => $r->hora,
+            'tipo'      => $r->tipo,
+            'estado'    => $r->estado,
+            'cliente'   => $r->cliente?->razon_social ?? trim(($r->cliente?->first_name ?? '') . ' ' . ($r->cliente?->last_name ?? '')) ?: null,
+            'empleado'  => $r->empleado?->nombre,
+            'cotizacion_id' => $r->cotizacion_id,
+        ])->toArray();
+
+        return [
+            'desde'         => $desde,
+            'hasta'         => $hasta,
+            'total'         => count($recordatorios),
+            'recordatorios' => $recordatorios,
+        ];
+    }
+
+    private function toolCompletarRecordatorio(array $input): array
+    {
+        $recordatorio = Recordatorio::find($input['recordatorio_id']);
+
+        if (!$recordatorio) {
+            return ['error' => 'Recordatorio no encontrado'];
+        }
+
+        $recordatorio->update([
+            'estado'        => $input['estado'],
+            'completado_at' => $input['estado'] === 'completado' ? now() : null,
+        ]);
+
+        return [
+            'ok'      => true,
+            'mensaje' => "Recordatorio \"{$recordatorio->titulo}\" marcado como {$input['estado']}",
+        ];
     }
 
     private function toolEstimarFecha(array $input): array

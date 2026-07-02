@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Log;
  */
 class WorkeraService
 {
-    private string $baseUrl = 'https://api.workera.com/apiClient/v1';
+    private string $baseUrl = 'https://workera.com/apiClient/v1';
 
     private function headers(): array
     {
@@ -90,14 +90,17 @@ class WorkeraService
             }
 
             foreach ($empleados as $w) {
-                $rut = $this->limpiarRut($w['identification'] ?? '');
+                $rutWorkera = $this->limpiarRut($w['identification'] ?? '');
 
-                if (!$rut) {
+                if (!$rutWorkera) {
                     $skipped++;
                     continue;
                 }
 
-                $local = Empleado::where('rut', $rut)->first();
+                // Buscar por RUT limpio (sin puntos ni guión)
+                $local = Empleado::all()->first(function ($e) use ($rutWorkera) {
+                    return $this->limpiarRut($e->rut ?? '') === $rutWorkera;
+                });
 
                 if (!$local) {
                     $skipped++;
@@ -105,7 +108,7 @@ class WorkeraService
                 }
 
                 $local->update([
-                    'workera_code' => (string) ($w['code'] ?? $w['id'] ?? ''),
+                    'workera_code' => (string) ($w['code'] ?? ''),
                     'telefono'     => $w['phone'] ?? null,
                 ]);
 
@@ -125,33 +128,37 @@ class WorkeraService
      * Retorna marcaciones del día indicado.
      * date: 'Y-m-d'
      */
-    public function getAsistencia(string $date): array
+    public function getAsistencia(string $date, ?string $endDate = null): array
     {
         return $this->get('attendanceData', [
-            'startDate' => $date,
-            'endDate'   => $date,
+            'start' => $date,
+            'end'   => $endDate ?? $date,
+            'page'  => 1,
         ]);
     }
 
     /**
      * Lee asistencia del día y detecta ausentes e impuntuales.
-     * Compara contra turnos esperados (workshift/schedules).
      *
      * Retorna:
-     *   ausentes    → empleados sin marcación
-     *   tarde       → llegaron después de 15 min del inicio del turno
+     *   ausentes    → empleados sin marcación de entrada
+     *   tarde       → llegaron después de 15 min del inicio del turno (08:00)
      *   presentes   → marcaron dentro del margen
      */
     public function analizarAsistenciaHoy(): array
     {
-        $hoy       = now()->toDateString();
-        $registros = $this->getAsistencia($hoy);
+        $hoy  = now()->toDateString();
+        $data = $this->getAsistencia($hoy);
 
-        $marcaciones = [];
-        foreach ($registros as $r) {
-            $code = (string) ($r['employeeCode'] ?? $r['employee_code'] ?? '');
-            if ($code) {
-                $marcaciones[$code] = $r;
+        // Indexar primera marcación de ENTRADA (attendanceType=0) por employee.code
+        $entradas = [];
+        foreach ($data['data'] ?? $data as $r) {
+            $code = (string) ($r['employee']['code'] ?? '');
+            if (!$code || ($r['attendanceType'] ?? -1) !== 0) {
+                continue;
+            }
+            if (!isset($entradas[$code])) {
+                $entradas[$code] = $r['attendanceDate'];
             }
         }
 
@@ -162,31 +169,34 @@ class WorkeraService
         $empleados = Empleado::whereNotNull('workera_code')->where('activo', true)->get();
 
         foreach ($empleados as $emp) {
-            $code = $emp->workera_code;
+            $code = (string) $emp->workera_code;
 
-            if (!isset($marcaciones[$code])) {
+            if (!isset($entradas[$code])) {
                 $ausentes[] = ['empleado_id' => $emp->id, 'nombre' => $emp->nombre];
                 continue;
             }
 
-            $entrada = $marcaciones[$code]['checkIn'] ?? $marcaciones[$code]['startTime'] ?? null;
+            $horaEntrada = Carbon::parse($entradas[$code]);
+            $horaInicio  = config('services.workera.turno_inicio', '08:00');
+            $turnoInicio = Carbon::parse($hoy . ' ' . $horaInicio . ':00');
+            $minutosTarde = $horaEntrada->diffInMinutes($turnoInicio, false);
 
-            if ($entrada) {
-                $horaEntrada = Carbon::parse($entrada);
-                $turnoInicio = Carbon::parse($hoy . ' 08:00:00');
-
-                if ($horaEntrada->diffInMinutes($turnoInicio, false) < -15) {
-                    $tarde[] = [
-                        'empleado_id' => $emp->id,
-                        'nombre'      => $emp->nombre,
-                        'hora_entrada' => $horaEntrada->format('H:i'),
-                        'minutos_tarde' => abs($horaEntrada->diffInMinutes($turnoInicio)),
-                    ];
-                    continue;
-                }
+            // diffInMinutes(false): negativo si $horaEntrada > $turnoInicio (llegó tarde)
+            if ($minutosTarde < -15) {
+                $tarde[] = [
+                    'empleado_id'   => $emp->id,
+                    'nombre'        => $emp->nombre,
+                    'hora_entrada'  => $horaEntrada->format('H:i'),
+                    'minutos_tarde' => (int) abs($minutosTarde),
+                ];
+                continue;
             }
 
-            $presentes[] = ['empleado_id' => $emp->id, 'nombre' => $emp->nombre];
+            $presentes[] = [
+                'empleado_id'  => $emp->id,
+                'nombre'       => $emp->nombre,
+                'hora_entrada' => $horaEntrada->format('H:i'),
+            ];
         }
 
         return compact('ausentes', 'tarde', 'presentes');
@@ -197,8 +207,9 @@ class WorkeraService
     public function getHorasExtra(string $startDate, string $endDate): array
     {
         return $this->get('overtimeAuthorization', [
-            'startDate' => $startDate,
-            'endDate'   => $endDate,
+            'start' => $startDate,
+            'end'   => $endDate,
+            'page'  => 1,
         ]);
     }
 

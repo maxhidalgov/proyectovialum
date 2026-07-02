@@ -31,3 +31,13 @@ Schedule::command('chipax:sync-cobranza')
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/chipax-cobranza.log'));
 
+// ──────────────────────────────────────────────────────────────────────────────
+//  Check diario de asistencia via Workera
+//  Lunes–Viernes a las 09:30 → inyecta reporte en chat IA producción
+// ──────────────────────────────────────────────────────────────────────────────
+Schedule::command('workera:check-diario')
+    ->weekdays()
+    ->at('09:30')
+    ->withoutOverlapping(5)
+    ->appendOutputTo(storage_path('logs/workera-asistencia.log'));
+

@@ -131,6 +131,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Calendario',
+    to: { name: 'calendario' },
+    icon: { icon: 'mdi-calendar-month' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Finanzas',
     icon: { icon: 'mdi-bank' },
     permission: 'gestionar_usuarios', // Solo admin

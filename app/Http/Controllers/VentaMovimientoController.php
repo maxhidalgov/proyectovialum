@@ -35,22 +35,28 @@ class VentaMovimientoController extends Controller
 
         $totalManual = (float) ($venta->monto_cobrado_manual ?? 0);
 
-        // NC aplicadas explícitamente (venta_nc_aplicacion)
-        $totalNC = (float) DB::table('venta_nc_aplicacion')
-            ->where('factura_id', $ventaId)
-            ->sum('monto');
+        // NCs aplicadas explícitamente (venta_nc_aplicacion)
+        $ncsAplicadas = DB::table('venta_nc_aplicacion as ap')
+            ->join('documentos_facturacion as nc', 'nc.id', '=', 'ap.nc_id')
+            ->where('ap.factura_id', $ventaId)
+            ->select('nc.id', 'nc.numero_documento_bsale as numero', 'ap.monto', 'ap.fecha')
+            ->get();
+        $totalNC = $ncsAplicadas->sum('monto');
 
-        // NC de Bsale que referencian esta factura (nc_referencia_df_id), sin doble conteo
-        $totalNCRef = (float) DB::table('documentos_facturacion as nc')
+        // NCs de Bsale que referencian esta factura (nc_referencia_df_id), sin doble conteo
+        $ncsRef = DB::table('documentos_facturacion as nc')
             ->where('nc.tipo_documento_bsale_id', 2)
             ->where('nc.nc_referencia_df_id', $ventaId)
             ->whereNotExists(fn($q) => $q->from('venta_nc_aplicacion')->whereColumn('venta_nc_aplicacion.nc_id', 'nc.id'))
-            ->sum('nc.monto');
+            ->select('nc.id', 'nc.numero_documento_bsale as numero', 'nc.monto', 'nc.fecha_emision as fecha')
+            ->get();
+        $totalNCRef = $ncsRef->sum('monto');
 
         $saldoPorCobrar = max(0, $venta->monto - $totalCobrado - $totalTransbank - $totalManual - $totalNC - $totalNCRef);
 
         return response()->json([
             'asignados'         => $asignados,
+            'ncs_aplicadas'     => $ncsAplicadas->concat($ncsRef)->values(),
             'cobrado_transbank' => $totalTransbank,
             'cobrado_manual'    => $totalManual,
             'cobrado_nc'        => $totalNC + $totalNCRef,

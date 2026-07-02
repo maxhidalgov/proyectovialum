@@ -344,6 +344,17 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/operaciones/{id}/abonos', [OperacionesController::class, 'storeAbono']);
     Route::delete('/operaciones/abonos/{abonoId}', [OperacionesController::class, 'destroyAbono']);
 
+    // Taller (vista de fabricación con etapas)
+    Route::get('/taller', [\App\Http\Controllers\ProduccionController::class, 'taller']);
+    Route::post('/taller/{id}/etapas', [\App\Http\Controllers\ProduccionController::class, 'guardarEtapa']);
+
+    // Calendario y recordatorios
+    Route::get('/calendario/eventos', [\App\Http\Controllers\CalendarioController::class, 'eventos']);
+    Route::get('/recordatorios', [\App\Http\Controllers\RecordatorioController::class, 'index']);
+    Route::post('/recordatorios', [\App\Http\Controllers\RecordatorioController::class, 'store']);
+    Route::patch('/recordatorios/{id}', [\App\Http\Controllers\RecordatorioController::class, 'update']);
+    Route::delete('/recordatorios/{id}', [\App\Http\Controllers\RecordatorioController::class, 'destroy']);
+
     // routes/api.php
     Route::get('/dashboard/ventas-mensuales', [DashboardController::class, 'ventasMensuales']);
     Route::get('/dashboard-financiero', [DashboardFinancieroController::class, 'index']);

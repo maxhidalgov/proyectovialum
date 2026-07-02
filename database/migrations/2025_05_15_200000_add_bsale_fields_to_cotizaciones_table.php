@@ -12,12 +12,20 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('cotizaciones', function (Blueprint $table) {
-            $table->string('numero_documento_bsale')->nullable()->after('total');
-            $table->integer('id_documento_bsale')->nullable()->after('numero_documento_bsale');
-            $table->datetime('fecha_documento_bsale')->nullable()->after('id_documento_bsale');
-            $table->enum('estado_facturacion', ['aprobada', 'facturada', 'pagada', 'anulada'])
-                  ->default('aprobada')
-                  ->after('fecha_documento_bsale');
+            if (!Schema::hasColumn('cotizaciones', 'numero_documento_bsale')) {
+                $table->string('numero_documento_bsale')->nullable()->after('total');
+            }
+            if (!Schema::hasColumn('cotizaciones', 'id_documento_bsale')) {
+                $table->integer('id_documento_bsale')->nullable()->after('numero_documento_bsale');
+            }
+            if (!Schema::hasColumn('cotizaciones', 'fecha_documento_bsale')) {
+                $table->datetime('fecha_documento_bsale')->nullable()->after('id_documento_bsale');
+            }
+            if (!Schema::hasColumn('cotizaciones', 'estado_facturacion')) {
+                $table->enum('estado_facturacion', ['aprobada', 'facturada', 'pagada', 'anulada'])
+                      ->default('aprobada')
+                      ->after('fecha_documento_bsale');
+            }
         });
     }
 

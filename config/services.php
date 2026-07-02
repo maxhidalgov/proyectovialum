@@ -41,8 +41,9 @@ return [
     ],
 
     'workera' => [
-        'api_user' => env('WORKERA_API_USER'),
-        'api_key'  => env('WORKERA_API_KEY'),
+        'api_user'     => env('WORKERA_API_USER'),
+        'api_key'      => env('WORKERA_API_KEY'),
+        'turno_inicio' => env('WORKERA_TURNO_INICIO', '09:00'), // HH:MM — hora de inicio del turno laboral
     ],
 
     'bch' => [
