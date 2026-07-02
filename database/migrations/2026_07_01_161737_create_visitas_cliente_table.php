@@ -11,23 +11,27 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('visitas_cliente', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('cotizacion_id')->nullable()->constrained('cotizaciones')->nullOnDelete();
-            $table->foreignId('cliente_id')->nullable()->constrained('clientes')->nullOnDelete();
-            $table->enum('tipo', ['medicion', 'instalacion', 'postventa', 'otro']);
-            $table->date('fecha');
-            $table->time('hora')->nullable();
-            $table->enum('estado', ['programada', 'realizada', 'cancelada'])->default('programada');
-            $table->text('notas')->nullable();
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('visitas_cliente')) {
+            Schema::create('visitas_cliente', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('cotizacion_id')->nullable()->constrained('cotizaciones')->nullOnDelete();
+                $table->foreignId('cliente_id')->nullable()->constrained('clientes')->nullOnDelete();
+                $table->enum('tipo', ['medicion', 'instalacion', 'postventa', 'otro']);
+                $table->date('fecha');
+                $table->time('hora')->nullable();
+                $table->enum('estado', ['programada', 'realizada', 'cancelada'])->default('programada');
+                $table->text('notas')->nullable();
+                $table->timestamps();
+            });
+        }
 
-        Schema::create('visita_empleado', function (Blueprint $table) {
-            $table->foreignId('visita_id')->constrained('visitas_cliente')->cascadeOnDelete();
-            $table->foreignId('empleado_id')->constrained('empleados')->cascadeOnDelete();
-            $table->primary(['visita_id', 'empleado_id']);
-        });
+        if (!Schema::hasTable('visita_empleado')) {
+            Schema::create('visita_empleado', function (Blueprint $table) {
+                $table->foreignId('visita_id')->constrained('visitas_cliente')->cascadeOnDelete();
+                $table->foreignId('empleado_id')->constrained('empleados')->cascadeOnDelete();
+                $table->primary(['visita_id', 'empleado_id']);
+            });
+        }
     }
 
     public function down(): void

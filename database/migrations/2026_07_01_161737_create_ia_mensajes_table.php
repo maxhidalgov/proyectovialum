@@ -11,6 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('ia_mensajes')) {
+            return;
+        }
         Schema::create('ia_mensajes', function (Blueprint $table) {
             $table->id();
             $table->enum('rol', ['user', 'assistant']);
