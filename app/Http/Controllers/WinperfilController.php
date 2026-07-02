@@ -404,8 +404,8 @@ class WinperfilController extends Controller
             $actualizados = 0;
 
             foreach ($pedidos as $ped) {
-                // Según docs: cabecera de pedido usa 'presupuesto' (minúscula)
-                $numero = $ped['presupuesto'] ?? $ped['PRESUPUESTO_NUMERO'] ?? $ped['NUMERO_PRESUPUESTO'] ?? null;
+                // La cabecera real del pedido usa 'PRESUPUESTO' (mayúscula) para el número
+                $numero = $ped['PRESUPUESTO'] ?? $ped['presupuesto'] ?? $ped['PRESUPUESTO_NUMERO'] ?? $ped['NUMERO_PRESUPUESTO'] ?? null;
                 if (!$numero) continue;
 
                 // Buscar cotizacion asociada
