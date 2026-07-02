@@ -107,7 +107,7 @@ class WinperfilController extends Controller
     public function testConexion()
     {
         try {
-            $res = Http::timeout(5)->get("{$this->baseUrl}/erp/clientes", [
+            $res = Http::connectTimeout(15)->timeout(20)->get("{$this->baseUrl}/erp/clientes", [
                 'empresa'        => $this->empresa,
                 'pagina'         => 0,
                 'itemsPorPagina' => 1,
