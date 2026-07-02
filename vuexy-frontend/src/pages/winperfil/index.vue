@@ -756,12 +756,10 @@ function calcTotal(item) {
 }
 
 function colorAceptado(v) {
-  if (!v) return 'default'
   switch (v?.toUpperCase()) {
     case 'T': return 'success'
     case 'C': return 'info'
-    case 'F': return 'error'
-    default:  return 'warning'
+    default:  return 'warning' // 'F' o vacío → pendiente de aceptar
   }
 }
 
@@ -769,8 +767,7 @@ function labelAceptado(v) {
   switch (v?.toUpperCase()) {
     case 'T': return 'Aceptado'
     case 'C': return 'Facturado'
-    case 'F': return 'Rechazado'
-    default:  return 'En evaluación'
+    default:  return 'Pendiente' // 'F' en Winperfil = no aceptado aún, NO rechazado
   }
 }
 
