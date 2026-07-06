@@ -42,6 +42,9 @@ import { useRoute } from 'vue-router'
 import api from '@/axiosInstance'
 import HojaCortesView from '@/components/HojaCortesView.vue'
 
+// Sin navbar/footer de la app: documento limpio para imprimir
+definePage({ meta: { layout: 'blank', public: false } })
+
 const route = useRoute()
 const data    = ref(null)
 const loading = ref(true)
@@ -88,5 +91,9 @@ onMounted(cargar)
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  /* sin scroll horizontal en las tablas: mostrar todo */
+  .v-table__wrapper { overflow: visible !important; }
+  /* evitar cortar una barra a la mitad entre páginas */
+  .barra-wrap, .cortes-tabla { break-inside: avoid; }
 }
 </style>
