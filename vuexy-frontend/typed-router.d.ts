@@ -62,6 +62,7 @@ declare module 'vue-router/auto-routes' {
     'ordenes-compra': RouteRecordInfo<'ordenes-compra', '/ordenes-compra', Record<never, never>, Record<never, never>>,
     'produccion': RouteRecordInfo<'produccion', '/produccion', Record<never, never>, Record<never, never>>,
     'produccion-id': RouteRecordInfo<'produccion-id', '/produccion/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    'produccion-hoja-winperfil': RouteRecordInfo<'produccion-hoja-winperfil', '/produccion/hoja-winperfil', Record<never, never>, Record<never, never>>,
     'produccion-materiales-id': RouteRecordInfo<'produccion-materiales-id', '/produccion/materiales/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'productos': RouteRecordInfo<'productos', '/productos', Record<never, never>, Record<never, never>>,
     'productos-producto-form': RouteRecordInfo<'productos-producto-form', '/productos/ProductoForm', Record<never, never>, Record<never, never>>,

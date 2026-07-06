@@ -411,7 +411,7 @@
                 {{ hojaCortes.error }}
               </v-alert>
               <template v-else-if="hojaCortes.data">
-                <div class="d-flex align-center justify-space-between mb-3 gap-2 flex-wrap d-print-none">
+                <div class="d-flex align-center justify-space-between mb-3 gap-2 flex-wrap">
                   <v-alert type="info" variant="tonal" density="compact" class="text-caption mb-0 flex-grow-1">
                     Optimización estimada (bin-packing). Puede diferir en 1 barra respecto a Winperfil hasta habilitar la optimización exacta.
                   </v-alert>
@@ -419,12 +419,7 @@
                     Imprimir / PDF
                   </v-btn>
                 </div>
-                <div class="print-hoja-cortes">
-                  <div class="print-only print-title">
-                    Hoja de Cortes — {{ dialogMat.cliente }} · WP {{ dialogMat.serie }}-{{ dialogMat.numero }}
-                  </div>
-                  <HojaCortesView :data="hojaCortes.data" />
-                </div>
+                <HojaCortesView :data="hojaCortes.data" />
               </template>
             </v-window-item>
           </v-window>
@@ -491,9 +486,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from '@/axiosInstance'
 import HojaCortesView from '@/components/HojaCortesView.vue'
 const api = axios
+const router = useRouter()
 
 const cargando  = ref(false)
 const guardando = ref(false)
@@ -675,7 +672,15 @@ function cerrarDialogOrden() {
 }
 
 function imprimirCortes() {
-  window.print()
+  const href = router.resolve({
+    name: 'produccion-hoja-winperfil',
+    query: {
+      cotizacion_id: cotizacionMatId.value,
+      serie: dialogMat.value.serie,
+      numero: dialogMat.value.numero,
+    },
+  }).href
+  window.open(href, '_blank')
 }
 
 // ── Computed ──────────────────────────────────────────────────────
@@ -873,37 +878,5 @@ function mostrarSnack(msg, color = 'success') {
 .etapa-actions {
   width: 100%;
   margin-top: 2px;
-}
-
-.print-only { display: none; }
-</style>
-
-<!-- No-scoped: aísla la hoja de cortes al imprimir/guardar PDF -->
-<style>
-@media print {
-  body * { visibility: hidden !important; }
-  .print-hoja-cortes, .print-hoja-cortes * { visibility: visible !important; }
-  .print-hoja-cortes {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    padding: 12px;
-    background: #fff;
-    overflow: visible;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .print-only { display: block !important; }
-  .print-title {
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 12px;
-  }
-  .d-print-none { display: none !important; }
-  /* Asegura que los colores de las piezas se impriman */
-  .print-hoja-cortes * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
 }
 </style>
