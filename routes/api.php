@@ -373,6 +373,9 @@ Route::middleware('auth:api')->group(function () {
         // Conectividad
         Route::get('/test',                     [WinperfilController::class, 'testConexion']);
 
+        // Lista de materiales (lismonta, en vivo)
+        Route::get('/materiales',               [WinperfilController::class, 'materiales']);
+
         // Proxy (lectura directa desde Winperfil, sin persistir)
         Route::get('/presupuestos',             [WinperfilController::class, 'getPresupuestos']);
         Route::get('/presupuesto',              [WinperfilController::class, 'getPresupuesto']);

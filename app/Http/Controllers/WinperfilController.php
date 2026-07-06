@@ -653,6 +653,137 @@ class WinperfilController extends Controller
     // ══════════════════════════════════════════════════════════════════════════
 
     /**
+     * Lista de materiales de una cotización Winperfil (endpoint lismonta, en vivo).
+     * Devuelve el despiece por ventana y la lista de compra agregada.
+     * Los vidrios se listan por medida (no se suma m²).
+     *
+     * GET /api/winperfil/materiales?cotizacion_id=X[&oferta=1]
+     */
+    public function materiales(Request $request)
+    {
+        $cotizacion = Cotizacion::findOrFail($request->integer('cotizacion_id'));
+
+        if (!$cotizacion->winperfil_numero) {
+            return response()->json(['error' => 'La cotización no proviene de Winperfil.'], 422);
+        }
+
+        $oferta = $request->integer('oferta', 1);
+
+        try {
+            $res = Http::connectTimeout(15)->timeout(90)->get("{$this->baseUrl}/erp/lismonta", [
+                'empresa'     => $this->empresa,
+                'serie'       => $cotizacion->winperfil_serie,
+                'presupuesto' => $cotizacion->winperfil_numero,
+                'oferta'      => $oferta,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'No se pudo conectar con Winperfil: ' . $e->getMessage()], 503);
+        }
+
+        if ($res->failed()) {
+            return response()->json(['error' => "Winperfil respondió {$res->status()}"], 502);
+        }
+
+        $datos = $res->json()['datos'] ?? null;
+        if (!is_array($datos) || empty($datos['modelos'])) {
+            return response()->json(['error' => 'Winperfil no devolvió materiales para este presupuesto/oferta.'], 404);
+        }
+
+        // ── Despiece por ventana + agregación de compra ──────────────────────
+        $modelos = [];
+        $perfiles = [];  // por referencia: piezas + longitud total
+        $herrajes = [];  // por referencia: cantidad
+        $juntas   = [];
+        $otros    = [];
+        $vidrios  = [];  // por referencia + medida (alto x ancho)
+
+        foreach ($datos['modelos'] as $m) {
+            $grupos = [];
+
+            foreach ($m['detalle'] ?? [] as $d) {
+                $tipo  = $d['DescTipoComponente'] ?? 'OTROS';
+                $ref   = trim($d['Referencia'] ?? '');
+                $desc  = $this->limpiarTexto($d['Descripcion'] ?? '');
+                $long  = (float) ($d['Longitud'] ?? 0);
+                $alto  = (float) ($d['Alto'] ?? 0);
+                $totU  = (float) ($d['TotalUnidades'] ?? 0); // ya = unidades artículo × unidades modelo
+
+                // Para el despiece por ventana
+                $grupos[$tipo][] = [
+                    'referencia' => $ref,
+                    'descripcion'=> $desc,
+                    'ubicacion'  => trim($d['DescMecanizado'] ?? ''),
+                    'longitud'   => $long,
+                    'alto'       => $alto,
+                    'corte_izq'  => $d['CorteIzq'] ?? null,
+                    'corte_der'  => $d['CorteDer'] ?? null,
+                    'cantidad'   => (float) ($d['Cantidad'] ?? 0),
+                    'total'      => $totU,
+                ];
+
+                // Para la lista de compra agregada
+                switch ((int) ($d['TipoElemento'] ?? 5)) {
+                    case 0: // PERFILES
+                        $k = $ref ?: $desc;
+                        $perfiles[$k] ??= ['referencia' => $ref, 'descripcion' => $desc, 'piezas' => 0, 'longitud_total_mm' => 0];
+                        $perfiles[$k]['piezas']            += $totU;
+                        $perfiles[$k]['longitud_total_mm'] += $long * $totU;
+                        break;
+                    case 1: // VIDRIOS — por medida, sin sumar m²
+                        $k = $ref . '|' . $long . 'x' . $alto;
+                        $vidrios[$k] ??= ['referencia' => $ref, 'descripcion' => $desc, 'ancho' => $long, 'alto' => $alto, 'cantidad' => 0];
+                        $vidrios[$k]['cantidad'] += $totU;
+                        break;
+                    case 6: // MANO DE OBRA — no se compra
+                        break;
+                    case 3: // HERRAJES
+                        $k = $ref ?: $desc;
+                        $herrajes[$k] ??= ['referencia' => $ref, 'descripcion' => $desc, 'cantidad' => 0];
+                        $herrajes[$k]['cantidad'] += $totU;
+                        break;
+                    case 4: // JUNTAS, FELPAS Y GOMAS
+                        $k = $ref ?: $desc;
+                        $juntas[$k] ??= ['referencia' => $ref, 'descripcion' => $desc, 'cantidad' => 0];
+                        $juntas[$k]['cantidad'] += $totU;
+                        break;
+                    default: // OTROS / CHAPAS / COMPACTOS / PANELES / MOSQUITERAS
+                        $k = $ref ?: $desc;
+                        $otros[$k] ??= ['referencia' => $ref, 'descripcion' => $desc, 'cantidad' => 0];
+                        $otros[$k]['cantidad'] += $totU;
+                        break;
+                }
+            }
+
+            $modelos[] = [
+                'cantidad'    => (int) ($m['Cantidad'] ?? 1),
+                'color'       => $m['Color'] ?? '',
+                'tipo'        => $m['Tipo'] ?? '',
+                'descripcion' => $this->limpiarTexto($m['Descripcion'] ?? ''),
+                'grupos'      => $grupos,
+            ];
+        }
+
+        // Redondear longitudes de perfiles y calcular metros
+        $perfiles = array_map(function ($p) {
+            $p['longitud_total_mm'] = round($p['longitud_total_mm']);
+            $p['metros_lineales']   = round($p['longitud_total_mm'] / 1000, 2);
+            return $p;
+        }, array_values($perfiles));
+
+        return response()->json([
+            'cabecera' => $datos['cabecera'] ?? null,
+            'modelos'  => $modelos,
+            'compra'   => [
+                'perfiles' => $perfiles,
+                'vidrios'  => array_values($vidrios),
+                'herrajes' => array_values($herrajes),
+                'juntas'   => array_values($juntas),
+                'otros'    => array_values($otros),
+            ],
+        ]);
+    }
+
+    /**
      * Quita el candado de precio de una cotización Winperfil y restaura el
      * precio original desde Winperfil (si está disponible). Si Winperfil no
      * responde, el candado igual se quita y se restaurará en la próxima sync.
@@ -1017,6 +1148,16 @@ class WinperfilController extends Controller
 
         // 9. Si después de todo quedó texto muy corto, devolver vacío para usar fallback
         return strlen($result) > 4 ? $result : '';
+    }
+
+    /**
+     * Limpia texto de Winperfil: corrige encoding y colapsa saltos de línea/espacios.
+     */
+    private function limpiarTexto(?string $str): string
+    {
+        $t = $this->fixEncoding($str);
+        $t = str_replace(["\r\n", "\r", "\n"], ' ', $t);
+        return trim(preg_replace('/\s+/', ' ', $t));
     }
 
     /**

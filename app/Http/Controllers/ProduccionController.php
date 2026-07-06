@@ -195,6 +195,8 @@ class ProduccionController extends Controller
                 'urgencia'         => $urgencia,
                 'm2'               => round((float) $m2, 2),
                 'cant_ventanas'    => $c->ventanas->sum('cantidad'),
+                'winperfil_numero' => $c->winperfil_numero,
+                'winperfil_serie'  => $c->winperfil_serie,
                 'fabricar_termopanel' => (bool) $c->fabricar_termopanel,
                 'cortar_vidrio_cnc'   => (bool) $c->cortar_vidrio_cnc,
                 'notas_operaciones' => $c->notas_operaciones,

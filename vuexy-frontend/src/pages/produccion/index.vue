@@ -153,6 +153,16 @@
                 >
                   Materiales
                 </v-btn>
+                <v-btn
+                  v-if="cotizacion.winperfil_numero"
+                  size="x-small"
+                  color="deep-purple"
+                  variant="tonal"
+                  prepend-icon="mdi-window-open"
+                  @click="abrirMateriales(cotizacion)"
+                >
+                  Materiales WP
+                </v-btn>
               </div>
             </div>
           </div>
@@ -261,6 +271,100 @@
       </v-card>
     </v-dialog>
 
+    <!-- Dialog Materiales Winperfil -->
+    <v-dialog v-model="dialogMat.show" max-width="1100" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="deep-purple">mdi-window-open</v-icon>
+          Materiales — {{ dialogMat.cliente }}
+          <span class="text-caption text-medium-emphasis">WP {{ dialogMat.serie }}-{{ dialogMat.numero }}</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="dialogMat.show = false" />
+        </v-card-title>
+
+        <v-tabs v-model="dialogMat.tab" color="deep-purple" class="px-4">
+          <v-tab value="compra"><v-icon size="16" class="mr-1">mdi-cart</v-icon>Lista de compra</v-tab>
+          <v-tab value="ventana"><v-icon size="16" class="mr-1">mdi-format-list-bulleted</v-icon>Despiece por ventana</v-tab>
+        </v-tabs>
+        <v-divider />
+
+        <v-card-text style="min-height:300px">
+          <div v-if="dialogMat.loading" class="text-center py-10">
+            <v-progress-circular indeterminate color="deep-purple" />
+            <div class="text-caption text-medium-emphasis mt-3">Consultando Winperfil...</div>
+          </div>
+
+          <v-alert v-else-if="dialogMat.error" type="warning" variant="tonal" density="compact">
+            {{ dialogMat.error }}
+          </v-alert>
+
+          <v-window v-else v-model="dialogMat.tab">
+            <!-- TAB compra -->
+            <v-window-item value="compra">
+              <div v-for="grupo in gruposCompra" :key="grupo.key" class="mb-4">
+                <div v-if="grupo.items.length" class="text-subtitle-2 font-weight-bold mb-1 d-flex align-center gap-1">
+                  <v-icon size="16" :color="grupo.color">{{ grupo.icon }}</v-icon>{{ grupo.label }}
+                  <v-chip size="x-small" :color="grupo.color" variant="tonal">{{ grupo.items.length }}</v-chip>
+                </div>
+                <v-table v-if="grupo.items.length" density="compact" class="mb-2">
+                  <thead>
+                    <tr>
+                      <th class="text-left">Referencia</th>
+                      <th class="text-left">Descripción</th>
+                      <th v-if="grupo.key === 'vidrios'" class="text-left">Medida (mm)</th>
+                      <th v-if="grupo.key === 'perfiles'" class="text-right">Metros</th>
+                      <th class="text-right">{{ grupo.key === 'perfiles' ? 'Piezas' : 'Cant.' }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(it, i) in grupo.items" :key="i">
+                      <td class="font-monospace text-caption">{{ it.referencia || '—' }}</td>
+                      <td class="text-caption">{{ it.descripcion }}</td>
+                      <td v-if="grupo.key === 'vidrios'" class="text-caption">{{ it.ancho }} × {{ it.alto }}</td>
+                      <td v-if="grupo.key === 'perfiles'" class="text-right text-caption">{{ it.metros_lineales }} m</td>
+                      <td class="text-right font-weight-bold">{{ grupo.key === 'perfiles' ? it.piezas : it.cantidad }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+            </v-window-item>
+
+            <!-- TAB por ventana -->
+            <v-window-item value="ventana">
+              <v-expansion-panels multiple>
+                <v-expansion-panel v-for="(m, i) in dialogMat.data?.modelos || []" :key="i">
+                  <v-expansion-panel-title>
+                    <div>
+                      <v-chip size="x-small" color="deep-purple" variant="tonal" class="mr-2">{{ m.cantidad }}×</v-chip>
+                      <span class="text-body-2">{{ m.descripcion }}</span>
+                    </div>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <div v-for="(items, tipo) in m.grupos" :key="tipo" class="mb-3">
+                      <div class="text-caption font-weight-bold text-uppercase text-medium-emphasis mb-1">{{ tipo }}</div>
+                      <v-table density="compact">
+                        <tbody>
+                          <tr v-for="(it, j) in items" :key="j">
+                            <td class="font-monospace text-caption" style="width:120px">{{ it.referencia || '—' }}</td>
+                            <td class="text-caption">{{ it.descripcion }}<span v-if="it.ubicacion" class="text-medium-emphasis"> · {{ it.ubicacion }}</span></td>
+                            <td class="text-caption text-right" style="width:110px">
+                              <span v-if="it.longitud">{{ it.longitud }}<span v-if="it.alto">×{{ it.alto }}</span> mm</span>
+                            </td>
+                            <td v-if="it.corte_izq !== null" class="text-caption text-right" style="width:70px">{{ it.corte_izq }}°/{{ it.corte_der }}°</td>
+                            <td class="text-right font-weight-bold" style="width:50px">{{ it.total }}</td>
+                          </tr>
+                        </tbody>
+                      </v-table>
+                    </div>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
+            </v-window-item>
+          </v-window>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snack.show" :color="snack.color" timeout="3000" location="top">
       {{ snack.msg }}
     </v-snackbar>
@@ -288,6 +392,42 @@ const dialogEtapa = ref({
   etapaLabel: '', cliente: '',
   nuevoEstado: '', empleadoId: null, notas: '',
 })
+
+// ── Materiales Winperfil ──────────────────────────────────────────
+const dialogMat = ref({
+  show: false, loading: false, error: '',
+  cliente: '', numero: null, serie: '', tab: 'compra', data: null,
+})
+
+const gruposCompra = computed(() => {
+  const c = dialogMat.value.data?.compra
+  if (!c) return []
+  return [
+    { key: 'perfiles', label: 'Perfiles',  icon: 'mdi-view-day',        color: 'blue',       items: c.perfiles || [] },
+    { key: 'vidrios',  label: 'Vidrios',   icon: 'mdi-window-maximize', color: 'cyan',       items: c.vidrios || [] },
+    { key: 'herrajes', label: 'Herrajes',  icon: 'mdi-cog',             color: 'orange',     items: c.herrajes || [] },
+    { key: 'juntas',   label: 'Juntas/Felpas/Gomas', icon: 'mdi-rubber-band', color: 'green', items: c.juntas || [] },
+    { key: 'otros',    label: 'Otros',     icon: 'mdi-dots-horizontal', color: 'grey',       items: c.otros || [] },
+  ]
+})
+
+async function abrirMateriales(cotizacion) {
+  dialogMat.value = {
+    show: true, loading: true, error: '',
+    cliente: cotizacion.cliente, numero: cotizacion.winperfil_numero,
+    serie: cotizacion.winperfil_serie, tab: 'compra', data: null,
+  }
+  try {
+    const { data } = await api.get('/api/winperfil/materiales', {
+      params: { cotizacion_id: cotizacion.id },
+    })
+    dialogMat.value.data = data
+  } catch (e) {
+    dialogMat.value.error = e.response?.data?.error || 'No se pudieron cargar los materiales'
+  } finally {
+    dialogMat.value.loading = false
+  }
+}
 
 // ── Computed ──────────────────────────────────────────────────────
 const vencidas = computed(() =>
