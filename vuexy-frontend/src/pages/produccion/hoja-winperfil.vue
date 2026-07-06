@@ -29,17 +29,19 @@
       <VAlert v-else-if="error" type="warning" variant="tonal">{{ error }}</VAlert>
 
       <!-- Contenido capturable (PDF / impresión) -->
-      <div v-else-if="data" ref="hojaRef" class="hoja-doc">
-        <div class="doc-header mb-4 d-flex justify-space-between align-center">
-          <div>
-            <h2 class="doc-title">Hoja de Cortes</h2>
-            <div class="doc-sub">
-              {{ data.cotizacion.cliente }} · Winperfil {{ serie }}-{{ numero }} · {{ hoy }}
+      <div v-else-if="data" class="hoja-doc-wrap">
+        <div ref="hojaRef" class="hoja-doc">
+          <div class="doc-header mb-4 d-flex justify-space-between align-center">
+            <div>
+              <h2 class="doc-title">Hoja de Cortes</h2>
+              <div class="doc-sub">
+                {{ data.cotizacion.cliente }} · Winperfil {{ serie }}-{{ numero }} · {{ hoy }}
+              </div>
             </div>
+            <img v-if="logoData" :src="logoData" alt="Vialum" class="doc-logo" />
           </div>
-          <img v-if="logoData" :src="logoData" alt="Vialum" class="doc-logo" />
+          <HojaCortesView :data="data" />
         </div>
-        <HojaCortesView :data="data" />
       </div>
     </div>
   </VThemeProvider>
@@ -100,10 +102,14 @@ async function descargarPdf() {
   if (!hojaRef.value) return
   generandoPdf.value = true
   try {
-    const canvas = await toCanvas(hojaRef.value, {
+    const node = hojaRef.value
+    const canvas = await toCanvas(node, {
       backgroundColor: '#ffffff',
-      pixelRatio: 2,
+      pixelRatio: 3,
       cacheBust: true,
+      width: node.scrollWidth,
+      height: node.scrollHeight,
+      style: { margin: '0' },
     })
 
     const pdf = new jsPDF('p', 'mm', 'a4')
@@ -142,8 +148,10 @@ onMounted(() => {
 
 <style scoped>
 .hoja-print { background: #fff; min-height: 100vh; }
-/* Ancho tipo A4: al exportar a PDF queda ~1:1 y la letra se lee bien */
-.hoja-doc { max-width: 780px; margin: 0 auto; }
+/* Wrapper solo centra en pantalla; NO se captura */
+.hoja-doc-wrap { display: flex; justify-content: center; }
+/* Ancho fijo tipo A4 y SIN margin auto: la captura sale 1:1, centrada y sin recortes */
+.hoja-doc { width: 760px; }
 .doc-header { border-bottom: 2px solid #6a1b9a; padding-bottom: 8px; }
 .doc-title { margin: 0; font-size: 22px; font-weight: 800; color: #6a1b9a; }
 .doc-sub { font-size: 14px; color: #555; }
