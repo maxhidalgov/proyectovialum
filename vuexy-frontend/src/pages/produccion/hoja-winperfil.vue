@@ -68,17 +68,10 @@ const serie  = computed(() => route.query.serie || '')
 const numero = computed(() => route.query.numero || '')
 const hoy    = new Date().toLocaleDateString('es-CL')
 
-const LOGO_URL = 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png'
-
 async function cargarLogo() {
   try {
-    const res  = await fetch(LOGO_URL)
-    const blob = await res.blob()
-    logoData.value = await new Promise((resolve) => {
-      const fr = new FileReader()
-      fr.onload = () => resolve(fr.result)
-      fr.readAsDataURL(blob)
-    })
+    const { data } = await api.get('/api/logo')
+    if (data?.logo) logoData.value = data.logo
   } catch {
     /* sin logo, el documento se genera igual */
   }
@@ -149,6 +142,8 @@ onMounted(() => {
 
 <style scoped>
 .hoja-print { background: #fff; min-height: 100vh; }
+/* Ancho tipo A4: al exportar a PDF queda ~1:1 y la letra se lee bien */
+.hoja-doc { max-width: 780px; margin: 0 auto; }
 .doc-header { border-bottom: 2px solid #6a1b9a; padding-bottom: 8px; }
 .doc-title { margin: 0; font-size: 22px; font-weight: 800; color: #6a1b9a; }
 .doc-sub { font-size: 14px; color: #555; }

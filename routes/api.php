@@ -350,6 +350,15 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/taller', [\App\Http\Controllers\ProduccionController::class, 'taller']);
     Route::post('/taller/{id}/etapas', [\App\Http\Controllers\ProduccionController::class, 'guardarEtapa']);
 
+    // Logo como dataURL (evita problemas de CORS al capturar PDF en el frontend)
+    Route::get('/logo', function () {
+        $url  = env('LOGO_URL', 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png');
+        $data = @file_get_contents($url);
+        return response()->json([
+            'logo' => $data !== false ? 'data:image/png;base64,' . base64_encode($data) : null,
+        ]);
+    });
+
     // Órdenes de compra
     Route::get('/ordenes-compra', [\App\Http\Controllers\OrdenCompraController::class, 'index']);
     Route::post('/ordenes-compra', [\App\Http\Controllers\OrdenCompraController::class, 'store']);
