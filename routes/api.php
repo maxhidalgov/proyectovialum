@@ -365,6 +365,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/ordenes-compra/{id}', [\App\Http\Controllers\OrdenCompraController::class, 'show']);
     Route::get('/ordenes-compra/{id}/pdf', [\App\Http\Controllers\OrdenCompraController::class, 'pdf']);
     Route::get('/ordenes-compra/{id}/excel', [\App\Http\Controllers\OrdenCompraController::class, 'excel']);
+    Route::post('/ordenes-compra/{id}/enviar', [\App\Http\Controllers\OrdenCompraController::class, 'enviar']);
 
     // Calendario y recordatorios
     Route::get('/calendario/eventos', [\App\Http\Controllers\CalendarioController::class, 'eventos']);

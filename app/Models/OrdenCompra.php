@@ -11,10 +11,12 @@ class OrdenCompra extends Model
     protected $fillable = [
         'numero', 'cotizacion_id', 'proveedor_id', 'proveedor_nombre',
         'observaciones', 'items', 'estado', 'created_by',
+        'enviado_at', 'enviado_via', 'enviado_a',
     ];
 
     protected $casts = [
-        'items' => 'array',
+        'items'      => 'array',
+        'enviado_at' => 'datetime',
     ];
 
     public function cotizacion()

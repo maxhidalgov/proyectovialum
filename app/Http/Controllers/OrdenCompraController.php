@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OrdenCompraMail;
 use App\Models\OrdenCompra;
 use App\Models\Proveedor;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class OrdenCompraController extends Controller
 {
@@ -29,6 +31,11 @@ class OrdenCompraController extends Controller
                                  ?? trim(($o->cotizacion?->cliente?->first_name ?? '') . ' ' . ($o->cotizacion?->cliente?->last_name ?? '')),
                 'items_count' => is_array($o->items) ? count($o->items) : 0,
                 'estado'      => $o->estado,
+                'enviado_via' => $o->enviado_via,
+                'enviado_a'   => $o->enviado_a,
+                'enviado_at'  => $o->enviado_at?->toDateTimeString(),
+                'proveedor_email'    => $o->proveedor?->email,
+                'proveedor_telefono' => $o->proveedor?->telefono,
                 'creador'     => $o->creador?->name,
                 'fecha'       => $o->created_at?->toDateTimeString(),
             ]);
@@ -81,12 +88,120 @@ class OrdenCompraController extends Controller
     {
         $orden = OrdenCompra::with(['proveedor', 'cotizacion.cliente'])->findOrFail($id);
 
-        $pdf = Pdf::loadView('ordenes-compra.pdf', [
+        return $this->construirPdf($orden)->download("{$orden->numero}.pdf");
+    }
+
+    private function construirPdf(OrdenCompra $orden)
+    {
+        return Pdf::loadView('ordenes-compra.pdf', [
             'orden'      => $orden,
             'logoBase64' => $this->cargarLogo(),
         ]);
+    }
 
-        return $pdf->download("{$orden->numero}.pdf");
+    /**
+     * Enviar la orden al proveedor (correo con PDF adjunto o WhatsApp prellenado)
+     * y dejar el registro en operaciones (marca "pedido proveedor" en la cotización).
+     */
+    public function enviar(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'via'      => 'required|in:email,whatsapp',
+            'email'    => 'nullable|email',
+            'telefono' => 'nullable|string',
+            'mensaje'  => 'nullable|string',
+        ]);
+
+        $orden = OrdenCompra::with(['proveedor', 'cotizacion.cliente'])->findOrFail($id);
+
+        // Guardar contacto en el proveedor para reutilizarlo la próxima vez
+        if ($orden->proveedor) {
+            $cambios = [];
+            if (!empty($data['email']))    $cambios['email']    = $data['email'];
+            if (!empty($data['telefono'])) $cambios['telefono'] = $data['telefono'];
+            if ($cambios) $orden->proveedor->update($cambios);
+        }
+
+        $mensaje = trim($data['mensaje'] ?? '') ?: $this->mensajePorDefecto($orden);
+
+        if ($data['via'] === 'email') {
+            $dest = $data['email'] ?: $orden->proveedor?->email;
+            if (!$dest) {
+                return response()->json(['error' => 'No hay correo de destino para el proveedor.'], 422);
+            }
+
+            try {
+                $pdfContent = $this->construirPdf($orden)->output();
+                Mail::to($dest)->send(new OrdenCompraMail($orden, $mensaje, $pdfContent));
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'error' => 'No se pudo enviar el correo. Revisa la configuración de correo (SMTP) en el servidor.',
+                    'detalle' => $e->getMessage(),
+                ], 500);
+            }
+
+            $this->registrarEnvio($orden, 'email', $dest);
+
+            return response()->json(['ok' => true, 'mensaje' => "Orden enviada a {$dest}", 'orden' => $this->resumen($orden)]);
+        }
+
+        // WhatsApp: construimos el enlace wa.me y el frontend lo abre
+        $tel = $data['telefono'] ?: $orden->proveedor?->telefono;
+        if (!$tel) {
+            return response()->json(['error' => 'No hay teléfono de destino para el proveedor.'], 422);
+        }
+
+        $digitos = preg_replace('/\D+/', '', $tel);
+        // Si viene sin código de país y parte con 9 (celular chileno), anteponer 56
+        if (strlen($digitos) === 9 && str_starts_with($digitos, '9')) {
+            $digitos = '56' . $digitos;
+        }
+        $waUrl = 'https://wa.me/' . $digitos . '?text=' . rawurlencode($mensaje);
+
+        $this->registrarEnvio($orden, 'whatsapp', $tel);
+
+        return response()->json(['ok' => true, 'wa_url' => $waUrl, 'orden' => $this->resumen($orden)]);
+    }
+
+    private function mensajePorDefecto(OrdenCompra $orden): string
+    {
+        $prov = $orden->proveedor_nombre ?? $orden->proveedor?->nombre;
+        $saludo = $prov ? "Hola {$prov}," : 'Hola,';
+
+        return "{$saludo}\n\nAdjunto la orden de compra {$orden->numero}. Quedo atento a la confirmación.\n\nSaludos,\nVialum";
+    }
+
+    private function registrarEnvio(OrdenCompra $orden, string $via, string $dest): void
+    {
+        $orden->update([
+            'estado'      => 'enviada',
+            'enviado_at'  => now(),
+            'enviado_via' => $via,
+            'enviado_a'   => $dest,
+        ]);
+
+        // Dejar el registro en operaciones: marcar pedido al proveedor + nota
+        if ($orden->cotizacion) {
+            $viaTxt = $via === 'email' ? 'correo' : 'WhatsApp';
+            $nota   = "OC {$orden->numero} enviada por {$viaTxt} (" . now()->format('d-m-Y') . ')';
+            $notasPrev = trim((string) $orden->cotizacion->notas_operaciones);
+
+            $orden->cotizacion->update([
+                'pedido_proveedor'  => true,
+                'notas_operaciones' => $notasPrev ? ($notasPrev . ' · ' . $nota) : $nota,
+            ]);
+        }
+    }
+
+    private function resumen(OrdenCompra $orden): array
+    {
+        return [
+            'id'          => $orden->id,
+            'estado'      => $orden->estado,
+            'enviado_via' => $orden->enviado_via,
+            'enviado_a'   => $orden->enviado_a,
+            'enviado_at'  => $orden->enviado_at?->toDateTimeString(),
+        ];
     }
 
     private function cargarLogo(): ?string

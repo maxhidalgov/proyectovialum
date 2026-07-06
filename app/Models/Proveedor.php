@@ -11,7 +11,7 @@ class Proveedor extends Model
 
     protected $table = 'proveedors'; // ✅ Definir el nombre correcto de la tabla
 
-    protected $fillable = ['nombre', 'contacto']; // ✅ Habilitar asignación masiva
+    protected $fillable = ['nombre', 'contacto', 'email', 'telefono']; // ✅ Habilitar asignación masiva
 
 
 public function productosPorColor()
