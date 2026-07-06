@@ -41,6 +41,23 @@ function segWidth(mm, largoBarra) {
   return (mm / largoBarra * 100).toFixed(2) + '%'
 }
 
+// Forma del segmento según los ángulos de corte (inglete). Puntos: SI, SD, ID, II.
+// 90° = borde recto; 45° = punta larga abajo en ese extremo; 135° = punta larga arriba.
+function clipPath(corte) {
+  const o = '8px'
+  let si = '0', sd = '100%', id = '100%', ii = '0'
+  const ai = Number(corte.angulo_izq)
+  const ad = Number(corte.angulo_der)
+
+  if (ai === 135) si = o                       // sup-izq se retrae
+  else if (ai === 45) ii = o                   // inf-izq se retrae
+
+  if (ad === 45) id = `calc(100% - ${o})`      // inf-der se retrae
+  else if (ad === 135) sd = `calc(100% - ${o})` // sup-der se retrae
+
+  return `polygon(${si} 0, ${sd} 0, ${id} 100%, ${ii} 100%)`
+}
+
 function ventanasEnBarra(barra) {
   const seen = new Set()
   ;(barra.cortes ?? []).forEach(c => seen.add(String(c.ventana_ref ?? '').split('.')[0]))
@@ -206,14 +223,16 @@ const statsGlobales = computed(() => {
                   v-for="(corte, ci) in barra.cortes"
                   :key="ci"
                   class="barra-seg"
-                  :style="{ width: segWidth(corte.largo_mm, grupo.largo_barra), backgroundColor: getHex(corte.ventana_ref) }"
+                  :style="{
+                    width: segWidth(corte.largo_mm, grupo.largo_barra),
+                    backgroundColor: getHex(corte.ventana_ref),
+                    clipPath: clipPath(corte),
+                  }"
                   :title="`${corte.ventana_ref} | ${corte.posicion} | ${corte.largo_mm} mm (${corte.angulo_izq}°/${corte.angulo_der}°)`"
                 >
                   <span v-if="corte.largo_mm / grupo.largo_barra > 0.06" class="seg-label">
                     {{ corte.largo_mm }}
                   </span>
-                  <!-- marca de corte diagonal a la derecha del segmento -->
-                  <span class="seg-cut" />
                 </div>
                 <div
                   v-if="barra.retal_mm > 0"
@@ -271,10 +290,11 @@ const statsGlobales = computed(() => {
 <style scoped>
 .barra-bg {
   display: flex;
-  height: 32px;
+  gap: 2px;
+  height: 34px;
   border-radius: 6px;
-  overflow: hidden;
-  background: #e0e0e0;
+  padding: 2px;
+  background: #d8d8d8;
   border: 1px solid rgba(0, 0, 0, 0.15);
 }
 
@@ -283,19 +303,8 @@ const statsGlobales = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 1px;
-  overflow: visible;
-}
-
-/* Marca de corte diagonal (triángulo) entre piezas, estilo Winperfil */
-.seg-cut {
-  position: absolute;
-  right: -1px;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-right: 2px solid rgba(244, 67, 54, 0.9);
-  transform: skewX(-18deg);
+  min-width: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
 .seg-label {
@@ -333,5 +342,10 @@ const statsGlobales = computed(() => {
 @media print {
   .d-print-none { display: none !important; }
   .v-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+  .barra-bg, .barra-seg, .barra-retal, .leyenda-item {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .barra-seg { box-shadow: none !important; }
 }
 </style>

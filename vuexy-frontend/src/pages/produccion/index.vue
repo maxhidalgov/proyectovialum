@@ -411,10 +411,20 @@
                 {{ hojaCortes.error }}
               </v-alert>
               <template v-else-if="hojaCortes.data">
-                <v-alert type="info" variant="tonal" density="compact" class="mb-3 text-caption">
-                  Optimización estimada (bin-packing). Puede diferir en 1 barra respecto a Winperfil hasta habilitar la optimización exacta.
-                </v-alert>
-                <HojaCortesView :data="hojaCortes.data" />
+                <div class="d-flex align-center justify-space-between mb-3 gap-2 flex-wrap d-print-none">
+                  <v-alert type="info" variant="tonal" density="compact" class="text-caption mb-0 flex-grow-1">
+                    Optimización estimada (bin-packing). Puede diferir en 1 barra respecto a Winperfil hasta habilitar la optimización exacta.
+                  </v-alert>
+                  <v-btn color="deep-purple" prepend-icon="mdi-printer" @click="imprimirCortes">
+                    Imprimir / PDF
+                  </v-btn>
+                </div>
+                <div class="print-hoja-cortes">
+                  <div class="print-only print-title">
+                    Hoja de Cortes — {{ dialogMat.cliente }} · WP {{ dialogMat.serie }}-{{ dialogMat.numero }}
+                  </div>
+                  <HojaCortesView :data="hojaCortes.data" />
+                </div>
               </template>
             </v-window-item>
           </v-window>
@@ -664,6 +674,10 @@ function cerrarDialogOrden() {
   seleccion.value = {}
 }
 
+function imprimirCortes() {
+  window.print()
+}
+
 // ── Computed ──────────────────────────────────────────────────────
 const vencidas = computed(() =>
   cotizaciones.value.filter(c => c.urgencia === 'vencida').length
@@ -859,5 +873,37 @@ function mostrarSnack(msg, color = 'success') {
 .etapa-actions {
   width: 100%;
   margin-top: 2px;
+}
+
+.print-only { display: none; }
+</style>
+
+<!-- No-scoped: aísla la hoja de cortes al imprimir/guardar PDF -->
+<style>
+@media print {
+  body * { visibility: hidden !important; }
+  .print-hoja-cortes, .print-hoja-cortes * { visibility: visible !important; }
+  .print-hoja-cortes {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    padding: 12px;
+    background: #fff;
+    overflow: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-only { display: block !important; }
+  .print-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .d-print-none { display: none !important; }
+  /* Asegura que los colores de las piezas se impriman */
+  .print-hoja-cortes * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 </style>
