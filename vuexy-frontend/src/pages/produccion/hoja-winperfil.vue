@@ -30,11 +30,14 @@
 
       <!-- Contenido capturable (PDF / impresión) -->
       <div v-else-if="data" ref="hojaRef" class="hoja-doc">
-        <div class="doc-header mb-4">
-          <h2 class="doc-title">Hoja de Cortes</h2>
-          <div class="doc-sub">
-            {{ data.cotizacion.cliente }} · Winperfil {{ serie }}-{{ numero }} · {{ hoy }}
+        <div class="doc-header mb-4 d-flex justify-space-between align-center">
+          <div>
+            <h2 class="doc-title">Hoja de Cortes</h2>
+            <div class="doc-sub">
+              {{ data.cotizacion.cliente }} · Winperfil {{ serie }}-{{ numero }} · {{ hoy }}
+            </div>
           </div>
+          <img v-if="logoData" :src="logoData" alt="Vialum" class="doc-logo" />
         </div>
         <HojaCortesView :data="data" />
       </div>
@@ -59,10 +62,27 @@ const loading     = ref(true)
 const error       = ref('')
 const generandoPdf = ref(false)
 const hojaRef     = ref(null)
+const logoData    = ref('')
 
 const serie  = computed(() => route.query.serie || '')
 const numero = computed(() => route.query.numero || '')
 const hoy    = new Date().toLocaleDateString('es-CL')
+
+const LOGO_URL = 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png'
+
+async function cargarLogo() {
+  try {
+    const res  = await fetch(LOGO_URL)
+    const blob = await res.blob()
+    logoData.value = await new Promise((resolve) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result)
+      fr.readAsDataURL(blob)
+    })
+  } catch {
+    /* sin logo, el documento se genera igual */
+  }
+}
 
 async function cargar() {
   loading.value = true
@@ -121,14 +141,18 @@ async function descargarPdf() {
   }
 }
 
-onMounted(cargar)
+onMounted(() => {
+  cargar()
+  cargarLogo()
+})
 </script>
 
 <style scoped>
 .hoja-print { background: #fff; min-height: 100vh; }
 .doc-header { border-bottom: 2px solid #6a1b9a; padding-bottom: 8px; }
-.doc-title { margin: 0; font-size: 20px; font-weight: 800; color: #6a1b9a; }
-.doc-sub { font-size: 13px; color: #555; }
+.doc-title { margin: 0; font-size: 22px; font-weight: 800; color: #6a1b9a; }
+.doc-sub { font-size: 14px; color: #555; }
+.doc-logo { height: 52px; object-fit: contain; }
 </style>
 
 <style>

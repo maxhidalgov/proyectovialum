@@ -208,7 +208,7 @@ const statsGlobales = computed(() => {
               <VChip size="small" color="primary" label>
                 Barra {{ barra.numero }}/{{ grupo.total_barras }}
               </VChip>
-              <span class="text-caption text-medium-emphasis">
+              <span class="text-body-2 text-medium-emphasis">
                 Uso: {{ barra.uso_mm.toLocaleString('es-CL') }} mm
                 ({{ Math.round(barra.uso_mm / grupo.largo_barra * 100) }}%)
                 &middot; Virutas: {{ barra.virutas_mm }} mm
@@ -291,7 +291,7 @@ const statsGlobales = computed(() => {
 .barra-bg {
   display: flex;
   gap: 2px;
-  height: 34px;
+  height: 42px;
   border-radius: 6px;
   padding: 2px;
   background: #d8d8d8;
@@ -308,9 +308,10 @@ const statsGlobales = computed(() => {
 }
 
 .seg-label {
-  font-size: 10px;
+  font-size: 13px;
+  font-weight: 700;
   color: #fff;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
   white-space: nowrap;
   padding: 0 3px;
   overflow: hidden;
@@ -324,18 +325,24 @@ const statsGlobales = computed(() => {
 
 .leyenda-item {
   display: inline-block;
-  padding: 2px 7px;
+  padding: 3px 9px;
   border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: #fff;
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
   line-height: 1.5;
 }
 
-.cortes-tabla :deep(th),
+.cortes-tabla :deep(th) {
+  padding: 7px 12px !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+
 .cortes-tabla :deep(td) {
-  padding: 5px 10px !important;
+  padding: 7px 12px !important;
+  font-size: 13px !important;
   white-space: nowrap;
 }
 
