@@ -57,7 +57,9 @@ class OrdenCompraController extends Controller
             'proveedor_id'     => $data['proveedor_id'] ?? null,
             'proveedor_nombre' => $proveedorNombre,
             'observaciones'    => $data['observaciones'] ?? null,
-            'items'            => $data['items'],
+            // Usar input() completo: validate() descarta los campos sin regla
+            // (referencia, categoria, detalle) y se perderían.
+            'items'            => $request->input('items'),
             'estado'           => 'generada',
             'created_by'       => auth()->id(),
         ]);

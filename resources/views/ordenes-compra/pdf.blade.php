@@ -5,9 +5,9 @@
     <style>
         * { font-family: DejaVu Sans, sans-serif; }
         body { font-size: 12px; color: #222; margin: 0; }
-        .header { border-bottom: 2px solid #6a1b9a; padding-bottom: 10px; margin-bottom: 16px; }
+        .header { border-bottom: 2px solid #6a1b9a; padding-bottom: 10px; margin-bottom: 16px; width: 100%; }
         .header h1 { margin: 0; font-size: 22px; color: #6a1b9a; }
-        .header .logo { height: 48px; margin-bottom: 6px; }
+        .header .logo { height: 44px; }
         .empresa { font-size: 11px; color: #555; margin-top: 2px; }
         .meta { width: 100%; margin-bottom: 16px; }
         .meta td { padding: 3px 0; font-size: 12px; vertical-align: top; }
@@ -25,13 +25,19 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        @if (!empty($logoBase64))
-            <img src="{{ $logoBase64 }}" class="logo" alt="Vialum">
-        @endif
-        <h1>Orden de Compra</h1>
-        <div class="empresa">Vialum — Fabricación de ventanas de aluminio</div>
-    </div>
+    <table class="header">
+        <tr>
+            <td style="vertical-align: middle;">
+                <h1>Orden de Compra</h1>
+                <div class="empresa">Vialum — Fabricación de ventanas de aluminio</div>
+            </td>
+            <td style="vertical-align: middle; text-align: right; width: 160px;">
+                @if (!empty($logoBase64))
+                    <img src="{{ $logoBase64 }}" class="logo" alt="Vialum">
+                @endif
+            </td>
+        </tr>
+    </table>
 
     <table class="meta">
         <tr>
