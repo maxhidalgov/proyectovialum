@@ -652,6 +652,46 @@ class WinperfilController extends Controller
     // Helpers privados
     // ══════════════════════════════════════════════════════════════════════════
 
+    /**
+     * Quita el candado de precio de una cotización Winperfil y restaura el
+     * precio original desde Winperfil (si está disponible). Si Winperfil no
+     * responde, el candado igual se quita y se restaurará en la próxima sync.
+     */
+    public function desbloquearPrecio($id)
+    {
+        $cotizacion = Cotizacion::findOrFail($id);
+
+        if (!$cotizacion->winperfil_numero) {
+            return response()->json(['message' => 'No es una cotización de Winperfil.'], 422);
+        }
+
+        $cotizacion->update(['winperfil_precio_lock' => false]);
+
+        // Intentar restaurar el precio original desde Winperfil de inmediato
+        try {
+            $res = Http::connectTimeout(15)->timeout(30)->get("{$this->baseUrl}/erp/presupuesto", $this->paramsConImagen([
+                'empresa' => $this->empresa,
+                'serie'   => $cotizacion->winperfil_serie,
+                'numero'  => $cotizacion->winperfil_numero,
+            ]));
+
+            if ($res->successful()) {
+                $body   = $res->json();
+                $oferta = $body['ofertas'][0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+                $pres   = array_merge($oferta['cabecera'] ?? $oferta, ['DETALLES' => $oferta['detalle'] ?? []]);
+
+                $estados = EstadoCotizacion::all()->keyBy(fn($e) => strtolower($e->nombre));
+                $this->upsertPresupuesto($pres, $cotizacion->winperfil_serie, $this->buildEstadoMap($estados));
+
+                return response()->json(['message' => 'Precio desbloqueado y restaurado desde Winperfil.', 'restaurado' => true]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('desbloquearPrecio: no se pudo restaurar desde Winperfil', ['id' => $id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['message' => 'Precio desbloqueado. Se restaurará en la próxima sincronización con Winperfil.', 'restaurado' => false]);
+    }
+
     private function upsertPresupuesto(array $pres, string $serie, array $estadoMap): string
     {
         // La API puede devolver el número como 'PRESUPUESTO_NUMERO' (mayúsc) o 'numfactura' (minúsc)

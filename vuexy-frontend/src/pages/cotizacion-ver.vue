@@ -139,8 +139,22 @@
           v-if="cotizacion?.winperfil_precio_lock"
           type="info" variant="tonal" density="compact" class="mb-3"
         >
-          <v-icon size="16" class="mr-1">mdi-lock-check</v-icon>
-          Precio ajustado manualmente — la sincronización con Winperfil ya no lo modificará.
+          <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+            <span>
+              <v-icon size="16" class="mr-1">mdi-lock-check</v-icon>
+              Precio ajustado manualmente — la sincronización con Winperfil ya no lo modificará.
+            </span>
+            <v-btn
+              size="small"
+              variant="tonal"
+              color="warning"
+              prepend-icon="mdi-lock-open-variant"
+              :loading="desbloqueando"
+              @click="desbloquearPrecio"
+            >
+              Desbloquear y restaurar
+            </v-btn>
+          </div>
         </v-alert>
 
         <v-row dense align="center" class="bg-grey-lighten-4 rounded pa-2">
@@ -336,6 +350,23 @@ async function aplicarAjustePrecio() {
     alert(e.response?.data?.message || 'Error al ajustar el precio')
   } finally {
     ajuste.value.loading = false
+  }
+}
+
+const desbloqueando = ref(false)
+
+async function desbloquearPrecio() {
+  if (!confirm('¿Desbloquear el precio? Se restaurará el valor original de Winperfil.')) return
+  desbloqueando.value = true
+  try {
+    const { data } = await api.patch(`/api/cotizaciones/${cotizacion.value.id}/desbloquear-precio`)
+    const { data: fresca } = await api.get(`/api/cotizaciones/${cotizacion.value.id}`)
+    cotizacion.value = fresca
+    alert(data.message)
+  } catch (e) {
+    alert(e.response?.data?.message || 'Error al desbloquear el precio')
+  } finally {
+    desbloqueando.value = false
   }
 }
 
