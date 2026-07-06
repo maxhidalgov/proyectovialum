@@ -1,6 +1,7 @@
 <template>
   <VThemeProvider theme="light" with-background>
     <div class="hoja-print pa-4">
+      <!-- Barra de acciones (no se captura ni imprime) -->
       <div class="d-flex justify-space-between align-center mb-4 d-print-none">
         <div>
           <h1 class="text-h6 font-weight-bold">Hoja de Cortes</h1>
@@ -12,17 +13,12 @@
           <VBtn variant="tonal" color="secondary" class="mr-2" :loading="loading" prepend-icon="mdi-refresh" @click="cargar">
             Actualizar
           </VBtn>
-          <VBtn color="deep-purple" prepend-icon="mdi-printer" @click="imprimir">
-            Imprimir / PDF
+          <VBtn variant="outlined" color="secondary" class="mr-2" prepend-icon="mdi-printer" @click="imprimir">
+            Imprimir
           </VBtn>
-        </div>
-      </div>
-
-      <!-- Título solo visible al imprimir -->
-      <div class="print-only mb-4">
-        <h2 style="margin:0; font-size:18px; font-weight:700;">Hoja de Cortes</h2>
-        <div v-if="data" style="font-size:13px; color:#555;">
-          {{ data.cotizacion.cliente }} · Winperfil {{ serie }}-{{ numero }} · {{ hoy }}
+          <VBtn color="deep-purple" prepend-icon="mdi-download" :loading="generandoPdf" @click="descargarPdf">
+            Descargar PDF
+          </VBtn>
         </div>
       </div>
 
@@ -31,7 +27,17 @@
         <div class="text-caption text-medium-emphasis mt-3">Calculando optimización de barras...</div>
       </div>
       <VAlert v-else-if="error" type="warning" variant="tonal">{{ error }}</VAlert>
-      <HojaCortesView v-else-if="data" :data="data" />
+
+      <!-- Contenido capturable (PDF / impresión) -->
+      <div v-else-if="data" ref="hojaRef" class="hoja-doc">
+        <div class="doc-header mb-4">
+          <h2 class="doc-title">Hoja de Cortes</h2>
+          <div class="doc-sub">
+            {{ data.cotizacion.cliente }} · Winperfil {{ serie }}-{{ numero }} · {{ hoy }}
+          </div>
+        </div>
+        <HojaCortesView :data="data" />
+      </div>
     </div>
   </VThemeProvider>
 </template>
@@ -39,16 +45,20 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { toCanvas } from 'html-to-image'
+import jsPDF from 'jspdf'
 import api from '@/axiosInstance'
 import HojaCortesView from '@/components/HojaCortesView.vue'
 
-// Sin navbar/footer de la app: documento limpio para imprimir
+// Sin navbar/footer de la app: documento limpio
 definePage({ meta: { layout: 'blank', public: false } })
 
 const route = useRoute()
-const data    = ref(null)
-const loading = ref(true)
-const error   = ref('')
+const data        = ref(null)
+const loading     = ref(true)
+const error       = ref('')
+const generandoPdf = ref(false)
+const hojaRef     = ref(null)
 
 const serie  = computed(() => route.query.serie || '')
 const numero = computed(() => route.query.numero || '')
@@ -73,27 +83,63 @@ function imprimir() {
   window.print()
 }
 
+async function descargarPdf() {
+  if (!hojaRef.value) return
+  generandoPdf.value = true
+  try {
+    const canvas = await toCanvas(hojaRef.value, {
+      backgroundColor: '#ffffff',
+      pixelRatio: 2,
+      cacheBust: true,
+    })
+
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageW = 210, pageH = 297, margin = 8
+    const imgW = pageW - margin * 2
+    const imgH = canvas.height * imgW / canvas.width
+    const imgData = canvas.toDataURL('image/jpeg', 0.92)
+    const pageContentH = pageH - margin * 2
+
+    let heightLeft = imgH
+    let position = margin
+    pdf.addImage(imgData, 'JPEG', margin, position, imgW, imgH)
+    heightLeft -= pageContentH
+
+    while (heightLeft > 0) {
+      position = margin - (imgH - heightLeft)
+      pdf.addPage()
+      pdf.addImage(imgData, 'JPEG', margin, position, imgW, imgH)
+      heightLeft -= pageContentH
+    }
+
+    pdf.save(`Pauta_Corte_${serie.value}-${numero.value || 'winperfil'}.pdf`)
+  } catch (e) {
+    console.error('descargarPdf', e)
+    alert('No se pudo generar el PDF. Prueba con "Imprimir" → Guardar como PDF.')
+  } finally {
+    generandoPdf.value = false
+  }
+}
+
 onMounted(cargar)
 </script>
 
 <style scoped>
 .hoja-print { background: #fff; min-height: 100vh; }
-.print-only { display: none; }
+.doc-header { border-bottom: 2px solid #6a1b9a; padding-bottom: 8px; }
+.doc-title { margin: 0; font-size: 20px; font-weight: 800; color: #6a1b9a; }
+.doc-sub { font-size: 13px; color: #555; }
 </style>
 
 <style>
 @media print {
   .d-print-none { display: none !important; }
-  .print-only { display: block !important; }
   @page { margin: 10mm; }
-  /* que los colores de las piezas se impriman */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  /* sin scroll horizontal en las tablas: mostrar todo */
   .v-table__wrapper { overflow: visible !important; }
-  /* evitar cortar una barra a la mitad entre páginas */
   .barra-wrap, .cortes-tabla { break-inside: avoid; }
 }
 </style>

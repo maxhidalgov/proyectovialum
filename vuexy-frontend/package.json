@@ -34,6 +34,8 @@
     "cookie-es": "1.2.2",
     "destr": "2.0.3",
     "eslint-plugin-regexp": "2.7.0",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "jwt-decode": "4.0.0",
     "konva": "^9.3.22",
     "mapbox-gl": "3.5.2",
