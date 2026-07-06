@@ -49,11 +49,12 @@ function clipPath(corte) {
   const ai = Number(corte.angulo_izq)
   const ad = Number(corte.angulo_der)
 
-  if (ai === 135) si = o                       // sup-izq se retrae
-  else if (ai === 45) ii = o                   // inf-izq se retrae
+  // 135° = "\" (arriba a la izq, abajo corrido a la der) ; 45° = "/" (arriba a la der, abajo a la izq)
+  if (ai === 135) ii = o                        // "\" : inf-izq se retrae
+  else if (ai === 45) si = o                    // "/" : sup-izq se retrae
 
-  if (ad === 45) id = `calc(100% - ${o})`      // inf-der se retrae
-  else if (ad === 135) sd = `calc(100% - ${o})` // sup-der se retrae
+  if (ad === 135) sd = `calc(100% - ${o})`      // "\" : sup-der se retrae
+  else if (ad === 45) id = `calc(100% - ${o})`  // "/" : inf-der se retrae
 
   return `polygon(${si} 0, ${sd} 0, ${id} 100%, ${ii} 100%)`
 }
