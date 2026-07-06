@@ -784,6 +784,160 @@ class WinperfilController extends Controller
     }
 
     /**
+     * Hoja de cortes de una cotización Winperfil, en la MISMA estructura que
+     * CortesService (grupos → barras → cortes), para renderizar con el mismo
+     * componente que las cotizaciones de la app.
+     *
+     * Fuente temporal: bin-packing (First-Fit-Decreasing) sobre las piezas de
+     * lismonta. Cuando el endpoint pedbarra de Winperfil funcione, se cambiará
+     * la fuente por la optimización real (misma estructura de salida).
+     *
+     * GET /api/winperfil/hoja-cortes?cotizacion_id=X[&oferta=1&largo_barra=6000]
+     */
+    public function hojaCortes(Request $request)
+    {
+        $cotizacion = Cotizacion::findOrFail($request->integer('cotizacion_id'));
+
+        if (!$cotizacion->winperfil_numero) {
+            return response()->json(['error' => 'La cotización no proviene de Winperfil.'], 422);
+        }
+
+        $oferta     = $request->integer('oferta', 1);
+        $largoBarra = $request->integer('largo_barra', 6000);
+        $kerf       = 5; // viruta por corte (mm)
+
+        try {
+            $res = Http::connectTimeout(15)->timeout(90)->get("{$this->baseUrl}/erp/lismonta", [
+                'empresa'     => $this->empresa,
+                'serie'       => $cotizacion->winperfil_serie,
+                'presupuesto' => $cotizacion->winperfil_numero,
+                'oferta'      => $oferta,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'No se pudo conectar con Winperfil: ' . $e->getMessage()], 503);
+        }
+
+        if ($res->failed()) {
+            return response()->json(['error' => "Winperfil respondió {$res->status()}"], 502);
+        }
+
+        $datos = $res->json()['datos'] ?? null;
+        if (!is_array($datos) || empty($datos['modelos'])) {
+            return response()->json(['error' => 'Winperfil no devolvió datos para este presupuesto/oferta.'], 404);
+        }
+
+        // 1) Recolectar todas las piezas de cada perfil (TipoElemento 0)
+        $perfilesPorRef = [];
+        foreach ($datos['modelos'] as $mi => $m) {
+            $ventanaRef = $m['Tipo'] ?: ('V' . ($mi + 1));
+            $color      = $m['Color'] ?? '';
+
+            foreach ($m['detalle'] ?? [] as $d) {
+                if ((int) ($d['TipoElemento'] ?? -1) !== 0) {
+                    continue; // solo perfiles
+                }
+                $largo = (float) ($d['Longitud'] ?? 0);
+                if ($largo <= 0) {
+                    continue;
+                }
+                // Agrupar por referencia BASE: el sufijo @N es una sub-instancia del
+                // mismo perfil físico (Winperfil las corta de la misma barra).
+                $refFull = trim($d['Referencia'] ?? '');
+                $ref     = preg_replace('/@\d+$/', '', $refFull) ?: $this->limpiarTexto($d['Descripcion'] ?? '');
+                $tot     = max(1, (int) ($d['TotalUnidades'] ?? 1));
+
+                $perfilesPorRef[$ref] ??= [
+                    'nombre' => $this->limpiarTexto($d['Descripcion'] ?? ''),
+                    'color'  => $color,
+                    'piezas' => [],
+                ];
+
+                for ($k = 0; $k < $tot; $k++) {
+                    $perfilesPorRef[$ref]['piezas'][] = [
+                        'largo'       => $largo,
+                        'angIzq'      => (int) round((float) ($d['CorteIzq'] ?? 90)),
+                        'angDer'      => (int) round((float) ($d['CorteDer'] ?? 90)),
+                        'posicion'    => trim($d['DescMecanizado'] ?? ''),
+                        'ventana_ref' => $ventanaRef,
+                    ];
+                }
+            }
+        }
+
+        // 2) Bin-packing FFD por referencia → barras
+        $grupos = [];
+        foreach ($perfilesPorRef as $ref => $info) {
+            $piezas = $info['piezas'];
+            usort($piezas, fn ($a, $b) => $b['largo'] <=> $a['largo']);
+
+            // Best-Fit-Decreasing: cada pieza va a la barra donde deje menos sobra.
+            $barrasRaw = [];
+            foreach ($piezas as $p) {
+                $mejorIdx   = null;
+                $mejorSobra = PHP_INT_MAX;
+                foreach ($barrasRaw as $idx => $barra) {
+                    $usado = array_sum(array_column($barra, 'largo')) + count($barra) * $kerf;
+                    $sobra = $largoBarra - ($usado + $p['largo'] + $kerf);
+                    if ($sobra >= 0 && $sobra < $mejorSobra) {
+                        $mejorSobra = $sobra;
+                        $mejorIdx   = $idx;
+                    }
+                }
+                if ($mejorIdx !== null) {
+                    $barrasRaw[$mejorIdx][] = $p;
+                } else {
+                    $barrasRaw[] = [$p];
+                }
+            }
+
+            $barras = [];
+            $totalCortes = 0;
+            foreach ($barrasRaw as $i => $barra) {
+                $uso     = array_sum(array_column($barra, 'largo'));
+                $virutas = count($barra) * $kerf;
+                $retal   = max(0, $largoBarra - $uso - $virutas);
+                $totalCortes += count($barra);
+
+                $barras[] = [
+                    'numero'     => $i + 1,
+                    'uso_mm'     => (int) round($uso),
+                    'virutas_mm' => (int) round($virutas),
+                    'retal_mm'   => (int) round($retal),
+                    'cortes'     => array_map(fn ($p) => [
+                        'largo_mm'    => (int) round($p['largo']),
+                        'angulo_izq'  => $p['angIzq'],
+                        'angulo_der'  => $p['angDer'],
+                        'posicion'    => $p['posicion'],
+                        'ventana_ref' => $p['ventana_ref'],
+                    ], $barra),
+                ];
+            }
+
+            $grupos[] = [
+                'producto_id'  => $ref,
+                'nombre'       => $info['nombre'],
+                'color'        => $info['color'],
+                'proveedor'    => 'Winhouse Chile',
+                'largo_barra'  => $largoBarra,
+                'total_barras' => count($barras),
+                'total_cortes' => $totalCortes,
+                'barras'       => $barras,
+            ];
+        }
+
+        return response()->json([
+            'cotizacion'        => [
+                'id'      => $cotizacion->id,
+                'cliente' => $datos['cabecera']['Desccli'] ?? '',
+                'fecha'   => $datos['cabecera']['Fecha'] ?? '',
+            ],
+            'grupos'            => $grupos,
+            'ventanas_omitidas' => [],
+            'fuente'            => 'winperfil_binpacking',
+        ]);
+    }
+
+    /**
      * Quita el candado de precio de una cotización Winperfil y restaura el
      * precio original desde Winperfil (si está disponible). Si Winperfil no
      * responde, el candado igual se quita y se restaurará en la próxima sync.

@@ -382,6 +382,8 @@ Route::middleware('auth:api')->group(function () {
 
         // Lista de materiales (lismonta, en vivo)
         Route::get('/materiales',               [WinperfilController::class, 'materiales']);
+        // Hoja de cortes (bin-packing sobre lismonta; pedbarra a futuro)
+        Route::get('/hoja-cortes',              [WinperfilController::class, 'hojaCortes']);
 
         // Proxy (lectura directa desde Winperfil, sin persistir)
         Route::get('/presupuestos',             [WinperfilController::class, 'getPresupuestos']);

@@ -285,6 +285,7 @@
         <v-tabs v-model="dialogMat.tab" color="deep-purple" class="px-4">
           <v-tab value="compra"><v-icon size="16" class="mr-1">mdi-cart</v-icon>Lista de compra</v-tab>
           <v-tab value="ventana"><v-icon size="16" class="mr-1">mdi-format-list-bulleted</v-icon>Despiece por ventana</v-tab>
+          <v-tab value="cortes"><v-icon size="16" class="mr-1">mdi-content-cut</v-icon>Hoja de cortes</v-tab>
         </v-tabs>
         <v-divider />
 
@@ -399,6 +400,23 @@
                 </v-expansion-panel>
               </v-expansion-panels>
             </v-window-item>
+
+            <!-- TAB hoja de cortes -->
+            <v-window-item value="cortes">
+              <div v-if="hojaCortes.loading" class="text-center py-10">
+                <v-progress-circular indeterminate color="deep-purple" />
+                <div class="text-caption text-medium-emphasis mt-3">Calculando optimización de barras...</div>
+              </div>
+              <v-alert v-else-if="hojaCortes.error" type="warning" variant="tonal" density="compact">
+                {{ hojaCortes.error }}
+              </v-alert>
+              <template v-else-if="hojaCortes.data">
+                <v-alert type="info" variant="tonal" density="compact" class="mb-3 text-caption">
+                  Optimización estimada (bin-packing). Puede diferir en 1 barra respecto a Winperfil hasta habilitar la optimización exacta.
+                </v-alert>
+                <HojaCortesView :data="hojaCortes.data" />
+              </template>
+            </v-window-item>
           </v-window>
         </v-card-text>
       </v-card>
@@ -462,8 +480,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from '@/axiosInstance'
+import HojaCortesView from '@/components/HojaCortesView.vue'
 const api = axios
 
 const cargando  = ref(false)
@@ -503,9 +522,13 @@ const gruposCompra = computed(() => {
 const seleccion = ref({})          // { 'perfiles:0': true, ... }
 const cotizacionMatId = ref(null)  // cotización origen para la orden
 
+// Hoja de cortes (lazy: se carga al abrir la tab)
+const hojaCortes = ref({ loading: false, error: '', data: null })
+
 async function abrirMateriales(cotizacion) {
   seleccion.value = {}
   cotizacionMatId.value = cotizacion.id
+  hojaCortes.value = { loading: false, error: '', data: null }
   dialogMat.value = {
     show: true, loading: true, error: '',
     cliente: cotizacion.cliente, numero: cotizacion.winperfil_numero,
@@ -522,6 +545,23 @@ async function abrirMateriales(cotizacion) {
     dialogMat.value.loading = false
   }
 }
+
+// Cargar la hoja de cortes solo cuando se entra a esa tab (es una llamada extra a Winperfil)
+watch(() => dialogMat.value.tab, async (tab) => {
+  if (tab !== 'cortes' || hojaCortes.value.data || hojaCortes.value.loading) return
+  hojaCortes.value.loading = true
+  hojaCortes.value.error = ''
+  try {
+    const { data } = await api.get('/api/winperfil/hoja-cortes', {
+      params: { cotizacion_id: cotizacionMatId.value },
+    })
+    hojaCortes.value.data = data
+  } catch (e) {
+    hojaCortes.value.error = e.response?.data?.error || 'No se pudo generar la hoja de cortes'
+  } finally {
+    hojaCortes.value.loading = false
+  }
+})
 
 // ── Selección de materiales ───────────────────────────────────────
 const isSelected = (grupoKey, i) => !!seleccion.value[`${grupoKey}:${i}`]

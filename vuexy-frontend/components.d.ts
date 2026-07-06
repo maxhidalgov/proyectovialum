@@ -52,6 +52,7 @@ declare module 'vue' {
     EnableOneTimePasswordDialog: typeof import('./src/components/dialogs/EnableOneTimePasswordDialog.vue')['default']
     ErrorHeader: typeof import('./src/components/ErrorHeader.vue')['default']
     FlechaNumero: typeof import('./src/components/svg/FlechaNumero.vue')['default']
+    HojaCortesView: typeof import('./src/components/HojaCortesView.vue')['default']
     I18n: typeof import('./src/@core/components/I18n.vue')['default']
     Manilla: typeof import('./src/components/Manilla.vue')['default']
     ManillaBlanca: typeof import('./src/components/svg/ManillaBlanca.vue')['default']
