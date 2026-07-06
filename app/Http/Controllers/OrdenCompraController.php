@@ -79,9 +79,28 @@ class OrdenCompraController extends Controller
     {
         $orden = OrdenCompra::with(['proveedor', 'cotizacion.cliente'])->findOrFail($id);
 
-        $pdf = Pdf::loadView('ordenes-compra.pdf', ['orden' => $orden]);
+        $pdf = Pdf::loadView('ordenes-compra.pdf', [
+            'orden'      => $orden,
+            'logoBase64' => $this->cargarLogo(),
+        ]);
 
         return $pdf->download("{$orden->numero}.pdf");
+    }
+
+    private function cargarLogo(): ?string
+    {
+        try {
+            $logoUrl = env('LOGO_URL', 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png');
+            $ctx     = stream_context_create(['http' => ['timeout' => 10]]);
+            $data    = @file_get_contents($logoUrl, false, $ctx);
+            if ($data !== false) {
+                return 'data:image/png;base64,' . base64_encode($data);
+            }
+        } catch (\Throwable $e) {
+            // sin logo, el PDF se genera igual
+        }
+
+        return null;
     }
 
     public function excel(int $id)
