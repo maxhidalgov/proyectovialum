@@ -301,14 +301,43 @@
           <v-window v-else v-model="dialogMat.tab">
             <!-- TAB compra -->
             <v-window-item value="compra">
+              <div class="d-flex align-center justify-space-between mb-3 flex-wrap gap-2">
+                <div class="text-caption text-medium-emphasis">
+                  Marca lo que quieras pedir y genera una orden de compra.
+                </div>
+                <div class="d-flex align-center gap-2">
+                  <v-chip v-if="nSeleccionados" size="small" color="deep-purple" variant="tonal">
+                    {{ nSeleccionados }} seleccionado{{ nSeleccionados !== 1 ? 's' : '' }}
+                  </v-chip>
+                  <v-btn
+                    color="deep-purple"
+                    size="small"
+                    prepend-icon="mdi-cart-arrow-down"
+                    :disabled="!nSeleccionados"
+                    @click="abrirDialogOrden"
+                  >
+                    Generar orden de compra
+                  </v-btn>
+                </div>
+              </div>
+
               <div v-for="grupo in gruposCompra" :key="grupo.key" class="mb-4">
                 <div v-if="grupo.items.length" class="text-subtitle-2 font-weight-bold mb-1 d-flex align-center gap-1">
+                  <v-checkbox
+                    :model-value="grupoTodoSeleccionado(grupo)"
+                    :indeterminate="grupoParcial(grupo)"
+                    density="compact"
+                    hide-details
+                    color="deep-purple"
+                    @update:model-value="toggleGrupo(grupo, $event)"
+                  />
                   <v-icon size="16" :color="grupo.color">{{ grupo.icon }}</v-icon>{{ grupo.label }}
                   <v-chip size="x-small" :color="grupo.color" variant="tonal">{{ grupo.items.length }}</v-chip>
                 </div>
                 <v-table v-if="grupo.items.length" density="compact" class="mb-2">
                   <thead>
                     <tr>
+                      <th style="width:40px"></th>
                       <th class="text-left">Referencia</th>
                       <th class="text-left">Descripción</th>
                       <th v-if="grupo.key === 'vidrios'" class="text-left">Medida (mm)</th>
@@ -317,7 +346,17 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(it, i) in grupo.items" :key="i">
+                    <tr v-for="(it, i) in grupo.items" :key="i" @click="toggleItem(grupo.key, i)" style="cursor:pointer">
+                      <td>
+                        <v-checkbox
+                          :model-value="isSelected(grupo.key, i)"
+                          density="compact"
+                          hide-details
+                          color="deep-purple"
+                          @click.stop
+                          @update:model-value="toggleItem(grupo.key, i)"
+                        />
+                      </td>
                       <td class="font-monospace text-caption">{{ it.referencia || '—' }}</td>
                       <td class="text-caption">{{ it.descripcion }}</td>
                       <td v-if="grupo.key === 'vidrios'" class="text-caption">{{ it.ancho }} × {{ it.alto }}</td>
@@ -362,6 +401,56 @@
             </v-window-item>
           </v-window>
         </v-card-text>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog crear orden de compra -->
+    <v-dialog v-model="dialogOrden.show" max-width="480" persistent>
+      <v-card>
+        <v-card-title class="text-body-1 font-weight-bold pa-4">
+          <v-icon color="deep-purple" class="mr-1">mdi-cart-arrow-down</v-icon>
+          Orden de compra ({{ nSeleccionados }} ítems)
+        </v-card-title>
+        <v-card-text>
+          <template v-if="!dialogOrden.ordenId">
+            <v-select
+              v-model="dialogOrden.proveedorId"
+              :items="proveedores"
+              item-title="nombre"
+              item-value="id"
+              label="Proveedor"
+              variant="outlined"
+              density="compact"
+              clearable
+              class="mb-3"
+            />
+            <v-textarea
+              v-model="dialogOrden.observaciones"
+              label="Observaciones (opcional)"
+              variant="outlined"
+              density="compact"
+              rows="2"
+              hide-details
+            />
+          </template>
+          <v-alert v-else type="success" variant="tonal" density="compact">
+            Orden <strong>{{ dialogOrden.numero }}</strong> creada. Descárgala:
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <template v-if="!dialogOrden.ordenId">
+            <v-btn variant="text" @click="dialogOrden.show = false">Cancelar</v-btn>
+            <v-btn color="deep-purple" variant="flat" :loading="dialogOrden.creando" @click="crearOrden">
+              Crear orden
+            </v-btn>
+          </template>
+          <template v-else>
+            <v-btn variant="tonal" color="red" prepend-icon="mdi-file-pdf-box" @click="descargarOrden('pdf')">PDF</v-btn>
+            <v-btn variant="tonal" color="green" prepend-icon="mdi-file-excel" @click="descargarOrden('excel')">Excel</v-btn>
+            <v-btn variant="text" @click="cerrarDialogOrden">Cerrar</v-btn>
+          </template>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -411,7 +500,12 @@ const gruposCompra = computed(() => {
   ]
 })
 
+const seleccion = ref({})          // { 'perfiles:0': true, ... }
+const cotizacionMatId = ref(null)  // cotización origen para la orden
+
 async function abrirMateriales(cotizacion) {
+  seleccion.value = {}
+  cotizacionMatId.value = cotizacion.id
   dialogMat.value = {
     show: true, loading: true, error: '',
     cliente: cotizacion.cliente, numero: cotizacion.winperfil_numero,
@@ -427,6 +521,107 @@ async function abrirMateriales(cotizacion) {
   } finally {
     dialogMat.value.loading = false
   }
+}
+
+// ── Selección de materiales ───────────────────────────────────────
+const isSelected = (grupoKey, i) => !!seleccion.value[`${grupoKey}:${i}`]
+
+function toggleItem(grupoKey, i) {
+  const k = `${grupoKey}:${i}`
+  seleccion.value = { ...seleccion.value, [k]: !seleccion.value[k] }
+}
+
+function grupoTodoSeleccionado(grupo) {
+  return grupo.items.length > 0 && grupo.items.every((_, i) => isSelected(grupo.key, i))
+}
+function grupoParcial(grupo) {
+  const n = grupo.items.filter((_, i) => isSelected(grupo.key, i)).length
+  return n > 0 && n < grupo.items.length
+}
+function toggleGrupo(grupo, val) {
+  const copia = { ...seleccion.value }
+  grupo.items.forEach((_, i) => { copia[`${grupo.key}:${i}`] = val })
+  seleccion.value = copia
+}
+
+const nSeleccionados = computed(() =>
+  Object.values(seleccion.value).filter(Boolean).length,
+)
+
+// Construye los items normalizados para la orden
+const itemsSeleccionados = computed(() => {
+  const out = []
+  for (const grupo of gruposCompra.value) {
+    grupo.items.forEach((it, i) => {
+      if (!isSelected(grupo.key, i)) return
+      out.push({
+        categoria:   grupo.label,
+        referencia:  it.referencia || '',
+        descripcion: it.descripcion || '',
+        detalle:     grupo.key === 'vidrios' ? `${it.ancho}×${it.alto} mm`
+                    : grupo.key === 'perfiles' ? `${it.metros_lineales} m`
+                    : '',
+        cantidad:    grupo.key === 'perfiles' ? it.piezas : it.cantidad,
+      })
+    })
+  }
+  return out
+})
+
+// ── Orden de compra ───────────────────────────────────────────────
+const proveedores = ref([])
+const dialogOrden = ref({ show: false, proveedorId: null, observaciones: '', creando: false, ordenId: null, numero: '' })
+
+async function abrirDialogOrden() {
+  dialogOrden.value = { show: true, proveedorId: null, observaciones: '', creando: false, ordenId: null, numero: '' }
+  if (!proveedores.value.length) {
+    try {
+      const { data } = await api.get('/api/proveedores')
+      proveedores.value = Array.isArray(data) ? data : (data?.data ?? [])
+    } catch { /* sin proveedores, se puede crear sin uno */ }
+  }
+}
+
+async function crearOrden() {
+  dialogOrden.value.creando = true
+  try {
+    const { data } = await api.post('/api/ordenes-compra', {
+      cotizacion_id: cotizacionMatId.value,
+      proveedor_id:  dialogOrden.value.proveedorId,
+      observaciones: dialogOrden.value.observaciones || null,
+      items:         itemsSeleccionados.value,
+    })
+    dialogOrden.value.ordenId = data.id
+    dialogOrden.value.numero  = data.numero
+    mostrarSnack(`Orden ${data.numero} creada`)
+  } catch (e) {
+    mostrarSnack(e.response?.data?.message || 'Error al crear la orden', 'error')
+  } finally {
+    dialogOrden.value.creando = false
+  }
+}
+
+async function descargarOrden(formato) {
+  try {
+    const res = await api.get(`/api/ordenes-compra/${dialogOrden.value.ordenId}/${formato}`, { responseType: 'blob' })
+    const ext = formato === 'pdf' ? 'pdf' : 'csv'
+    const mime = formato === 'pdf' ? 'application/pdf' : 'text/csv'
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: mime }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${dialogOrden.value.numero}.${ext}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+  } catch {
+    mostrarSnack('Error al descargar', 'error')
+  }
+}
+
+function cerrarDialogOrden() {
+  dialogOrden.value.show = false
+  seleccion.value = {}
 }
 
 // ── Computed ──────────────────────────────────────────────────────

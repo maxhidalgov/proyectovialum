@@ -125,6 +125,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Órdenes de Compra',
+    to: { name: 'ordenes-compra' },
+    icon: { icon: 'mdi-cart-arrow-down' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Asistente IA',
     to: { name: 'ia-produccion' },
     icon: { icon: 'mdi-robot' },
