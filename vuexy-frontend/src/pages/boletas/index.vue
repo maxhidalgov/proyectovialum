@@ -79,11 +79,13 @@
               <td class="text-right">{{ fmt(montoVinculado(r)) }}</td>
               <td>
                 <VChip
-                  :color="r.conciliado ? 'success' : 'warning'"
+                  :color="estaConciliado(r) ? 'success' : 'warning'"
                   size="small"
                   label
                 >
-                  {{ r.conciliado ? '✓ Conciliado' : 'Por conciliar' }}
+                  {{ estaConciliado(r)
+                     ? (Number(r.conciliado_transbank) > 0 && Number(r.conciliado) === 0 ? '✓ Conciliado (Transbank)' : '✓ Conciliado')
+                     : 'Por conciliar' }}
                 </VChip>
               </td>
               <td>
@@ -95,7 +97,7 @@
                   <VIcon icon="mdi-eye-outline" />
                 </VBtn>
                 <VBtn
-                  v-if="!r.conciliado"
+                  v-if="!estaConciliado(r)"
                   icon size="small" variant="text" color="primary"
                   @click="abrirConciliar(r)"
                   title="Conciliar"
@@ -375,7 +377,14 @@ function fmt(v) {
 }
 
 function montoVinculado(r) {
-  return (r.movimientos ?? []).reduce((s, m) => s + Number(m.monto), 0)
+  const vinculado = (r.movimientos ?? []).reduce((s, m) => s + Number(m.monto), 0)
+  // Las boletas de tarjeta se concilian vía Transbank (marca conciliado_transbank)
+  const transbank = Number(r.conciliado_transbank) > 0 ? Number(r.monto_total) : 0
+  return vinculado + transbank
+}
+
+function estaConciliado(r) {
+  return Number(r.conciliado) > 0 || Number(r.conciliado_transbank) > 0
 }
 
 function labelFormaPago(fp) {

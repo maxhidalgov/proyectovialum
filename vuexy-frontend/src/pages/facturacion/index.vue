@@ -269,29 +269,42 @@
 
                         <!-- Estado de cobro (solo docs emitidos) -->
                         <template v-if="doc.estado === 'emitido'">
-                          <div class="d-flex justify-space-between text-caption mb-1">
-                            <span class="text-success">Cobrado: {{ clp(doc.monto_cobrado || 0) }}</span>
-                            <span :class="(doc.pendiente || 0) > 0 ? 'text-warning' : 'text-success'">
-                              {{ (doc.pendiente || 0) > 0 ? `Por cobrar: ${clp(doc.pendiente)}` : '✓ Cobrado' }}
-                            </span>
+                          <!-- Boletas: el cobro se gestiona en el módulo Boletas (resumen mensual por forma de pago) -->
+                          <div v-if="esBoleta(doc)" class="d-flex align-center gap-2 mt-1">
+                            <v-chip size="x-small" color="info" variant="tonal">
+                              <v-icon size="12" start>mdi-receipt-text-outline</v-icon>
+                              Boleta — cobro por resumen mensual
+                            </v-chip>
+                            <v-btn size="x-small" variant="text" color="info" to="/boletas" @click.stop>
+                              Ir a módulo Boletas
+                            </v-btn>
                           </div>
-                          <v-progress-linear
-                            :model-value="doc.monto > 0 ? ((doc.monto_cobrado || 0) / doc.monto) * 100 : 0"
-                            color="success"
-                            bg-color="warning"
-                            height="4"
-                            rounded
-                            class="mb-2"
-                          />
-                          <v-btn
-                            size="x-small"
-                            variant="tonal"
-                            color="success"
-                            @click.stop="abrirConciliarCobro(doc, item)"
-                          >
-                            <v-icon size="12" start>mdi-link-variant</v-icon>
-                            Conciliar cobro
-                          </v-btn>
+                          <!-- Facturas / anticipos: se concilian aquí contra los movimientos bancarios -->
+                          <template v-else>
+                            <div class="d-flex justify-space-between text-caption mb-1">
+                              <span class="text-success">Cobrado: {{ clp(doc.monto_cobrado || 0) }}</span>
+                              <span :class="(doc.pendiente || 0) > 0 ? 'text-warning' : 'text-success'">
+                                {{ (doc.pendiente || 0) > 0 ? `Por cobrar: ${clp(doc.pendiente)}` : '✓ Cobrado' }}
+                              </span>
+                            </div>
+                            <v-progress-linear
+                              :model-value="doc.monto > 0 ? ((doc.monto_cobrado || 0) / doc.monto) * 100 : 0"
+                              color="success"
+                              bg-color="warning"
+                              height="4"
+                              rounded
+                              class="mb-2"
+                            />
+                            <v-btn
+                              size="x-small"
+                              variant="tonal"
+                              color="success"
+                              @click.stop="abrirConciliarCobro(doc, item)"
+                            >
+                              <v-icon size="12" start>mdi-link-variant</v-icon>
+                              Conciliar cobro
+                            </v-btn>
+                          </template>
                         </template>
                         <v-chip v-else size="x-small" color="warning" variant="tonal">Pendiente de emisión</v-chip>
                       </div>
@@ -870,6 +883,9 @@ const clp = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency:
 const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-CL') : '-'
 const colorEstado = (e) => ({ aprobada: 'warning', facturada: 'info', pagada: 'success' }[e] || 'grey')
 const textoEstado = (e) => ({ aprobada: 'Por facturar', facturada: 'Facturada', pagada: 'Cobrada' }[e] || e)
+
+// Boleta electrónica (tipo_documento_bsale_id = 1): su cobro se gestiona en el módulo Boletas
+const esBoleta = (doc) => Number(doc?.tipo_documento_bsale_id) === 1
 
 function mostrarSnack(text, color = 'success') {
   snack.value = { show: true, text, color }
