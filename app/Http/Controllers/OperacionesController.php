@@ -119,6 +119,38 @@ class OperacionesController extends Controller
     }
 
     /**
+     * Agregar un hito manualmente (para poner al día trabajos ya en curso con sus fechas reales).
+     */
+    public function storeHistorial(Request $request, $id)
+    {
+        $data = $request->validate([
+            'estado' => 'required|in:En Espera de Medidas,Lista para Corte,En Fabricación,Fabricadas OK,Instalada',
+            'fecha'  => 'required|date',
+        ]);
+
+        Cotizacion::findOrFail($id); // asegura que exista
+
+        $registro = CotizacionEstadoHistorial::create([
+            'cotizacion_id' => $id,
+            'tipo'          => 'produccion',
+            'estado'        => $data['estado'],
+            'fecha'         => $data['fecha'],
+        ]);
+
+        return response()->json(['success' => true, 'id' => $registro->id]);
+    }
+
+    /**
+     * Borrar un hito del historial (corrección de errores al poner al día).
+     */
+    public function destroyHistorial($id)
+    {
+        CotizacionEstadoHistorial::findOrFail($id)->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
      * Calcula las métricas de tiempo de una cotización a partir de su historial de estados.
      * T0 = medición (entrada a "Lista para Corte").
      */

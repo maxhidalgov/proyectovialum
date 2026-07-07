@@ -371,22 +371,58 @@
                     <span v-if="h.estado === 'Lista para Corte'" class="text-indigo font-weight-bold">· medición (T0)</span>
                   </div>
                 </div>
-                <input
-                  v-if="h.tipo === 'produccion'"
-                  type="date"
-                  :value="(h.fecha || '').slice(0, 10)"
-                  class="date-input"
-                  @change="e => guardarFechaHito(h, e.target.value)"
-                />
-                <span v-else class="text-caption text-grey">{{ (h.fecha || '').slice(0, 10) }}</span>
+                <div class="d-flex align-center gap-1">
+                  <input
+                    v-if="h.tipo === 'produccion'"
+                    type="date"
+                    :value="(h.fecha || '').slice(0, 10)"
+                    class="date-input"
+                    @change="e => guardarFechaHito(h, e.target.value)"
+                  />
+                  <span v-else class="text-caption text-grey">{{ (h.fecha || '').slice(0, 10) }}</span>
+                  <v-btn
+                    v-if="h.tipo === 'produccion'"
+                    size="x-small"
+                    variant="text"
+                    color="error"
+                    icon="mdi-delete-outline"
+                    @click="borrarHito(h)"
+                  />
+                </div>
               </div>
             </v-timeline-item>
           </v-timeline>
           <div v-else class="text-center text-caption text-grey py-6">
             Sin historial aún. Se registrará automáticamente con cada cambio de estado.
           </div>
-          <p class="text-caption text-grey mt-2">
-            Puedes corregir la fecha de un hito de producción (ej: el día real de medición) haciendo clic en ella.
+
+          <!-- Agregar hito con fecha real (poner al día trabajos en curso) -->
+          <v-divider class="my-3" />
+          <div class="text-caption font-weight-bold mb-2">Agregar hito con fecha real</div>
+          <div class="d-flex gap-2 align-center">
+            <v-select
+              v-model="nuevoHito.estado"
+              :items="estadosProduccion"
+              label="Estado"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width:220px"
+            />
+            <input v-model="nuevoHito.fecha" type="date" class="date-input date-input--box" />
+            <v-btn
+              size="small"
+              color="indigo"
+              variant="flat"
+              prepend-icon="mdi-plus"
+              :disabled="!nuevoHito.estado || !nuevoHito.fecha"
+              @click="agregarHito"
+            >
+              Agregar
+            </v-btn>
+          </div>
+          <p class="text-caption text-grey mt-3">
+            Para trabajos ya en curso: agrega el hito <strong>"Lista para Corte"</strong> con la fecha real de medición (T0) y los demás hitos que correspondan.
           </p>
         </v-card-text>
         <v-divider />
@@ -572,10 +608,41 @@ async function updateCampo(item, campo, valor) {
 }
 
 // ── Línea de tiempo ──────────────────────────────────────────────
-const timeline = ref({ show: false, item: null })
+const timeline  = ref({ show: false, item: null })
+const nuevoHito = ref({ estado: null, fecha: '' })
 
 function abrirTimeline(item) {
   timeline.value = { show: true, item }
+  nuevoHito.value = { estado: null, fecha: '' }
+}
+
+async function refrescarTimeline() {
+  await cargar()
+  const fresh = cotizaciones.value.find(c => c.id === timeline.value.item?.id)
+  if (fresh) timeline.value.item = fresh
+}
+
+async function agregarHito() {
+  const { estado, fecha } = nuevoHito.value
+  if (!estado || !fecha) return
+  try {
+    await api.post(`/api/operaciones/${timeline.value.item.id}/historial`, { estado, fecha })
+    mostrarSnack('Hito agregado')
+    nuevoHito.value = { estado: null, fecha: '' }
+    await refrescarTimeline()
+  } catch {
+    mostrarSnack('Error al agregar el hito', 'error')
+  }
+}
+
+async function borrarHito(hito) {
+  try {
+    await api.delete(`/api/operaciones/historial/${hito.id}`)
+    mostrarSnack('Hito eliminado')
+    await refrescarTimeline()
+  } catch {
+    mostrarSnack('Error al eliminar el hito', 'error')
+  }
 }
 
 async function guardarFechaHito(hito, fecha) {
@@ -583,10 +650,7 @@ async function guardarFechaHito(hito, fecha) {
   try {
     await api.patch(`/api/operaciones/historial/${hito.id}`, { fecha })
     mostrarSnack('Fecha actualizada')
-    await cargar()
-    // Refrescar el item abierto en el diálogo con los datos recalculados
-    const fresh = cotizaciones.value.find(c => c.id === timeline.value.item?.id)
-    if (fresh) timeline.value.item = fresh
+    await refrescarTimeline()
   } catch {
     mostrarSnack('Error al actualizar la fecha', 'error')
   }
@@ -629,6 +693,13 @@ function fmt(val) {
 .date-vencida {
   color: rgb(244, 67, 54) !important;
   font-weight: 600;
+}
+
+.date-input--box {
+  border: 1px solid rgba(var(--v-border-color), 0.4);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
 }
 
 /* Kanban */
