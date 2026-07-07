@@ -407,6 +407,7 @@ Route::middleware('auth:api')->group(function () {
         // Sincronización (persiste en BD)
         Route::post('/sync/clientes',           [WinperfilController::class, 'syncClientes']);
         Route::post('/sync/presupuestos',       [WinperfilController::class, 'syncPresupuestos']);
+        Route::post('/importar-uno',            [WinperfilController::class, 'importarUno']);
         Route::post('/sync/pedidos',            [WinperfilController::class, 'syncPedidos']);
         Route::post('/sync/todo',               [WinperfilController::class, 'syncTodo']);
         Route::post('/sync/resync',             [WinperfilController::class, 'resyncSincronizados']);

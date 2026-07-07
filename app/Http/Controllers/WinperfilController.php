@@ -383,6 +383,52 @@ class WinperfilController extends Controller
     }
 
     /**
+     * Importa UN solo presupuesto por serie + número (el botón "Importar" de cada fila).
+     * Funciona tanto para aceptados como pendientes. Los pendientes NO entran al pipeline
+     * de producción (upsertPresupuesto solo pone estado_produccion cuando ACEPTADO='T').
+     */
+    public function importarUno(Request $request)
+    {
+        $serie  = $request->get('serie', $this->serieDefault);
+        $numero = $request->get('numero');
+
+        if (!$numero) {
+            return response()->json(['error' => 'Falta el número de presupuesto'], 422);
+        }
+
+        try {
+            $res = Http::connectTimeout(15)->timeout(30)->get("{$this->baseUrl}/erp/presupuesto", $this->paramsConImagen([
+                'empresa' => $this->empresa,
+                'serie'   => $serie,
+                'numero'  => $numero,
+            ]));
+
+            if (!$res->successful()) {
+                return response()->json(['error' => 'Winperfil no respondió correctamente'], 502);
+            }
+
+            $body   = $res->json();
+            $oferta = $body['ofertas'][0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+            $pres   = array_merge($oferta['cabecera'] ?? $oferta, ['DETALLES' => $oferta['detalle'] ?? []]);
+
+            // Asegurar el número por si la cabecera no lo trae
+            $pres['PRESUPUESTO_NUMERO'] = $pres['PRESUPUESTO_NUMERO'] ?? $pres['numfactura'] ?? $numero;
+
+            $estados = EstadoCotizacion::all()->keyBy(fn($e) => strtolower($e->nombre));
+            $accion  = $this->upsertPresupuesto($pres, $serie, $this->buildEstadoMap($estados));
+
+            return response()->json([
+                'ok'     => true,
+                'accion' => $accion, // created | updated
+                'numero' => $numero,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Winperfil importarUno', ['serie' => $serie, 'numero' => $numero, 'error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Sincroniza pedidos de Winperfil → tabla winperfil_pedidos.
      */
     public function syncPedidos(Request $request)

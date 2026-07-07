@@ -506,18 +506,20 @@ async function cargarPresupuestos() {
 }
 
 async function syncUno(item) {
-  syncingId.value = item.PRESUPUESTO_NUMERO
+  const numero = item.PRESUPUESTO_NUMERO
+  syncingId.value = numero
   try {
-    await axios.post('/api/winperfil/sync/presupuestos', {
-      serie: filtros.value.serie,
-      desde: fechaParaWinperfil(filtros.value.desde),
-      hasta: fechaParaWinperfil(filtros.value.hasta),
+    // Importa SOLO este presupuesto (no todo el rango de fechas)
+    await axios.post('/api/winperfil/importar-uno', {
+      serie: item.PRESUPUESTO_SERIE || filtros.value.serie,
+      numero,
     })
     // Refrescar estado sync
     await cargarPresupuestos()
     await cargarSync()
   } catch (e) {
     console.error(e)
+    conexion.value = { ok: false, mensaje: e.response?.data?.error || 'No se pudo importar el presupuesto' }
   } finally {
     syncingId.value = null
   }
