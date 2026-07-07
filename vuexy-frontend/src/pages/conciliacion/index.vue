@@ -1131,7 +1131,7 @@
                   <VCardText class="pa-2 d-flex align-center justify-space-between">
                     <div>
                       <VChip size="x-small" color="warning" variant="flat" class="mb-1">Boletas</VChip>
-                      <div class="text-caption font-weight-bold">Boletas {{ a.periodo }}</div>
+                      <div class="text-caption font-weight-bold">Boletas {{ a.periodo }} · {{ labelFormaPago(a.forma_pago) }}</div>
                       <div class="text-caption">Asignado: <strong>{{ formatMonto(a.monto_asignado) }}</strong></div>
                     </div>
                     <VBtn icon size="x-small" variant="text" color="error" :loading="loadingDesasignar === 'b'+a.pivot_id" @click="desasignarBoleta(a.pivot_id)">
@@ -1303,18 +1303,21 @@
                   <VTable v-else density="compact">
                     <thead>
                       <tr>
-                        <th>Período</th><th class="text-right">N° Boletas</th><th class="text-right">Monto Total</th><th class="text-right">Saldo</th><th></th>
+                        <th>Período</th><th>Forma de Pago</th><th class="text-right">N° Boletas</th><th class="text-right">Monto Total</th><th class="text-right">Saldo</th><th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="b in concBoletasDisponibles" :key="b.periodo">
+                      <tr v-for="b in concBoletasDisponibles" :key="b.resumen_id">
                         <td class="font-weight-bold">{{ b.periodo }}</td>
+                        <td>
+                          <VChip size="x-small" label variant="tonal">{{ labelFormaPago(b.forma_pago) }}</VChip>
+                        </td>
                         <td class="text-right">{{ b.total_boletas }}</td>
                         <td class="text-right">{{ formatMonto(b.monto_total) }}</td>
                         <td class="text-right font-weight-bold text-warning">{{ formatMonto(b.saldo_por_cobrar) }}</td>
                         <td>
                           <VBtn size="x-small" color="warning" variant="tonal"
-                            :loading="loadingAsignarBoleta === b.periodo"
+                            :loading="loadingAsignarBoleta === b.resumen_id"
                             :disabled="concSaldoPorAsignar <= 0"
                             @click="asignarBoleta(b)">Seleccionar</VBtn>
                         </td>
@@ -2686,10 +2689,10 @@ async function cargarBoletasDisponibles() {
 }
 
 async function asignarBoleta(boleta) {
-  loadingAsignarBoleta.value = boleta.periodo
+  loadingAsignarBoleta.value = boleta.resumen_id
   try {
     await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/boletas`, {
-      periodo: boleta.periodo,
+      resumen_id: boleta.resumen_id,
       monto: Math.min(concSaldoPorAsignar.value, boleta.saldo_por_cobrar),
     })
     await cargarEstadoConciliar()
@@ -3097,6 +3100,21 @@ const chartOptions = computed(() => ({
 
 function formatMonto(v) {
   return '$' + parseFloat(v || 0).toLocaleString('es-CL', { minimumFractionDigits: 0 })
+}
+
+function labelFormaPago(fp) {
+  const map = {
+    tarjeta_credito: 'Tarjeta Crédito',
+    tarjeta_debito:  'Tarjeta Débito',
+    transferencia:   'Transferencia',
+    efectivo:        'Efectivo',
+    cheque:          'Cheque',
+    credito:         'Crédito',
+    nota_credito:    'Nota Crédito',
+    otros:           'Otros',
+    sin_informacion: 'Sin Información',
+  }
+  return map[fp] ?? fp ?? '—'
 }
 
 function descLimpia(desc) {

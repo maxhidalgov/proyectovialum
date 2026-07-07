@@ -215,66 +215,81 @@ class BoletaResumenController extends Controller
     // ══════════════════════════════════════════════════════════════════════════
 
     // ── GET /api/conciliacion/movimientos/{id}/boletas ────────────────────────
+    // Resúmenes (mes + forma de pago) ya asignados a este movimiento
     public function asignadosPorMovimiento(int $movId)
     {
-        $asignados = DB::table('boleta_periodo_movimiento')
-            ->where('movimiento_id', $movId)
-            ->select('id as pivot_id', 'periodo', 'monto as monto_asignado')
-            ->orderBy('periodo')
+        $asignados = DB::table('boleta_resumen_movimiento as brm')
+            ->join('boleta_resumenes as br', 'br.id', '=', 'brm.boleta_resumen_id')
+            ->where('brm.movimiento_id', $movId)
+            ->select(
+                'brm.id as pivot_id',
+                'br.id as resumen_id',
+                'br.periodo',
+                'br.forma_pago',
+                'brm.monto as monto_asignado'
+            )
+            ->orderBy('br.periodo')
+            ->orderBy('br.forma_pago')
             ->get();
 
         return response()->json(['asignados' => $asignados]);
     }
 
     // ── GET /api/conciliacion/movimientos/{id}/boletas-disponibles ────────────
+    // Resúmenes por mes Y forma de pago, con su saldo por cobrar
     public function disponiblesPorMovimiento(int $movId)
     {
-        // Periodos con boletas (agrupados, suma de todas las formas_pago)
-        $periodos = DB::table('boleta_resumenes')
-            ->selectRaw("periodo, SUM(total_boletas) as total_boletas, SUM(monto_total) as monto_total")
-            ->groupBy('periodo')
-            ->orderByDesc('periodo')
+        $resumenes = DB::table('boleta_resumenes as br')
+            ->leftJoin(
+                DB::raw('(SELECT boleta_resumen_id, SUM(monto) as asignado FROM boleta_resumen_movimiento GROUP BY boleta_resumen_id) as brm'),
+                'br.id', '=', 'brm.boleta_resumen_id'
+            )
+            ->select(
+                'br.id as resumen_id',
+                'br.periodo',
+                'br.forma_pago',
+                'br.total_boletas',
+                'br.monto_total',
+                'br.conciliado_transbank',
+                DB::raw('COALESCE(brm.asignado, 0) as asignado')
+            )
+            ->orderByDesc('br.periodo')
+            ->orderBy('br.forma_pago')
             ->get();
 
-        // Ya asignado a CUALQUIER movimiento por periodo
-        $asignados = DB::table('boleta_periodo_movimiento')
-            ->selectRaw('periodo, SUM(monto) as asignado')
-            ->groupBy('periodo')
-            ->pluck('asignado', 'periodo');
-
-        // Periodos ya vinculados a ESTE movimiento (excluir)
-        $yaVinculados = DB::table('boleta_periodo_movimiento')
-            ->where('movimiento_id', $movId)
-            ->pluck('periodo')
-            ->all();
-
-        $result = $periodos
-            ->filter(fn($p) => !in_array($p->periodo, $yaVinculados))
-            ->map(fn($p) => [
-                'periodo'         => $p->periodo,
-                'total_boletas'   => $p->total_boletas,
-                'monto_total'     => (float) $p->monto_total,
-                'saldo_por_cobrar'=> max(0, (float) $p->monto_total - (float) ($asignados[$p->periodo] ?? 0)),
-            ])
-            ->filter(fn($p) => $p['saldo_por_cobrar'] > 0)
-            ->values();
+        $result = $resumenes->map(function ($r) {
+            $transbank = !empty($r->conciliado_transbank) ? (float) $r->monto_total : 0;
+            $saldo     = max(0, (float) $r->monto_total - (float) $r->asignado - $transbank);
+            return [
+                'resumen_id'       => $r->resumen_id,
+                'periodo'          => $r->periodo,
+                'forma_pago'       => $r->forma_pago,
+                'total_boletas'    => $r->total_boletas,
+                'monto_total'      => (float) $r->monto_total,
+                'saldo_por_cobrar' => $saldo,
+            ];
+        })
+        ->filter(fn ($r) => $r['saldo_por_cobrar'] > 0)
+        ->values();
 
         return response()->json($result);
     }
 
     // ── POST /api/conciliacion/movimientos/{id}/boletas ───────────────────────
+    // Vincula el movimiento a un resumen concreto (mes + forma de pago)
     public function vincularPorMovimiento(Request $request, int $movId)
     {
         $request->validate([
-            'periodo' => 'required|string|size:7',
-            'monto'   => 'required|numeric|min:0.01',
+            'resumen_id' => 'required|integer|exists:boleta_resumenes,id',
+            'monto'      => 'required|numeric|min:0.01',
         ]);
 
-        DB::table('boleta_periodo_movimiento')->updateOrInsert(
-            ['periodo' => $request->periodo, 'movimiento_id' => $movId],
+        DB::table('boleta_resumen_movimiento')->updateOrInsert(
+            ['boleta_resumen_id' => $request->resumen_id, 'movimiento_id' => $movId],
             ['monto' => $request->monto, 'updated_at' => now(), 'created_at' => now()]
         );
 
+        $this->recalcularConciliado((int) $request->resumen_id);
         $this->actualizarConciliadoMovimiento($movId);
 
         return response()->json(['ok' => true], 201);
@@ -283,12 +298,16 @@ class BoletaResumenController extends Controller
     // ── DELETE /api/conciliacion/movimientos/{id}/boletas/{pivotId} ───────────
     public function destroyPorMovimiento(int $movId, int $pivotId)
     {
-        DB::table('boleta_periodo_movimiento')
+        $pivot = DB::table('boleta_resumen_movimiento')
             ->where('id', $pivotId)
             ->where('movimiento_id', $movId)
-            ->delete();
+            ->first();
 
-        $this->actualizarConciliadoMovimiento($movId);
+        if ($pivot) {
+            DB::table('boleta_resumen_movimiento')->where('id', $pivotId)->delete();
+            $this->recalcularConciliado((int) $pivot->boleta_resumen_id);
+            $this->actualizarConciliadoMovimiento($movId);
+        }
 
         return response()->json(null, 204);
     }
