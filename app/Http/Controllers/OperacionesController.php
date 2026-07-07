@@ -17,7 +17,7 @@ class OperacionesController extends Controller
     // Cotizaciones aprobadas/en producción/entregadas con datos de operaciones
     public function index()
     {
-        $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'estado', 'ventanas', 'historialEstados'])
+        $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'estado', 'ventanas', 'detalles', 'historialEstados'])
             ->whereHas('estado', fn($q) => $q->whereNotIn('nombre', [
                 'Evaluación', 'Rechazada', 'Anulada',
             ]))
@@ -36,10 +36,23 @@ class OperacionesController extends Controller
 
         $items = $cotizaciones->map(function ($c) use ($cobrados) {
             $totalAbonado = (float) ($cobrados[$c->id] ?? 0);
-            $cantVentanas = $c->ventanas->sum('cantidad');
-            $m2           = $c->ventanas->sum(fn($v) =>
-                ($v->ancho / 1000) * ($v->alto / 1000) * ($v->cantidad ?? 1)
-            );
+
+            // App: ventanas viven en la tabla `ventanas`. Winperfil: viven en
+            // `cotizacion_detalles` (esVidrio=false, con ancho_mm/alto_mm).
+            if ($c->ventanas->isNotEmpty()) {
+                $cantVentanas = $c->ventanas->sum('cantidad');
+                $m2           = $c->ventanas->sum(fn($v) =>
+                    ($v->ancho / 1000) * ($v->alto / 1000) * ($v->cantidad ?? 1)
+                );
+            } else {
+                $ventDet = $c->detalles->filter(fn($d) =>
+                    !$d->esVidrio && $d->ancho_mm && $d->alto_mm
+                );
+                $cantVentanas = $ventDet->sum('cantidad');
+                $m2           = $ventDet->sum(fn($d) =>
+                    ($d->ancho_mm / 1000) * ($d->alto_mm / 1000) * ($d->cantidad ?? 1)
+                );
+            }
 
             $tiempos = $this->tiempos($c);
 
