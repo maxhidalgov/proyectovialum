@@ -212,6 +212,31 @@
             />
           </template>
 
+          <!-- Tiempos (T0 = medición) -->
+          <template #item.tiempos="{ item }">
+            <div class="d-flex align-center gap-1">
+              <div v-if="item.medido_en">
+                <v-chip
+                  size="x-small"
+                  :color="item.instalado_en ? 'success' : 'indigo'"
+                  variant="tonal"
+                  prepend-icon="mdi-timer-outline"
+                >
+                  {{ item.dias_produccion }} d
+                </v-chip>
+                <div class="text-caption text-grey mt-1">
+                  Medido: {{ item.medido_en }}{{ item.instalado_en ? '' : ' · en curso' }}
+                </div>
+              </div>
+              <span v-else class="text-caption text-grey">Sin medir</span>
+              <v-tooltip text="Ver línea de tiempo" location="top">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" size="x-small" variant="text" icon="mdi-timeline-clock-outline" @click="abrirTimeline(item)" />
+                </template>
+              </v-tooltip>
+            </div>
+          </template>
+
           <!-- Ventanas / M² -->
           <template #item.cant_ventanas="{ item }">
             <v-chip size="small" color="blue" variant="tonal">{{ item.cant_ventanas }}</v-chip>
@@ -314,6 +339,64 @@
       </div>
     </template>
 
+    <!-- Línea de tiempo -->
+    <v-dialog v-model="timeline.show" max-width="540">
+      <v-card v-if="timeline.item">
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="indigo">mdi-timeline-clock-outline</v-icon>
+          <div>
+            <div class="text-body-1 font-weight-bold">{{ timeline.item.cliente }}</div>
+            <div class="text-caption text-grey">
+              Línea de tiempo · T0 = medición
+              <template v-if="timeline.item.medido_en">
+                · {{ timeline.item.dias_produccion }} días {{ timeline.item.instalado_en ? 'de producción' : 'en curso' }}
+              </template>
+            </div>
+          </div>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <v-timeline v-if="timeline.item.timeline?.length" density="compact" side="end" truncate-line="both">
+            <v-timeline-item
+              v-for="h in timeline.item.timeline"
+              :key="h.id"
+              :dot-color="h.tipo === 'produccion' ? colorEstadoProd(h.estado) : 'teal'"
+              size="x-small"
+            >
+              <div class="d-flex justify-space-between align-center gap-3">
+                <div>
+                  <div class="text-body-2 font-weight-medium">{{ h.estado || '—' }}</div>
+                  <div class="text-caption text-grey">
+                    {{ h.tipo === 'produccion' ? 'Producción' : 'Comercial' }}
+                    <span v-if="h.estado === 'Lista para Corte'" class="text-indigo font-weight-bold">· medición (T0)</span>
+                  </div>
+                </div>
+                <input
+                  v-if="h.tipo === 'produccion'"
+                  type="date"
+                  :value="(h.fecha || '').slice(0, 10)"
+                  class="date-input"
+                  @change="e => guardarFechaHito(h, e.target.value)"
+                />
+                <span v-else class="text-caption text-grey">{{ (h.fecha || '').slice(0, 10) }}</span>
+              </div>
+            </v-timeline-item>
+          </v-timeline>
+          <div v-else class="text-center text-caption text-grey py-6">
+            Sin historial aún. Se registrará automáticamente con cada cambio de estado.
+          </div>
+          <p class="text-caption text-grey mt-2">
+            Puedes corregir la fecha de un hito de producción (ej: el día real de medición) haciendo clic en ella.
+          </p>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="timeline.show = false">Cerrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snack.show" :color="snack.color" timeout="3000" location="top">
       {{ snack.msg }}
     </v-snackbar>
@@ -367,15 +450,14 @@ function estaVencida(item) {
 }
 
 function diasEnEstado(item) {
-  const ref = item.fecha_entrega || item.fecha
-  const d   = new Date(ref)
-  return Math.floor((hoy - d) / 86400000)
+  // Días reales en el estado de producción actual (según último cambio registrado)
+  return item.dias_en_estado ?? 0
 }
 
 function sinMoverMucho(item) {
-  // Alerta si tiene estado_produccion asignado y lleva más de DIAS_ALERTA en la misma fecha
-  if (!item.estado_produccion) return false
-  return diasEnEstado(item) > DIAS_ALERTA
+  // Alerta si tiene estado_produccion asignado y lleva más de DIAS_ALERTA sin cambiarlo
+  if (!item.estado_produccion || item.dias_en_estado == null) return false
+  return item.dias_en_estado > DIAS_ALERTA
 }
 
 const alertas = computed(() => ({
@@ -397,6 +479,7 @@ const statCards = computed(() => [
   { label: 'Total a cobrar', valor: fmt(stats.value.total_facturado),          color: 'green',   icon: 'mdi-currency-usd'   },
   { label: 'Abonado',        valor: fmt(stats.value.total_abonado),            color: 'success', icon: 'mdi-cash-check'     },
   { label: 'Saldo pendiente',valor: fmt(stats.value.total_saldo),              color: 'warning', icon: 'mdi-cash-clock'     },
+  { label: 'Días prod. prom',valor: stats.value.dias_produccion_prom != null ? `${stats.value.dias_produccion_prom} d` : '—', color: 'indigo', icon: 'mdi-timer-outline' },
 ])
 
 // ── Tabla ────────────────────────────────────────────────────────
@@ -411,6 +494,7 @@ const headers = [
   { title: 'Pedido Prov.', value: 'pedido_proveedor',  width: 100 },
   { title: 'Estado Prod.', value: 'estado_produccion', width: 220 },
   { title: 'Entrega',      value: 'fecha_entrega',     width: 140 },
+  { title: 'Tiempos',      value: 'tiempos',           width: 150, sortable: false },
   { title: 'Ventanas',     value: 'cant_ventanas',     width: 90  },
   { title: 'M²',           value: 'm2',                width: 80  },
   { title: 'Notas',        value: 'notas_operaciones', width: 180 },
@@ -484,6 +568,27 @@ async function updateCampo(item, campo, valor) {
   } catch {
     mostrarSnack('Error al guardar', 'error')
     cargar()
+  }
+}
+
+// ── Línea de tiempo ──────────────────────────────────────────────
+const timeline = ref({ show: false, item: null })
+
+function abrirTimeline(item) {
+  timeline.value = { show: true, item }
+}
+
+async function guardarFechaHito(hito, fecha) {
+  if (!fecha) return
+  try {
+    await api.patch(`/api/operaciones/historial/${hito.id}`, { fecha })
+    mostrarSnack('Fecha actualizada')
+    await cargar()
+    // Refrescar el item abierto en el diálogo con los datos recalculados
+    const fresh = cotizaciones.value.find(c => c.id === timeline.value.item?.id)
+    if (fresh) timeline.value.item = fresh
+  } catch {
+    mostrarSnack('Error al actualizar la fecha', 'error')
   }
 }
 

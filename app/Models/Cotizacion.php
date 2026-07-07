@@ -100,4 +100,46 @@ class Cotizacion extends Model
     {
         return $this->hasMany(DocumentoFacturacion::class);
     }
+
+    public function historialEstados()
+    {
+        return $this->hasMany(CotizacionEstadoHistorial::class);
+    }
+
+    /**
+     * Registrar automáticamente cada cambio de estado (producción o comercial)
+     * en el historial, sin importar desde qué controlador se haga el cambio.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (Cotizacion $c) {
+            if ($c->wasChanged('estado_produccion')) {
+                $c->historialEstados()->create([
+                    'tipo'            => 'produccion',
+                    'estado'          => $c->estado_produccion,
+                    'estado_anterior' => $c->getOriginal('estado_produccion'),
+                    'fecha'           => now(),
+                ]);
+            }
+
+            if ($c->wasChanged('estado_cotizacion_id')) {
+                $c->historialEstados()->create([
+                    'tipo'            => 'comercial',
+                    'estado'          => optional(EstadoCotizacion::find($c->estado_cotizacion_id))->nombre,
+                    'estado_anterior' => optional(EstadoCotizacion::find($c->getOriginal('estado_cotizacion_id')))->nombre,
+                    'fecha'           => now(),
+                ]);
+            }
+        });
+
+        static::created(function (Cotizacion $c) {
+            if ($c->estado_produccion) {
+                $c->historialEstados()->create([
+                    'tipo'   => 'produccion',
+                    'estado' => $c->estado_produccion,
+                    'fecha'  => now(),
+                ]);
+            }
+        });
+    }
 }

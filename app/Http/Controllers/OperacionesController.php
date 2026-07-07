@@ -3,15 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cotizacion;
+use App\Models\CotizacionEstadoHistorial;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class OperacionesController extends Controller
 {
+    // Hito que marca el inicio del reloj de producción (T0)
+    private const ESTADO_MEDICION = 'Lista para Corte';
+    private const ESTADO_INSTALADA = 'Instalada';
+
     // Cotizaciones aprobadas/en producción/entregadas con datos de operaciones
     public function index()
     {
-        $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'estado', 'ventanas'])
+        $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'estado', 'ventanas', 'historialEstados'])
             ->whereHas('estado', fn($q) => $q->whereNotIn('nombre', [
                 'Evaluación', 'Rechazada', 'Anulada',
             ]))
@@ -35,6 +41,8 @@ class OperacionesController extends Controller
                 ($v->ancho / 1000) * ($v->alto / 1000) * ($v->cantidad ?? 1)
             );
 
+            $tiempos = $this->tiempos($c);
+
             return [
                 'id'                 => $c->id,
                 'cliente'            => $c->cliente?->razon_social
@@ -51,8 +59,17 @@ class OperacionesController extends Controller
                 'notas_operaciones'  => $c->notas_operaciones,
                 'cant_ventanas'      => (int) $cantVentanas,
                 'm2'                 => round($m2, 2),
+                // Métricas de tiempo (T0 = medición)
+                'medido_en'          => $tiempos['medido_en'],
+                'instalado_en'       => $tiempos['instalado_en'],
+                'dias_produccion'    => $tiempos['dias_produccion'],
+                'dias_en_estado'     => $tiempos['dias_en_estado'],
+                'timeline'           => $tiempos['timeline'],
             ];
         });
+
+        // Promedio de días de producción (medición → instalación) de las ya instaladas
+        $completadas = $items->whereNotNull('dias_produccion')->pluck('dias_produccion');
 
         $stats = [
             'total_cotizaciones' => $items->count(),
@@ -61,6 +78,7 @@ class OperacionesController extends Controller
             'total_facturado'    => $items->sum('total'),
             'total_abonado'      => $items->sum('total_abonado'),
             'total_saldo'        => $items->sum('saldo'),
+            'dias_produccion_prom' => $completadas->count() ? round($completadas->avg(), 1) : null,
         ];
 
         return response()->json([
@@ -85,5 +103,64 @@ class OperacionesController extends Controller
         ]));
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Editar la fecha de un hito del historial (ej: corregir el día real de medición).
+     */
+    public function actualizarHistorial(Request $request, $id)
+    {
+        $request->validate(['fecha' => 'required|date']);
+
+        $registro = CotizacionEstadoHistorial::findOrFail($id);
+        $registro->update(['fecha' => $request->fecha]);
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Calcula las métricas de tiempo de una cotización a partir de su historial de estados.
+     * T0 = medición (entrada a "Lista para Corte").
+     */
+    private function tiempos(Cotizacion $c): array
+    {
+        $prod = $c->historialEstados
+            ->where('tipo', 'produccion')
+            ->sortBy('fecha')
+            ->values();
+
+        $medidoEn    = optional($prod->firstWhere('estado', self::ESTADO_MEDICION))->fecha;
+        $instaladoEn = optional($prod->firstWhere('estado', self::ESTADO_INSTALADA))->fecha;
+
+        $diasProduccion = null;
+        if ($medidoEn) {
+            $fin = $instaladoEn ?? Carbon::now();
+            $diasProduccion = (int) $medidoEn->copy()->startOfDay()->diffInDays($fin->copy()->startOfDay());
+        }
+
+        // Días en el estado de producción actual (real, según último cambio)
+        $ultimo = $prod->last();
+        $diasEnEstado = $ultimo
+            ? (int) $ultimo->fecha->copy()->startOfDay()->diffInDays(Carbon::now()->startOfDay())
+            : null;
+
+        $timeline = $c->historialEstados
+            ->sortBy('fecha')
+            ->values()
+            ->map(fn ($h) => [
+                'id'              => $h->id,
+                'tipo'            => $h->tipo,
+                'estado'          => $h->estado,
+                'estado_anterior' => $h->estado_anterior,
+                'fecha'           => $h->fecha?->toDateTimeString(),
+            ]);
+
+        return [
+            'medido_en'       => $medidoEn?->toDateString(),
+            'instalado_en'    => $instaladoEn?->toDateString(),
+            'dias_produccion' => $diasProduccion,
+            'dias_en_estado'  => $diasEnEstado,
+            'timeline'        => $timeline,
+        ];
     }
 }
