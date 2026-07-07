@@ -204,12 +204,24 @@
 
           <!-- Fecha entrega -->
           <template #item.fecha_entrega="{ item }">
-            <input
-              type="date"
-              :value="item.fecha_entrega ?? ''"
-              :class="['date-input', estaVencida(item) ? 'date-vencida' : '']"
-              @change="e => updateCampo(item, 'fecha_entrega', e.target.value || null)"
-            />
+            <div class="d-flex flex-column">
+              <input
+                type="date"
+                :value="item.fecha_entrega ?? ''"
+                :class="['date-input', estaVencida(item) ? 'date-vencida' : '']"
+                @change="e => updateCampo(item, 'fecha_entrega', e.target.value || null)"
+              />
+              <button
+                v-if="!item.fecha_entrega && item.entrega_sugerida"
+                type="button"
+                class="sugerida-link"
+                title="Usar fecha sugerida por el sistema"
+                @click="updateCampo(item, 'fecha_entrega', item.entrega_sugerida)"
+              >
+                <v-icon size="11">mdi-lightbulb-on-outline</v-icon>
+                Sugerida: {{ fmtFechaCorta(item.entrega_sugerida) }}
+              </button>
+            </div>
           </template>
 
           <!-- Tiempos (T0 = medición) -->
@@ -670,6 +682,12 @@ function fmt(val) {
     style: 'currency', currency: 'CLP', maximumFractionDigits: 0,
   }).format(val || 0)
 }
+
+function fmtFechaCorta(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}-${m}`
+}
 </script>
 
 <style scoped>
@@ -710,6 +728,21 @@ function fmt(val) {
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.85rem;
+}
+
+.sugerida-link {
+  background: transparent;
+  border: none;
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.7rem;
+  cursor: pointer;
+  text-align: left;
+  padding: 2px 0 0;
+  opacity: 0.85;
+}
+.sugerida-link:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* Kanban */

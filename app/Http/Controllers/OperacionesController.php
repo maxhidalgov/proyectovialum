@@ -14,6 +14,9 @@ class OperacionesController extends Controller
     private const ESTADO_MEDICION = 'Lista para Corte';
     private const ESTADO_INSTALADA = 'Instalada';
 
+    // Días hábiles de producción por defecto (para la entrega sugerida cuando aún no hay histórico)
+    private const DIAS_PRODUCCION_DEFAULT = 15;
+
     // Cotizaciones aprobadas/en producción/entregadas con datos de operaciones
     public function index()
     {
@@ -81,8 +84,18 @@ class OperacionesController extends Controller
             ];
         });
 
-        // Promedio de días de producción (medición → instalación) de las ya instaladas
-        $completadas = $items->whereNotNull('dias_produccion')->pluck('dias_produccion');
+        // Promedio de días hábiles de producción (medición → instalación) de las ya instaladas
+        $completadas = $items->whereNotNull('instalado_en')->pluck('dias_produccion')->filter(fn($d) => $d !== null);
+        $promedio    = $completadas->count() ? round($completadas->avg(), 1) : null;
+
+        // Entrega sugerida = medición + días hábiles de producción (promedio histórico o default)
+        $leadDays = $promedio ? (int) round($promedio) : self::DIAS_PRODUCCION_DEFAULT;
+        $items = $items->map(function ($it) use ($leadDays) {
+            $it['entrega_sugerida'] = $it['medido_en']
+                ? Carbon::parse($it['medido_en'])->addWeekdays($leadDays)->toDateString()
+                : null;
+            return $it;
+        });
 
         $stats = [
             'total_cotizaciones' => $items->count(),
@@ -91,7 +104,8 @@ class OperacionesController extends Controller
             'total_facturado'    => $items->sum('total'),
             'total_abonado'      => $items->sum('total_abonado'),
             'total_saldo'        => $items->sum('saldo'),
-            'dias_produccion_prom' => $completadas->count() ? round($completadas->avg(), 1) : null,
+            'dias_produccion_prom' => $promedio,
+            'lead_days'          => $leadDays,
         ];
 
         return response()->json([
@@ -177,16 +191,17 @@ class OperacionesController extends Controller
         $medidoEn    = optional($prod->firstWhere('estado', self::ESTADO_MEDICION))->fecha;
         $instaladoEn = optional($prod->firstWhere('estado', self::ESTADO_INSTALADA))->fecha;
 
+        // Tiempos en días HÁBILES (lunes a viernes), no corridos
         $diasProduccion = null;
         if ($medidoEn) {
             $fin = $instaladoEn ?? Carbon::now();
-            $diasProduccion = (int) $medidoEn->copy()->startOfDay()->diffInDays($fin->copy()->startOfDay());
+            $diasProduccion = (int) $medidoEn->copy()->startOfDay()->diffInWeekdays($fin->copy()->startOfDay());
         }
 
-        // Días en el estado de producción actual (real, según último cambio)
+        // Días hábiles en el estado de producción actual (real, según último cambio)
         $ultimo = $prod->last();
         $diasEnEstado = $ultimo
-            ? (int) $ultimo->fecha->copy()->startOfDay()->diffInDays(Carbon::now()->startOfDay())
+            ? (int) $ultimo->fecha->copy()->startOfDay()->diffInWeekdays(Carbon::now()->startOfDay())
             : null;
 
         $timeline = $c->historialEstados
