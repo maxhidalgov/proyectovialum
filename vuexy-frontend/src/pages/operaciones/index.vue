@@ -494,6 +494,8 @@ hoy.setHours(0, 0, 0, 0)
 
 function estaVencida(item) {
   if (!item.fecha_entrega) return false
+  // Una obra ya instalada/entregada no cuenta como vencida
+  if (item.estado_produccion === 'Instalada' || item.instalado_en) return false
   return new Date(item.fecha_entrega) < hoy
 }
 
