@@ -520,20 +520,20 @@ const statCards = computed(() => [
 
 // ── Tabla ────────────────────────────────────────────────────────
 const headers = [
-  { title: '#',            value: 'id',                width: 60  },
-  { title: 'Cliente',      value: 'cliente',           width: 180 },
-  { title: 'Vendedor',     value: 'vendedor',          width: 120 },
-  { title: 'Estado',       value: 'estado',            width: 120 },
-  { title: 'Total',        value: 'total',             width: 120 },
-  { title: 'Abonado',      value: 'total_abonado',     width: 130 },
-  { title: 'Saldo',        value: 'saldo',             width: 110 },
-  { title: 'Pedido Prov.', value: 'pedido_proveedor',  width: 100 },
-  { title: 'Estado Prod.', value: 'estado_produccion', width: 220 },
-  { title: 'Entrega',      value: 'fecha_entrega',     width: 140 },
-  { title: 'Tiempos',      value: 'tiempos',           width: 150, sortable: false },
-  { title: 'Ventanas',     value: 'cant_ventanas',     width: 90  },
-  { title: 'M²',           value: 'm2',                width: 80  },
-  { title: 'Notas',        value: 'notas_operaciones', width: 180 },
+  { title: '#',            value: 'id',                width: 48  },
+  { title: 'Cliente',      value: 'cliente',           width: 150 },
+  { title: 'Vendedor',     value: 'vendedor',          width: 100 },
+  { title: 'Estado',       value: 'estado',            width: 100 },
+  { title: 'Total',        value: 'total',             width: 100 },
+  { title: 'Abonado',      value: 'total_abonado',     width: 100 },
+  { title: 'Saldo',        value: 'saldo',             width: 95  },
+  { title: 'Pedido Prov.', value: 'pedido_proveedor',  width: 70  },
+  { title: 'Estado Prod.', value: 'estado_produccion', width: 180 },
+  { title: 'Entrega',      value: 'fecha_entrega',     width: 130 },
+  { title: 'Tiempos',      value: 'tiempos',           width: 130, sortable: false },
+  { title: 'Ventanas',     value: 'cant_ventanas',     width: 75  },
+  { title: 'M²',           value: 'm2',                width: 65  },
+  { title: 'Notas',        value: 'notas_operaciones', width: 150 },
 ]
 
 const estadosProduccion = [
@@ -671,6 +671,11 @@ function fmt(val) {
 .operaciones-table :deep(td) {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
+}
+
+/* La tabla scrollea horizontalmente dentro de la card si no cabe */
+.operaciones-table :deep(.v-table__wrapper) {
+  overflow-x: auto;
 }
 
 .operaciones-table :deep(.row-vencida td) {
