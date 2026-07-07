@@ -601,6 +601,8 @@ async function updateCampo(item, campo, valor) {
   item[campo] = valor
   try {
     await api.patch(`/api/operaciones/${item.id}`, { [campo]: valor })
+    // Cambiar el estado de producción genera un hito → refrescar tiempos/línea de tiempo
+    if (campo === 'estado_produccion') await cargar()
   } catch {
     mostrarSnack('Error al guardar', 'error')
     cargar()
@@ -611,8 +613,11 @@ async function updateCampo(item, campo, valor) {
 const timeline  = ref({ show: false, item: null })
 const nuevoHito = ref({ estado: null, fecha: '' })
 
-function abrirTimeline(item) {
-  timeline.value = { show: true, item }
+async function abrirTimeline(item) {
+  // Traer datos frescos para que la línea de tiempo refleje los últimos cambios
+  await cargar()
+  const fresh = cotizaciones.value.find(c => c.id === item.id) || item
+  timeline.value = { show: true, item: fresh }
   nuevoHito.value = { estado: null, fecha: '' }
 }
 
