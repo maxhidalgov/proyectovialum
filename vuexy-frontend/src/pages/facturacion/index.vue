@@ -138,10 +138,12 @@
           <div v-if="item.documentos_facturacion?.some(d => d.estado === 'emitido')" style="min-width: 100px">
             <div class="d-flex justify-space-between text-caption mb-1">
               <span class="text-info">Fact: {{ pctEmitido(item) }}%</span>
-              <span class="text-success">Cobr: {{ pctCobrado(item) }}%</span>
+              <span v-if="soloBoletas(item)" class="text-info" title="El cobro de boletas se concilia en el módulo Boletas">🧾 Boleta</span>
+              <span v-else class="text-success">Cobr: {{ pctCobrado(item) }}%</span>
             </div>
             <v-progress-linear :model-value="pctEmitido(item)" color="info" bg-color="grey-lighten-3" rounded height="3" class="mb-1" />
-            <v-progress-linear :model-value="pctCobrado(item)" color="success" bg-color="grey-lighten-3" rounded height="3" />
+            <v-progress-linear v-if="!soloBoletas(item)" :model-value="pctCobrado(item)" color="success" bg-color="grey-lighten-3" rounded height="3" />
+            <div v-else class="text-caption text-info">cobro en módulo Boletas</div>
           </div>
           <span v-else class="text-caption text-disabled">—</span>
         </template>
@@ -319,22 +321,33 @@
 
                       <!-- Totales globales cobro -->
                       <div class="mt-2 pa-2 rounded bg-surface-variant">
-                        <div class="d-flex justify-space-between text-caption mb-1">
-                          <span>Facturado: {{ clp(item.total_emitido || 0) }}</span>
-                          <span>Cobrado: {{ clp(item.total_cobrado || 0) }}</span>
-                        </div>
-                        <v-progress-linear
-                          :model-value="(item.total_emitido || 0) > 0 ? ((item.total_cobrado || 0) / item.total_emitido) * 100 : 0"
-                          color="success"
-                          bg-color="warning"
-                          rounded height="6"
-                        />
-                        <div v-if="(item.saldo_por_cobrar || 0) > 0" class="text-caption text-warning text-end mt-1">
-                          Por cobrar: {{ clp(item.saldo_por_cobrar) }}
-                        </div>
-                        <div v-else-if="(item.total_cobrado || 0) > 0" class="text-caption text-success text-end mt-1">
-                          ✓ Completamente cobrada
-                        </div>
+                        <!-- Boletas: el cobro no se cuadra aquí sino en el módulo Boletas -->
+                        <template v-if="soloBoletas(item)">
+                          <div class="d-flex justify-space-between align-center text-caption">
+                            <span>Facturado (boleta): {{ clp(item.total_emitido || 0) }}</span>
+                            <v-btn size="x-small" variant="text" color="info" to="/boletas" @click.stop>
+                              Cobro en módulo Boletas →
+                            </v-btn>
+                          </div>
+                        </template>
+                        <template v-else>
+                          <div class="d-flex justify-space-between text-caption mb-1">
+                            <span>Facturado: {{ clp(item.total_emitido || 0) }}</span>
+                            <span>Cobrado: {{ clp(item.total_cobrado || 0) }}</span>
+                          </div>
+                          <v-progress-linear
+                            :model-value="(item.total_emitido || 0) > 0 ? ((item.total_cobrado || 0) / item.total_emitido) * 100 : 0"
+                            color="success"
+                            bg-color="warning"
+                            rounded height="6"
+                          />
+                          <div v-if="(item.saldo_por_cobrar || 0) > 0" class="text-caption text-warning text-end mt-1">
+                            Por cobrar: {{ clp(item.saldo_por_cobrar) }}
+                          </div>
+                          <div v-else-if="(item.total_cobrado || 0) > 0" class="text-caption text-success text-end mt-1">
+                            ✓ Completamente cobrada
+                          </div>
+                        </template>
                       </div>
                     </div>
 
@@ -886,6 +899,12 @@ const textoEstado = (e) => ({ aprobada: 'Por facturar', facturada: 'Facturada', 
 
 // Boleta electrónica (tipo_documento_bsale_id = 1): su cobro se gestiona en el módulo Boletas
 const esBoleta = (doc) => Number(doc?.tipo_documento_bsale_id) === 1
+
+// Cotización cuyos documentos emitidos son todos boletas → el cobro no se cuadra aquí
+function soloBoletas(item) {
+  const emitidos = item.documentos_facturacion?.filter(d => d.estado === 'emitido') || []
+  return emitidos.length > 0 && emitidos.every(esBoleta)
+}
 
 function mostrarSnack(text, color = 'success') {
   snack.value = { show: true, text, color }
