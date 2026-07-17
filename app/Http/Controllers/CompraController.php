@@ -53,6 +53,23 @@ class CompraController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // GET /api/compras/categorias — categorías conocidas (de compras + reglas)
+    // -------------------------------------------------------------------------
+    public function categorias()
+    {
+        $deCompras = DB::table('compras')->whereNotNull('categoria')->distinct()->pluck('categoria');
+        $deReglas  = DB::table('reglas_categoria_proveedor')->distinct()->pluck('categoria');
+
+        $todas = $deCompras->merge($deReglas)
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        return response()->json($todas);
+    }
+
+    // -------------------------------------------------------------------------
     // GET /api/compras/{id}
     // -------------------------------------------------------------------------
     public function show(Compra $compra)

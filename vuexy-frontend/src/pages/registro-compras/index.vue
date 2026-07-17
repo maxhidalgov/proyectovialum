@@ -188,10 +188,22 @@
 
         <!-- Categoría -->
         <template #item.categoria="{ item }">
-          <VChip v-if="item.categoria" size="x-small" color="secondary" variant="tonal">
-            {{ item.categoria }}
-          </VChip>
-          <span v-else class="text-caption text-disabled">—</span>
+          <div class="d-flex align-center" style="gap:4px">
+            <VChip v-if="item.categoria" size="x-small" color="secondary" variant="tonal">
+              {{ item.categoria }}
+            </VChip>
+            <span v-else class="text-caption text-disabled">Sin categoría</span>
+            <VBtn
+              size="x-small"
+              variant="text"
+              icon
+              :color="item.categoria ? 'default' : 'primary'"
+              :title="item.categoria ? 'Cambiar categoría' : 'Asignar categoría'"
+              @click="abrirCategoria(item)"
+            >
+              <VIcon size="14">{{ item.categoria ? 'mdi-pencil' : 'mdi-plus-circle-outline' }}</VIcon>
+            </VBtn>
+          </div>
         </template>
 
         <!-- Total -->
@@ -444,6 +456,54 @@
         </VCardText>
       </VCard>
     </VDialog>
+
+    <!-- ── Dialog Categorizar ──────────────────────────────────────────────────── -->
+    <VDialog v-model="catDialog.show" max-width="460">
+      <VCard v-if="catDialog.compra">
+        <VCardTitle class="pa-4 pb-2 d-flex align-center gap-2">
+          <VIcon color="primary">mdi-tag-outline</VIcon>
+          Categorizar compra
+        </VCardTitle>
+        <VCardText>
+          <div class="text-caption text-medium-emphasis mb-3">
+            {{ tipoLabel(catDialog.compra) }} {{ catDialog.compra.folio }} ·
+            {{ catDialog.compra.nombre_emisor }}
+          </div>
+          <VCombobox
+            v-model="catDialog.categoria"
+            :items="categoriasDisponibles"
+            label="Categoría"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="mb-3"
+          />
+          <VCheckbox
+            v-model="catDialog.crearRegla"
+            density="compact"
+            hide-details
+            color="primary"
+            label="Aplicar a todas las compras de este proveedor (crear regla)"
+          />
+          <p class="text-caption text-medium-emphasis mt-2 mb-0">
+            Con la regla activada se categorizan también las demás facturas de
+            <strong>{{ catDialog.compra.nombre_emisor }}</strong> y las que lleguen a futuro.
+          </p>
+        </VCardText>
+        <VCardActions class="pa-3">
+          <VSpacer />
+          <VBtn variant="text" @click="catDialog.show = false">Cancelar</VBtn>
+          <VBtn
+            color="primary"
+            :loading="catDialog.loading"
+            :disabled="!catDialog.categoria"
+            @click="guardarCategoria"
+          >
+            Guardar
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -658,11 +718,41 @@ async function desasignar(pivotId) {
   }
 }
 
-onMounted(async () => {
-  cargar()
+async function cargarCategorias() {
   try {
     const { data } = await axios.get('/api/compras/categorias')
     categoriasDisponibles.value = data
   } catch { /* silencioso */ }
+}
+
+// ── Categorizar una compra (inline) ─────────────────────────────────────────
+const catDialog = ref({ show: false, compra: null, categoria: '', crearRegla: true, loading: false })
+
+function abrirCategoria(item) {
+  catDialog.value = { show: true, compra: item, categoria: item.categoria || '', crearRegla: true, loading: false }
+}
+
+async function guardarCategoria() {
+  const d = catDialog.value
+  if (!d.categoria) return
+  d.loading = true
+  try {
+    await axios.patch(`/api/compras/${d.compra.id}/categoria`, {
+      categoria:   d.categoria,
+      crear_regla: d.crearRegla,
+    })
+    toast(d.crearRegla ? 'Categoría asignada y regla creada' : 'Categoría asignada')
+    catDialog.value.show = false
+    await Promise.all([cargar(), cargarCategorias()])
+  } catch (e) {
+    toast(e.response?.data?.message || 'Error al asignar categoría', 'error')
+  } finally {
+    d.loading = false
+  }
+}
+
+onMounted(() => {
+  cargar()
+  cargarCategorias()
 })
 </script>

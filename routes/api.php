@@ -149,6 +149,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/debug-nc-xml',                    [\App\Http\Controllers\CompraController::class, 'debugNcXml']);
         Route::post('/vincular-nc-xml',                [\App\Http\Controllers\CompraController::class, 'vincularNcXml']);
         Route::post('/vincular-todas-ncs-xml',         [\App\Http\Controllers\CompraController::class, 'vincularTodasNcsXml']);
+        Route::get('/categorias',                  [\App\Http\Controllers\CompraController::class, 'categorias']);
         Route::patch('/{compraId}/categoria',      [\App\Http\Controllers\ReglaProveedorController::class, 'asignarCategoria']);
         Route::post('/{compra}/cargar-xml',        [\App\Http\Controllers\CompraController::class, 'cargarXml']);
         Route::get('/{compra}',                    [\App\Http\Controllers\CompraController::class, 'show']);
