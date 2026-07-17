@@ -44,14 +44,22 @@ class VentaExpressController extends Controller
             return response()->json([]);
         }
 
+        // Búsqueda flexible: cada palabra debe aparecer en el nombre o el color,
+        // en cualquier orden y parcial (ej: "tub 80 blanco" → "Tubular 80 mm" + color "Blanco").
+        $palabras = array_filter(explode(' ', preg_replace('/\s+/', ' ', $q)));
+
         $rows = DB::table('lista_precios as lp')
             ->join('productos as p', 'p.id', '=', 'lp.producto_id')
             ->leftJoin('colores as c', 'c.id', '=', 'lp.color_id')
             ->where('lp.activo', 1)
             ->where('lp.precio_venta', '>', 0)
-            ->where(function ($w) use ($q) {
-                $w->where('p.nombre', 'like', "%$q%")
-                  ->orWhere('c.nombre', 'like', "%$q%");
+            ->where(function ($outer) use ($palabras) {
+                foreach ($palabras as $pal) {
+                    $outer->where(function ($w) use ($pal) {
+                        $w->where('p.nombre', 'like', "%$pal%")
+                          ->orWhere('c.nombre', 'like', "%$pal%");
+                    });
+                }
             })
             ->orderBy('p.nombre')
             ->limit(30)
