@@ -144,10 +144,12 @@
     <!-- Tabla -->
     <VCard>
       <VDataTable
+        v-model:page="page"
         :headers="headers"
         :items="compras"
         :loading="loading"
         :items-per-page="50"
+        :items-per-page-options="[25, 50, 100, { title: 'Todos', value: -1 }]"
         density="compact"
         hover
       >
@@ -457,6 +459,7 @@ const loading = ref(false)
 const compras  = ref([])
 const totales  = ref({})
 const snack    = ref({ show: false, color: 'success', text: '' })
+const page     = ref(1)
 
 const hoy       = new Date().toISOString().slice(0, 10)
 const inicioAño = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
@@ -530,6 +533,7 @@ async function cargar() {
     }
     compras.value  = resultado
     totales.value  = data.totales
+    page.value     = 1   // volver a la primera página al cambiar filtros (evita quedar en página vacía)
   } catch (e) {
     console.error(e)
   } finally {
