@@ -31,7 +31,7 @@ class ReglaProveedorController extends Controller
 
         $rut = mb_strtolower(str_replace(['.', ' '], '', trim($request->rut_emisor)));
 
-        $id = DB::table('reglas_categoria_proveedor')->updateOrInsert(
+        DB::table('reglas_categoria_proveedor')->updateOrInsert(
             ['rut_emisor' => $rut],
             [
                 'nombre_emisor' => $request->nombre_emisor,
@@ -41,8 +41,11 @@ class ReglaProveedorController extends Controller
             ]
         );
 
+        // Aplicar de inmediato a las compras existentes de ese proveedor
+        $afectadas = $this->aplicarACompras($rut, $request->categoria);
+
         $regla = DB::table('reglas_categoria_proveedor')->where('rut_emisor', $rut)->first();
-        return response()->json($regla, 201);
+        return response()->json(['regla' => $regla, 'compras_actualizadas' => $afectadas], 201);
     }
 
     // ── Actualizar regla ──────────────────────────────────────────────────────
@@ -60,7 +63,13 @@ class ReglaProveedorController extends Controller
             'updated_at'    => now(),
         ]);
 
-        return response()->json(DB::table('reglas_categoria_proveedor')->find($id));
+        // Reaplicar a las compras existentes de ese proveedor
+        $regla = DB::table('reglas_categoria_proveedor')->find($id);
+        if ($regla) {
+            $this->aplicarACompras($regla->rut_emisor, $request->categoria);
+        }
+
+        return response()->json($regla);
     }
 
     // ── Eliminar regla ────────────────────────────────────────────────────────
@@ -72,18 +81,31 @@ class ReglaProveedorController extends Controller
     }
 
     // ── Aplicar todas las reglas a compras existentes ─────────────────────────
-    // Actualiza `categoria` en compras que tengan rut_emisor con regla definida
+    // Actualiza `categoria` en compras que tengan rut_emisor con regla definida.
+    // Normaliza el RUT en ambos lados (quita puntos y espacios) para que matchee
+    // aunque las compras vengan con RUT formateado (76.072.694-K) y las reglas sin puntos.
 
     public function aplicar()
     {
         $actualizadas = DB::update("
             UPDATE compras c
             JOIN reglas_categoria_proveedor r
-              ON LOWER(c.rut_emisor) = LOWER(r.rut_emisor)
+              ON REPLACE(REPLACE(LOWER(c.rut_emisor), '.', ''), ' ', '')
+               = REPLACE(REPLACE(LOWER(r.rut_emisor), '.', ''), ' ', '')
             SET c.categoria = r.categoria
         ");
 
         return response()->json(['actualizadas' => $actualizadas]);
+    }
+
+    // Aplica una categoría a todas las compras de un proveedor (RUT ya normalizado)
+    private function aplicarACompras(string $rutNorm, string $categoria): int
+    {
+        return DB::update("
+            UPDATE compras
+            SET categoria = ?, updated_at = NOW()
+            WHERE REPLACE(REPLACE(LOWER(rut_emisor), '.', ''), ' ', '') = ?
+        ", [$categoria, $rutNorm]);
     }
 
     // ── Categorías distintas (para el select del frontend) ────────────────────
