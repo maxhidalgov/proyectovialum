@@ -249,9 +249,6 @@
           </div>
         </template>
 
-        <template #bottom>
-          <div class="pa-3 text-caption text-medium-emphasis">{{ compras.length }} documentos</div>
-        </template>
       </VDataTable>
     </VCard>
 
