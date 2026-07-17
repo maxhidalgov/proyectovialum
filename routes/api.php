@@ -188,6 +188,10 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/documentos-facturacion/huerfanos', [DocumentoFacturacionController::class, 'huerfanos']);
     Route::delete('/documentos-facturacion/{id}', [DocumentoFacturacionController::class, 'destroy']);
 
+    // Venta Express (POS): emite boleta/factura directo a Bsale
+    Route::get('/venta-express/productos', [\App\Http\Controllers\VentaExpressController::class, 'buscarProductos']);
+    Route::post('/venta-express/emitir',   [\App\Http\Controllers\VentaExpressController::class, 'emitir']);
+
     // Conciliación bancaria
     Route::prefix('conciliacion')->group(function () {
         Route::get('/test-conexion',      [\App\Http\Controllers\ConciliacionController::class, 'testConexion']);

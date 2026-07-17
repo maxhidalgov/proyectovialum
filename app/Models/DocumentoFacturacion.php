@@ -11,6 +11,7 @@ class DocumentoFacturacion extends Model
         'cotizacion_id', 'tipo', 'porcentaje', 'monto', 'estado',
         'id_documento_bsale', 'numero_documento_bsale', 'url_pdf_bsale',
         'fecha_emision', 'nota',
+        'tipo_documento_bsale_id', 'forma_pago', 'bsale_cliente_nombre',
     ];
 
     public function cotizacion()

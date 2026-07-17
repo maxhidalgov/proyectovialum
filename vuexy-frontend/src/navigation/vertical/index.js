@@ -113,6 +113,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Venta Express',
+    to: { name: 'venta-express' },
+    icon: { icon: 'mdi-flash' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Operaciones',
     to: { name: 'operaciones' },
     icon: { icon: 'mdi-view-column' },

@@ -182,11 +182,12 @@ public function crearClienteBsale(Request $request, BsaleClientService $bsale)
             'identification' => $clienteBsale['code'] ?? '',
             'telefono'       => $clienteBsale['phone'] ?? '',
             'direccion'      => $clienteBsale['address'] ?? '',
-            'tipo_cliente'   => $clienteBsale['companyOrPerson'] == 1 ? 'empresa' : 'persona',
+            'tipo_cliente'   => ($clienteBsale['companyOrPerson'] ?? 0) == 1 ? 'empresa' : 'persona',
             'razon_social'   => $clienteBsale['company'] ?? '',
             'giro'           => $clienteBsale['activity'] ?? '',
             'ciudad'         => $clienteBsale['city'] ?? '',
             'comuna'         => $clienteBsale['municipality'] ?? '',
+            'bsale_id'       => $clienteBsale['id'] ?? null,
         ]);
 
         return response()->json([

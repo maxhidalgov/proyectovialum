@@ -73,6 +73,7 @@ declare module 'vue-router/auto-routes' {
     'second-page': RouteRecordInfo<'second-page', '/second-page', Record<never, never>, Record<never, never>>,
     'sugerencias-conciliacion': RouteRecordInfo<'sugerencias-conciliacion', '/sugerencias-conciliacion', Record<never, never>, Record<never, never>>,
     'transbank': RouteRecordInfo<'transbank', '/transbank', Record<never, never>, Record<never, never>>,
+    'venta-express': RouteRecordInfo<'venta-express', '/venta-express', Record<never, never>, Record<never, never>>,
     'ventana-form': RouteRecordInfo<'ventana-form', '/VentanaForm', Record<never, never>, Record<never, never>>,
     'ventanapreview': RouteRecordInfo<'ventanapreview', '/ventanapreview', Record<never, never>, Record<never, never>>,
     'visor3d': RouteRecordInfo<'visor3d', '/visor3d', Record<never, never>, Record<never, never>>,
