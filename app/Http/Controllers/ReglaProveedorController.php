@@ -136,9 +136,13 @@ class ReglaProveedorController extends Controller
             'updated_at' => now(),
         ]);
 
+        $afectadas = 1;
+
         if ($request->boolean('crear_regla') && $compra->rut_emisor) {
+            $rutNorm = mb_strtolower(str_replace(['.', ' '], '', $compra->rut_emisor));
+
             DB::table('reglas_categoria_proveedor')->updateOrInsert(
-                ['rut_emisor' => mb_strtolower(str_replace(['.', ' '], '', $compra->rut_emisor))],
+                ['rut_emisor' => $rutNorm],
                 [
                     'nombre_emisor' => $compra->nombre_emisor,
                     'categoria'     => $request->categoria,
@@ -146,8 +150,11 @@ class ReglaProveedorController extends Controller
                     'created_at'    => now(),
                 ]
             );
+
+            // Aplicar la categoría a TODAS las compras de ese proveedor
+            $afectadas = $this->aplicarACompras($rutNorm, $request->categoria);
         }
 
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'compras_actualizadas' => $afectadas]);
     }
 }

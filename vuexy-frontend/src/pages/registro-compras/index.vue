@@ -737,11 +737,12 @@ async function guardarCategoria() {
   if (!d.categoria) return
   d.loading = true
   try {
-    await axios.patch(`/api/compras/${d.compra.id}/categoria`, {
+    const { data } = await axios.patch(`/api/compras/${d.compra.id}/categoria`, {
       categoria:   d.categoria,
       crear_regla: d.crearRegla,
     })
-    toast(d.crearRegla ? 'Categoría asignada y regla creada' : 'Categoría asignada')
+    const n = data?.compras_actualizadas ?? 1
+    toast(d.crearRegla ? `Categoría aplicada a ${n} compra${n === 1 ? '' : 's'} del proveedor` : 'Categoría asignada')
     catDialog.value.show = false
     await Promise.all([cargar(), cargarCategorias()])
   } catch (e) {
