@@ -7,9 +7,9 @@
         <p class="text-caption text-grey mt-1">Emite una boleta o factura rápida directo a Bsale</p>
       </div>
       <VSpacer />
-      <VBtnToggle v-model="tipo" mandatory color="primary" density="comfortable" variant="outlined">
-        <VBtn value="boleta" prepend-icon="mdi-receipt-text-outline">Boleta</VBtn>
-        <VBtn value="factura" prepend-icon="mdi-file-document-outline">Factura</VBtn>
+      <VBtnToggle v-model="tipo" mandatory color="primary" variant="outlined" divided rounded="lg">
+        <VBtn value="boleta" prepend-icon="mdi-receipt-text-outline" class="px-5">Boleta</VBtn>
+        <VBtn value="factura" prepend-icon="mdi-file-document-outline" class="px-5">Factura</VBtn>
       </VBtnToggle>
     </div>
 
@@ -211,6 +211,8 @@
               <VTextField v-model="r.fecha" type="date" density="compact" variant="outlined" hide-details title="Fecha del documento (opcional)" />
               <VBtn icon size="x-small" variant="text" color="error" @click="referencias.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
             </div>
+
+            <VDivider class="my-3" />
 
             <!-- Totales -->
             <div class="d-flex justify-space-between text-body-2 mb-1">
