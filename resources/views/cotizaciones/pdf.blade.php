@@ -342,7 +342,7 @@
 
 {{-- ── Productos Adicionales (sin winperfil) ─────────────────────────── --}}
 @if($productosItems->count() > 0)
-  <div class="section-title">Productos Adicionales</div>
+  <div class="section-title">Productos</div>
   <table class="products-table">
     <thead>
       <tr>
@@ -412,6 +412,7 @@
       <td style="width: 58%; border: none;"></td>
       <td style="width: 42%; border: none;">
         <table class="totals-inner">
+          @if($cantidadTotal > 0)
           <tr>
             <td><strong>Cantidad ventanas:</strong></td>
             <td>{{ $cantidadTotal }} ud.</td>
@@ -420,6 +421,7 @@
             <td><strong>Total m²:</strong></td>
             <td>{{ number_format($totalM2, 2, ',', '.') }} m²</td>
           </tr>
+          @endif
           @if($totalVentanas > 0)
           <tr>
             <td><strong>Subtotal Ventanas:</strong></td>
