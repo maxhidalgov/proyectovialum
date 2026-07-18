@@ -207,7 +207,8 @@
             </div>
             <div v-for="(r, i) in referencias" :key="'ref' + i" class="d-flex align-center gap-2 mb-2">
               <VSelect v-model="r.code_sii" :items="tiposReferencia" item-title="label" item-value="value" density="compact" variant="outlined" hide-details style="max-width:130px" />
-              <VTextField v-model="r.numero" label="N°" density="compact" variant="outlined" hide-details />
+              <VTextField v-model="r.numero" label="N°" density="compact" variant="outlined" hide-details style="max-width:90px" />
+              <VTextField v-model="r.fecha" type="date" density="compact" variant="outlined" hide-details title="Fecha del documento (opcional)" />
               <VBtn icon size="x-small" variant="text" color="error" @click="referencias.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
             </div>
 
@@ -553,7 +554,7 @@ const tiposReferencia = [
   { label: 'Factura',         value: 33 },
 ]
 function agregarReferencia() {
-  referencias.value.push({ code_sii: 801, numero: '' })
+  referencias.value.push({ code_sii: 801, numero: '', fecha: '' })
 }
 
 // ── Emitir ───────────────────────────────────────────────────────────────
@@ -623,6 +624,7 @@ async function emitir() {
         .map(r => ({
           code_sii: r.code_sii,
           numero: String(r.numero),
+          fecha: r.fecha || undefined,
           razon: `${(tiposReferencia.find(t => t.value === r.code_sii)?.label) || 'Ref'} ${r.numero}`,
         })),
       items: items.value.map(it => ({

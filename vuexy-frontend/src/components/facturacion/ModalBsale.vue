@@ -159,7 +159,8 @@
         </div>
         <div v-for="(r, i) in referencias" :key="'ref' + i" class="d-flex align-center gap-2 mb-2">
           <v-select v-model="r.code_sii" :items="tiposReferencia" item-title="label" item-value="value" density="compact" variant="outlined" hide-details style="max-width:150px" />
-          <v-text-field v-model="r.numero" label="N°" density="compact" variant="outlined" hide-details />
+          <v-text-field v-model="r.numero" label="N°" density="compact" variant="outlined" hide-details style="max-width:100px" />
+          <v-text-field v-model="r.fecha" type="date" density="compact" variant="outlined" hide-details title="Fecha del documento (opcional)" />
           <v-btn icon size="x-small" variant="text" color="error" @click="referencias.splice(i, 1)"><v-icon size="16">mdi-close</v-icon></v-btn>
         </div>
 
@@ -236,7 +237,7 @@ const tiposReferencia = [
   { label: 'Factura',         value: 33 },
 ]
 function agregarReferencia() {
-  referencias.value.push({ code_sii: 801, numero: '' })
+  referencias.value.push({ code_sii: 801, numero: '', fecha: '' })
 }
 
 // opciones base — se filtran/adaptan según saldo disponible
@@ -368,6 +369,7 @@ async function generar() {
         .map(r => ({
           code_sii: r.code_sii,
           numero: String(r.numero),
+          fecha: r.fecha || undefined,
           razon: `${(tiposReferencia.find(t => t.value === r.code_sii)?.label) || 'Ref'} ${r.numero}`,
         })),
     })
