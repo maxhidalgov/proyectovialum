@@ -164,18 +164,52 @@
 
             <VDivider class="my-3" />
 
-            <!-- Forma de pago -->
-            <VSelect
-              v-model="formaPago"
-              :items="formasPago"
-              item-title="label"
-              item-value="value"
-              label="Forma de pago"
+            <!-- Formas de pago (una o varias) -->
+            <div class="d-flex align-center justify-space-between mb-1">
+              <span class="text-subtitle-2 font-weight-bold">Formas de pago</span>
+              <VBtn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarPago">Dividir</VBtn>
+            </div>
+            <div v-for="(p, i) in pagos" :key="i" class="d-flex align-center gap-2 mb-2">
+              <VSelect
+                v-model="p.forma_pago"
+                :items="formasPago"
+                item-title="label"
+                item-value="value"
+                density="compact"
+                variant="outlined"
+                hide-details
+                style="max-width:150px"
+              />
+              <VTextField v-model.number="p.monto" type="number" min="0" density="compact" variant="outlined" hide-details reverse prefix="$" />
+              <VBtn v-if="pagos.length > 1" icon size="x-small" variant="text" color="error" @click="pagos.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
+            </div>
+            <div v-if="pagos.length > 1" class="d-flex justify-space-between text-caption mb-2" :class="pagosOk ? 'text-success' : 'text-warning'">
+              <span>Asignado</span>
+              <span>{{ clp(totalPagos) }} / {{ clp(totalBruto) }}{{ pagosOk ? ' ✓' : '' }}</span>
+            </div>
+
+            <!-- Observaciones (nota libre en el documento) -->
+            <VTextarea
+              v-model="observaciones"
+              label="Observaciones / nota (opcional)"
               variant="outlined"
               density="compact"
+              rows="2"
+              auto-grow
               hide-details
               class="mb-3"
             />
+
+            <!-- Referencias (ej. orden de compra) -->
+            <div class="d-flex align-center justify-space-between mb-1">
+              <span class="text-subtitle-2 font-weight-bold">Referencias</span>
+              <VBtn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarReferencia">Agregar</VBtn>
+            </div>
+            <div v-for="(r, i) in referencias" :key="'ref' + i" class="d-flex align-center gap-2 mb-2">
+              <VSelect v-model="r.code_sii" :items="tiposReferencia" item-title="label" item-value="value" density="compact" variant="outlined" hide-details style="max-width:130px" />
+              <VTextField v-model="r.numero" label="N°" density="compact" variant="outlined" hide-details />
+              <VBtn icon size="x-small" variant="text" color="error" @click="referencias.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
+            </div>
 
             <!-- Totales -->
             <div class="d-flex justify-space-between text-body-2 mb-1">
@@ -323,7 +357,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import api from '@/axiosInstance'
 
 const tipo = ref('boleta')
@@ -486,8 +520,7 @@ async function guardarCliente() {
   }
 }
 
-// ── Forma de pago ────────────────────────────────────────────────────────
-const formaPago = ref('efectivo')
+// ── Formas de pago (una o varias) ──────────────────────────────────────────
 const formasPago = [
   { label: 'Efectivo',        value: 'efectivo' },
   { label: 'Transferencia',   value: 'transferencia' },
@@ -496,6 +529,32 @@ const formasPago = [
   { label: 'Cheque',          value: 'cheque' },
   { label: 'Webpay',          value: 'webpay' },
 ]
+const pagos = ref([{ forma_pago: 'efectivo', monto: 0 }])
+const totalPagos = computed(() => pagos.value.reduce((s, p) => s + (Number(p.monto) || 0), 0))
+const pagosOk = computed(() => Math.abs(totalPagos.value - totalBruto.value) < 1)
+
+function agregarPago() {
+  const restante = Math.max(0, totalBruto.value - totalPagos.value)
+  pagos.value.push({ forma_pago: 'transferencia', monto: restante })
+}
+
+// Si hay una sola forma de pago, se mantiene igual al total automáticamente
+watch(totalBruto, (t) => {
+  if (pagos.value.length === 1) pagos.value[0].monto = t
+})
+
+// ── Observaciones y referencias ────────────────────────────────────────────
+const observaciones = ref('')
+const referencias = ref([])
+const tiposReferencia = [
+  { label: 'Orden de Compra', value: 801 },
+  { label: 'Nota de Pedido',  value: 802 },
+  { label: 'Guía de Despacho', value: 52 },
+  { label: 'Factura',         value: 33 },
+]
+function agregarReferencia() {
+  referencias.value.push({ code_sii: 801, numero: '' })
+}
 
 // ── Emitir ───────────────────────────────────────────────────────────────
 const emitiendo = ref(false)
@@ -545,6 +604,8 @@ const puedeEmitir = computed(() => {
   if (!items.value.length) return false
   if (items.value.some(it => !it.nombre || !(Number(it.cantidad) > 0))) return false
   if (tipo.value === 'factura' && (!cliente.value || !cliente.value.bsale_id)) return false
+  if (!pagosOk.value) return false
+  if (referencias.value.some(r => !r.numero)) return false
   return true
 })
 
@@ -555,7 +616,15 @@ async function emitir() {
     const { data } = await api.post('/api/venta-express/emitir', {
       tipo: tipo.value,
       cliente_id: cliente.value?.id || undefined,
-      forma_pago: formaPago.value,
+      observaciones: observaciones.value || undefined,
+      pagos: pagos.value.map(p => ({ forma_pago: p.forma_pago, monto: Number(p.monto) })),
+      referencias: referencias.value
+        .filter(r => r.numero)
+        .map(r => ({
+          code_sii: r.code_sii,
+          numero: String(r.numero),
+          razon: `${(tiposReferencia.find(t => t.value === r.code_sii)?.label) || 'Ref'} ${r.numero}`,
+        })),
       items: items.value.map(it => ({
         nombre: it.nombre,
         cantidad: Number(it.cantidad),
@@ -589,7 +658,9 @@ async function emitir() {
 function nuevaVenta() {
   items.value = []
   cliente.value = null
-  formaPago.value = 'efectivo'
+  pagos.value = [{ forma_pago: 'efectivo', monto: 0 }]
+  observaciones.value = ''
+  referencias.value = []
   resultado.value.show = false
 }
 

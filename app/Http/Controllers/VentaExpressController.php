@@ -90,7 +90,17 @@ class VentaExpressController extends Controller
         $data = $request->validate([
             'tipo'               => 'required|in:boleta,factura',
             'cliente_id'         => 'nullable|integer|exists:clientes,id',
-            'forma_pago'         => 'required|string',
+            'observaciones'      => 'nullable|string',
+            // Pagos (uno o varios, ej. efectivo + transbank)
+            'pagos'              => 'required|array|min:1',
+            'pagos.*.forma_pago' => 'required|string',
+            'pagos.*.monto'      => 'required|numeric|min:1',
+            // Referencias electrónicas (ej. orden de compra)
+            'referencias'            => 'nullable|array',
+            'referencias.*.numero'   => 'required|string',
+            'referencias.*.razon'    => 'nullable|string',
+            'referencias.*.code_sii' => 'nullable|integer',
+            'referencias.*.fecha'    => 'nullable|date',
             'items'              => 'required|array|min:1',
             'items.*.nombre'     => 'required|string',
             'items.*.cantidad'   => 'required|numeric|min:0.0001',
@@ -152,6 +162,20 @@ class VentaExpressController extends Controller
         }
         $totalBruto = (int) round($totalNeto * 1.19);
 
+        // Observaciones (nota libre) → en boleta se antepone al primer ítem; en factura va como atributo "Nota"
+        $obs = trim($data['observaciones'] ?? '');
+        if ($obs !== '' && $esBoleta && !empty($details)) {
+            $details[0]['comment'] = mb_substr('[' . $obs . '] ' . $details[0]['comment'], 0, 100);
+        }
+
+        // Pagos (uno o varios). La forma de pago "principal" (mayor monto) se guarda para el resumen.
+        $payments = collect($data['pagos'])->map(fn ($p) => [
+            'paymentTypeId' => $this->paymentTypes[$p['forma_pago']] ?? 1,
+            'amount'        => (int) round($p['monto']),
+            'recordDate'    => time(),
+        ])->all();
+        $formaPagoPrincipal = collect($data['pagos'])->sortByDesc('monto')->first()['forma_pago'];
+
         $payload = [
             'documentTypeId' => $documentTypeId,
             'officeId'       => 1,
@@ -160,12 +184,30 @@ class VentaExpressController extends Controller
             'declareSii'     => 1,
             'clientId'       => $clienteBsaleId,
             'details'        => $details,
-            'payments'       => [[
-                'paymentTypeId' => $this->paymentTypes[$data['forma_pago']] ?? 1,
-                'amount'        => $totalBruto,
-                'recordDate'    => time(),
-            ]],
+            'payments'       => $payments,
         ];
+
+        // Nota en factura/nota de venta (Bsale dynamicAttribute "Nota": factura=6, nota de venta=7)
+        if ($obs !== '' && !$esBoleta) {
+            $notaAttrId = [5 => 6, 3 => 7][$documentTypeId] ?? null;
+            if ($notaAttrId) {
+                $payload['dynamicAttributes'] = [[
+                    'description'        => $obs,
+                    'dynamicAttributeId' => $notaAttrId,
+                ]];
+            }
+        }
+
+        // Referencias electrónicas (ej. Orden de Compra codeSii 801)
+        $references = collect($data['referencias'] ?? [])->map(fn ($r) => array_filter([
+            'number'        => (string) $r['numero'],
+            'referenceDate' => !empty($r['fecha']) ? strtotime($r['fecha']) : time(),
+            'reason'        => $r['razon'] ?? null,
+            'codeSii'       => isset($r['code_sii']) ? (int) $r['code_sii'] : null,
+        ], fn ($v) => $v !== null && $v !== ''))->values()->all();
+        if ($references) {
+            $payload['references'] = $references;
+        }
 
         // Emitir en Bsale
         try {
@@ -196,7 +238,8 @@ class VentaExpressController extends Controller
             'neto'                    => (int) round($totalNeto),
             'estado'                  => 'emitido',
             'tipo_documento_bsale_id' => $documentTypeId,
-            'forma_pago'              => $data['forma_pago'],
+            'forma_pago'              => $formaPagoPrincipal,
+            'nota'                    => $obs ?: null,
             'cliente_id'              => $cliente?->id,
             'bsale_cliente_nombre'    => $clienteNombre,
             'id_documento_bsale'      => $bsale['id'] ?? null,
