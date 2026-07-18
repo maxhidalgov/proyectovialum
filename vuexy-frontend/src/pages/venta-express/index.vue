@@ -379,22 +379,17 @@ function confirmarMedidas() {
     return
   }
   const pz = Number(m.piezas)
-  const detalle = `${m.producto.nombre} · ${m.ancho}×${m.alto} mm${pz > 1 ? ` (${pz}u)` : ''}`
+  // El pulido se integra en la misma línea: precio/m² +20% y se anota en el detalle
+  const precioM2 = m.pulido
+    ? Math.round((m.producto.precio_venta || 0) * (1 + PULIDO_PCT))
+    : (m.producto.precio_venta || 0)
+  const detalle = `${m.producto.nombre} · ${m.ancho}×${m.alto} mm${pz > 1 ? ` (${pz}u)` : ''}${m.pulido ? ' · con pulido' : ''}`
   items.value.push({
     nombre: detalle,
     cantidad: m2Calculado.value, // la cantidad es el total de m²
-    precio: m.producto.precio_venta, // precio por m²
+    precio: precioM2,            // precio por m² (con pulido si aplica)
     descuento: 0,
   })
-  // Pulido como línea aparte (20% del valor del vidrio)
-  if (m.pulido && pulidoMonto.value > 0) {
-    items.value.push({
-      nombre: `Pulido (20%) · ${m.producto.nombre} ${m.ancho}×${m.alto} mm`,
-      cantidad: 1,
-      precio: pulidoMonto.value,
-      descuento: 0,
-    })
-  }
   medidas.value.show = false
 }
 
