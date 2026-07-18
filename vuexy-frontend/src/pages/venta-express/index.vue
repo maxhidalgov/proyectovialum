@@ -299,7 +299,18 @@
           <h2 class="text-h6 font-weight-bold mb-1">{{ resultado.tipo }} emitida</h2>
           <p class="text-body-2 mb-1">N° {{ resultado.numero }} · {{ resultado.cliente }}</p>
           <p class="text-h6 font-weight-bold text-success">{{ clp(resultado.total) }}</p>
-          <div class="d-flex gap-2 justify-center mt-4">
+          <VBtn
+            v-if="resultado.vidrios && resultado.vidrios.length"
+            block
+            color="info"
+            variant="tonal"
+            prepend-icon="mdi-content-cut"
+            class="mt-4"
+            @click="imprimirOrdenCorte"
+          >
+            Imprimir orden de corte ({{ resultado.vidrios.length }} vidrio{{ resultado.vidrios.length > 1 ? 's' : '' }})
+          </VBtn>
+          <div class="d-flex gap-2 justify-center mt-3">
             <VBtn v-if="resultado.pdf" color="error" variant="tonal" prepend-icon="mdi-file-pdf-box" :href="resultado.pdf" target="_blank">Ver PDF</VBtn>
             <VBtn color="primary" @click="nuevaVenta">Nueva venta</VBtn>
           </div>
@@ -389,6 +400,14 @@ function confirmarMedidas() {
     cantidad: m2Calculado.value, // la cantidad es el total de m²
     precio: precioM2,            // precio por m² (con pulido si aplica)
     descuento: 0,
+    // Datos estructurados para la orden de corte (no se envían a Bsale)
+    vidrio: {
+      producto: m.producto.nombre,
+      ancho: Number(m.ancho),
+      alto: Number(m.alto),
+      piezas: pz,
+      pulido: !!m.pulido,
+    },
   })
   medidas.value.show = false
 }
@@ -479,7 +498,47 @@ const formasPago = [
 
 // ── Emitir ───────────────────────────────────────────────────────────────
 const emitiendo = ref(false)
-const resultado = ref({ show: false, tipo: '', numero: '', total: 0, pdf: '', cliente: '' })
+const resultado = ref({ show: false, tipo: '', numero: '', total: 0, pdf: '', cliente: '', vidrios: [] })
+
+function imprimirOrdenCorte() {
+  const r = resultado.value
+  const filas = (r.vidrios || []).map((v, i) => `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${v.producto}</td>
+      <td style="text-align:center">${v.ancho}</td>
+      <td style="text-align:center">${v.alto}</td>
+      <td style="text-align:center">${v.piezas}</td>
+      <td style="text-align:center">${v.pulido ? 'Sí' : '—'}</td>
+    </tr>`).join('')
+
+  const html = `
+    <html><head><title>Orden de Corte ${r.tipo} ${r.numero}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:24px}
+      h1{color:#6a1b9a;margin:0 0 2px;font-size:22px}
+      .sub{color:#666;font-size:13px;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;margin-top:8px}
+      th,td{border:1px solid #ccc;padding:8px 10px;font-size:14px}
+      th{background:#f3e5f5;text-align:left}
+      .pulido{margin-top:14px;font-size:12px;color:#666}
+    </style></head><body>
+      <h1>Vialum — Orden de Corte</h1>
+      <div class="sub">${r.tipo} N° ${r.numero || '—'} · ${r.cliente || 'Consumidor Final'} · ${new Date().toLocaleDateString('es-CL')}</div>
+      <table>
+        <thead><tr><th style="width:36px">#</th><th>Vidrio</th><th style="width:90px">Ancho (mm)</th><th style="width:90px">Alto (mm)</th><th style="width:70px">Piezas</th><th style="width:70px">Pulido</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <p class="pulido">Total de piezas a cortar: ${(r.vidrios || []).reduce((s, v) => s + Number(v.piezas), 0)}</p>
+    </body></html>`
+
+  const w = window.open('', '_blank')
+  if (!w) { snackMsg('Permite las ventanas emergentes para imprimir', 'warning'); return }
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 300)
+}
 
 const puedeEmitir = computed(() => {
   if (!items.value.length) return false
@@ -510,6 +569,7 @@ async function emitir() {
       total: data.documento.total,
       pdf: data.documento.pdf,
       cliente: data.documento.cliente,
+      vidrios: items.value.filter(it => it.vidrio).map(it => it.vidrio),
     }
   } catch (e) {
     snackMsg(e.response?.data?.error || 'No se pudo emitir el documento', 'error')
