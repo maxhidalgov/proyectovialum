@@ -39,9 +39,14 @@
                   :key="p.id"
                   @click="agregarProducto(p)"
                 >
-                  <VListItemTitle>{{ p.nombre }}</VListItemTitle>
+                  <VListItemTitle>
+                    {{ p.nombre }}
+                    <VChip v-if="p.es_vidrio" size="x-small" color="info" variant="tonal" class="ml-1">por m²</VChip>
+                  </VListItemTitle>
                   <template #append>
-                    <span class="text-body-2 font-weight-bold">{{ clp(p.precio_venta) }}</span>
+                    <span class="text-body-2 font-weight-bold">
+                      {{ clp(p.precio_venta) }}<span v-if="p.es_vidrio" class="text-caption text-medium-emphasis">/m²</span>
+                    </span>
                   </template>
                 </VListItem>
               </VList>
@@ -238,6 +243,33 @@
       </VCard>
     </VDialog>
 
+    <!-- ── Dialog medidas de vidrio ─────────────────────────────────────── -->
+    <VDialog v-model="medidas.show" max-width="440">
+      <VCard v-if="medidas.producto">
+        <VCardTitle class="pa-4 pb-2 d-flex align-center gap-2">
+          <VIcon color="info">mdi-ruler-square</VIcon> Medidas del vidrio
+        </VCardTitle>
+        <VCardText>
+          <div class="text-body-2 font-weight-medium mb-1">{{ medidas.producto.nombre }}</div>
+          <div class="text-caption text-medium-emphasis mb-3">{{ clp(medidas.producto.precio_venta) }} / m²</div>
+          <VRow dense>
+            <VCol cols="4"><VTextField v-model.number="medidas.ancho" label="Ancho (mm)" type="number" min="0" variant="outlined" density="compact" hide-details autofocus /></VCol>
+            <VCol cols="4"><VTextField v-model.number="medidas.alto" label="Alto (mm)" type="number" min="0" variant="outlined" density="compact" hide-details /></VCol>
+            <VCol cols="4"><VTextField v-model.number="medidas.piezas" label="Piezas" type="number" min="1" variant="outlined" density="compact" hide-details /></VCol>
+          </VRow>
+          <div class="d-flex justify-space-between align-center mt-3 pa-2 rounded bg-surface-variant">
+            <span class="text-body-2">{{ m2Calculado }} m²</span>
+            <span class="text-body-1 font-weight-bold">{{ clp(Math.round(m2Calculado * (medidas.producto.precio_venta || 0))) }} <span class="text-caption text-medium-emphasis">neto</span></span>
+          </div>
+        </VCardText>
+        <VCardActions class="pa-3">
+          <VSpacer />
+          <VBtn variant="text" @click="medidas.show = false">Cancelar</VBtn>
+          <VBtn color="primary" :disabled="m2Calculado <= 0" @click="confirmarMedidas">Agregar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
     <!-- ── Dialog resultado ─────────────────────────────────────────────── -->
     <VDialog v-model="resultado.show" max-width="420">
       <VCard>
@@ -294,10 +326,42 @@ function buscarProductos(q) {
 }
 
 function agregarProducto(p) {
-  items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: 0 })
+  prodMenu.value = false
+  if (p.es_vidrio) {
+    // Vidrio: pedir medidas para calcular m²
+    medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1 }
+  } else {
+    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: 0 })
+  }
   prodSearch.value = ''
   prodResults.value = []
-  prodMenu.value = false
+}
+
+// ── Medidas de vidrio (venta por m²) ───────────────────────────────────────
+const medidas = ref({ show: false, producto: null, ancho: null, alto: null, piezas: 1 })
+
+const m2Calculado = computed(() => {
+  const a = Number(medidas.value.ancho) || 0
+  const al = Number(medidas.value.alto) || 0
+  const pz = Number(medidas.value.piezas) || 0
+  return +((a / 1000) * (al / 1000) * pz).toFixed(4)
+})
+
+function confirmarMedidas() {
+  const m = medidas.value
+  if (!(Number(m.ancho) > 0) || !(Number(m.alto) > 0) || !(Number(m.piezas) > 0)) {
+    snackMsg('Ingresa ancho, alto y piezas', 'warning')
+    return
+  }
+  const pz = Number(m.piezas)
+  const detalle = `${m.producto.nombre} · ${m.ancho}×${m.alto} mm${pz > 1 ? ` (${pz}u)` : ''}`
+  items.value.push({
+    nombre: detalle,
+    cantidad: m2Calculado.value, // la cantidad es el total de m²
+    precio: m.producto.precio_venta, // precio por m²
+    descuento: 0,
+  })
+  medidas.value.show = false
 }
 
 function agregarManual() {

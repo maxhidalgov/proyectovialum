@@ -64,12 +64,16 @@ class VentaExpressController extends Controller
             })
             ->orderBy('p.nombre')
             ->limit(30)
-            ->get(['lp.id', 'p.nombre as producto', 'c.nombre as color', 'lp.precio_venta']);
+            ->get(['lp.id', 'p.nombre as producto', 'c.nombre as color', 'lp.precio_venta', 'p.tipo_producto_id']);
+
+        // tipos 1, 2 y 7 = cristales/vidrios → se venden por m²
+        $tiposVidrio = [1, 2, 7];
 
         $items = $rows->map(fn ($r) => [
             'id'           => $r->id,
             'nombre'       => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
             'precio_venta' => (float) $r->precio_venta,
+            'es_vidrio'    => in_array((int) $r->tipo_producto_id, $tiposVidrio, true),
         ]);
 
         return response()->json($items);
