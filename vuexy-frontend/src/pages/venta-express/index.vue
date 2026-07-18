@@ -10,6 +10,7 @@
       <VBtnToggle v-model="tipo" mandatory color="primary" variant="outlined" divided rounded="lg">
         <VBtn value="boleta" prepend-icon="mdi-receipt-text-outline" class="px-5">Boleta</VBtn>
         <VBtn value="factura" prepend-icon="mdi-file-document-outline" class="px-5">Factura</VBtn>
+        <VBtn value="cotizacion" prepend-icon="mdi-file-clock-outline" class="px-5">Cotización</VBtn>
       </VBtnToggle>
     </div>
 
@@ -114,7 +115,7 @@
             <!-- Cliente -->
             <div class="d-flex align-center justify-space-between mb-1">
               <span class="text-subtitle-2 font-weight-bold">Cliente</span>
-              <VChip v-if="tipo === 'factura'" size="x-small" color="error" variant="tonal">Obligatorio</VChip>
+              <VChip v-if="tipo !== 'boleta'" size="x-small" color="error" variant="tonal">Obligatorio</VChip>
               <VChip v-else size="x-small" color="grey" variant="tonal">Opcional</VChip>
             </div>
 
@@ -164,7 +165,8 @@
 
             <VDivider class="my-3" />
 
-            <!-- Formas de pago (una o varias) -->
+            <!-- Formas de pago (una o varias) — no aplica a cotización -->
+            <template v-if="tipo !== 'cotizacion'">
             <div class="d-flex align-center justify-space-between mb-1">
               <span class="text-subtitle-2 font-weight-bold">Formas de pago</span>
               <VBtn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarPago">Dividir</VBtn>
@@ -187,6 +189,7 @@
               <span>Asignado</span>
               <span>{{ clp(totalPagos) }} / {{ clp(totalBruto) }}{{ pagosOk ? ' ✓' : '' }}</span>
             </div>
+            </template>
 
             <!-- Observaciones (nota libre en el documento) -->
             <VTextarea
@@ -200,7 +203,8 @@
               class="mb-3"
             />
 
-            <!-- Referencias (ej. orden de compra) -->
+            <!-- Referencias (ej. orden de compra) — no aplica a cotización -->
+            <template v-if="tipo !== 'cotizacion'">
             <div class="d-flex align-center justify-space-between mb-1">
               <span class="text-subtitle-2 font-weight-bold">Referencias</span>
               <VBtn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarReferencia">Agregar</VBtn>
@@ -211,6 +215,7 @@
               <VTextField v-model="r.fecha" type="date" density="compact" variant="outlined" hide-details title="Fecha del documento (opcional)" />
               <VBtn icon size="x-small" variant="text" color="error" @click="referencias.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
             </div>
+            </template>
 
             <VDivider class="my-3" />
 
@@ -232,13 +237,16 @@
               class="mt-4"
               :loading="emitiendo"
               :disabled="!puedeEmitir"
-              prepend-icon="mdi-check"
+              :prepend-icon="tipo === 'cotizacion' ? 'mdi-content-save' : 'mdi-check'"
               @click="emitir"
             >
-              Emitir {{ tipo === 'boleta' ? 'Boleta' : 'Factura' }}
+              {{ tipo === 'cotizacion' ? 'Guardar cotización' : (tipo === 'boleta' ? 'Emitir Boleta' : 'Emitir Factura') }}
             </VBtn>
             <p v-if="tipo === 'factura' && (!cliente || !cliente.bsale_id)" class="text-caption text-warning mt-2 mb-0 text-center">
               La factura requiere un cliente con RUT sincronizado en Bsale.
+            </p>
+            <p v-else-if="tipo === 'cotizacion' && !cliente" class="text-caption text-warning mt-2 mb-0 text-center">
+              La cotización requiere seleccionar un cliente.
             </p>
           </VCardText>
         </VCard>
@@ -333,7 +341,7 @@
       <VCard>
         <VCardText class="text-center pa-6">
           <VIcon size="56" color="success" class="mb-2">mdi-check-circle</VIcon>
-          <h2 class="text-h6 font-weight-bold mb-1">{{ resultado.tipo }} emitida</h2>
+          <h2 class="text-h6 font-weight-bold mb-1">{{ resultado.tipo }} {{ resultado.cotizacion_id ? 'creada' : 'emitida' }}</h2>
           <p class="text-body-2 mb-1">N° {{ resultado.numero }} · {{ resultado.cliente }}</p>
           <p class="text-h6 font-weight-bold text-success">{{ clp(resultado.total) }}</p>
           <VBtn
@@ -349,7 +357,8 @@
           </VBtn>
           <div class="d-flex gap-2 justify-center mt-3">
             <VBtn v-if="resultado.pdf" color="error" variant="tonal" prepend-icon="mdi-file-pdf-box" :href="resultado.pdf" target="_blank">Ver PDF</VBtn>
-            <VBtn color="primary" @click="nuevaVenta">Nueva venta</VBtn>
+            <VBtn v-if="resultado.cotizacion_id" color="info" variant="tonal" prepend-icon="mdi-open-in-new" :to="{ name: 'cotizaciones', query: { id: resultado.cotizacion_id } }">Ver cotización</VBtn>
+            <VBtn color="primary" @click="nuevaVenta">Nueva</VBtn>
           </div>
         </VCardText>
       </VCard>
@@ -606,14 +615,57 @@ function imprimirOrdenCorte() {
 const puedeEmitir = computed(() => {
   if (!items.value.length) return false
   if (items.value.some(it => !it.nombre || !(Number(it.cantidad) > 0))) return false
+  if (tipo.value === 'cotizacion') return !!cliente.value // cliente obligatorio, sin Bsale
   if (tipo.value === 'factura' && (!cliente.value || !cliente.value.bsale_id)) return false
   if (!pagosOk.value) return false
   if (referencias.value.some(r => !r.numero)) return false
   return true
 })
 
+function itemsPayload() {
+  return items.value.map(it => ({
+    nombre: it.nombre,
+    cantidad: Number(it.cantidad),
+    precio: Number(it.precio),
+    descuento: Number(it.descuento) || 0,
+    producto_id: it.producto_id || undefined,
+    producto_nombre: it.vidrio ? it.vidrio.producto : it.nombre,
+    es_vidrio: !!it.vidrio,
+    ancho: it.vidrio?.ancho,
+    alto: it.vidrio?.alto,
+    piezas: it.vidrio?.piezas,
+    pulido: it.vidrio?.pulido,
+  }))
+}
+
+async function guardarCotizacion() {
+  emitiendo.value = true
+  try {
+    const { data } = await api.post('/api/venta-express/cotizacion', {
+      cliente_id: cliente.value.id,
+      observaciones: observaciones.value || undefined,
+      items: itemsPayload(),
+    })
+    resultado.value = {
+      show: true,
+      tipo: 'Cotización',
+      numero: data.cotizacion_id,
+      total: totalBruto.value,
+      pdf: '',
+      cliente: cliente.value.nombre,
+      vidrios: [],
+      cotizacion_id: data.cotizacion_id,
+    }
+  } catch (e) {
+    snackMsg(e.response?.data?.error || 'No se pudo guardar la cotización', 'error')
+  } finally {
+    emitiendo.value = false
+  }
+}
+
 async function emitir() {
   if (!puedeEmitir.value) return
+  if (tipo.value === 'cotizacion') return guardarCotizacion()
   emitiendo.value = true
   try {
     const { data } = await api.post('/api/venta-express/emitir', {

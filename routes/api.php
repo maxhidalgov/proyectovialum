@@ -191,6 +191,7 @@ Route::middleware('auth:api')->group(function () {
     // Venta Express (POS): emite boleta/factura directo a Bsale
     Route::get('/venta-express/productos', [\App\Http\Controllers\VentaExpressController::class, 'buscarProductos']);
     Route::post('/venta-express/emitir',   [\App\Http\Controllers\VentaExpressController::class, 'emitir']);
+    Route::post('/venta-express/cotizacion', [\App\Http\Controllers\VentaExpressController::class, 'guardarCotizacion']);
     Route::get('/ordenes-corte',           [\App\Http\Controllers\VentaExpressController::class, 'ordenesCorte']);
 
     // Conciliación bancaria

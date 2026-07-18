@@ -292,6 +292,71 @@ class VentaExpressController extends Controller
     }
 
     /**
+     * POST /api/venta-express/cotizacion — crea una cotización interna (no toca Bsale).
+     * Cliente obligatorio. Queda en estado Evaluación para seguir el flujo normal.
+     */
+    public function guardarCotizacion(Request $request)
+    {
+        $data = $request->validate([
+            'cliente_id'         => 'required|integer|exists:clientes,id',
+            'observaciones'      => 'nullable|string',
+            'items'              => 'required|array|min:1',
+            'items.*.nombre'     => 'required|string',
+            'items.*.cantidad'   => 'required|numeric|min:0.0001',
+            'items.*.precio'     => 'required|numeric|min:0',
+            'items.*.descuento'  => 'nullable|numeric|min:0|max:100',
+            'items.*.producto_id'=> 'nullable|integer',
+            'items.*.es_vidrio'  => 'nullable|boolean',
+            'items.*.ancho'      => 'nullable|integer',
+            'items.*.alto'       => 'nullable|integer',
+            'items.*.piezas'     => 'nullable|integer',
+            'items.*.pulido'     => 'nullable|boolean',
+        ]);
+
+        $estadoEval = \App\Models\EstadoCotizacion::where('nombre', 'Evaluación')->value('id') ?? 1;
+
+        $total = 0;
+        foreach ($data['items'] as $it) {
+            $total += (float) $it['precio'] * (float) $it['cantidad'] * (1 - (float) ($it['descuento'] ?? 0) / 100);
+        }
+
+        $cot = \App\Models\Cotizacion::create([
+            'cliente_id'           => $data['cliente_id'],
+            'vendedor_id'          => auth()->id() ?? 1,
+            'fecha'                => now()->toDateString(),
+            'estado_cotizacion_id' => $estadoEval,
+            'observaciones'        => $data['observaciones'] ?? null,
+            'total'                => round($total),
+        ]);
+
+        foreach ($data['items'] as $it) {
+            $neto = (float) $it['precio'];
+            $cant = (float) $it['cantidad'];
+            $desc = (float) ($it['descuento'] ?? 0);
+            $esVidrio = (bool) ($it['es_vidrio'] ?? false);
+
+            \App\Models\CotizacionDetalle::create([
+                'cotizacion_id'   => $cot->id,
+                'producto_id'     => $it['producto_id'] ?? null,
+                'tipo_item'       => !empty($it['producto_id']) ? 'producto' : 'item_libre',
+                'descripcion'     => $it['nombre'],
+                'cantidad'        => $cant,
+                'precio_unitario' => round($neto),
+                'total'           => round($neto * $cant * (1 - $desc / 100)),
+                'esVidrio'        => $esVidrio,
+                'ancho_mm'        => $it['ancho'] ?? null,
+                'alto_mm'         => $it['alto'] ?? null,
+                'm2'              => ($esVidrio && !empty($it['ancho']) && !empty($it['alto']))
+                    ? round(($it['ancho'] / 1000) * ($it['alto'] / 1000) * ($it['piezas'] ?? 1), 4)
+                    : null,
+                'pulido'          => (bool) ($it['pulido'] ?? false),
+            ]);
+        }
+
+        return response()->json(['success' => true, 'cotizacion_id' => $cot->id]);
+    }
+
+    /**
      * GET /api/ordenes-corte — registro de órdenes de corte (ventas con vidrios), reimprimible.
      */
     public function ordenesCorte(Request $request)
