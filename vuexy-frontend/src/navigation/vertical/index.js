@@ -119,6 +119,12 @@ const allMenuItems = [
     permission: 'gestionar_cotizaciones',
   },
   {
+    title: 'Órdenes de Corte',
+    to: { name: 'ordenes-corte' },
+    icon: { icon: 'mdi-content-cut' },
+    permission: 'gestionar_cotizaciones',
+  },
+  {
     title: 'Operaciones',
     to: { name: 'operaciones' },
     icon: { icon: 'mdi-view-column' },

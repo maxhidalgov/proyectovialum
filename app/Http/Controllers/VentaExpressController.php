@@ -64,13 +64,14 @@ class VentaExpressController extends Controller
             })
             ->orderBy('p.nombre')
             ->limit(30)
-            ->get(['lp.id', 'p.nombre as producto', 'c.nombre as color', 'lp.precio_venta', 'p.tipo_producto_id']);
+            ->get(['lp.id', 'p.id as producto_id', 'p.nombre as producto', 'c.nombre as color', 'lp.precio_venta', 'p.tipo_producto_id']);
 
         // tipos 1, 2 y 7 = cristales/vidrios → se venden por m²
         $tiposVidrio = [1, 2, 7];
 
         $items = $rows->map(fn ($r) => [
-            'id'           => $r->id,
+            'id'           => $r->id, // lista_precio id (key único)
+            'producto_id'  => $r->producto_id ?? null,
             'nombre'       => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
             'precio_venta' => (float) $r->precio_venta,
             'es_vidrio'    => in_array((int) $r->tipo_producto_id, $tiposVidrio, true),
@@ -87,14 +88,21 @@ class VentaExpressController extends Controller
     public function emitir(Request $request)
     {
         $data = $request->validate([
-            'tipo'              => 'required|in:boleta,factura',
-            'cliente_id'        => 'nullable|integer|exists:clientes,id',
-            'forma_pago'        => 'required|string',
-            'items'             => 'required|array|min:1',
-            'items.*.nombre'    => 'required|string',
-            'items.*.cantidad'  => 'required|numeric|min:0.0001',
-            'items.*.precio'    => 'required|numeric|min:0',
-            'items.*.descuento' => 'nullable|numeric|min:0|max:100',
+            'tipo'               => 'required|in:boleta,factura',
+            'cliente_id'         => 'nullable|integer|exists:clientes,id',
+            'forma_pago'         => 'required|string',
+            'items'              => 'required|array|min:1',
+            'items.*.nombre'     => 'required|string',
+            'items.*.cantidad'   => 'required|numeric|min:0.0001',
+            'items.*.precio'     => 'required|numeric|min:0',
+            'items.*.descuento'  => 'nullable|numeric|min:0|max:100',
+            'items.*.producto_id'    => 'nullable|integer',
+            'items.*.producto_nombre'=> 'nullable|string',
+            'items.*.es_vidrio'  => 'nullable|boolean',
+            'items.*.ancho'      => 'nullable|integer',
+            'items.*.alto'       => 'nullable|integer',
+            'items.*.piezas'     => 'nullable|integer',
+            'items.*.pulido'     => 'nullable|boolean',
         ]);
 
         if (!$this->accessToken) {
@@ -195,6 +203,27 @@ class VentaExpressController extends Controller
             'fecha_emision'           => now()->toDateString(),
         ]);
 
+        // Guardar líneas de venta (para reimprimir orden de corte y para top de productos)
+        foreach ($data['items'] as $it) {
+            $neto = (float) $it['precio'];
+            $cant = (float) $it['cantidad'];
+            $desc = (float) ($it['descuento'] ?? 0);
+            \App\Models\DocumentoItem::create([
+                'documento_facturacion_id' => $doc->id,
+                'producto_id'    => $it['producto_id'] ?? null,
+                'nombre'         => $it['producto_nombre'] ?? $it['nombre'],
+                'cantidad'       => $cant,
+                'precio_unitario'=> (int) round($neto),
+                'descuento'      => $desc,
+                'total_neto'     => (int) round($neto * $cant * (1 - $desc / 100)),
+                'es_vidrio'      => (bool) ($it['es_vidrio'] ?? false),
+                'ancho'          => $it['ancho'] ?? null,
+                'alto'           => $it['alto'] ?? null,
+                'piezas'         => $it['piezas'] ?? null,
+                'pulido'         => (bool) ($it['pulido'] ?? false),
+            ]);
+        }
+
         // Si es boleta, recalcular el resumen del mes para que aparezca al instante en el módulo Boletas
         if ($esBoleta) {
             try {
@@ -215,6 +244,53 @@ class VentaExpressController extends Controller
             ],
             'doc_id' => $doc->id,
         ]);
+    }
+
+    /**
+     * GET /api/ordenes-corte — registro de órdenes de corte (ventas con vidrios), reimprimible.
+     */
+    public function ordenesCorte(Request $request)
+    {
+        $docs = DB::table('documentos_facturacion as df')
+            ->join('documento_items as di', 'di.documento_facturacion_id', '=', 'df.id')
+            ->where('di.es_vidrio', 1)
+            ->when($request->filled('buscar'), function ($q) use ($request) {
+                $t = '%' . $request->buscar . '%';
+                $q->where('df.bsale_cliente_nombre', 'like', $t)
+                  ->orWhere('df.numero_documento_bsale', 'like', $t);
+            })
+            ->select('df.id', 'df.numero_documento_bsale', 'df.tipo_documento_bsale_id', 'df.bsale_cliente_nombre', 'df.fecha_emision')
+            ->distinct()
+            ->orderByDesc('df.id')
+            ->limit(300)
+            ->get();
+
+        $items = DB::table('documento_items')
+            ->whereIn('documento_facturacion_id', $docs->pluck('id'))
+            ->where('es_vidrio', 1)
+            ->get()
+            ->groupBy('documento_facturacion_id');
+
+        return response()->json($docs->map(function ($d) use ($items) {
+            $piezas = ($items->get($d->id) ?? collect())->map(fn ($i) => [
+                'producto' => $i->nombre,
+                'ancho'    => $i->ancho,
+                'alto'     => $i->alto,
+                'piezas'   => (int) $i->piezas,
+                'pulido'   => (bool) $i->pulido,
+            ])->values();
+
+            return [
+                'id'           => $d->id,
+                'numero'       => 'OTC-' . str_pad($d->id, 5, '0', STR_PAD_LEFT),
+                'doc_numero'   => $d->numero_documento_bsale,
+                'tipo'         => $d->tipo_documento_bsale_id == 1 ? 'Boleta' : 'Factura',
+                'cliente'      => $d->bsale_cliente_nombre,
+                'fecha'        => $d->fecha_emision,
+                'piezas'       => $piezas,
+                'total_piezas' => $piezas->sum('piezas'),
+            ];
+        }));
     }
 
     private function nombreCliente(Cliente $c): string

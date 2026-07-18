@@ -363,7 +363,7 @@ function agregarProducto(p) {
     // Vidrio: pedir medidas para calcular m²
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
   } else {
-    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: 0 })
+    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: 0, producto_id: p.producto_id })
   }
   prodSearch.value = ''
   prodResults.value = []
@@ -400,7 +400,8 @@ function confirmarMedidas() {
     cantidad: m2Calculado.value, // la cantidad es el total de m²
     precio: precioM2,            // precio por m² (con pulido si aplica)
     descuento: 0,
-    // Datos estructurados para la orden de corte (no se envían a Bsale)
+    producto_id: m.producto.producto_id,
+    // Datos estructurados para la orden de corte
     vidrio: {
       producto: m.producto.nombre,
       ancho: Number(m.ancho),
@@ -560,6 +561,13 @@ async function emitir() {
         cantidad: Number(it.cantidad),
         precio: Number(it.precio),
         descuento: Number(it.descuento) || 0,
+        producto_id: it.producto_id || undefined,
+        producto_nombre: it.vidrio ? it.vidrio.producto : it.nombre,
+        es_vidrio: !!it.vidrio,
+        ancho: it.vidrio?.ancho,
+        alto: it.vidrio?.alto,
+        piezas: it.vidrio?.piezas,
+        pulido: it.vidrio?.pulido,
       })),
     })
     resultado.value = {
