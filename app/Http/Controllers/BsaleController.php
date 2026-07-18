@@ -72,8 +72,15 @@ class BsaleController extends Controller
             $condicionesPago      = $request->input('condiciones_pago');
             $fechaVencimiento     = $request->input('fecha_vencimiento');
             $observaciones        = $request->input('observaciones', '');
+            $pagos                = $request->input('pagos', []);
+            $referencias          = $request->input('referencias', []);
             $porcentaje           = (float) $request->input('porcentaje', 100); // 100 = total completo
             $tipoEmision          = $porcentaje == 100 ? 'total' : ($porcentaje <= 50 ? 'anticipo' : 'saldo');
+
+            // Forma de pago principal (mayor monto) para el registro / resumen de boletas
+            $formaPagoPrincipal   = !empty($pagos)
+                ? collect($pagos)->sortByDesc('monto')->first()['forma_pago']
+                : $metodoPago;
             
             // Buscar cotización
             $cotizacion = Cotizacion::with([
@@ -156,7 +163,9 @@ class BsaleController extends Controller
                     $condicionesPago,
                     $fechaVencimiento,
                     $observaciones,
-                    $porcentaje
+                    $porcentaje,
+                    $pagos,
+                    $referencias
                 );
                 Log::info("✅ Payload construido exitosamente");
             } catch (\Exception $e) {
@@ -191,7 +200,8 @@ class BsaleController extends Controller
                     // Clasificación (igual que Venta Express) para que boletas caigan
                     // en el resumen mensual y CxC clasifique bien.
                     'tipo_documento_bsale_id'=> (int) $tipoDocumento,
-                    'forma_pago'             => $metodoPago ?: null,
+                    'forma_pago'             => $formaPagoPrincipal ?: null,
+                    'nota'                   => $observaciones ?: null,
                     'cliente_id'             => $clienteFacturacion?->id,
                     'bsale_cliente_nombre'   => $clienteFacturacion
                         ? ($clienteFacturacion->razon_social ?: trim(($clienteFacturacion->first_name ?? '') . ' ' . ($clienteFacturacion->last_name ?? '')))
@@ -270,7 +280,9 @@ class BsaleController extends Controller
         $condicionesPago,
         $fechaVencimiento,
         $observaciones,
-        $porcentaje = 100
+        $porcentaje = 100,
+        array $pagos = [],
+        array $referencias = []
     ) {
         $detalles = [];
         $totalNeto = 0;
@@ -374,9 +386,15 @@ class BsaleController extends Controller
             ? "{$label} {$porcentaje}% sobre cotización #{$cotizacion->id}. Total cotización: $" . number_format($cotizacion->total, 0, ',', '.')
             : null;
 
+        // Observaciones libres del usuario se agregan a la nota del documento
+        $obs = trim((string) $observaciones);
+        if ($obs !== '') {
+            $nota = $nota ? ($nota . ' — ' . $obs) : $obs;
+        }
+
         // Opción B: Boleta no tiene dynamicAttribute "Nota" → prefixar primer item
         if ($tipoDocumento == 1 && $nota !== null && !empty($detalles)) {
-            $detalles[0]['comment'] = "[{$label} {$porcentaje}%] " . $detalles[0]['comment'];
+            $detalles[0]['comment'] = mb_substr("[{$nota}] " . $detalles[0]['comment'], 0, 100);
         }
 
         // Formato correcto según documentación BSALE
@@ -411,8 +429,14 @@ class BsaleController extends Controller
             $payload['expirationDate'] = strtotime($fechaVencimiento);
         }
 
-        // Agregar método de pago
-        if ($metodoPago) {
+        // Pagos: varios (efectivo + transbank, etc.) o uno solo
+        if (!empty($pagos)) {
+            $payload['payments'] = collect($pagos)->map(fn ($p) => [
+                'paymentTypeId' => $this->getPaymentTypeId($p['forma_pago']),
+                'amount'        => (int) round($p['monto']),
+                'recordDate'    => time(),
+            ])->all();
+        } elseif ($metodoPago) {
             // El monto del pago es el total del documento (ya con descuento aplicado)
             $montoDocumento = $porcentaje < 100
                 ? (int)round($cotizacion->total * $porcentaje / 100)
@@ -424,6 +448,19 @@ class BsaleController extends Controller
                     "recordDate"    => time(),
                 ]
             ];
+        }
+
+        // Referencias electrónicas (ej. Orden de Compra codeSii 801)
+        if (!empty($referencias)) {
+            $refs = collect($referencias)->map(fn ($r) => array_filter([
+                'number'        => (string) ($r['numero'] ?? ''),
+                'referenceDate' => !empty($r['fecha']) ? strtotime($r['fecha']) : time(),
+                'reason'        => $r['razon'] ?? null,
+                'codeSii'       => isset($r['code_sii']) ? (int) $r['code_sii'] : null,
+            ], fn ($v) => $v !== null && $v !== ''))->values()->all();
+            if ($refs) {
+                $payload['references'] = $refs;
+            }
         }
 
         Log::info("🧾 PAYLOAD BSALE FINAL:", [
