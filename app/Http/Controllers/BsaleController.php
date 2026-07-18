@@ -182,12 +182,30 @@ class BsaleController extends Controller
                     'tipo'                   => $tipoEmision,
                     'porcentaje'             => $porcentaje,
                     'monto'                  => $monto,
+                    'neto'                   => (int) round($monto / 1.19),
                     'estado'                 => 'emitido',
                     'id_documento_bsale'     => $response['data']['id'] ?? null,
                     'numero_documento_bsale' => $response['data']['number'] ?? null,
                     'url_pdf_bsale'          => $response['data']['urlPdf'] ?? null,
                     'fecha_emision'          => now()->toDateString(),
+                    // Clasificación (igual que Venta Express) para que boletas caigan
+                    // en el resumen mensual y CxC clasifique bien.
+                    'tipo_documento_bsale_id'=> (int) $tipoDocumento,
+                    'forma_pago'             => $metodoPago ?: null,
+                    'cliente_id'             => $clienteFacturacion?->id,
+                    'bsale_cliente_nombre'   => $clienteFacturacion
+                        ? ($clienteFacturacion->razon_social ?: trim(($clienteFacturacion->first_name ?? '') . ' ' . ($clienteFacturacion->last_name ?? '')))
+                        : 'Consumidor Final',
                 ]);
+
+                // Si es boleta, recalcular el resumen del mes para que aparezca en el módulo Boletas
+                if ((int) $tipoDocumento === 1) {
+                    try {
+                        \Artisan::call('boletas:recalcular-resumenes', ['--periodo' => now()->format('Y-m')]);
+                    } catch (\Throwable $e) {
+                        Log::warning('crearDocumentoDesdeCotzacion: no se pudo recalcular resumen boletas', ['error' => $e->getMessage()]);
+                    }
+                }
 
                 // Calcular total emitido para decidir si cambiar estado
                 $totalEmitido = \App\Models\DocumentoFacturacion::where('cotizacion_id', $cotizacion->id)
