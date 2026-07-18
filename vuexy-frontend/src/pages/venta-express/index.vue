@@ -8,9 +8,9 @@
       </div>
       <VSpacer />
       <VBtnToggle v-model="tipo" mandatory color="primary" variant="outlined" divided rounded="lg">
-        <VBtn value="boleta" prepend-icon="mdi-receipt-text-outline" class="px-5">Boleta</VBtn>
-        <VBtn value="factura" prepend-icon="mdi-file-document-outline" class="px-5">Factura</VBtn>
-        <VBtn value="cotizacion" prepend-icon="mdi-file-clock-outline" class="px-5">Cotización</VBtn>
+        <VBtn value="boleta" class="text-none px-6">Boleta</VBtn>
+        <VBtn value="factura" class="text-none px-6">Factura</VBtn>
+        <VBtn value="cotizacion" class="text-none px-6">Cotización</VBtn>
       </VBtnToggle>
     </div>
 
