@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cliente;
 use App\Models\DocumentoFacturacion;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -189,6 +190,15 @@ class VentaExpressController extends Controller
             'url_pdf_bsale'           => $bsale['urlPdf'] ?? null,
             'fecha_emision'           => now()->toDateString(),
         ]);
+
+        // Si es boleta, recalcular el resumen del mes para que aparezca al instante en el módulo Boletas
+        if ($esBoleta) {
+            try {
+                Artisan::call('boletas:recalcular-resumenes', ['--periodo' => now()->format('Y-m')]);
+            } catch (\Throwable $e) {
+                Log::warning('VentaExpress: no se pudo recalcular resumen de boletas', ['error' => $e->getMessage()]);
+            }
+        }
 
         return response()->json([
             'success'   => true,
