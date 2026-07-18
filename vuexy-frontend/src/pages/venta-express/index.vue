@@ -171,19 +171,32 @@
               <span class="text-subtitle-2 font-weight-bold">Formas de pago</span>
               <VBtn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarPago">Dividir</VBtn>
             </div>
-            <div v-for="(p, i) in pagos" :key="i" class="d-flex align-center gap-2 mb-2">
-              <VSelect
-                v-model="p.forma_pago"
-                :items="formasPago"
-                item-title="label"
-                item-value="value"
+            <div v-for="(p, i) in pagos" :key="i" class="mb-2">
+              <div class="d-flex align-center gap-2">
+                <VSelect
+                  v-model="p.forma_pago"
+                  :items="formasPago"
+                  item-title="label"
+                  item-value="value"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  style="max-width:150px"
+                />
+                <VTextField v-model.number="p.monto" type="number" min="0" density="compact" variant="outlined" hide-details reverse prefix="$" />
+                <VBtn v-if="pagos.length > 1" icon size="x-small" variant="text" color="error" @click="pagos.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
+              </div>
+              <VTextField
+                v-if="esTarjeta(p.forma_pago)"
+                v-model="p.voucher"
+                label="N° voucher Transbank"
                 density="compact"
                 variant="outlined"
                 hide-details
-                style="max-width:150px"
+                prepend-inner-icon="mdi-credit-card-outline"
+                class="mt-2"
+                :error="!p.voucher"
               />
-              <VTextField v-model.number="p.monto" type="number" min="0" density="compact" variant="outlined" hide-details reverse prefix="$" />
-              <VBtn v-if="pagos.length > 1" icon size="x-small" variant="text" color="error" @click="pagos.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
             </div>
             <div v-if="pagos.length > 1" class="d-flex justify-space-between text-caption mb-2" :class="pagosOk ? 'text-success' : 'text-warning'">
               <span>Asignado</span>
@@ -541,13 +554,15 @@ const formasPago = [
   { label: 'Cheque',          value: 'cheque' },
   { label: 'Webpay',          value: 'webpay' },
 ]
-const pagos = ref([{ forma_pago: 'efectivo', monto: 0 }])
+const pagos = ref([{ forma_pago: 'efectivo', monto: 0, voucher: '' }])
+const esTarjeta = (fp) => ['tarjeta_debito', 'tarjeta_credito'].includes(fp)
 const totalPagos = computed(() => pagos.value.reduce((s, p) => s + (Number(p.monto) || 0), 0))
 const pagosOk = computed(() => Math.abs(totalPagos.value - totalBruto.value) < 1)
+const vouchersOk = computed(() => pagos.value.every(p => !esTarjeta(p.forma_pago) || !!p.voucher))
 
 function agregarPago() {
   const restante = Math.max(0, totalBruto.value - totalPagos.value)
-  pagos.value.push({ forma_pago: 'transferencia', monto: restante })
+  pagos.value.push({ forma_pago: 'transferencia', monto: restante, voucher: '' })
 }
 
 // Si hay una sola forma de pago, se mantiene igual al total automáticamente
@@ -618,6 +633,7 @@ const puedeEmitir = computed(() => {
   if (tipo.value === 'cotizacion') return !!cliente.value // cliente obligatorio, sin Bsale
   if (tipo.value === 'factura' && (!cliente.value || !cliente.value.bsale_id)) return false
   if (!pagosOk.value) return false
+  if (!vouchersOk.value) return false
   if (referencias.value.some(r => !r.numero)) return false
   return true
 })
@@ -672,7 +688,7 @@ async function emitir() {
       tipo: tipo.value,
       cliente_id: cliente.value?.id || undefined,
       observaciones: observaciones.value || undefined,
-      pagos: pagos.value.map(p => ({ forma_pago: p.forma_pago, monto: Number(p.monto) })),
+      pagos: pagos.value.map(p => ({ forma_pago: p.forma_pago, monto: Number(p.monto), voucher: p.voucher || undefined })),
       referencias: referencias.value
         .filter(r => r.numero)
         .map(r => ({
@@ -714,7 +730,7 @@ async function emitir() {
 function nuevaVenta() {
   items.value = []
   cliente.value = null
-  pagos.value = [{ forma_pago: 'efectivo', monto: 0 }]
+  pagos.value = [{ forma_pago: 'efectivo', monto: 0, voucher: '' }]
   observaciones.value = ''
   referencias.value = []
   resultado.value.show = false

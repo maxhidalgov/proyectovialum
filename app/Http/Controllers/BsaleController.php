@@ -81,6 +81,14 @@ class BsaleController extends Controller
             $formaPagoPrincipal   = !empty($pagos)
                 ? collect($pagos)->sortByDesc('monto')->first()['forma_pago']
                 : $metodoPago;
+
+            // Voucher Transbank (obligatorio en pagos con tarjeta) — para la conciliación
+            $cardPago = collect($pagos)->first(fn ($p) => in_array($p['forma_pago'] ?? '', ['tarjeta_debito', 'tarjeta_credito']));
+            if ($cardPago && empty($cardPago['voucher'])) {
+                return response()->json(['success' => false, 'error' => 'Ingresa el N° de voucher para el pago con tarjeta.'], 400);
+            }
+            $voucherTbk    = $cardPago['voucher'] ?? null;
+            $pagadoTarjeta = $cardPago ? 1 : 0;
             
             // Buscar cotización
             $cotizacion = Cotizacion::with([
@@ -202,6 +210,9 @@ class BsaleController extends Controller
                     'tipo_documento_bsale_id'=> (int) $tipoDocumento,
                     'forma_pago'             => $formaPagoPrincipal ?: null,
                     'nota'                   => $observaciones ?: null,
+                    'nro_comprobante_transbank' => $voucherTbk,
+                    'pagado_con_tarjeta'     => $pagadoTarjeta,
+                    'payment_type_id'        => $formaPagoPrincipal ? $this->getPaymentTypeId($formaPagoPrincipal) : null,
                     'cliente_id'             => $clienteFacturacion?->id,
                     'bsale_cliente_nombre'   => $clienteFacturacion
                         ? ($clienteFacturacion->razon_social ?: trim(($clienteFacturacion->first_name ?? '') . ' ' . ($clienteFacturacion->last_name ?? '')))

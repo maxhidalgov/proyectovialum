@@ -121,19 +121,32 @@
           <span class="text-subtitle-2 font-weight-bold">Formas de pago</span>
           <v-btn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarPago">Dividir</v-btn>
         </div>
-        <div v-for="(p, i) in pagos" :key="i" class="d-flex align-center gap-2 mb-2">
-          <v-select
-            v-model="p.forma_pago"
-            :items="metodosPago"
-            item-title="text"
-            item-value="value"
+        <div v-for="(p, i) in pagos" :key="i" class="mb-2">
+          <div class="d-flex align-center gap-2">
+            <v-select
+              v-model="p.forma_pago"
+              :items="metodosPago"
+              item-title="text"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width:170px"
+            />
+            <v-text-field v-model.number="p.monto" type="number" min="0" density="compact" variant="outlined" hide-details reverse prefix="$" />
+            <v-btn v-if="pagos.length > 1" icon size="x-small" variant="text" color="error" @click="pagos.splice(i, 1)"><v-icon size="16">mdi-close</v-icon></v-btn>
+          </div>
+          <v-text-field
+            v-if="esTarjeta(p.forma_pago)"
+            v-model="p.voucher"
+            label="N° voucher Transbank"
             density="compact"
             variant="outlined"
             hide-details
-            style="max-width:170px"
+            prepend-inner-icon="mdi-credit-card-outline"
+            class="mt-2"
+            :error="!p.voucher"
           />
-          <v-text-field v-model.number="p.monto" type="number" min="0" density="compact" variant="outlined" hide-details reverse prefix="$" />
-          <v-btn v-if="pagos.length > 1" icon size="x-small" variant="text" color="error" @click="pagos.splice(i, 1)"><v-icon size="16">mdi-close</v-icon></v-btn>
         </div>
         <div v-if="pagos.length > 1" class="d-flex justify-space-between text-caption mb-2" :class="pagosOk ? 'text-success' : 'text-warning'">
           <span>Asignado</span>
@@ -179,7 +192,7 @@
           color="success"
           variant="flat"
           :loading="generando"
-          :disabled="!form.tipo_documento || porcentaje < 1 || porcentaje > 100 || !pagosOk || referencias.some(r => !r.numero)"
+          :disabled="!form.tipo_documento || porcentaje < 1 || porcentaje > 100 || !pagosOk || !vouchersOk || referencias.some(r => !r.numero)"
           @click="generar"
         >
           <v-icon start>mdi-receipt</v-icon>
@@ -222,11 +235,13 @@ const form = ref({
 })
 
 // Pagos (uno o varios), observaciones y referencias
-const pagos = ref([{ forma_pago: 'transferencia', monto: 0 }])
+const pagos = ref([{ forma_pago: 'transferencia', monto: 0, voucher: '' }])
+const esTarjeta = (fp) => ['tarjeta_debito', 'tarjeta_credito'].includes(fp)
 const totalPagos = computed(() => pagos.value.reduce((s, p) => s + (Number(p.monto) || 0), 0))
 const pagosOk = computed(() => Math.abs(totalPagos.value - montoCalculado.value) < 1)
+const vouchersOk = computed(() => pagos.value.every(p => !esTarjeta(p.forma_pago) || !!p.voucher))
 function agregarPago() {
-  pagos.value.push({ forma_pago: 'efectivo', monto: Math.max(0, montoCalculado.value - totalPagos.value) })
+  pagos.value.push({ forma_pago: 'efectivo', monto: Math.max(0, montoCalculado.value - totalPagos.value), voucher: '' })
 }
 
 const referencias = ref([])
@@ -305,7 +320,7 @@ async function inicializar() {
   error.value = ''
   personalizado.value = false
   form.value = { tipo_documento: null, observaciones: '', cliente_facturacion_id: null }
-  pagos.value = [{ forma_pago: 'transferencia', monto: 0 }]
+  pagos.value = [{ forma_pago: 'transferencia', monto: 0, voucher: '' }]
   referencias.value = []
   // Pre-seleccionar saldo si ya hay documentos emitidos
   porcentaje.value = pctSaldo.value > 0 && pctSaldo.value < 100 ? pctSaldo.value : 100
@@ -363,7 +378,7 @@ async function generar() {
       cliente_facturacion_id: form.value.cliente_facturacion_id,
       observaciones:          form.value.observaciones || undefined,
       porcentaje:             porcentaje.value,
-      pagos:                  pagos.value.map(p => ({ forma_pago: p.forma_pago, monto: Number(p.monto) })),
+      pagos:                  pagos.value.map(p => ({ forma_pago: p.forma_pago, monto: Number(p.monto), voucher: p.voucher || undefined })),
       referencias:            referencias.value
         .filter(r => r.numero)
         .map(r => ({

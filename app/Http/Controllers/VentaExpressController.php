@@ -95,6 +95,7 @@ class VentaExpressController extends Controller
             'pagos'              => 'required|array|min:1',
             'pagos.*.forma_pago' => 'required|string',
             'pagos.*.monto'      => 'required|numeric|min:1',
+            'pagos.*.voucher'    => 'nullable|string',
             // Referencias electrónicas (ej. orden de compra)
             'referencias'            => 'nullable|array',
             'referencias.*.numero'   => 'required|string',
@@ -176,6 +177,14 @@ class VentaExpressController extends Controller
         ])->all();
         $formaPagoPrincipal = collect($data['pagos'])->sortByDesc('monto')->first()['forma_pago'];
 
+        // Voucher Transbank (obligatorio en pagos con tarjeta) — para la conciliación Transbank
+        $cardPago = collect($data['pagos'])->first(fn ($p) => in_array($p['forma_pago'], ['tarjeta_debito', 'tarjeta_credito']));
+        if ($cardPago && empty($cardPago['voucher'])) {
+            return response()->json(['success' => false, 'error' => 'Ingresa el N° de voucher para el pago con tarjeta.'], 422);
+        }
+        $voucherTbk    = $cardPago['voucher'] ?? null;
+        $pagadoTarjeta = $cardPago ? 1 : 0;
+
         $payload = [
             'documentTypeId' => $documentTypeId,
             'officeId'       => 1,
@@ -240,6 +249,9 @@ class VentaExpressController extends Controller
             'tipo_documento_bsale_id' => $documentTypeId,
             'forma_pago'              => $formaPagoPrincipal,
             'nota'                    => $obs ?: null,
+            'nro_comprobante_transbank' => $voucherTbk,
+            'pagado_con_tarjeta'      => $pagadoTarjeta,
+            'payment_type_id'         => $this->paymentTypes[$formaPagoPrincipal] ?? null,
             'cliente_id'              => $cliente?->id,
             'bsale_cliente_nombre'    => $clienteNombre,
             'id_documento_bsale'      => $bsale['id'] ?? null,
