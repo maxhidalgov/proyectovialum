@@ -257,9 +257,30 @@
             <VCol cols="4"><VTextField v-model.number="medidas.alto" label="Alto (mm)" type="number" min="0" variant="outlined" density="compact" hide-details /></VCol>
             <VCol cols="4"><VTextField v-model.number="medidas.piezas" label="Piezas" type="number" min="1" variant="outlined" density="compact" hide-details /></VCol>
           </VRow>
-          <div class="d-flex justify-space-between align-center mt-3 pa-2 rounded bg-surface-variant">
-            <span class="text-body-2">{{ m2Calculado }} m²</span>
-            <span class="text-body-1 font-weight-bold">{{ clp(Math.round(m2Calculado * (medidas.producto.precio_venta || 0))) }} <span class="text-caption text-medium-emphasis">neto</span></span>
+
+          <VCheckbox
+            v-model="medidas.pulido"
+            density="compact"
+            hide-details
+            color="info"
+            class="mt-2"
+            label="Pulido (+20%)"
+          />
+
+          <div class="mt-3 pa-2 rounded bg-surface-variant">
+            <div class="d-flex justify-space-between text-body-2">
+              <span>Vidrio · {{ m2Calculado }} m²</span>
+              <span>{{ clp(vidrioNeto) }}</span>
+            </div>
+            <div v-if="medidas.pulido" class="d-flex justify-space-between text-body-2 text-info">
+              <span>Pulido (20%)</span>
+              <span>{{ clp(pulidoMonto) }}</span>
+            </div>
+            <VDivider class="my-1" />
+            <div class="d-flex justify-space-between text-body-1 font-weight-bold">
+              <span>Subtotal neto</span>
+              <span>{{ clp(vidrioNeto + pulidoMonto) }}</span>
+            </div>
           </div>
         </VCardText>
         <VCardActions class="pa-3">
@@ -329,7 +350,7 @@ function agregarProducto(p) {
   prodMenu.value = false
   if (p.es_vidrio) {
     // Vidrio: pedir medidas para calcular m²
-    medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1 }
+    medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
   } else {
     items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: 0 })
   }
@@ -338,7 +359,8 @@ function agregarProducto(p) {
 }
 
 // ── Medidas de vidrio (venta por m²) ───────────────────────────────────────
-const medidas = ref({ show: false, producto: null, ancho: null, alto: null, piezas: 1 })
+const PULIDO_PCT = 0.20 // el pulido cuesta 20% más sobre el valor del vidrio
+const medidas = ref({ show: false, producto: null, ancho: null, alto: null, piezas: 1, pulido: false })
 
 const m2Calculado = computed(() => {
   const a = Number(medidas.value.ancho) || 0
@@ -346,6 +368,9 @@ const m2Calculado = computed(() => {
   const pz = Number(medidas.value.piezas) || 0
   return +((a / 1000) * (al / 1000) * pz).toFixed(4)
 })
+
+const vidrioNeto = computed(() => Math.round(m2Calculado.value * (medidas.value.producto?.precio_venta || 0)))
+const pulidoMonto = computed(() => medidas.value.pulido ? Math.round(vidrioNeto.value * PULIDO_PCT) : 0)
 
 function confirmarMedidas() {
   const m = medidas.value
@@ -361,6 +386,15 @@ function confirmarMedidas() {
     precio: m.producto.precio_venta, // precio por m²
     descuento: 0,
   })
+  // Pulido como línea aparte (20% del valor del vidrio)
+  if (m.pulido && pulidoMonto.value > 0) {
+    items.value.push({
+      nombre: `Pulido (20%) · ${m.producto.nombre} ${m.ancho}×${m.alto} mm`,
+      cantidad: 1,
+      precio: pulidoMonto.value,
+      descuento: 0,
+    })
+  }
   medidas.value.show = false
 }
 
