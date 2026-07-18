@@ -370,7 +370,7 @@
                 <br><span style="font-size: 10px; color: #888;">Color: {{ $color->nombre ?? 'N/A' }}</span>
               @endif
             @elseif($detalle->producto)
-              <strong>{{ $detalle->producto->nombre }}</strong>
+              <strong>{{ $detalle->descripcion ?: $detalle->producto->nombre }}</strong>
             @else
               <strong>{{ $detalle->descripcion }}</strong>
             @endif
