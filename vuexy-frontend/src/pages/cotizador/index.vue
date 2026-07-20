@@ -347,6 +347,9 @@
 
         <template #item.precio_venta="{ item }">
           ${{ formatearNumero(item.precio_venta) }}
+          <div v-if="item.descuento_pct > 0" class="text-caption text-medium-emphasis">
+            <s>${{ formatearNumero(item.precio_base) }}</s> −{{ item.descuento_pct }}%
+          </div>
         </template>
 
         <template #item.acciones="{ item, index }">
@@ -1495,10 +1498,27 @@ const guardarVentana = (ventana) => {
   mostrarModalVentana.value = false
 }
 
+// Descuento configurado del cliente (0 si no hay cliente o sin descuento)
+const descuentoClienteCot = () => Number(form.cliente?.descuento_productos || 0)
+
+// Reaplica el descuento del cliente a los productos ya agregados (sobre su precio base)
+const aplicarDescuentoProductos = () => {
+  const desc = descuentoClienteCot()
+  cotizacion.productos.forEach(p => {
+    if (p.precio_base == null) p.precio_base = Number(p.precio_venta) || 0
+    p.descuento_pct = desc
+    p.precio_venta = Math.round(p.precio_base * (1 - desc / 100))
+    p.total = p.precio_venta * Number(p.cantidad || 1)
+  })
+}
+
 const agregarProductosCotizacion = (productos) => {
   console.log('📦 PRODUCTOS RECIBIDOS DEL MODAL:', productos)
+  const desc = descuentoClienteCot()
   // Agregar productos al arreglo de la cotización
   productos.forEach(item => {
+    const base        = Number(item.precio_venta) || 0
+    const precioFinal = Math.round(base * (1 - desc / 100))
     const productoParaCotizacion = {
       producto_lista_id: item.producto_lista_id, // ✅ ID del producto
       lista_precio_id: item.lista_precio_id, // ✅ ID de la lista de precios
@@ -1511,9 +1531,11 @@ const agregarProductosCotizacion = (productos) => {
       cantidad: item.cantidad,
       precio_costo: item.precio_costo,
       margen: item.margen,
-      precio_venta: item.precio_venta,
+      precio_base: base,        // precio de lista sin descuento
+      descuento_pct: desc,      // % de descuento del cliente
+      precio_venta: precioFinal, // precio con descuento aplicado
       descripcion: item.descripcion || item.nombre || item.producto?.nombre || '',
-      total: item.precio_venta * item.cantidad,
+      total: precioFinal * item.cantidad,
       // Campos adicionales para vidrios
       esVidrio: item.esVidrio || false,
       ancho_mm: item.ancho_mm || null,
@@ -1850,6 +1872,7 @@ const seleccionarCliente = (cliente) => {
   terminoBusquedaCliente.value = cliente.razon_social // Mostrar el nombre en el input
   mostrarDropdown.value = false // Ocultar dropdown
   clientesBuscados.value = [] // Limpiar resultados
+  aplicarDescuentoProductos() // Reaplicar descuento del cliente a productos ya agregados
 }
 
 const onFocusBuscador = () => {
