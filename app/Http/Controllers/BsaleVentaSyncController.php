@@ -459,6 +459,20 @@ class BsaleVentaSyncController extends Controller
         return response()->json(['importados' => $importados, 'pendientes' => $pendientes]);
     }
 
+    // ── GET /api/ventas/lineas-pendientes ─────────────────────────────────────
+    // Cuántos documentos Bsale aún no tienen sus líneas importadas.
+    public function pendientesLineas()
+    {
+        $pendientes = DB::table('documentos_facturacion as df')
+            ->whereNotNull('df.id_documento_bsale')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))->from('documento_items as di')
+                  ->whereColumn('di.documento_facturacion_id', 'df.id');
+            })->count();
+
+        return response()->json(['pendientes' => $pendientes]);
+    }
+
     // ── GET /api/ventas/historial-productos?cliente=&q= ───────────────────────
     // Historial de productos vendidos (líneas), filtrable por cliente y producto.
     public function historialProductos(Request $request)

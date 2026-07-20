@@ -7,11 +7,21 @@
         <p class="text-caption text-grey mt-1">Precio al que se vendió cada producto, por cliente</p>
       </div>
       <VSpacer />
+      <VChip
+        v-if="pendientes !== null"
+        :color="pendientes > 0 ? 'warning' : 'success'"
+        variant="tonal"
+        size="small"
+        class="mr-2"
+      >
+        {{ pendientes > 0 ? `${pendientes} ventas sin importar` : 'Histórico al día' }}
+      </VChip>
       <VBtn
         variant="tonal"
         color="teal"
         prepend-icon="mdi-cloud-download"
         :loading="importando"
+        :disabled="pendientes === 0"
         @click="importarHistorico"
       >
         {{ importando ? `Importando… ${importProgreso}` : 'Importar histórico Bsale' }}
@@ -130,6 +140,14 @@ function buscarDebounced() {
 const importando    = ref(false)
 const importMsg     = ref('')
 const importProgreso = ref('')
+const pendientes    = ref(null)
+
+async function cargarPendientes() {
+  try {
+    const { data } = await api.get('/api/ventas/lineas-pendientes')
+    pendientes.value = data.pendientes
+  } catch { pendientes.value = null }
+}
 
 async function importarHistorico() {
   importando.value = true
@@ -139,6 +157,7 @@ async function importarHistorico() {
     while (true) {
       const { data } = await api.post('/api/ventas/importar-lineas', { limit: 40 })
       totalImportados += data.importados
+      pendientes.value = data.pendientes
       importProgreso.value = `${totalImportados} docs · faltan ${data.pendientes}`
       if (data.importados === 0 || data.pendientes === 0) break
     }
@@ -163,5 +182,8 @@ function fmtFecha(f) {
 const fmtNum = v => new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(Number(v) || 0)
 const clp = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v || 0)
 
-onMounted(cargar)
+onMounted(() => {
+  cargar()
+  cargarPendientes()
+})
 </script>
