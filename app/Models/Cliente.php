@@ -19,6 +19,11 @@ class Cliente extends Model
         'giro',
         'ciudad',
         'comuna',
+        'descuento_productos',
+    ];
+
+    protected $casts = [
+        'descuento_productos' => 'decimal:2',
     ];
 
     public function cotizaciones()

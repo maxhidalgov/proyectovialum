@@ -422,7 +422,7 @@ function agregarProducto(p) {
     // Vidrio: pedir medidas para calcular m²
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
   } else {
-    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: 0, producto_id: p.producto_id })
+    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: descuentoCliente(), producto_id: p.producto_id })
   }
   prodSearch.value = ''
   prodResults.value = []
@@ -458,7 +458,7 @@ function confirmarMedidas() {
     nombre: detalle,
     cantidad: m2Calculado.value, // la cantidad es el total de m²
     precio: precioM2,            // precio por m² (con pulido si aplica)
-    descuento: 0,
+    descuento: descuentoCliente(),
     producto_id: m.producto.producto_id,
     // Datos estructurados para la orden de corte
     vidrio: {
@@ -505,10 +505,19 @@ function seleccionarCliente(c) {
     nombre: nombreCli(c),
     identification: c.identification,
     bsale_id: c.bsale_id,
+    descuento: Number(c.descuento_productos || 0),
   }
   cliMenu.value = false
   cliSearch.value = ''
   cliResults.value = []
+  // Aplicar el descuento del cliente a las líneas de catálogo ya agregadas
+  const d = descuentoCliente()
+  if (d > 0) items.value.forEach(it => { if (it.producto_id) it.descuento = d })
+}
+
+// Descuento configurado del cliente (0 si no hay cliente o sin descuento)
+function descuentoCliente() {
+  return Number(cliente.value?.descuento || 0)
 }
 
 // Crear cliente

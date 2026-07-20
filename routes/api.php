@@ -119,6 +119,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/clientes', [ClienteController::class, 'index']);
     Route::get('/clientes/{cliente}', [ClienteController::class, 'show']);
     Route::put('/clientes/{cliente}', [ClienteController::class, 'update']);
+    Route::patch('/clientes/{cliente}/descuento', [ClienteController::class, 'actualizarDescuento']);
     Route::get('proveedores/{productoId}/{colorId}', [ProductoController::class, 'getProveedoresPorProductoYColor']);
 
     // Rutas Lista de Precios - Las específicas ANTES del resource

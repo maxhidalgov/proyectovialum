@@ -82,6 +82,18 @@ class ClienteController extends Controller
         //
     }
 
+    // PATCH /api/clientes/{cliente}/descuento — descuento sobre productos de lista
+    public function actualizarDescuento(Request $request, Cliente $cliente)
+    {
+        $data = $request->validate([
+            'descuento_productos' => 'required|numeric|min:0|max:100',
+        ]);
+
+        $cliente->update(['descuento_productos' => $data['descuento_productos']]);
+
+        return response()->json(['ok' => true, 'descuento_productos' => $cliente->descuento_productos]);
+    }
+
     /**
      * Remove the specified resource from storage.
      */

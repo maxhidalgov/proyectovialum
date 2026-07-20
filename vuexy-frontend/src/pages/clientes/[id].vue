@@ -77,6 +77,29 @@
             </v-list>
           </v-card>
 
+          <!-- Descuento en productos de lista -->
+          <v-card class="mt-4" rounded="lg">
+            <v-card-text class="d-flex align-center gap-3">
+              <v-icon icon="mdi-sale" color="warning" />
+              <div class="flex-grow-1">
+                <div class="text-body-2 font-weight-medium">Descuento en productos</div>
+                <div class="text-caption text-medium-emphasis">Se aplica automáticamente al vender/cotizar productos de lista (no ventanas)</div>
+              </div>
+              <v-text-field
+                v-model.number="descuento"
+                type="number"
+                min="0"
+                max="100"
+                suffix="%"
+                density="compact"
+                variant="outlined"
+                hide-details
+                style="max-width:110px"
+              />
+              <v-btn size="small" color="primary" :loading="guardandoDesc" @click="guardarDescuento">Guardar</v-btn>
+            </v-card-text>
+          </v-card>
+
           <!-- Resumen -->
           <v-card class="mt-4" rounded="lg">
             <v-card-title class="pa-4 pb-2">
@@ -175,6 +198,20 @@ import api from '@/axiosInstance'
 const route = useRoute()
 const cliente = ref(null)
 const loading = ref(true)
+const descuento = ref(0)
+const guardandoDesc = ref(false)
+
+async function guardarDescuento() {
+  guardandoDesc.value = true
+  try {
+    await api.patch(`/api/clientes/${route.params.id}/descuento`, { descuento_productos: descuento.value })
+    if (cliente.value) cliente.value.descuento_productos = descuento.value
+  } catch (e) {
+    alert(e.response?.data?.message || 'Error al guardar el descuento')
+  } finally {
+    guardandoDesc.value = false
+  }
+}
 
 const cotizaciones = computed(() => cliente.value?.cotizaciones ?? [])
 
@@ -223,6 +260,7 @@ onMounted(async () => {
   try {
     const res = await api.get(`/api/clientes/${route.params.id}`)
     cliente.value = res.data
+    descuento.value = Number(res.data?.descuento_productos ?? 0)
   } catch {
     cliente.value = null
   } finally {
