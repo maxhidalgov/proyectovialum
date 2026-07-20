@@ -378,4 +378,119 @@ class BsaleVentaSyncController extends Controller
         $fin    = Carbon::create($anio, 12, 31)->endOfYear()->timestamp;
         return "[$inicio,$fin]";
     }
+
+    // ── POST /api/ventas/importar-lineas ──────────────────────────────────────
+    // Importa las líneas (detalle) de documentos Bsale hacia documento_items,
+    // para tener historial de productos vendidos por cliente. Llamar en lotes.
+    public function importarLineas(Request $request)
+    {
+        set_time_limit(0);
+        $limit = (int) $request->get('limit', 40);
+
+        $docs = DB::table('documentos_facturacion as df')
+            ->whereNotNull('df.id_documento_bsale')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))->from('documento_items as di')
+                  ->whereColumn('di.documento_facturacion_id', 'df.id');
+            })
+            ->orderByDesc('df.fecha_emision')
+            ->limit($limit)
+            ->get(['df.id', 'df.id_documento_bsale']);
+
+        $importados = 0;
+
+        foreach ($docs as $doc) {
+            try {
+                $res = Http::timeout(15)
+                    ->withHeaders(['access_token' => $this->token])
+                    ->get($this->baseUrl . "documents/{$doc->id_documento_bsale}/details.json");
+
+                if (!$res->ok()) {
+                    continue; // se reintenta en el próximo lote
+                }
+
+                $items = $res->json()['items'] ?? [];
+                $rows  = [];
+
+                foreach ($items as $it) {
+                    $nombre = trim((string) ($it['comment'] ?? ''))
+                        ?: trim((string) ($it['variant']['description'] ?? ''))
+                        ?: 'Producto';
+
+                    $rows[] = [
+                        'documento_facturacion_id' => $doc->id,
+                        'producto_id'    => null,
+                        'nombre'         => mb_substr($nombre, 0, 255),
+                        'cantidad'       => (float) ($it['quantity'] ?? 0),
+                        'precio_unitario'=> (int) round((float) ($it['netUnitValue'] ?? 0)),
+                        'descuento'      => 0,
+                        'total_neto'     => (int) round((float) ($it['netAmount'] ?? 0)),
+                        'es_vidrio'      => 0,
+                        'pulido'         => 0,
+                        'created_at'     => now(),
+                        'updated_at'     => now(),
+                    ];
+                }
+
+                if (empty($rows)) {
+                    // Sin detalle → placeholder para no reprocesar infinito
+                    $rows[] = [
+                        'documento_facturacion_id' => $doc->id,
+                        'producto_id' => null, 'nombre' => '(sin detalle)',
+                        'cantidad' => 0, 'precio_unitario' => 0, 'descuento' => 0, 'total_neto' => 0,
+                        'es_vidrio' => 0, 'pulido' => 0, 'created_at' => now(), 'updated_at' => now(),
+                    ];
+                }
+
+                DB::table('documento_items')->insert($rows);
+                $importados++;
+            } catch (\Throwable $e) {
+                Log::warning('importarLineas', ['doc' => $doc->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        $pendientes = DB::table('documentos_facturacion as df')
+            ->whereNotNull('df.id_documento_bsale')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))->from('documento_items as di')
+                  ->whereColumn('di.documento_facturacion_id', 'df.id');
+            })->count();
+
+        return response()->json(['importados' => $importados, 'pendientes' => $pendientes]);
+    }
+
+    // ── GET /api/ventas/historial-productos?cliente=&q= ───────────────────────
+    // Historial de productos vendidos (líneas), filtrable por cliente y producto.
+    public function historialProductos(Request $request)
+    {
+        $cliente = trim((string) $request->get('cliente', ''));
+        $q       = trim((string) $request->get('q', ''));
+
+        $query = DB::table('documento_items as di')
+            ->join('documentos_facturacion as df', 'df.id', '=', 'di.documento_facturacion_id')
+            ->leftJoin('clientes as c', 'c.id', '=', 'df.cliente_id')
+            ->where('di.nombre', '!=', '(sin detalle)')
+            ->whereNotNull('df.fecha_emision')
+            ->when($q !== '', function ($w) use ($q) {
+                foreach (array_filter(explode(' ', $q)) as $pal) {
+                    $w->where('di.nombre', 'like', "%{$pal}%");
+                }
+            })
+            ->when($cliente !== '', function ($w) use ($cliente) {
+                $w->where(function ($x) use ($cliente) {
+                    $x->where('df.bsale_cliente_nombre', 'like', "%{$cliente}%")
+                      ->orWhere('df.bsale_cliente_rut', 'like', "%{$cliente}%")
+                      ->orWhere('c.razon_social', 'like', "%{$cliente}%")
+                      ->orWhere('c.first_name', 'like', "%{$cliente}%")
+                      ->orWhere('c.last_name', 'like', "%{$cliente}%");
+                });
+            })
+            ->selectRaw("di.nombre as producto, di.cantidad, di.precio_unitario, di.total_neto,
+                df.fecha_emision, df.numero_documento_bsale, df.tipo_documento_bsale_id,
+                COALESCE(c.razon_social, NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), df.bsale_cliente_nombre) as cliente")
+            ->orderByDesc('df.fecha_emision')
+            ->limit(500);
+
+        return response()->json($query->get());
+    }
 }
