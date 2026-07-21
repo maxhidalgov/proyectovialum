@@ -52,19 +52,25 @@ class VentaExpressController extends Controller
         $rows = DB::table('lista_precios as lp')
             ->join('productos as p', 'p.id', '=', 'lp.producto_id')
             ->leftJoin('colores as c', 'c.id', '=', 'lp.color_id')
+            // Color legacy: vía producto_color_proveedor cuando la lista no tiene color_id directo
+            ->leftJoin('producto_color_proveedor as pcp', 'pcp.id', '=', 'lp.producto_color_proveedor_id')
+            ->leftJoin('colores as c2', 'c2.id', '=', 'pcp.color_id')
             ->where('lp.activo', 1)
             ->where('lp.precio_venta', '>', 0)
             ->where(function ($outer) use ($palabras) {
                 foreach ($palabras as $pal) {
                     $outer->where(function ($w) use ($pal) {
                         $w->where('p.nombre', 'like', "%$pal%")
-                          ->orWhere('c.nombre', 'like', "%$pal%");
+                          ->orWhere('c.nombre', 'like', "%$pal%")
+                          ->orWhere('c2.nombre', 'like', "%$pal%");
                     });
                 }
             })
             ->orderBy('p.nombre')
             ->limit(30)
-            ->get(['lp.id', 'p.id as producto_id', 'p.nombre as producto', 'c.nombre as color', 'lp.precio_venta', 'p.tipo_producto_id']);
+            ->get(['lp.id', 'p.id as producto_id', 'p.nombre as producto',
+                   DB::raw('COALESCE(c.nombre, c2.nombre) as color'),
+                   'lp.precio_venta', 'p.tipo_producto_id']);
 
         // tipos 1, 2 y 7 = cristales/vidrios → se venden por m²
         $tiposVidrio = [1, 2, 7];
