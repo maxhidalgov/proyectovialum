@@ -188,8 +188,31 @@
         <!-- Tipo de pago -->
         <template #item.tipo_pago="{ item }">
           <div class="d-flex flex-wrap" style="gap:3px">
+            <!-- Editable en documentos reales -->
+            <VMenu v-if="!item.es_boleta_resumen">
+              <template #activator="{ props }">
+                <VChip
+                  v-bind="props"
+                  size="x-small"
+                  :color="formaPagoColor(item)"
+                  variant="tonal"
+                  style="cursor:pointer"
+                >
+                  {{ formaPagoLabel(item) || 'Sin forma' }}
+                  <VIcon end size="11">mdi-pencil</VIcon>
+                </VChip>
+              </template>
+              <VList density="compact">
+                <VListItem
+                  v-for="fp in formasPagoEdit"
+                  :key="fp.value"
+                  :title="fp.label"
+                  @click="cambiarFormaPago(item, fp.value)"
+                />
+              </VList>
+            </VMenu>
             <VChip
-              v-if="formaPagoLabel(item)"
+              v-else-if="formaPagoLabel(item)"
               size="x-small"
               :color="formaPagoColor(item)"
               variant="tonal"
@@ -518,6 +541,26 @@ const notaMarcar        = ref('')
 const guardandoMarcar   = ref(false)
 const loadingMarcar     = ref({})
 const loadingResync     = ref({})
+
+const formasPagoEdit = [
+  { label: 'Efectivo',        value: 'efectivo' },
+  { label: 'Transferencia',   value: 'transferencia' },
+  { label: 'Tarjeta Débito',  value: 'tarjeta_debito' },
+  { label: 'Tarjeta Crédito', value: 'tarjeta_credito' },
+  { label: 'Cheque',          value: 'cheque' },
+  { label: 'Webpay',          value: 'webpay' },
+]
+
+async function cambiarFormaPago(item, formaPago) {
+  try {
+    await axios.patch(`/api/ventas/${item.id}/forma-pago`, { forma_pago: formaPago })
+    item.forma_pago = formaPago
+    snack.value = { show: true, text: 'Forma de pago actualizada', color: 'success' }
+    await cargar()
+  } catch (e) {
+    snack.value = { show: true, text: e.response?.data?.error || 'No se pudo actualizar', color: 'error' }
+  }
+}
 
 async function resyncPago(item) {
   loadingResync.value = { ...loadingResync.value, [item.id]: true }

@@ -499,6 +499,43 @@ class BsaleVentaSyncController extends Controller
         return response()->json(['ok' => true, 'forma_pago' => $pago['forma_pago'], 'comprobante' => $pago['comprobante']]);
     }
 
+    // ── PATCH /api/ventas/{id}/forma-pago ─────────────────────────────────────
+    // Edita manualmente la forma de pago del documento en la app (no toca Bsale).
+    public function actualizarFormaPago(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'forma_pago' => 'required|string',
+        ]);
+
+        $doc = DB::table('documentos_facturacion')->where('id', $id)->first();
+        if (!$doc) {
+            return response()->json(['error' => 'Documento no encontrado.'], 404);
+        }
+
+        $map = [
+            'efectivo' => 1, 'tarjeta_credito' => 2, 'nota_credito' => 3, 'credito' => 4,
+            'cheque' => 5, 'tarjeta_debito' => 6, 'transferencia' => 8, 'webpay' => 10,
+        ];
+
+        DB::table('documentos_facturacion')->where('id', $id)->update([
+            'forma_pago'         => $data['forma_pago'],
+            'payment_type_id'    => $map[$data['forma_pago']] ?? null,
+            'pagado_con_tarjeta' => in_array($data['forma_pago'], ['tarjeta_credito', 'tarjeta_debito']) ? 1 : 0,
+            'updated_at'         => now(),
+        ]);
+
+        // Si es boleta, la forma de pago define el resumen mensual → recalcular
+        if ((int) $doc->tipo_documento_bsale_id === 1 && $doc->fecha_emision) {
+            try {
+                Artisan::call('boletas:recalcular-resumenes', ['--periodo' => substr($doc->fecha_emision, 0, 7)]);
+            } catch (\Throwable $e) {
+                Log::warning('actualizarFormaPago recalcular boletas', ['id' => $id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json(['ok' => true, 'forma_pago' => $data['forma_pago']]);
+    }
+
     // ── GET /api/ventas/lineas-pendientes ─────────────────────────────────────
     // Cuántos documentos Bsale aún no tienen sus líneas importadas.
     public function pendientesLineas()

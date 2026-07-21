@@ -283,6 +283,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/ventas/importar-lineas',        [\App\Http\Controllers\BsaleVentaSyncController::class, 'importarLineas']);
     Route::get('/ventas/lineas-pendientes',       [\App\Http\Controllers\BsaleVentaSyncController::class, 'pendientesLineas']);
     Route::post('/ventas/{id}/resync-pago',       [\App\Http\Controllers\BsaleVentaSyncController::class, 'resyncPago']);
+    Route::patch('/ventas/{id}/forma-pago',       [\App\Http\Controllers\BsaleVentaSyncController::class, 'actualizarFormaPago']);
     Route::get('/ventas/historial-productos',     [\App\Http\Controllers\BsaleVentaSyncController::class, 'historialProductos']);
 
     // Boletas — resúmenes mensuales por forma de pago
