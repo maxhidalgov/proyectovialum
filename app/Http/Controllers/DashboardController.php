@@ -14,8 +14,8 @@ class DashboardController extends Controller
 
 public function ventasMensuales(Request $request)
 {
-    $token = '4845c098298dba6a64cf559dbecb555e310458d4';
-    $baseUrl = 'https://api.bsale.cl/v1/';
+    $token = config('services.bsale.access_token');
+    $baseUrl = config('services.bsale.base_url', 'https://api.bsale.cl/v1/');
     $mes = (int) $request->get('mes', now()->month);
     $anio = (int) $request->get('anio', now()->year);
 
@@ -107,8 +107,8 @@ public function ventasMensuales(Request $request)
 
 public function comprasTercerosMensuales(Request $request)
 {
-    $token = '4845c098298dba6a64cf559dbecb555e310458d4';
-    $baseUrl = 'https://api.bsale.cl/v1/';
+    $token = config('services.bsale.access_token');
+    $baseUrl = config('services.bsale.base_url', 'https://api.bsale.cl/v1/');
 
     $mes = (int) $request->get('mes', now()->month);
     $anio = (int) $request->get('anio', now()->year);
