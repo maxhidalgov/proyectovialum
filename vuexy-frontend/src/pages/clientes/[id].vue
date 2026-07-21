@@ -79,24 +79,29 @@
 
           <!-- Descuento en productos de lista -->
           <v-card class="mt-4" rounded="lg">
-            <v-card-text class="d-flex align-center gap-3">
-              <v-icon icon="mdi-sale" color="warning" />
-              <div class="flex-grow-1">
-                <div class="text-body-2 font-weight-medium">Descuento en productos</div>
-                <div class="text-caption text-medium-emphasis">Se aplica automáticamente al vender/cotizar productos de lista (no ventanas)</div>
+            <v-card-text>
+              <div class="d-flex align-center gap-2 mb-3">
+                <v-icon icon="mdi-sale" color="warning" />
+                <div>
+                  <div class="text-body-2 font-weight-medium">Descuento en productos</div>
+                  <div class="text-caption text-medium-emphasis">Se aplica al vender/cotizar productos de lista (no ventanas)</div>
+                </div>
               </div>
-              <v-text-field
-                v-model.number="descuento"
-                type="number"
-                min="0"
-                max="100"
-                suffix="%"
-                density="compact"
-                variant="outlined"
-                hide-details
-                style="max-width:110px"
-              />
-              <v-btn size="small" color="primary" :loading="guardandoDesc" @click="guardarDescuento">Guardar</v-btn>
+              <div class="d-flex align-center gap-2">
+                <v-text-field
+                  v-model.number="descuento"
+                  type="number"
+                  min="0"
+                  max="100"
+                  label="Descuento"
+                  suffix="%"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  style="max-width:150px"
+                />
+                <v-btn color="primary" :loading="guardandoDesc" @click="guardarDescuento">Guardar</v-btn>
+              </div>
             </v-card-text>
           </v-card>
 
@@ -182,6 +187,52 @@
               </template>
             </v-data-table>
           </v-card>
+
+          <!-- Facturas y boletas -->
+          <v-card rounded="lg" class="mt-4">
+            <v-card-title class="pa-4 pb-2 d-flex align-center justify-space-between">
+              <div>
+                <v-icon icon="mdi-receipt-text-outline" class="mr-2" />
+                Facturas y boletas
+              </div>
+              <v-chip size="small" variant="tonal" color="teal">{{ facturas.length }}</v-chip>
+            </v-card-title>
+            <v-divider />
+            <v-data-table
+              :headers="headersFacturas"
+              :items="facturas"
+              :items-per-page="10"
+              no-data-text="Sin documentos emitidos"
+            >
+              <template #item.tipo_documento_bsale_id="{ item }">
+                <v-chip
+                  size="x-small"
+                  :color="item.tipo_documento_bsale_id === 1 ? 'secondary' : (item.tipo_documento_bsale_id === 2 ? 'error' : 'info')"
+                  variant="tonal"
+                >
+                  {{ tipoDoc(item.tipo_documento_bsale_id) }}{{ item.numero_documento_bsale ? ' ' + item.numero_documento_bsale : '' }}
+                </v-chip>
+              </template>
+              <template #item.fecha_emision="{ item }">
+                {{ item.fecha_emision ? new Date(item.fecha_emision).toLocaleDateString('es-CL') : '—' }}
+              </template>
+              <template #item.monto="{ item }">{{ formatCLP(item.monto) }}</template>
+              <template #item.forma_pago="{ item }">
+                <span class="text-body-2">{{ item.forma_pago || '—' }}</span>
+              </template>
+              <template #item.acciones="{ item }">
+                <v-btn
+                  v-if="item.url_pdf_bsale"
+                  icon="mdi-file-pdf-box"
+                  size="small"
+                  variant="text"
+                  color="error"
+                  :href="item.url_pdf_bsale"
+                  target="_blank"
+                />
+              </template>
+            </v-data-table>
+          </v-card>
         </v-col>
       </v-row>
     </template>
@@ -214,6 +265,11 @@ async function guardarDescuento() {
 }
 
 const cotizaciones = computed(() => cliente.value?.cotizaciones ?? [])
+const facturas = computed(() => cliente.value?.facturas ?? [])
+
+function tipoDoc(t) {
+  return { 1: 'Boleta', 2: 'NC', 5: 'Factura', 3: 'Nota Venta', 4: 'Liquidación' }[t] || 'Doc'
+}
 
 const nombreCliente = computed(() => {
   if (!cliente.value) return 'Cliente'
@@ -254,6 +310,14 @@ const headersCotizaciones = [
   { title: 'Total',    value: 'total',    sortable: true },
   { title: 'Vendedor', value: 'vendedor', sortable: false },
   { title: '',         value: 'acciones', sortable: false, align: 'end' },
+]
+
+const headersFacturas = [
+  { title: 'Documento',   value: 'tipo_documento_bsale_id', sortable: false },
+  { title: 'Fecha',       value: 'fecha_emision', sortable: true },
+  { title: 'Monto',       value: 'monto', sortable: true },
+  { title: 'Forma pago',  value: 'forma_pago', sortable: false },
+  { title: '',            value: 'acciones', sortable: false, align: 'end' },
 ]
 
 onMounted(async () => {

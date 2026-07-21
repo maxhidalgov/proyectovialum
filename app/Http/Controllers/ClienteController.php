@@ -63,7 +63,26 @@ class ClienteController extends Controller
             'cotizaciones.vendedor',
         ]);
 
-        return response()->json($cliente);
+        // Facturas/boletas emitidas del cliente (directas o vía sus cotizaciones)
+        $facturas = \DB::table('documentos_facturacion as df')
+            ->leftJoin('cotizaciones as c', 'c.id', '=', 'df.cotizacion_id')
+            ->where('df.estado', 'emitido')
+            ->where(function ($q) use ($cliente) {
+                $q->where('df.cliente_id', $cliente->id)
+                  ->orWhere('c.cliente_id', $cliente->id);
+            })
+            ->select(
+                'df.id', 'df.tipo_documento_bsale_id', 'df.numero_documento_bsale',
+                'df.fecha_emision', 'df.monto', 'df.forma_pago', 'df.url_pdf_bsale'
+            )
+            ->orderByDesc('df.fecha_emision')
+            ->limit(200)
+            ->get();
+
+        $data = $cliente->toArray();
+        $data['facturas'] = $facturas;
+
+        return response()->json($data);
     }
 
     /**
