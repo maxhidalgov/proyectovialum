@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -457,6 +458,45 @@ class BsaleVentaSyncController extends Controller
             })->count();
 
         return response()->json(['importados' => $importados, 'pendientes' => $pendientes]);
+    }
+
+    // ── POST /api/ventas/{id}/resync-pago ─────────────────────────────────────
+    // Re-consulta la forma de pago (y comprobante) del documento en Bsale y la
+    // actualiza en la app. Útil si se corrigió el pago directamente en Bsale.
+    public function resyncPago(int $id)
+    {
+        $doc = DB::table('documentos_facturacion')->where('id', $id)->first();
+        if (!$doc) {
+            return response()->json(['error' => 'Documento no encontrado.'], 404);
+        }
+        if (!$doc->id_documento_bsale) {
+            return response()->json(['error' => 'Este documento no está vinculado a Bsale.'], 422);
+        }
+
+        $pago = $this->obtenerInfoPago((int) $doc->id_documento_bsale);
+
+        if (empty($pago['forma_pago']) || $pago['forma_pago'] === 'sin_informacion') {
+            return response()->json(['error' => 'Bsale no devolvió información de pago para este documento.'], 422);
+        }
+
+        DB::table('documentos_facturacion')->where('id', $id)->update([
+            'forma_pago'                => $pago['forma_pago'],
+            'payment_type_id'           => $pago['payment_type_id'],
+            'nro_comprobante_transbank' => $pago['comprobante'],
+            'pagado_con_tarjeta'        => $pago['tarjeta'] ? 1 : 0,
+            'updated_at'                => now(),
+        ]);
+
+        // Si es boleta, la forma de pago define el resumen mensual → recalcular
+        if ((int) $doc->tipo_documento_bsale_id === 1 && $doc->fecha_emision) {
+            try {
+                Artisan::call('boletas:recalcular-resumenes', ['--periodo' => substr($doc->fecha_emision, 0, 7)]);
+            } catch (\Throwable $e) {
+                Log::warning('resyncPago recalcular boletas', ['id' => $id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json(['ok' => true, 'forma_pago' => $pago['forma_pago'], 'comprobante' => $pago['comprobante']]);
     }
 
     // ── GET /api/ventas/lineas-pendientes ─────────────────────────────────────

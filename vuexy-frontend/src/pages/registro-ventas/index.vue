@@ -260,6 +260,25 @@
             >
               <VIcon start size="11">mdi-cash</VIcon>Manual
             </VChip>
+            <VTooltip
+              v-if="!item.es_boleta_resumen"
+              location="bottom"
+              text="Re-sincronizar forma de pago desde Bsale"
+            >
+              <template #activator="{ props: tp }">
+                <VBtn
+                  v-bind="tp"
+                  size="x-small"
+                  icon
+                  variant="text"
+                  color="info"
+                  :loading="loadingResync[item.id]"
+                  @click="resyncPago(item)"
+                >
+                  <VIcon size="14">mdi-credit-card-sync-outline</VIcon>
+                </VBtn>
+              </template>
+            </VTooltip>
             <VBtn
               v-if="item.url_pdf_bsale"
               size="x-small"
@@ -498,6 +517,20 @@ const montoMarcar       = ref(0)
 const notaMarcar        = ref('')
 const guardandoMarcar   = ref(false)
 const loadingMarcar     = ref({})
+const loadingResync     = ref({})
+
+async function resyncPago(item) {
+  loadingResync.value = { ...loadingResync.value, [item.id]: true }
+  try {
+    const { data } = await axios.post(`/api/ventas/${item.id}/resync-pago`)
+    snack.value = { show: true, text: `Forma de pago actualizada: ${data.forma_pago}`, color: 'success' }
+    await cargar()
+  } catch (e) {
+    snack.value = { show: true, text: e.response?.data?.error || 'No se pudo re-sincronizar el pago', color: 'error' }
+  } finally {
+    loadingResync.value = { ...loadingResync.value, [item.id]: false }
+  }
+}
 
 // ── Filtros ───────────────────────────────────────────────────────────────────
 const hoy       = new Date().toISOString().slice(0, 10)
