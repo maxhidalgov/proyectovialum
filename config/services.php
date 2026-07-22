@@ -77,4 +77,10 @@ return [
         'secret_key' => env('CHIPAX_SECRET_KEY'),   // API oficial: secret_key
     ],
 
+    'workera' => [
+        'base_url' => env('WORKERA_BASE_URL', 'https://api.workera.com/apiClient/v1/'),
+        'api_user' => env('WORKERA_API_USER'),
+        'api_key'  => env('WORKERA_API_KEY'),
+    ],
+
 ];

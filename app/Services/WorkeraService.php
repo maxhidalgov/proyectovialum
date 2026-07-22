@@ -18,7 +18,18 @@ use Illuminate\Support\Facades\Log;
  */
 class WorkeraService
 {
-    private string $baseUrl = 'https://workera.com/apiClient/v1';
+    private string $baseUrl;
+
+    public function __construct()
+    {
+        // Configurable vía WORKERA_BASE_URL (el manual v1.4 indica api.workera.com)
+        $this->baseUrl = rtrim(config('services.workera.base_url', 'https://api.workera.com/apiClient/v1/'), '/');
+    }
+
+    public function configurado(): bool
+    {
+        return !empty(config('services.workera.api_user')) && !empty(config('services.workera.api_key'));
+    }
 
     private function headers(): array
     {
@@ -143,6 +154,44 @@ class WorkeraService
         } while ($page <= $totalPages && !empty($registros));
 
         return ['data' => $todos];
+    }
+
+    /**
+     * Horarios asignados (lo que el trabajador DEBE cumplir) en un rango.
+     * Cada elemento es un trabajador con su array de 'schedules' (por día).
+     * Rango máx 60 días según Workera.
+     */
+    public function getSchedules(string $start, string $end): array
+    {
+        $todos = [];
+        $page  = 1;
+        do {
+            $resp  = $this->get('workshift/schedules', ['start' => $start, 'end' => $end, 'page' => $page]);
+            $items = $resp['data'] ?? [];
+            $todos = array_merge($todos, $items);
+            $totalPages = (int) ($resp['totalPages'] ?? 1);
+            $page++;
+        } while ($page <= $totalPages && !empty($items));
+
+        return $todos;
+    }
+
+    /**
+     * Permisos / salidas especiales (licencias, vacaciones, etc.) en un rango, paginado.
+     */
+    public function getPermisosRango(string $start, string $end): array
+    {
+        $todos = [];
+        $page  = 1;
+        do {
+            $resp  = $this->get('permission', ['start' => $start, 'end' => $end, 'page' => $page]);
+            $items = $resp['data'] ?? [];
+            $todos = array_merge($todos, $items);
+            $totalPages = (int) ($resp['totalPages'] ?? 1);
+            $page++;
+        } while ($page <= $totalPages && !empty($items));
+
+        return $todos;
     }
 
     /**

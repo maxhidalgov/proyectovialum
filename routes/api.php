@@ -60,6 +60,10 @@ Route::middleware('auth:api')->group(function () {
     // Agente cotizador IA
     Route::post('/agente/cotizar', [AgenteController::class, 'cotizar']);
 
+    // Asistencia (reportes en vivo desde Workera)
+    Route::get('/asistencia/diario',  [\App\Http\Controllers\AsistenciaController::class, 'diario']);
+    Route::get('/asistencia/semanal', [\App\Http\Controllers\AsistenciaController::class, 'semanal']);
+
     // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
     Route::post('/cotizaciones/parse-winperfil', [CotizacionController::class, 'parseWinperfil']);

@@ -246,6 +246,12 @@ const allMenuItems = [
     permission: 'gestionar_usuarios', // Solo admin
   },
   {
+    title: 'Asistencia',
+    to: { name: 'asistencia' },
+    icon: { icon: 'mdi-clock-check-outline' },
+    permission: 'gestionar_usuarios', // Solo admin
+  },
+  {
     title: 'Winperfil',
     to: { name: 'winperfil' },
     icon: { icon: 'mdi-window-maximize' },
