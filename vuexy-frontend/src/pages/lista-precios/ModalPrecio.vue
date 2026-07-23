@@ -256,10 +256,13 @@ const brutoEstimadoHint = computed(() => {
 const onPrecioBrutoChange = () => {
   const bruto = parseFloat(precioBrutoInput.value) || 0
   const costo = parseFloat(formulario.value.precio_costo) || 0
-  if (bruto > 0 && costo > 0) {
+  if (bruto > 0) {
     const neto = bruto / 1.19
     formulario.value.precio_venta = neto // exacto, sin redondear
-    formulario.value.margen = Math.round((1 - costo / neto) * 100 * 10000) / 10000
+    // El margen solo tiene sentido si hay costo; si no, se deja como está.
+    if (costo > 0) {
+      formulario.value.margen = Math.round((1 - costo / neto) * 100 * 10000) / 10000
+    }
   } else {
     formulario.value.precio_venta = null
   }
