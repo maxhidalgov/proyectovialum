@@ -40,11 +40,19 @@ Route::get('/cron/sync-diario', function (\Illuminate\Http\Request $r) {
     if (empty($token) || !hash_equals($token, (string) $r->query('token'))) {
         abort(403, 'Token inválido');
     }
-    @set_time_limit(0);
-    \Illuminate\Support\Facades\Artisan::call('sync:diario');
+    // Correr DESPUÉS de enviar la respuesta, para que el cron externo no espere
+    // (el sync puede tardar varios minutos y haría timeout en el cliente).
+    app()->terminating(function () {
+        @set_time_limit(0);
+        try {
+            \Illuminate\Support\Facades\Artisan::call('sync:diario');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('cron sync-diario', ['error' => $e->getMessage()]);
+        }
+    });
     return response()->json([
-        'ok'     => true,
-        'output' => \Illuminate\Support\Facades\Artisan::output(),
+        'ok'      => true,
+        'mensaje' => 'sync:diario iniciado en segundo plano',
     ]);
 });
 
