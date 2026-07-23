@@ -23,6 +23,14 @@ Schedule::command('bsale:sync')
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/bsale-sync.log'));
 
+// Actualización diaria "a cierta hora" (ventas+compras Bsale + cobranza Chipax)
+// Se dispara 07:00. Requiere que el scheduler corra en Railway (worker o cron).
+Schedule::command('sync:diario')
+    ->dailyAt('07:00')
+    ->withoutOverlapping(30)
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/sync-diario.log'));
+
 // Sincroniza estado de cobranza (monto_por_cobrar) desde Chipax /dtes
 // Corre cada 6 horas → actualiza qué facturas están pagadas según Chipax
 Schedule::command('chipax:sync-cobranza')

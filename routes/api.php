@@ -33,6 +33,21 @@ Route::post('/login', [AuthController::class, 'login']);
 // Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
 
+// 🔄 Actualización diaria vía cron externo (protegida por token, sin login).
+//    GET /api/cron/sync-diario?token=XXXX  → corre bsale:sync + chipax:sync-cobranza
+Route::get('/cron/sync-diario', function (\Illuminate\Http\Request $r) {
+    $token = config('services.cron.token');
+    if (empty($token) || !hash_equals($token, (string) $r->query('token'))) {
+        abort(403, 'Token inválido');
+    }
+    @set_time_limit(0);
+    \Illuminate\Support\Facades\Artisan::call('sync:diario');
+    return response()->json([
+        'ok'     => true,
+        'output' => \Illuminate\Support\Facades\Artisan::output(),
+    ]);
+});
+
 // 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
 Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin')->group(function () {
     Route::get('/users', [UserController::class, 'index']);

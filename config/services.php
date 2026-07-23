@@ -83,4 +83,9 @@ return [
         'api_key'  => env('WORKERA_API_KEY'),
     ],
 
+    // Token secreto para disparar la actualización diaria vía HTTP (cron externo)
+    'cron' => [
+        'token' => env('CRON_TOKEN'),
+    ],
+
 ];
