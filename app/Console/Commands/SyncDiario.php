@@ -40,8 +40,17 @@ class SyncDiario extends Command
             Log::error('sync:diario bsale:sync', ['error' => $e->getMessage()]);
         }
 
-        // 2) Estado de cobranza (qué facturas están pagadas) desde Chipax
         if (!$this->option('solo-ventas') && !$this->option('solo-compras')) {
+            // 2) Clientes de Bsale → base local (clientes nuevos / datos actualizados)
+            try {
+                $this->info('→ bsale:sincronizar-clientes');
+                $this->call('bsale:sincronizar-clientes');
+            } catch (\Throwable $e) {
+                $this->error('bsale:sincronizar-clientes falló: ' . $e->getMessage());
+                Log::error('sync:diario bsale:sincronizar-clientes', ['error' => $e->getMessage()]);
+            }
+
+            // 3) Estado de cobranza (qué facturas están pagadas) desde Chipax
             try {
                 $this->info('→ chipax:sync-cobranza');
                 $this->call('chipax:sync-cobranza');

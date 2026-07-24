@@ -289,15 +289,12 @@ class BsaleController extends Controller
 
     /**
      * Descuenta stock de las líneas de la cotización cuyo producto controla inventario.
-     * Solo en venta total (porcentaje=100) y una sola vez por cotización (idempotente).
+     * Descuenta las cantidades ENTERAS en la PRIMERA factura (sea anticipo o total),
+     * para "reservar" el material. Idempotente: una sola vez por cotización.
      * No descuenta vidrios (Fase 4) ni ventanas.
      */
     private function descontarStockCotizacion($cotizacion, float $porcentaje): void
     {
-        if ($porcentaje < 100) {
-            return; // en anticipos/saldos no descontamos (evita fracciones y doble conteo)
-        }
-
         $yaDescontado = \App\Models\InventarioMovimiento::where('referencia_tipo', 'cotizacion')
             ->where('referencia_id', $cotizacion->id)
             ->where('tipo', 'venta')
