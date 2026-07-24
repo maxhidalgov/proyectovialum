@@ -98,6 +98,13 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/asistencia/diario',  [\App\Http\Controllers\AsistenciaController::class, 'diario']);
     Route::get('/asistencia/semanal', [\App\Http\Controllers\AsistenciaController::class, 'semanal']);
 
+    // Inventario / control de stock
+    Route::get('/inventario/stock',              [\App\Http\Controllers\InventarioController::class, 'stock']);
+    Route::post('/inventario/set-stock',         [\App\Http\Controllers\InventarioController::class, 'setStock']);
+    Route::get('/inventario/movimientos',        [\App\Http\Controllers\InventarioController::class, 'movimientos']);
+    Route::get('/inventario/productos',          [\App\Http\Controllers\InventarioController::class, 'productos']);
+    Route::patch('/inventario/productos/{id}',   [\App\Http\Controllers\InventarioController::class, 'toggleControla']);
+
     // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
     Route::post('/cotizaciones/parse-winperfil', [CotizacionController::class, 'parseWinperfil']);

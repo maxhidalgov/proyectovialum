@@ -70,18 +70,41 @@ class VentaExpressController extends Controller
             ->limit(30)
             ->get(['lp.id', 'p.id as producto_id', 'p.nombre as producto',
                    DB::raw('COALESCE(c.nombre, c2.nombre) as color'),
+                   DB::raw('COALESCE(c.id, c2.id) as color_id'),
+                   'p.controla_stock',
                    'lp.precio_venta', 'p.tipo_producto_id']);
 
         // tipos 1, 2 y 7 = cristales/vidrios → se venden por m²
         $tiposVidrio = [1, 2, 7];
 
-        $items = $rows->map(fn ($r) => [
-            'id'           => $r->id, // lista_precio id (key único)
-            'producto_id'  => $r->producto_id ?? null,
-            'nombre'       => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
-            'precio_venta' => (float) $r->precio_venta,
-            'es_vidrio'    => in_array((int) $r->tipo_producto_id, $tiposVidrio, true),
-        ]);
+        // Stock actual de los productos que controlan inventario (para mostrarlo al vender)
+        $skusTrack = $rows->where('controla_stock', 1)
+            ->map(fn ($r) => [(int) $r->producto_id, $r->color_id]);
+        $stockMap = [];
+        if ($skusTrack->isNotEmpty()) {
+            $movs = DB::table('inventario_movimientos')
+                ->whereIn('producto_id', $skusTrack->pluck(0)->unique()->values())
+                ->select('producto_id', 'color_id', DB::raw('SUM(cantidad) as stock'))
+                ->groupBy('producto_id', 'color_id')
+                ->get();
+            foreach ($movs as $m) {
+                $stockMap[$m->producto_id . '-' . ($m->color_id ?? '0')] = (float) $m->stock;
+            }
+        }
+
+        $items = $rows->map(function ($r) use ($tiposVidrio, $stockMap) {
+            $controla = (int) $r->controla_stock === 1;
+            $key = $r->producto_id . '-' . ($r->color_id ?? '0');
+            return [
+                'id'           => $r->id, // lista_precio id (key único)
+                'producto_id'  => $r->producto_id ?? null,
+                'nombre'       => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
+                'precio_venta' => (float) $r->precio_venta,
+                'es_vidrio'    => in_array((int) $r->tipo_producto_id, $tiposVidrio, true),
+                // null = no controla stock; número = unidades disponibles
+                'stock'        => $controla ? ($stockMap[$key] ?? 0) : null,
+            ];
+        });
 
         return response()->json($items);
     }

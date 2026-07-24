@@ -156,6 +156,12 @@ const allMenuItems = [
         icon: { icon: 'tabler-file-import' },
         permission: 'gestionar_productos',
       },
+      {
+        title: 'Inventario',
+        to: { name: 'inventario' },
+        icon: { icon: 'mdi-warehouse' },
+        permissions: ['ver_productos', 'gestionar_productos'],
+      },
     ],
   },
 

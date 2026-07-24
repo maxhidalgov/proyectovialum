@@ -43,6 +43,15 @@
                   <VListItemTitle>
                     {{ p.nombre }}
                     <VChip v-if="p.es_vidrio" size="x-small" color="info" variant="tonal" class="ml-1">por m²</VChip>
+                    <VChip
+                      v-if="p.stock !== null && p.stock !== undefined"
+                      size="x-small"
+                      :color="p.stock > 0 ? 'success' : 'error'"
+                      variant="tonal"
+                      class="ml-1"
+                    >
+                      {{ p.stock > 0 ? p.stock + ' disp.' : 'Sin stock' }}
+                    </VChip>
                   </VListItemTitle>
                   <template #append>
                     <span class="text-body-2 font-weight-bold">
