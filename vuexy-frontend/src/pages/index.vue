@@ -1,5 +1,23 @@
 <template>
   <div>
+    <!-- Estado de la actualización automática (cron 7:00 AM) -->
+    <VAlert
+      v-if="syncRun"
+      :type="syncEstado.type"
+      variant="tonal"
+      density="compact"
+      class="mb-4"
+      :icon="syncEstado.icon"
+    >
+      <div class="d-flex flex-wrap align-center" style="gap:6px">
+        <strong>Última actualización automática:</strong>
+        <span>{{ syncFecha }}</span>
+        <span class="text-medium-emphasis">·</span>
+        <span>{{ syncRun.ventas_nuevas }} ventas, {{ syncRun.compras_nuevas }} compras, {{ syncRun.clientes_nuevos }} clientes nuevos</span>
+        <VChip v-if="!syncRun.ok" size="x-small" color="error" variant="flat" class="ml-1">con errores</VChip>
+      </div>
+    </VAlert>
+
     <!-- Header con filtros -->
     <VCard class="mb-6" title="Dashboard Financiero 📊">
       <VCardText>
@@ -404,8 +422,35 @@ watch(datosCompras, (newVal) => {
 }, { deep: true })
 
 // ✅ Cargar datos al inicio
+// ── Estado de la actualización automática (cron) ───────────────────────────
+const syncRun = ref(null)
+
+const syncFecha = computed(() => {
+  const f = syncRun.value?.finished_at
+  if (!f) return '—'
+  return new Date(String(f).replace(' ', 'T')).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })
+})
+
+const syncEstado = computed(() => {
+  const r = syncRun.value
+  if (!r) return { type: 'info', icon: 'mdi-sync' }
+  if (!r.ok) return { type: 'warning', icon: 'mdi-alert-outline' }
+  const fin = new Date(String(r.finished_at || '').replace(' ', 'T')).getTime()
+  const horas = (Date.now() - fin) / 3600000
+  if (horas > 26) return { type: 'warning', icon: 'mdi-clock-alert-outline' } // no corre hace >26h
+  return { type: 'success', icon: 'mdi-check-circle-outline' }
+})
+
+const cargarSyncRun = async () => {
+  try {
+    const { data } = await api.get('/api/sync/ultimo')
+    syncRun.value = data
+  } catch { /* silencioso */ }
+}
+
 onMounted(() => {
   cargarResumen()
+  cargarSyncRun()
 })
 </script>
 

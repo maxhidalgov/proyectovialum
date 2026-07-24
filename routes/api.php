@@ -98,6 +98,12 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/asistencia/diario',  [\App\Http\Controllers\AsistenciaController::class, 'diario']);
     Route::get('/asistencia/semanal', [\App\Http\Controllers\AsistenciaController::class, 'semanal']);
 
+    // Estado de la última corrida del cron de actualización (para el Home)
+    Route::get('/sync/ultimo', function () {
+        $run = \Illuminate\Support\Facades\DB::table('sync_runs')->latest('id')->first();
+        return response()->json($run);
+    });
+
     // Inventario / control de stock
     Route::get('/inventario/stock',              [\App\Http\Controllers\InventarioController::class, 'stock']);
     Route::post('/inventario/set-stock',         [\App\Http\Controllers\InventarioController::class, 'setStock']);
