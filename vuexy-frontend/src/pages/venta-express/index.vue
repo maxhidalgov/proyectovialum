@@ -79,15 +79,16 @@
                 <tr>
                   <th style="width:90px">Cant.</th>
                   <th>Detalle</th>
-                  <th style="width:130px" class="text-right">$/unidad (neto)</th>
-                  <th style="width:90px" class="text-right">% desc.</th>
-                  <th style="width:120px" class="text-right">Subtotal</th>
+                  <th style="width:120px" class="text-right">$/unidad (neto)</th>
+                  <th style="width:120px" class="text-right">$/unidad (c/IVA)</th>
+                  <th style="width:80px" class="text-right">% desc.</th>
+                  <th style="width:110px" class="text-right">Subtotal</th>
                   <th style="width:40px"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="!items.length">
-                  <td colspan="6" class="text-center text-caption text-medium-emphasis py-6">
+                  <td colspan="7" class="text-center text-caption text-medium-emphasis py-6">
                     Busca un producto o agrega un ítem manual para empezar
                   </td>
                 </tr>
@@ -100,6 +101,9 @@
                   </td>
                   <td>
                     <VTextField v-model.number="it.precio" type="number" min="0" density="compact" variant="plain" hide-details reverse />
+                  </td>
+                  <td>
+                    <VTextField :model-value="brutoItem(it)" type="number" min="0" density="compact" variant="plain" hide-details reverse @update:model-value="setBrutoItem(it, $event)" />
                   </td>
                   <td>
                     <VTextField v-model.number="it.descuento" type="number" min="0" max="100" density="compact" variant="plain" hide-details reverse />
@@ -398,6 +402,15 @@ const tipo = ref('boleta')
 
 // ── Ítems ────────────────────────────────────────────────────────────────
 const items = ref([])
+
+// Precio con IVA por unidad (editable, sincronizado con el neto it.precio)
+function brutoItem(it) {
+  return Math.round((Number(it.precio) || 0) * 1.19)
+}
+function setBrutoItem(it, val) {
+  const g = Number(val) || 0
+  it.precio = g > 0 ? g / 1.19 : 0
+}
 
 function subtotalItem(it) {
   const bruto = (Number(it.cantidad) || 0) * (Number(it.precio) || 0)
