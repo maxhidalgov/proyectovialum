@@ -49,15 +49,9 @@ class SyncDiario extends Command
                 $this->error('bsale:sincronizar-clientes falló: ' . $e->getMessage());
                 Log::error('sync:diario bsale:sincronizar-clientes', ['error' => $e->getMessage()]);
             }
-
-            // 3) Estado de cobranza (qué facturas están pagadas) desde Chipax
-            try {
-                $this->info('→ chipax:sync-cobranza');
-                $this->call('chipax:sync-cobranza');
-            } catch (\Throwable $e) {
-                $this->error('chipax:sync-cobranza falló: ' . $e->getMessage());
-                Log::error('sync:diario chipax:sync-cobranza', ['error' => $e->getMessage()]);
-            }
+            // NOTA: chipax:sync-cobranza se sacó del cron (2026-07-24). La cobranza/CxC
+            // se maneja con conciliación manual (venta_movimiento), no depende de Chipax.
+            // El comando sigue existiendo por si se necesita correr a mano.
         }
 
         $seg = $inicio->diffInSeconds(now());
