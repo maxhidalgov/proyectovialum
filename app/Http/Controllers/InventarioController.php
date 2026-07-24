@@ -168,4 +168,116 @@ class InventarioController extends Controller
         DB::table('productos')->where('id', $id)->update(['controla_stock' => $data['controla_stock']]);
         return response()->json(['ok' => true]);
     }
+
+    // ── FASE 2: Recepción de compras ──────────────────────────────────────────
+
+    /**
+     * GET /api/inventario/recepciones
+     * Facturas de compra pendientes de recibir que tienen ≥1 línea mapeada a un
+     * producto con controla_stock activo.
+     */
+    public function recepciones()
+    {
+        $compras = DB::table('compras as c')
+            ->whereNull('c.stock_recibido_at')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('compra_items as ci')
+                    ->join('producto_color_proveedor as pcp', 'pcp.id', '=', 'ci.pcp_id')
+                    ->join('productos as p', 'p.id', '=', 'pcp.producto_id')
+                    ->whereColumn('ci.compra_id', 'c.id')
+                    ->where('p.controla_stock', 1);
+            })
+            ->selectSub(function ($q) {
+                $q->from('compra_items as ci')
+                    ->join('producto_color_proveedor as pcp', 'pcp.id', '=', 'ci.pcp_id')
+                    ->join('productos as p', 'p.id', '=', 'pcp.producto_id')
+                    ->whereColumn('ci.compra_id', 'c.id')
+                    ->where('p.controla_stock', 1)
+                    ->selectRaw('count(*)');
+            }, 'lineas_stock')
+            ->orderByDesc('c.fecha_emision')
+            ->limit(200)
+            ->get(['c.id', 'c.folio', 'c.nombre_emisor', 'c.fecha_emision', 'c.total']);
+
+        return response()->json($compras);
+    }
+
+    /**
+     * GET /api/inventario/recepciones/{compra}
+     * Líneas de la factura con su mapeo (qué producto+color y si suma stock).
+     */
+    public function recepcionDetalle(int $compra)
+    {
+        $lineas = DB::table('compra_items as ci')
+            ->leftJoin('producto_color_proveedor as pcp', 'pcp.id', '=', 'ci.pcp_id')
+            ->leftJoin('productos as p', 'p.id', '=', 'pcp.producto_id')
+            ->leftJoin('colores as col', 'col.id', '=', 'pcp.color_id')
+            ->where('ci.compra_id', $compra)
+            ->get([
+                'ci.id', 'ci.nombre', 'ci.cantidad', 'ci.unidad',
+                'pcp.producto_id', 'pcp.color_id',
+                'p.nombre as producto', 'p.controla_stock',
+                'col.nombre as color',
+            ]);
+
+        $lineas = $lineas->map(function ($l) {
+            $suma = !empty($l->producto_id) && (int) $l->controla_stock === 1;
+            return [
+                'id'          => $l->id,
+                'nombre'      => $l->nombre,
+                'cantidad'    => (float) $l->cantidad,
+                'unidad'      => $l->unidad,
+                'producto'    => $l->producto ? trim($l->producto . ($l->color ? " - {$l->color}" : '')) : null,
+                'suma_stock'  => $suma,
+            ];
+        });
+
+        return response()->json($lineas);
+    }
+
+    /**
+     * POST /api/inventario/recepciones/{compra}/recibir
+     * Suma al stock las líneas que mapean a productos con controla_stock.
+     */
+    public function recibir(Request $request, int $compra)
+    {
+        $c = DB::table('compras')->where('id', $compra)->first();
+        if (!$c) {
+            return response()->json(['error' => 'Compra no encontrada.'], 404);
+        }
+        if ($c->stock_recibido_at) {
+            return response()->json(['error' => 'Esta compra ya fue recibida en inventario.'], 422);
+        }
+
+        $lineas = DB::table('compra_items as ci')
+            ->join('producto_color_proveedor as pcp', 'pcp.id', '=', 'ci.pcp_id')
+            ->join('productos as p', 'p.id', '=', 'pcp.producto_id')
+            ->where('ci.compra_id', $compra)
+            ->where('p.controla_stock', 1)
+            ->get(['ci.cantidad', 'pcp.producto_id', 'pcp.color_id']);
+
+        $agregadas = 0;
+        foreach ($lineas as $l) {
+            $cant = (float) $l->cantidad;
+            if ($cant <= 0) {
+                continue;
+            }
+            InventarioMovimiento::create([
+                'producto_id'     => $l->producto_id,
+                'color_id'        => $l->color_id,
+                'cantidad'        => $cant,
+                'tipo'            => 'compra',
+                'referencia_tipo' => 'compra',
+                'referencia_id'   => $compra,
+                'nota'            => 'Recepción compra ' . ($c->folio ?? $compra),
+                'user_id'         => optional($request->user())->id,
+            ]);
+            $agregadas++;
+        }
+
+        DB::table('compras')->where('id', $compra)->update(['stock_recibido_at' => now()]);
+
+        return response()->json(['ok' => true, 'lineas_agregadas' => $agregadas]);
+    }
 }

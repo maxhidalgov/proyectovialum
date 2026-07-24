@@ -14,6 +14,7 @@
 
     <VTabs v-model="tab" class="mb-4">
       <VTab value="stock">Stock actual</VTab>
+      <VTab value="recepciones">Recepción de compras</VTab>
       <VTab value="config">Configurar productos</VTab>
     </VTabs>
 
@@ -54,6 +55,37 @@
           </template>
           <template #bottom>
             <div class="pa-3 text-caption text-medium-emphasis">{{ stock.length }} productos</div>
+          </template>
+        </VDataTable>
+      </VCard>
+    </div>
+
+    <!-- ── RECEPCIÓN DE COMPRAS ────────────────────────────────────────────── -->
+    <div v-if="tab === 'recepciones'">
+      <VAlert type="info" variant="tonal" density="compact" class="mb-4">
+        Facturas de compra <strong>nuevas</strong> pendientes de recibir. Al recibir, suma al stock
+        solo las líneas de productos con "controla stock" activado.
+      </VAlert>
+
+      <VCard>
+        <VDataTable :headers="headersRec" :items="recepciones" :items-per-page="25" density="compact" :loading="loadingRec">
+          <template #item.fecha_emision="{ item }">
+            {{ item.fecha_emision ? new Date(item.fecha_emision).toLocaleDateString('es-CL') : '—' }}
+          </template>
+          <template #item.total="{ item }">${{ formatNum(item.total) }}</template>
+          <template #item.lineas_stock="{ item }">
+            <VChip size="x-small" color="primary" variant="tonal">{{ item.lineas_stock }}</VChip>
+          </template>
+          <template #item.acciones="{ item }">
+            <VBtn size="x-small" variant="tonal" color="success" @click="abrirRecepcion(item)">
+              <VIcon start size="14">mdi-package-down</VIcon>Recibir
+            </VBtn>
+          </template>
+          <template #no-data>
+            <div class="pa-6 text-center text-medium-emphasis">No hay compras nuevas pendientes de recibir.</div>
+          </template>
+          <template #bottom>
+            <div class="pa-3 text-caption text-medium-emphasis">{{ recepciones.length }} compras pendientes</div>
           </template>
         </VDataTable>
       </VCard>
@@ -116,6 +148,42 @@
           <VSpacer />
           <VBtn variant="text" @click="dialogAjuste = false">Cancelar</VBtn>
           <VBtn color="primary" :loading="guardandoAjuste" @click="guardarAjuste">Guardar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Dialog Recibir compra -->
+    <VDialog v-model="dialogRec" max-width="640">
+      <VCard v-if="recActiva">
+        <VCardTitle>Recibir compra {{ recActiva.folio ? '#' + recActiva.folio : '' }}</VCardTitle>
+        <VCardText>
+          <div class="text-caption text-medium-emphasis mb-3">{{ recActiva.nombre_emisor }}</div>
+          <VDataTable
+            :headers="headersRecLineas"
+            :items="recLineas"
+            :items-per-page="-1"
+            density="compact"
+            hide-default-footer
+            :loading="loadingRecLineas"
+          >
+            <template #item.producto="{ item }">
+              <span v-if="item.producto">{{ item.producto }}</span>
+              <span v-else class="text-disabled">— sin mapeo —</span>
+            </template>
+            <template #item.cantidad="{ item }">{{ formatNum(item.cantidad) }} {{ item.unidad }}</template>
+            <template #item.suma_stock="{ item }">
+              <VChip v-if="item.suma_stock" size="x-small" color="success" variant="tonal">+ suma</VChip>
+              <VChip v-else size="x-small" color="default" variant="tonal">no suma</VChip>
+            </template>
+          </VDataTable>
+          <div class="text-caption text-medium-emphasis mt-3">
+            Se sumarán al stock {{ recLineas.filter(l => l.suma_stock).length }} línea(s).
+          </div>
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="dialogRec = false">Cancelar</VBtn>
+          <VBtn color="success" :loading="recibiendo" @click="confirmarRecepcion">Confirmar recepción</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
@@ -217,10 +285,77 @@ async function toggle(item, val) {
   }
 }
 
+// Recepción de compras (Fase 2)
+const recepciones = ref([])
+const loadingRec = ref(false)
+const dialogRec = ref(false)
+const recActiva = ref(null)
+const recLineas = ref([])
+const loadingRecLineas = ref(false)
+const recibiendo = ref(false)
+
+const headersRec = [
+  { title: 'Folio', value: 'folio' },
+  { title: 'Proveedor', value: 'nombre_emisor' },
+  { title: 'Fecha', value: 'fecha_emision' },
+  { title: 'Total', value: 'total', align: 'end' },
+  { title: 'Prod. c/stock', value: 'lineas_stock', align: 'center', sortable: false },
+  { title: '', value: 'acciones', align: 'end', sortable: false },
+]
+
+const headersRecLineas = [
+  { title: 'Línea factura', value: 'nombre' },
+  { title: 'Producto (mapeo)', value: 'producto' },
+  { title: 'Cantidad', value: 'cantidad', align: 'end' },
+  { title: '', value: 'suma_stock', align: 'center', sortable: false },
+]
+
+async function cargarRecepciones() {
+  loadingRec.value = true
+  try {
+    const { data } = await axios.get('/api/inventario/recepciones')
+    recepciones.value = data
+  } catch (e) {
+    snack.value = { show: true, text: 'Error al cargar recepciones', color: 'error' }
+  } finally {
+    loadingRec.value = false
+  }
+}
+
+async function abrirRecepcion(item) {
+  recActiva.value = item
+  recLineas.value = []
+  dialogRec.value = true
+  loadingRecLineas.value = true
+  try {
+    const { data } = await axios.get(`/api/inventario/recepciones/${item.id}`)
+    recLineas.value = data
+  } catch (e) {
+    snack.value = { show: true, text: 'Error al cargar las líneas', color: 'error' }
+  } finally {
+    loadingRecLineas.value = false
+  }
+}
+
+async function confirmarRecepcion() {
+  recibiendo.value = true
+  try {
+    const { data } = await axios.post(`/api/inventario/recepciones/${recActiva.value.id}/recibir`)
+    dialogRec.value = false
+    snack.value = { show: true, text: `Recibida: ${data.lineas_agregadas} línea(s) sumadas al stock`, color: 'success' }
+    await Promise.all([cargarRecepciones(), cargarStock()])
+  } catch (e) {
+    snack.value = { show: true, text: e.response?.data?.error || 'Error al recibir', color: 'error' }
+  } finally {
+    recibiendo.value = false
+  }
+}
+
 function formatNum(n) {
   return new Intl.NumberFormat('es-CL').format(Number(n) || 0)
 }
 
 cargarStock()
 cargarProductos()
+cargarRecepciones()
 </script>

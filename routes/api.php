@@ -110,6 +110,10 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/inventario/movimientos',        [\App\Http\Controllers\InventarioController::class, 'movimientos']);
     Route::get('/inventario/productos',          [\App\Http\Controllers\InventarioController::class, 'productos']);
     Route::patch('/inventario/productos/{id}',   [\App\Http\Controllers\InventarioController::class, 'toggleControla']);
+    // Fase 2: recepción de compras
+    Route::get('/inventario/recepciones',                   [\App\Http\Controllers\InventarioController::class, 'recepciones']);
+    Route::get('/inventario/recepciones/{compra}',          [\App\Http\Controllers\InventarioController::class, 'recepcionDetalle']);
+    Route::post('/inventario/recepciones/{compra}/recibir', [\App\Http\Controllers\InventarioController::class, 'recibir']);
 
     // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
