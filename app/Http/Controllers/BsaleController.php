@@ -228,6 +228,13 @@ class BsaleController extends Controller
                     }
                 }
 
+                // Descontar stock de productos de lista que controlan inventario (Fase 3)
+                try {
+                    $this->descontarStockCotizacion($cotizacion, $porcentaje);
+                } catch (\Throwable $e) {
+                    Log::warning('crearDocumentoDesdeCotzacion: no se pudo descontar stock', ['error' => $e->getMessage()]);
+                }
+
                 // Calcular total emitido para decidir si cambiar estado
                 $totalEmitido = \App\Models\DocumentoFacturacion::where('cotizacion_id', $cotizacion->id)
                     ->where('estado', 'emitido')
@@ -277,6 +284,74 @@ class BsaleController extends Controller
                 'message' => $e->getMessage(),
                 'debug' => $errorDetails // TEMPORAL para debugging
             ], 500);
+        }
+    }
+
+    /**
+     * Descuenta stock de las líneas de la cotización cuyo producto controla inventario.
+     * Solo en venta total (porcentaje=100) y una sola vez por cotización (idempotente).
+     * No descuenta vidrios (Fase 4) ni ventanas.
+     */
+    private function descontarStockCotizacion($cotizacion, float $porcentaje): void
+    {
+        if ($porcentaje < 100) {
+            return; // en anticipos/saldos no descontamos (evita fracciones y doble conteo)
+        }
+
+        $yaDescontado = \App\Models\InventarioMovimiento::where('referencia_tipo', 'cotizacion')
+            ->where('referencia_id', $cotizacion->id)
+            ->where('tipo', 'venta')
+            ->exists();
+        if ($yaDescontado) {
+            return;
+        }
+
+        $detalles = collect($cotizacion->detalles)->filter(function ($d) {
+            return !($d->esVidrio ?? false) && !empty($d->producto_id);
+        });
+        if ($detalles->isEmpty()) {
+            return;
+        }
+
+        $controlan = \DB::table('productos')
+            ->whereIn('id', $detalles->pluck('producto_id')->unique()->values())
+            ->where('controla_stock', 1)
+            ->pluck('id')
+            ->all();
+        if (empty($controlan)) {
+            return;
+        }
+
+        // Mapa lista_precio_id → color_id resuelto (directo o legacy vía proveedor)
+        $lpIds = $detalles->pluck('lista_precio_id')->filter()->unique()->values();
+        $colorPorLp = [];
+        if ($lpIds->isNotEmpty()) {
+            $rows = \DB::table('lista_precios as lp')
+                ->leftJoin('producto_color_proveedor as pcp', 'pcp.id', '=', 'lp.producto_color_proveedor_id')
+                ->whereIn('lp.id', $lpIds)
+                ->get(['lp.id', \DB::raw('COALESCE(lp.color_id, pcp.color_id) as color_id')]);
+            foreach ($rows as $r) {
+                $colorPorLp[$r->id] = $r->color_id;
+            }
+        }
+
+        foreach ($detalles as $d) {
+            if (!in_array($d->producto_id, $controlan)) {
+                continue;
+            }
+            $cant = (float) ($d->cantidad ?? 0);
+            if ($cant <= 0) {
+                continue;
+            }
+            \App\Models\InventarioMovimiento::create([
+                'producto_id'     => $d->producto_id,
+                'color_id'        => $d->lista_precio_id ? ($colorPorLp[$d->lista_precio_id] ?? null) : null,
+                'cantidad'        => -1 * $cant,
+                'tipo'            => 'venta',
+                'referencia_tipo' => 'cotizacion',
+                'referencia_id'   => $cotizacion->id,
+                'nota'            => 'Facturación cotización #' . $cotizacion->id,
+            ]);
         }
     }
 
