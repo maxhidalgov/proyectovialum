@@ -427,11 +427,15 @@ function buscarProductos(q) {
 
 function agregarProducto(p) {
   prodMenu.value = false
+  // Aviso de stock (no bloquea la venta, solo avisa)
+  if (p.stock !== null && p.stock !== undefined && p.stock <= 0) {
+    snackMsg(`⚠️ ${p.nombre} sin stock — se vende igual`, 'warning')
+  }
   if (p.es_vidrio) {
     // Vidrio: pedir medidas para calcular m²
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
   } else {
-    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: descuentoCliente(), producto_id: p.producto_id })
+    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: descuentoCliente(), producto_id: p.producto_id, color_id: p.color_id })
   }
   prodSearch.value = ''
   prodResults.value = []
@@ -469,6 +473,7 @@ function confirmarMedidas() {
     precio: precioM2,            // precio por m² (con pulido si aplica)
     descuento: descuentoCliente(),
     producto_id: m.producto.producto_id,
+    color_id: m.producto.color_id,
     // Datos estructurados para la orden de corte
     vidrio: {
       producto: m.producto.nombre,
@@ -663,6 +668,7 @@ function itemsPayload() {
     precio: Number(it.precio),
     descuento: Number(it.descuento) || 0,
     producto_id: it.producto_id || undefined,
+    color_id: it.color_id ?? undefined,
     producto_nombre: it.vidrio ? it.vidrio.producto : it.nombre,
     es_vidrio: !!it.vidrio,
     ancho: it.vidrio?.ancho,

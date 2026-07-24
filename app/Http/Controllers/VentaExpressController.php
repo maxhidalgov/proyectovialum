@@ -98,6 +98,7 @@ class VentaExpressController extends Controller
             return [
                 'id'           => $r->id, // lista_precio id (key único)
                 'producto_id'  => $r->producto_id ?? null,
+                'color_id'     => $r->color_id ?? null,
                 'nombre'       => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
                 'precio_venta' => (float) $r->precio_venta,
                 'es_vidrio'    => in_array((int) $r->tipo_producto_id, $tiposVidrio, true),
@@ -107,6 +108,46 @@ class VentaExpressController extends Controller
         });
 
         return response()->json($items);
+    }
+
+    /**
+     * Descuenta stock (movimiento tipo 'venta') de los items cuyo producto controla inventario.
+     * No bloquea la venta: el stock puede quedar negativo (solo refleja la realidad).
+     */
+    private function descontarStock(array $items, int $docId): void
+    {
+        $ids = collect($items)->pluck('producto_id')->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $controlan = DB::table('productos')
+            ->whereIn('id', $ids)
+            ->where('controla_stock', 1)
+            ->pluck('id')
+            ->all();
+
+        if (empty($controlan)) {
+            return;
+        }
+
+        foreach ($items as $it) {
+            $pid  = $it['producto_id'] ?? null;
+            $cant = (float) ($it['cantidad'] ?? 0);
+            if (!$pid || !in_array($pid, $controlan) || $cant <= 0) {
+                continue;
+            }
+
+            \App\Models\InventarioMovimiento::create([
+                'producto_id'     => $pid,
+                'color_id'        => $it['color_id'] ?? null,
+                'cantidad'        => -1 * $cant,
+                'tipo'            => 'venta',
+                'referencia_tipo' => 'documento_facturacion',
+                'referencia_id'   => $docId,
+                'nota'            => 'Venta Express',
+            ]);
+        }
     }
 
     /**
@@ -137,6 +178,7 @@ class VentaExpressController extends Controller
             'items.*.precio'     => 'required|numeric|min:0',
             'items.*.descuento'  => 'nullable|numeric|min:0|max:100',
             'items.*.producto_id'    => 'nullable|integer',
+            'items.*.color_id'       => 'nullable|integer',
             'items.*.producto_nombre'=> 'nullable|string',
             'items.*.es_vidrio'  => 'nullable|boolean',
             'items.*.ancho'      => 'nullable|integer',
@@ -308,6 +350,13 @@ class VentaExpressController extends Controller
                 'piezas'         => $it['piezas'] ?? null,
                 'pulido'         => (bool) ($it['pulido'] ?? false),
             ]);
+        }
+
+        // Descontar stock de los productos que controlan inventario (Fase 3)
+        try {
+            $this->descontarStock($data['items'], $doc->id);
+        } catch (\Throwable $e) {
+            Log::warning('VentaExpress: no se pudo descontar stock', ['error' => $e->getMessage()]);
         }
 
         // Si es boleta, recalcular el resumen del mes para que aparezca al instante en el módulo Boletas
