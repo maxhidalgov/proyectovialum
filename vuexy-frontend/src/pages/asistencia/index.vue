@@ -102,9 +102,9 @@
               hide-details
               style="max-width:320px"
             />
-            <VBtnToggle v-model="vistaSem" mandatory density="compact" color="primary" variant="outlined">
-              <VBtn value="resumen" size="small">Resumen</VBtn>
-              <VBtn value="grilla" size="small">Grilla diaria</VBtn>
+            <VBtnToggle v-model="vistaSem" mandatory color="primary" variant="outlined" divided class="flex-shrink-0">
+              <VBtn value="resumen" class="px-5 text-none">Resumen</VBtn>
+              <VBtn value="grilla" class="px-5 text-none">Grilla diaria</VBtn>
             </VBtnToggle>
           </VCardText>
         </VCard>
