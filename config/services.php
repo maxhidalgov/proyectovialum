@@ -78,7 +78,8 @@ return [
     ],
 
     'workera' => [
-        'base_url' => env('WORKERA_BASE_URL', 'https://api.workera.com/apiClient/v1/'),
+        // Default: workera.com (el host que funciona; api.workera.com del manual NO responde)
+        'base_url' => env('WORKERA_BASE_URL', 'https://workera.com/apiClient/v1/'),
         'api_user' => env('WORKERA_API_USER'),
         'api_key'  => env('WORKERA_API_KEY'),
     ],
