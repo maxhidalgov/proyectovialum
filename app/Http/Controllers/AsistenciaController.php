@@ -115,6 +115,13 @@ class AsistenciaController extends Controller
         foreach ($schedules as $emp) {
             $e    = $emp['employee'] ?? [];
             $code = (string) ($e['code'] ?? '');
+
+            // Excluir trabajadores que ya no trabajan (inactivos / sin contrato)
+            $estadoEmp = strtoupper($e['employeeStatus'] ?? 'ACTIVO');
+            if (in_array($estadoEmp, ['INACTIVO', 'SIN_CONTRATO'], true)) {
+                continue;
+            }
+
             $nombre = trim(($e['name'] ?? '') . ' ' . ($e['lastName'] ?? '')) ?: ('#' . $code);
             $sucursal = $e['branchOffice'] ?? '';
             $departamento = $e['department'] ?? '';
