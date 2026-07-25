@@ -41,7 +41,21 @@
       </VRow>
 
       <VCard v-if="repDia">
-        <VDataTable :headers="headersDia" :items="repDia.dias" :items-per-page="25" density="compact">
+        <VCardText class="pb-0">
+          <VAutocomplete
+            v-model="filtroTrabajador"
+            :items="trabajadores"
+            item-title="nombre"
+            item-value="code"
+            label="Filtrar por trabajador"
+            density="compact"
+            variant="outlined"
+            clearable
+            hide-details
+            style="max-width:320px"
+          />
+        </VCardText>
+        <VDataTable :headers="headersDia" :items="diasFiltrados" :items-per-page="25" density="compact">
           <template #item.estado="{ item }">
             <VChip size="x-small" :color="colorEstado(item.estado)" variant="tonal">{{ item.estado }}</VChip>
           </template>
@@ -54,7 +68,7 @@
           </template>
           <template #item.permiso="{ item }">{{ item.permiso || '' }}</template>
           <template #bottom>
-            <div class="pa-3 text-caption text-medium-emphasis">{{ repDia.dias.length }} trabajadores con horario</div>
+            <div class="pa-3 text-caption text-medium-emphasis">{{ diasFiltrados.length }} trabajadores con horario</div>
           </template>
         </VDataTable>
       </VCard>
@@ -73,26 +87,80 @@
         </VCardText>
       </VCard>
 
-      <VCard v-if="repSem" class="mb-4">
-        <VCardTitle class="text-subtitle-1">Resumen por trabajador</VCardTitle>
-        <VDataTable :headers="headersSem" :items="repSem.resumen" :items-per-page="25" density="compact">
-          <template #item.atrasos="{ item }">
-            <VChip v-if="item.atrasos > 0" size="x-small" color="warning" variant="tonal">{{ item.atrasos }}</VChip>
-            <span v-else class="text-disabled">0</span>
-          </template>
-          <template #item.min_atraso="{ item }">
-            <span v-if="item.min_atraso > 0" class="text-warning">{{ item.min_atraso }} min</span>
-            <span v-else class="text-disabled">—</span>
-          </template>
-          <template #item.ausentes="{ item }">
-            <VChip v-if="item.ausentes > 0" size="x-small" color="error" variant="tonal">{{ item.ausentes }}</VChip>
-            <span v-else class="text-disabled">0</span>
-          </template>
-          <template #bottom>
-            <div class="pa-3 text-caption text-medium-emphasis">{{ repSem.resumen.length }} trabajadores</div>
-          </template>
-        </VDataTable>
-      </VCard>
+      <template v-if="repSem">
+        <VCard class="mb-4">
+          <VCardText class="d-flex flex-wrap align-center" style="gap:16px">
+            <VAutocomplete
+              v-model="filtroTrabajador"
+              :items="trabajadores"
+              item-title="nombre"
+              item-value="code"
+              label="Filtrar por trabajador"
+              density="compact"
+              variant="outlined"
+              clearable
+              hide-details
+              style="max-width:320px"
+            />
+            <VBtnToggle v-model="vistaSem" mandatory density="compact" color="primary" variant="outlined">
+              <VBtn value="resumen" size="small">Resumen</VBtn>
+              <VBtn value="grilla" size="small">Grilla diaria</VBtn>
+            </VBtnToggle>
+          </VCardText>
+        </VCard>
+
+        <!-- Resumen por trabajador -->
+        <VCard v-if="vistaSem === 'resumen'">
+          <VCardTitle class="text-subtitle-1">Resumen por trabajador</VCardTitle>
+          <VDataTable :headers="headersSem" :items="resumenFiltrado" :items-per-page="25" density="compact">
+            <template #item.atrasos="{ item }">
+              <VChip v-if="item.atrasos > 0" size="x-small" color="warning" variant="tonal">{{ item.atrasos }}</VChip>
+              <span v-else class="text-disabled">0</span>
+            </template>
+            <template #item.min_atraso="{ item }">
+              <span v-if="item.min_atraso > 0" class="text-warning">{{ item.min_atraso }} min</span>
+              <span v-else class="text-disabled">—</span>
+            </template>
+            <template #item.ausentes="{ item }">
+              <VChip v-if="item.ausentes > 0" size="x-small" color="error" variant="tonal">{{ item.ausentes }}</VChip>
+              <span v-else class="text-disabled">0</span>
+            </template>
+            <template #bottom>
+              <div class="pa-3 text-caption text-medium-emphasis">{{ resumenFiltrado.length }} trabajadores</div>
+            </template>
+          </VDataTable>
+        </VCard>
+
+        <!-- Grilla diaria: hora de entrada por día -->
+        <VCard v-else>
+          <VCardTitle class="text-subtitle-1">Hora de entrada por día</VCardTitle>
+          <VCardText style="overflow-x:auto">
+            <VTable density="compact">
+              <thead>
+                <tr>
+                  <th class="text-left text-no-wrap">Trabajador</th>
+                  <th v-for="f in diasCols" :key="f" class="text-center text-no-wrap">{{ fmtDiaCol(f) }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in grilla" :key="r.code">
+                  <td class="text-no-wrap font-weight-medium">{{ r.nombre }}</td>
+                  <td v-for="f in diasCols" :key="f" class="text-center">
+                    <span v-if="r.celdas[f]" :class="celdaClase(r.celdas[f])">{{ celdaTexto(r.celdas[f]) }}</span>
+                    <span v-else class="text-disabled">·</span>
+                  </td>
+                </tr>
+              </tbody>
+            </VTable>
+            <div class="mt-3 text-caption text-medium-emphasis">
+              <span class="text-success">verde</span> = a tiempo ·
+              <span class="text-warning">naranjo</span> = atraso ·
+              <span class="text-error">rojo</span> = ausente ·
+              <span class="text-info">azul</span> = permiso · · = sin horario
+            </div>
+          </VCardText>
+        </VCard>
+      </template>
     </div>
   </div>
 </template>
@@ -160,6 +228,64 @@ const tarjetasDia = computed(() => {
 
 function colorEstado(e) {
   return { 'A tiempo': 'success', 'Atraso': 'warning', 'Ausente': 'error', 'Permiso': 'info' }[e] || 'default'
+}
+
+// ── Filtro por trabajador y grilla diaria ──────────────────────────────────
+const filtroTrabajador = ref(null)
+const vistaSem = ref('resumen')
+
+const trabajadores = computed(() => {
+  const src = tab.value === 'diario' ? (repDia.value?.dias || []) : (repSem.value?.dias || [])
+  const map = new Map()
+  for (const r of src) if (r.code && !map.has(r.code)) map.set(r.code, r.nombre)
+  return [...map].map(([code, nombre]) => ({ code, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre))
+})
+
+const diasFiltrados = computed(() => {
+  const arr = repDia.value?.dias || []
+  return filtroTrabajador.value ? arr.filter(d => d.code === filtroTrabajador.value) : arr
+})
+
+const resumenFiltrado = computed(() => {
+  const arr = repSem.value?.resumen || []
+  return filtroTrabajador.value ? arr.filter(r => r.code === filtroTrabajador.value) : arr
+})
+
+const diasCols = computed(() => {
+  if (!repSem.value) return []
+  return [...new Set(repSem.value.dias.map(d => d.fecha))].sort()
+})
+
+const grilla = computed(() => {
+  if (!repSem.value) return []
+  let dias = repSem.value.dias
+  if (filtroTrabajador.value) dias = dias.filter(d => d.code === filtroTrabajador.value)
+  const map = new Map()
+  for (const d of dias) {
+    if (!map.has(d.code)) map.set(d.code, { code: d.code, nombre: d.nombre, celdas: {} })
+    map.get(d.code).celdas[d.fecha] = d
+  }
+  return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre))
+})
+
+function fmtDiaCol(fecha) {
+  const d = new Date(fecha + 'T00:00:00')
+  return d.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' })
+}
+
+function celdaTexto(d) {
+  if (d.estado === 'Permiso') return 'Perm.'
+  if (d.estado === 'Ausente') return 'Ausente'
+  return d.real || '—'
+}
+
+function celdaClase(d) {
+  return {
+    'A tiempo': 'text-success',
+    'Atraso': 'text-warning font-weight-bold',
+    'Ausente': 'text-error',
+    'Permiso': 'text-info',
+  }[d.estado] || ''
 }
 
 async function cargarDiario() {
