@@ -261,23 +261,71 @@
               size="large"
               color="primary"
               class="mt-4"
-              :loading="emitiendo"
-              :disabled="!puedeEmitir"
-              :prepend-icon="tipo === 'cotizacion' ? 'mdi-content-save' : 'mdi-check'"
-              @click="emitir"
+              :disabled="!itemsOk"
+              append-icon="mdi-arrow-right"
+              @click="dialogConfirmar = true"
             >
-              {{ tipo === 'cotizacion' ? 'Guardar cotización' : (tipo === 'boleta' ? 'Emitir Boleta' : 'Emitir Factura') }}
+              Realizar venta
             </VBtn>
-            <p v-if="tipo === 'factura' && (!cliente || !cliente.bsale_id)" class="text-caption text-warning mt-2 mb-0 text-center">
-              La factura requiere un cliente con RUT sincronizado en Bsale.
-            </p>
-            <p v-else-if="tipo === 'cotizacion' && !cliente" class="text-caption text-warning mt-2 mb-0 text-center">
-              La cotización requiere seleccionar un cliente.
+            <p class="text-caption text-medium-emphasis mt-2 mb-0 text-center">
+              Al confirmar eliges Boleta, Factura o Cotización.
             </p>
           </VCardText>
         </VCard>
       </VCol>
     </VRow>
+
+    <!-- ── Dialog confirmar tipo de documento (poka-yoke) ────────────────── -->
+    <VDialog v-model="dialogConfirmar" max-width="470">
+      <VCard>
+        <VCardTitle class="pa-4 pb-1">¿Qué documento emitir?</VCardTitle>
+        <VCardText>
+          <div class="d-flex justify-space-between mb-1">
+            <span class="text-medium-emphasis">Cliente</span>
+            <span class="font-weight-medium">{{ cliente?.nombre || 'Consumidor Final' }}</span>
+          </div>
+          <div class="d-flex justify-space-between text-h6 font-weight-bold mb-3">
+            <span>Total</span><span>{{ clp(totalBruto) }}</span>
+          </div>
+
+          <VAlert
+            v-if="cliente && cliente.identification"
+            type="info" variant="tonal" density="compact" class="mb-3"
+          >
+            Este cliente tiene RUT ({{ cliente.identification }}) → normalmente corresponde <strong>Factura</strong>.
+          </VAlert>
+
+          <div class="d-flex flex-column" style="gap:10px">
+            <VBtn size="large" color="secondary" variant="flat" :disabled="!puedeBoleta"
+                  :loading="emitiendo && tipoElegido === 'boleta'" @click="confirmarTipo('boleta')">
+              <VIcon start>mdi-receipt-text-outline</VIcon> Boleta
+            </VBtn>
+            <VBtn size="large" color="primary" variant="flat" :disabled="!puedeFactura"
+                  :loading="emitiendo && tipoElegido === 'factura'" @click="confirmarTipo('factura')">
+              <VIcon start>mdi-file-document-outline</VIcon> Factura
+            </VBtn>
+            <VBtn size="large" color="info" variant="tonal" :disabled="!puedeCotizacion"
+                  :loading="emitiendo && tipoElegido === 'cotizacion'" @click="confirmarTipo('cotizacion')">
+              <VIcon start>mdi-content-save-outline</VIcon> Cotización
+            </VBtn>
+          </div>
+
+          <p v-if="!puedeBoleta" class="text-caption text-warning mt-3 mb-0">
+            Boleta/Factura: revisa que los pagos cuadren con el total{{ referencias.some(r => !r.numero) ? ' y que las referencias tengan número' : '' }}.
+          </p>
+          <p v-if="!puedeFactura" class="text-caption text-warning mt-1 mb-0">
+            Factura: requiere cliente con RUT sincronizado en Bsale.
+          </p>
+          <p v-if="!puedeCotizacion" class="text-caption text-warning mt-1 mb-0">
+            Cotización: requiere seleccionar un cliente.
+          </p>
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="dialogConfirmar = false">Cancelar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
 
     <!-- ── Dialog crear cliente ─────────────────────────────────────────── -->
     <VDialog v-model="cliDialog.show" max-width="520">
@@ -673,6 +721,27 @@ const puedeEmitir = computed(() => {
   if (referencias.value.some(r => !r.numero)) return false
   return true
 })
+
+// ── Poka-yoke: confirmar tipo de documento al realizar la venta ────────────
+const dialogConfirmar = ref(false)
+const tipoElegido = ref('')
+
+const itemsOk = computed(() =>
+  items.value.length > 0 && !items.value.some(it => !it.nombre || !(Number(it.cantidad) > 0))
+)
+const puedeBoleta = computed(() =>
+  itemsOk.value && pagosOk.value && vouchersOk.value && !referencias.value.some(r => !r.numero)
+)
+const puedeFactura = computed(() => puedeBoleta.value && !!cliente.value && !!cliente.value.bsale_id)
+const puedeCotizacion = computed(() => itemsOk.value && !!cliente.value)
+
+async function confirmarTipo(t) {
+  tipo.value = t
+  tipoElegido.value = t
+  await emitir()
+  // emitir muestra el resultado al tener éxito → cerramos el diálogo; si falló, queda abierto
+  if (resultado.value.show) dialogConfirmar.value = false
+}
 
 function itemsPayload() {
   return items.value.map(it => ({
