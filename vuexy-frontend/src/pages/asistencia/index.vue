@@ -102,10 +102,20 @@
               hide-details
               style="max-width:320px"
             />
-            <VBtnToggle v-model="vistaSem" mandatory color="primary" variant="outlined" divided class="flex-shrink-0">
-              <VBtn value="resumen" class="px-5 text-none">Resumen</VBtn>
-              <VBtn value="grilla" class="px-5 text-none">Grilla diaria</VBtn>
-            </VBtnToggle>
+            <div class="d-flex" style="gap:8px">
+              <VBtn
+                :variant="vistaSem === 'resumen' ? 'flat' : 'outlined'"
+                :color="vistaSem === 'resumen' ? 'primary' : undefined"
+                class="text-none"
+                @click="vistaSem = 'resumen'"
+              >Resumen</VBtn>
+              <VBtn
+                :variant="vistaSem === 'grilla' ? 'flat' : 'outlined'"
+                :color="vistaSem === 'grilla' ? 'primary' : undefined"
+                class="text-none"
+                @click="vistaSem = 'grilla'"
+              >Grilla diaria</VBtn>
+            </div>
           </VCardText>
         </VCard>
 
