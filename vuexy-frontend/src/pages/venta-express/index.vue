@@ -80,8 +80,8 @@
               </VBtn>
             </div>
 
-            <!-- Tabla de ítems (scroll horizontal en móvil para que no se corte) -->
-            <div style="overflow-x:auto">
+            <!-- Tabla de ítems (solo escritorio) -->
+            <div class="d-none d-md-block" style="overflow-x:auto">
             <VTable density="compact" class="mt-2" style="min-width:640px">
               <thead>
                 <tr>
@@ -135,6 +135,51 @@
                 </tr>
               </tbody>
             </VTable>
+            </div>
+
+            <!-- Ítems como tarjetas (solo móvil) -->
+            <div class="d-md-none mt-2">
+              <div v-if="!items.length" class="text-center text-caption text-medium-emphasis py-6">
+                Busca un producto o agrega un ítem manual para empezar
+              </div>
+              <VCard v-for="(it, i) in items" :key="i" variant="tonal" class="mb-3">
+                <VCardText class="pa-3">
+                  <div class="d-flex align-start justify-space-between mb-2">
+                    <div class="flex-grow-1 pr-2">
+                      <VTextField
+                        v-if="!it.producto_id && !it.vidrio"
+                        v-model="it.nombre"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        placeholder="Detalle"
+                      />
+                      <span v-else class="text-body-2 font-weight-medium">{{ it.nombre }}</span>
+                    </div>
+                    <VBtn icon size="x-small" variant="text" color="error" @click="items.splice(i, 1)">
+                      <VIcon size="18">mdi-close</VIcon>
+                    </VBtn>
+                  </div>
+                  <VRow dense>
+                    <VCol cols="4">
+                      <VTextField v-model.number="it.cantidad" type="number" min="0" label="Cant." density="compact" variant="outlined" hide-details />
+                    </VCol>
+                    <VCol cols="4">
+                      <VTextField v-model.number="it.precio" type="number" min="0" label="Neto" density="compact" variant="outlined" hide-details />
+                    </VCol>
+                    <VCol cols="4">
+                      <VTextField :model-value="brutoItem(it)" type="number" min="0" label="c/IVA" density="compact" variant="outlined" hide-details @update:model-value="setBrutoItem(it, $event)" />
+                    </VCol>
+                  </VRow>
+                  <div class="d-flex align-center justify-space-between mt-2">
+                    <VTextField v-model.number="it.descuento" type="number" min="0" max="100" label="% desc." density="compact" variant="outlined" hide-details style="max-width:110px" />
+                    <div class="text-right">
+                      <div class="text-caption text-medium-emphasis">Subtotal</div>
+                      <div class="text-subtitle-1 font-weight-bold">{{ clp(subtotalItem(it)) }}</div>
+                    </div>
+                  </div>
+                </VCardText>
+              </VCard>
             </div>
           </VCardText>
         </VCard>
