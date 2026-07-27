@@ -72,7 +72,7 @@ class VentaExpressController extends Controller
                    DB::raw('COALESCE(c.nombre, c2.nombre) as color'),
                    DB::raw('COALESCE(c.id, c2.id) as color_id'),
                    'p.controla_stock',
-                   'lp.precio_venta', 'p.tipo_producto_id']);
+                   'lp.precio_venta', 'lp.precio_costo', 'p.tipo_producto_id']);
 
         // tipos 1, 2 y 7 = cristales/vidrios → se venden por m²
         $tiposVidrio = [1, 2, 7];
@@ -101,6 +101,7 @@ class VentaExpressController extends Controller
                 'color_id'     => $r->color_id ?? null,
                 'nombre'       => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
                 'precio_venta' => (float) $r->precio_venta,
+                'costo'        => (float) $r->precio_costo, // para controlar margen mínimo al vender
                 'es_vidrio'    => in_array((int) $r->tipo_producto_id, $tiposVidrio, true),
                 // null = no controla stock; número = unidades disponibles
                 'stock'        => $controla ? ($stockMap[$key] ?? 0) : null,

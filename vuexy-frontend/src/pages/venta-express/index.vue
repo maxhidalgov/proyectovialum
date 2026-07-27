@@ -88,15 +88,14 @@
                   <th style="width:90px">Cant.</th>
                   <th>Detalle</th>
                   <th style="width:120px" class="text-right">$/unidad (neto)</th>
-                  <th style="width:120px" class="text-right">$/unidad (c/IVA)</th>
                   <th style="width:80px" class="text-right">% desc.</th>
-                  <th style="width:110px" class="text-right">Subtotal</th>
+                  <th style="width:140px" class="text-right">Subtotal (c/IVA)</th>
                   <th style="width:40px"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="!items.length">
-                  <td colspan="7" class="text-center text-caption text-medium-emphasis py-6">
+                  <td colspan="6" class="text-center text-caption text-medium-emphasis py-6">
                     Busca un producto o agrega un ítem manual para empezar
                   </td>
                 </tr>
@@ -118,15 +117,20 @@
                     <span v-else class="text-body-2">{{ it.nombre }}</span>
                   </td>
                   <td>
-                    <VTextField v-model.number="it.precio" type="number" min="0" density="compact" variant="plain" hide-details reverse />
-                  </td>
-                  <td>
-                    <VTextField :model-value="brutoItem(it)" type="number" min="0" density="compact" variant="plain" hide-details reverse @update:model-value="setBrutoItem(it, $event)" />
+                    <VTextField v-model.number="it.precio" type="number" min="0" density="compact" variant="plain" hide-details reverse
+                                :class="bajoMargen(it) ? 'text-error' : ''" />
+                    <div v-if="margenItem(it) !== null" class="text-caption text-right"
+                         :class="bajoMargen(it) ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
+                      margen {{ Math.round(margenItem(it)) }}%
+                    </div>
                   </td>
                   <td>
                     <VTextField v-model.number="it.descuento" type="number" min="0" max="100" density="compact" variant="plain" hide-details reverse />
                   </td>
-                  <td class="text-right font-weight-medium">{{ clp(subtotalItem(it)) }}</td>
+                  <td>
+                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" density="compact" variant="plain" hide-details reverse
+                                class="font-weight-medium" @update:model-value="setSubtotalCiva(it, $event)" />
+                  </td>
                   <td>
                     <VBtn icon size="x-small" variant="text" color="error" @click="items.splice(i, 1)">
                       <VIcon size="16">mdi-close</VIcon>
@@ -165,18 +169,19 @@
                       <VTextField v-model.number="it.cantidad" type="number" min="0" label="Cant." density="compact" variant="outlined" hide-details />
                     </VCol>
                     <VCol cols="4">
-                      <VTextField v-model.number="it.precio" type="number" min="0" label="Neto" density="compact" variant="outlined" hide-details />
+                      <VTextField v-model.number="it.precio" type="number" min="0" label="Neto" density="compact" variant="outlined" hide-details :class="bajoMargen(it) ? 'text-error' : ''" />
                     </VCol>
                     <VCol cols="4">
-                      <VTextField :model-value="brutoItem(it)" type="number" min="0" label="c/IVA" density="compact" variant="outlined" hide-details @update:model-value="setBrutoItem(it, $event)" />
+                      <VTextField v-model.number="it.descuento" type="number" min="0" max="100" label="% desc." density="compact" variant="outlined" hide-details />
                     </VCol>
                   </VRow>
+                  <div v-if="margenItem(it) !== null" class="text-caption mt-1"
+                       :class="bajoMargen(it) ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
+                    Margen {{ Math.round(margenItem(it)) }}%
+                  </div>
                   <div class="d-flex align-center justify-space-between mt-2">
-                    <VTextField v-model.number="it.descuento" type="number" min="0" max="100" label="% desc." density="compact" variant="outlined" hide-details style="max-width:110px" />
-                    <div class="text-right">
-                      <div class="text-caption text-medium-emphasis">Subtotal</div>
-                      <div class="text-subtitle-1 font-weight-bold">{{ clp(subtotalItem(it)) }}</div>
-                    </div>
+                    <span class="text-caption text-medium-emphasis">Subtotal (c/IVA)</span>
+                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" density="compact" variant="outlined" hide-details reverse style="max-width:150px" class="font-weight-bold" @update:model-value="setSubtotalCiva(it, $event)" />
                   </div>
                 </VCardText>
               </VCard>
@@ -319,6 +324,13 @@
             <div class="d-flex justify-space-between text-h6 font-weight-bold mt-1">
               <span>Total</span><span>{{ clp(totalBruto) }}</span>
             </div>
+
+            <VAlert
+              v-if="hayBajoMargen"
+              type="error" variant="tonal" density="compact" class="mt-3 mb-0"
+            >
+              Hay una línea bajo el margen mínimo ({{ MARGEN_MINIMO }}%). Sube el precio para poder vender.
+            </VAlert>
 
             <VBtn
               block
@@ -521,15 +533,6 @@ const tipo = ref('boleta')
 // ── Ítems ────────────────────────────────────────────────────────────────
 const items = ref([])
 
-// Precio con IVA por unidad (editable, sincronizado con el neto it.precio)
-function brutoItem(it) {
-  return Math.round((Number(it.precio) || 0) * 1.19)
-}
-function setBrutoItem(it, val) {
-  const g = Number(val) || 0
-  it.precio = g > 0 ? g / 1.19 : 0
-}
-
 function subtotalItem(it) {
   const bruto = (Number(it.cantidad) || 0) * (Number(it.precio) || 0)
   return Math.round(bruto * (1 - (Number(it.descuento) || 0) / 100))
@@ -537,6 +540,32 @@ function subtotalItem(it) {
 const totalNeto  = computed(() => items.value.reduce((s, it) => s + subtotalItem(it), 0))
 const totalIva   = computed(() => Math.round(totalNeto.value * 0.19))
 const totalBruto = computed(() => totalNeto.value + totalIva.value)
+
+// Subtotal CON IVA por línea (editable → recalcula el precio unitario neto)
+function subtotalCivaItem(it) {
+  return Math.round(subtotalItem(it) * 1.19)
+}
+function setSubtotalCiva(it, val) {
+  const civa = Number(val) || 0
+  const cant = Number(it.cantidad) || 0
+  const desc = Number(it.descuento) || 0
+  const factor = cant * (1 - desc / 100) * 1.19
+  it.precio = factor > 0 ? civa / factor : 0
+}
+
+// ── Control de margen mínimo (productos de catálogo con costo) ──────────────
+const MARGEN_MINIMO = 20 // % mínimo permitido al vender (cambiar aquí si se necesita otro)
+function margenItem(it) {
+  const costo = Number(it.costo) || 0
+  const precio = Number(it.precio) || 0
+  if (costo <= 0 || precio <= 0) return null // sin costo (ítems manuales) → no se controla
+  return (precio - costo) / precio * 100
+}
+function bajoMargen(it) {
+  const m = margenItem(it)
+  return m !== null && m < MARGEN_MINIMO
+}
+const hayBajoMargen = computed(() => items.value.some(it => bajoMargen(it)))
 
 // ── Buscador de productos ────────────────────────────────────────────────
 const prodSearch  = ref('')
@@ -566,7 +595,7 @@ function agregarProducto(p) {
     // Vidrio: pedir medidas para calcular m²
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
   } else {
-    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, descuento: descuentoCliente(), producto_id: p.producto_id, color_id: p.color_id })
+    items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, costo: p.costo, descuento: descuentoCliente(), producto_id: p.producto_id, color_id: p.color_id })
   }
   prodSearch.value = ''
   prodResults.value = []
@@ -602,6 +631,7 @@ function confirmarMedidas() {
     nombre: detalle,
     cantidad: m2Calculado.value, // la cantidad es el total de m²
     precio: precioM2,            // precio por m² (con pulido si aplica)
+    costo: m.producto.costo,     // costo por m² (para control de margen)
     descuento: descuentoCliente(),
     producto_id: m.producto.producto_id,
     color_id: m.producto.color_id,
@@ -799,7 +829,9 @@ const dialogConfirmar = ref(false)
 const tipoElegido = ref('')
 
 const itemsOk = computed(() =>
-  items.value.length > 0 && !items.value.some(it => !it.nombre || !(Number(it.cantidad) > 0))
+  items.value.length > 0 &&
+  !items.value.some(it => !it.nombre || !(Number(it.cantidad) > 0)) &&
+  !hayBajoMargen.value // bloquea si alguna línea está bajo el margen mínimo
 )
 const puedeBoleta = computed(() =>
   itemsOk.value && pagosOk.value && vouchersOk.value && !referencias.value.some(r => !r.numero)
