@@ -174,7 +174,11 @@ class BsaleClientService
         return $response->json();
     }
 
-    throw new \Exception("❌ Error al crear cliente en Bsale: " . $response->body());
+    // Extraer el mensaje legible que devuelve Bsale (ej: "activity is required")
+    $body = $response->json();
+    $msg  = is_array($body) ? ($body['error'] ?? ($body['message'] ?? $response->body())) : $response->body();
+
+    throw new \Exception("Bsale rechazó la creación: " . $msg);
 }
 
     public function getOffices($limit = 25, $offset = 0)

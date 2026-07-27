@@ -226,8 +226,9 @@ public function crearClienteBsale(Request $request, BsaleClientService $bsale)
             'cliente' => $cliente,
         ]);
 
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
+    } catch (\Throwable $e) {
+        \Log::error('crearClienteBsale', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 422);
     }
 }
 

@@ -416,7 +416,13 @@
           </VRow>
           <VTextField v-model="cliDialog.activity" label="Giro" variant="outlined" density="compact" class="mt-2" hide-details />
           <VTextField v-model="cliDialog.address" label="Dirección" variant="outlined" density="compact" class="mt-2" hide-details />
-          <p class="text-caption text-medium-emphasis mt-2 mb-0">Se crea en Bsale y se guarda en la app.</p>
+          <VRow dense class="mt-0">
+            <VCol cols="6"><VTextField v-model="cliDialog.municipality" label="Comuna" variant="outlined" density="compact" hide-details /></VCol>
+            <VCol cols="6"><VTextField v-model="cliDialog.city" label="Ciudad" variant="outlined" density="compact" hide-details /></VCol>
+          </VRow>
+          <p class="text-caption text-medium-emphasis mt-2 mb-0">
+            Para <strong>facturas</strong>, Bsale suele exigir giro, dirección, comuna y ciudad.
+          </p>
         </VCardText>
         <VCardActions class="pa-3">
           <VSpacer />
@@ -660,10 +666,10 @@ function descuentoCliente() {
 }
 
 // Crear cliente
-const cliDialog = ref({ show: false, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '' })
+const cliDialog = ref({ show: false, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' })
 
 function abrirCrearCliente() {
-  cliDialog.value = { show: true, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '' }
+  cliDialog.value = { show: true, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' }
 }
 
 async function guardarCliente() {
@@ -677,6 +683,8 @@ async function guardarCliente() {
       phone: d.phone || undefined,
       activity: d.activity || undefined,
       address: d.address || undefined,
+      municipality: d.municipality || undefined,
+      city: d.city || undefined,
     }
     if (d.tipo === 'empresa') payload.company = d.company
     else { payload.firstName = d.firstName; payload.lastName = d.lastName }
