@@ -62,7 +62,7 @@
                   </VListItemTitle>
                   <template #append>
                     <span class="text-body-2 font-weight-bold">
-                      {{ clp(p.precio_venta) }}<span v-if="p.es_vidrio" class="text-caption text-medium-emphasis">/m²</span>
+                      {{ clp(Math.round(p.precio_venta * 1.19)) }}<span class="text-caption text-medium-emphasis">{{ p.es_vidrio ? '/m² c/IVA' : ' c/IVA' }}</span>
                     </span>
                   </template>
                 </VListItem>
@@ -116,10 +116,9 @@
                     />
                     <span v-else class="text-body-2">{{ it.nombre }}</span>
                   </td>
-                  <td>
-                    <VTextField v-model.number="it.precio" type="number" min="0" density="compact" variant="plain" hide-details reverse
-                                :class="bajoMargen(it) ? 'text-error' : ''" />
-                    <div v-if="margenItem(it) !== null" class="text-caption text-right"
+                  <td class="text-right">
+                    <span :class="bajoMargen(it) ? 'text-error font-weight-medium' : ''">{{ fmtNeto(it.precio) }}</span>
+                    <div v-if="margenItem(it) !== null" class="text-caption"
                          :class="bajoMargen(it) ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
                       margen {{ Math.round(margenItem(it)) }}%
                     </div>
@@ -128,7 +127,7 @@
                     <VTextField v-model.number="it.descuento" type="number" min="0" max="100" density="compact" variant="plain" hide-details reverse />
                   </td>
                   <td>
-                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" density="compact" variant="plain" hide-details reverse
+                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" prefix="$" density="compact" variant="plain" hide-details reverse
                                 class="font-weight-medium" @update:model-value="setSubtotalCiva(it, $event)" />
                   </td>
                   <td>
@@ -169,7 +168,8 @@
                       <VTextField v-model.number="it.cantidad" type="number" min="0" label="Cant." density="compact" variant="outlined" hide-details />
                     </VCol>
                     <VCol cols="4">
-                      <VTextField v-model.number="it.precio" type="number" min="0" label="Neto" density="compact" variant="outlined" hide-details :class="bajoMargen(it) ? 'text-error' : ''" />
+                      <div class="text-caption text-medium-emphasis">Neto</div>
+                      <div class="text-body-2" :class="bajoMargen(it) ? 'text-error font-weight-bold' : ''">{{ fmtNeto(it.precio) }}</div>
                     </VCol>
                     <VCol cols="4">
                       <VTextField v-model.number="it.descuento" type="number" min="0" max="100" label="% desc." density="compact" variant="outlined" hide-details />
@@ -181,7 +181,7 @@
                   </div>
                   <div class="d-flex align-center justify-space-between mt-2">
                     <span class="text-caption text-medium-emphasis">Subtotal (c/IVA)</span>
-                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" density="compact" variant="outlined" hide-details reverse style="max-width:150px" class="font-weight-bold" @update:model-value="setSubtotalCiva(it, $event)" />
+                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" prefix="$" density="compact" variant="outlined" hide-details reverse style="max-width:160px" class="font-weight-bold" @update:model-value="setSubtotalCiva(it, $event)" />
                   </div>
                 </VCardText>
               </VCard>
@@ -550,7 +550,7 @@ function setSubtotalCiva(it, val) {
   const cant = Number(it.cantidad) || 0
   const desc = Number(it.descuento) || 0
   const factor = cant * (1 - desc / 100) * 1.19
-  it.precio = factor > 0 ? civa / factor : 0
+  it.precio = factor > 0 ? Math.round((civa / factor) * 100) / 100 : 0 // 2 decimales
 }
 
 // ── Control de margen mínimo (productos de catálogo con costo) ──────────────
@@ -952,4 +952,6 @@ function nuevaVenta() {
 const snack = ref({ show: false, color: 'success', msg: '' })
 function snackMsg(msg, color = 'success') { snack.value = { show: true, color, msg } }
 const clp = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v || 0)
+// Neto con 2 decimales: $20.000,00 (punto miles, coma decimales)
+const fmtNeto = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0)
 </script>
