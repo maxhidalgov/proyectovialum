@@ -556,11 +556,11 @@ function setSubtotalCiva(it, val) {
 // ── Control de margen mínimo (productos de catálogo con costo) ──────────────
 const MARGEN_MINIMO = 20 // % mínimo permitido al vender (cambiar aquí si se necesita otro)
 function margenItem(it) {
-  // Vidrios: el costo está POR PLANCHA y el precio POR m² → no son comparables, no se controla.
-  if (it.vidrio) return null
+  // El costo (lista_precios) está en la MISMA unidad que el precio (por m² en vidrios,
+  // por unidad en el resto) → se puede comparar. Los ítems manuales no tienen costo.
   const costo = Number(it.costo) || 0
   const precio = Number(it.precio) || 0
-  if (costo <= 0 || precio <= 0) return null // sin costo (ítems manuales) → no se controla
+  if (costo <= 0 || precio <= 0) return null
   return (precio - costo) / precio * 100
 }
 function bajoMargen(it) {
