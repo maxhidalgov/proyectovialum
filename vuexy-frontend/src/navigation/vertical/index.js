@@ -232,9 +232,9 @@ const allMenuItems = [
         permission: 'gestionar_usuarios',
       },
       {
-        title: 'Historial de Ventas',
+        title: 'Ventas (buscar boleta/factura)',
         to: { name: 'historial-ventas' },
-        icon: { icon: 'mdi-history' },
+        icon: { icon: 'mdi-receipt-text-outline' },
         permission: 'gestionar_usuarios',
       },
       {

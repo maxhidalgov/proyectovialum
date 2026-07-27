@@ -584,4 +584,49 @@ class BsaleVentaSyncController extends Controller
 
         return response()->json($query->get());
     }
+
+    // ── GET /api/ventas/buscar-documentos ─────────────────────────────────────
+    // Lista documentos individuales (boletas, facturas, NC) para buscar uno puntual.
+    public function buscarDocumentos(Request $request)
+    {
+        $q     = trim((string) $request->get('q', ''));
+        $desde = $request->get('desde');
+        $hasta = $request->get('hasta');
+        $tipo  = $request->get('tipo'); // 1=boleta, 5=factura, 2=NC (opcional)
+
+        $query = DB::table('documentos_facturacion as df')
+            ->leftJoin('clientes as cl', 'cl.id', '=', 'df.cliente_id')
+            ->where('df.estado', 'emitido')
+            ->when($tipo, fn ($w) => $w->where('df.tipo_documento_bsale_id', (int) $tipo))
+            ->when($desde, fn ($w) => $w->whereDate('df.fecha_emision', '>=', $desde))
+            ->when($hasta, fn ($w) => $w->whereDate('df.fecha_emision', '<=', $hasta))
+            ->when($q !== '', function ($w) use ($q) {
+                $w->where(function ($x) use ($q) {
+                    $x->where('df.numero_documento_bsale', 'like', "%{$q}%")
+                      ->orWhere('df.bsale_cliente_nombre', 'like', "%{$q}%")
+                      ->orWhere('cl.razon_social', 'like', "%{$q}%")
+                      ->orWhere('cl.identification', 'like', "%{$q}%");
+                });
+            })
+            ->orderByDesc('df.fecha_emision')
+            ->limit(300)
+            ->get([
+                'df.id', 'df.tipo_documento_bsale_id', 'df.numero_documento_bsale',
+                'df.fecha_emision', 'df.monto', 'df.forma_pago', 'df.url_pdf_bsale',
+                DB::raw("COALESCE(cl.razon_social, NULLIF(TRIM(CONCAT_WS(' ', cl.first_name, cl.last_name)), ''), df.bsale_cliente_nombre) as cliente"),
+            ]);
+
+        return response()->json($query);
+    }
+
+    // ── GET /api/ventas/documento/{id}/items ──────────────────────────────────
+    // Líneas (qué se vendió) de un documento puntual.
+    public function documentoItems(int $id)
+    {
+        $items = DB::table('documento_items')
+            ->where('documento_facturacion_id', $id)
+            ->get(['nombre', 'cantidad', 'precio_unitario', 'descuento', 'total_neto', 'es_vidrio']);
+
+        return response()->json($items);
+    }
 }
