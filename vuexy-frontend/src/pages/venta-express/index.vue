@@ -97,7 +97,17 @@
                     <VTextField v-model.number="it.cantidad" type="number" min="0" density="compact" variant="plain" hide-details style="width:70px" />
                   </td>
                   <td>
-                    <VTextField v-model="it.nombre" density="compact" variant="plain" hide-details placeholder="Detalle" />
+                    <!-- Productos del catálogo (con producto_id) y vidrios: nombre fijo (no se edita
+                         para no ensuciar reportes/top de productos). Ítems manuales: editable. -->
+                    <VTextField
+                      v-if="!it.producto_id && !it.vidrio"
+                      v-model="it.nombre"
+                      density="compact"
+                      variant="plain"
+                      hide-details
+                      placeholder="Detalle"
+                    />
+                    <span v-else class="text-body-2">{{ it.nombre }}</span>
                   </td>
                   <td>
                     <VTextField v-model.number="it.precio" type="number" min="0" density="compact" variant="plain" hide-details reverse />
