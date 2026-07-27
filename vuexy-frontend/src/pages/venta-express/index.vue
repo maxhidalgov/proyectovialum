@@ -1,16 +1,23 @@
 <template>
   <VContainer fluid class="pa-4">
-    <div class="d-flex align-center gap-3 mb-4">
+    <div class="d-flex align-center flex-wrap gap-3 mb-4">
       <VIcon icon="mdi-flash" size="30" color="warning" />
-      <div>
+      <div class="flex-grow-1">
         <h1 class="text-h5 font-weight-bold">Venta Express</h1>
         <p class="text-caption text-grey mt-1">Emite una boleta o factura rápida directo a Bsale</p>
       </div>
-      <VSpacer />
-      <VBtnToggle v-model="tipo" mandatory color="primary" variant="outlined" divided rounded="lg">
-        <VBtn value="boleta" class="text-none px-6">Boleta</VBtn>
-        <VBtn value="factura" class="text-none px-6">Factura</VBtn>
-        <VBtn value="cotizacion" class="text-none px-6">Cotización</VBtn>
+      <VBtnToggle
+        v-model="tipo"
+        mandatory
+        color="primary"
+        variant="outlined"
+        divided
+        rounded="lg"
+        class="flex-grow-1 flex-md-grow-0"
+      >
+        <VBtn value="boleta" class="text-none flex-grow-1 flex-md-grow-0 px-md-6">Boleta</VBtn>
+        <VBtn value="factura" class="text-none flex-grow-1 flex-md-grow-0 px-md-6">Factura</VBtn>
+        <VBtn value="cotizacion" class="text-none flex-grow-1 flex-md-grow-0 px-md-6">Cotización</VBtn>
       </VBtnToggle>
     </div>
 
@@ -73,8 +80,9 @@
               </VBtn>
             </div>
 
-            <!-- Tabla de ítems -->
-            <VTable density="compact" class="mt-2">
+            <!-- Tabla de ítems (scroll horizontal en móvil para que no se corte) -->
+            <div style="overflow-x:auto">
+            <VTable density="compact" class="mt-2" style="min-width:640px">
               <thead>
                 <tr>
                   <th style="width:90px">Cant.</th>
@@ -127,6 +135,7 @@
                 </tr>
               </tbody>
             </VTable>
+            </div>
           </VCardText>
         </VCard>
       </VCol>
