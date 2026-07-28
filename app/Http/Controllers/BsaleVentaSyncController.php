@@ -505,6 +505,7 @@ class BsaleVentaSyncController extends Controller
     {
         $data = $request->validate([
             'forma_pago' => 'required|string',
+            'voucher'    => 'nullable|string',
         ]);
 
         $doc = DB::table('documentos_facturacion')->where('id', $id)->first();
@@ -517,12 +518,24 @@ class BsaleVentaSyncController extends Controller
             'cheque' => 5, 'tarjeta_debito' => 6, 'transferencia' => 8, 'webpay' => 10,
         ];
 
-        DB::table('documentos_facturacion')->where('id', $id)->update([
+        $esTarjeta = in_array($data['forma_pago'], ['tarjeta_credito', 'tarjeta_debito']);
+
+        $update = [
             'forma_pago'         => $data['forma_pago'],
             'payment_type_id'    => $map[$data['forma_pago']] ?? null,
-            'pagado_con_tarjeta' => in_array($data['forma_pago'], ['tarjeta_credito', 'tarjeta_debito']) ? 1 : 0,
+            'pagado_con_tarjeta' => $esTarjeta ? 1 : 0,
             'updated_at'         => now(),
-        ]);
+        ];
+        // Voucher: solo aplica a tarjeta. Si viene, se guarda; si pasa a no-tarjeta, se limpia.
+        if ($esTarjeta) {
+            if ($request->has('voucher')) {
+                $update['nro_comprobante_transbank'] = $data['voucher'] ?: null;
+            }
+        } else {
+            $update['nro_comprobante_transbank'] = null;
+        }
+
+        DB::table('documentos_facturacion')->where('id', $id)->update($update);
 
         // Si es boleta, la forma de pago define el resumen mensual → recalcular
         if ((int) $doc->tipo_documento_bsale_id === 1 && $doc->fecha_emision) {
@@ -613,6 +626,7 @@ class BsaleVentaSyncController extends Controller
             ->get([
                 'df.id', 'df.tipo_documento_bsale_id', 'df.numero_documento_bsale',
                 'df.fecha_emision', 'df.monto', 'df.forma_pago', 'df.url_pdf_bsale',
+                'df.nro_comprobante_transbank',
                 DB::raw("COALESCE(cl.razon_social, NULLIF(TRIM(CONCAT_WS(' ', cl.first_name, cl.last_name)), ''), df.bsale_cliente_nombre) as cliente"),
             ]);
 

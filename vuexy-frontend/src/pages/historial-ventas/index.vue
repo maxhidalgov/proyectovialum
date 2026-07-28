@@ -81,17 +81,11 @@
           <template #item.fecha_emision="{ item }">{{ fmtFecha(item.fecha_emision) }}</template>
           <template #item.monto="{ item }">{{ clp(item.monto) }}</template>
           <template #item.forma_pago="{ item }">
-            <VMenu>
-              <template #activator="{ props }">
-                <VChip v-bind="props" size="x-small" variant="tonal" color="primary" style="cursor:pointer">
-                  {{ formaPagoLabel(item.forma_pago) }}
-                  <VIcon end size="11">mdi-pencil</VIcon>
-                </VChip>
-              </template>
-              <VList density="compact">
-                <VListItem v-for="fp in formasPagoEdit" :key="fp.value" :title="fp.label" @click="cambiarFormaPago(item, fp.value)" />
-              </VList>
-            </VMenu>
+            <VChip size="x-small" variant="tonal" color="primary" style="cursor:pointer" @click="abrirEditarPago(item)">
+              {{ formaPagoLabel(item.forma_pago) }}
+              <span v-if="item.nro_comprobante_transbank" class="ml-1">· {{ item.nro_comprobante_transbank }}</span>
+              <VIcon end size="11">mdi-pencil</VIcon>
+            </VChip>
           </template>
           <template #item.acciones="{ item }">
             <VBtn size="x-small" variant="tonal" color="primary" @click="verDetalle(item)">
@@ -200,12 +194,33 @@
       </VCard>
     </VDialog>
 
+    <!-- ── Dialog: editar forma de pago + voucher ─────────────────────────── -->
+    <VDialog v-model="editPago.show" max-width="420">
+      <VCard v-if="editPago.doc">
+        <VCardTitle>Editar pago</VCardTitle>
+        <VCardText>
+          <div class="text-caption text-medium-emphasis mb-3">
+            {{ tipoDoc(editPago.doc.tipo_documento_bsale_id) }} {{ editPago.doc.numero_documento_bsale }}
+          </div>
+          <VSelect v-model="editPago.forma" :items="formasPagoEdit" item-title="label" item-value="value"
+                   label="Forma de pago" variant="outlined" density="compact" class="mb-3" hide-details />
+          <VTextField v-if="esTarjetaEdit" v-model="editPago.voucher" label="N° voucher Transbank"
+                      variant="outlined" density="compact" hide-details />
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="editPago.show = false">Cancelar</VBtn>
+          <VBtn color="primary" :loading="editPago.loading" @click="guardarPago">Guardar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
     <VSnackbar v-model="snack.show" :color="snack.color" timeout="3000" location="top">{{ snack.msg }}</VSnackbar>
   </VContainer>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/axiosInstance'
 
 const tab = ref('docs')
@@ -262,13 +277,29 @@ const formasPagoEdit = [
 function formaPagoLabel(v) {
   return formasPagoEdit.find(f => f.value === v)?.label || (v || 'Sin forma')
 }
-async function cambiarFormaPago(doc, val) {
+
+// Diálogo Editar pago (forma de pago + voucher si es tarjeta)
+const editPago = ref({ show: false, loading: false, doc: null, forma: '', voucher: '' })
+const esTarjetaEdit = computed(() => ['tarjeta_debito', 'tarjeta_credito'].includes(editPago.value.forma))
+
+function abrirEditarPago(doc) {
+  editPago.value = { show: true, loading: false, doc, forma: doc.forma_pago || 'efectivo', voucher: doc.nro_comprobante_transbank || '' }
+}
+
+async function guardarPago() {
+  editPago.value.loading = true
   try {
-    await api.patch(`/api/ventas/${doc.id}/forma-pago`, { forma_pago: val })
-    doc.forma_pago = val
-    snack.value = { show: true, color: 'success', msg: 'Forma de pago actualizada' }
+    const body = { forma_pago: editPago.value.forma }
+    if (esTarjetaEdit.value) body.voucher = editPago.value.voucher || ''
+    await api.patch(`/api/ventas/${editPago.value.doc.id}/forma-pago`, body)
+    editPago.value.doc.forma_pago = editPago.value.forma
+    editPago.value.doc.nro_comprobante_transbank = esTarjetaEdit.value ? (editPago.value.voucher || null) : null
+    editPago.value.show = false
+    snack.value = { show: true, color: 'success', msg: 'Pago actualizado' }
   } catch (e) {
     snack.value = { show: true, color: 'error', msg: e.response?.data?.error || 'No se pudo actualizar' }
+  } finally {
+    editPago.value.loading = false
   }
 }
 
