@@ -263,11 +263,11 @@ const topItems = ref([])
 const loadingTop = ref(false)
 const _hoy = new Date().toISOString().slice(0, 10)
 const _inicioAnio = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
-const topF = ref({ desde: _inicioAnio, hasta: _hoy, tipo: null, orden: 'ingreso' })
+const topF = ref({ desde: _inicioAnio, hasta: _hoy, canal: null, orden: 'ingreso' })
 const canales = [
   { title: 'Todos', value: null },
-  { title: 'Boleta (B2C)', value: 1 },
-  { title: 'Factura (B2B)', value: 5 },
+  { title: 'Mostrador (consumidor final)', value: 'final' },
+  { title: 'Con cliente registrado', value: 'cliente' },
 ]
 const ordenes = [
   { title: 'Ingreso ($)', value: 'ingreso' },
@@ -288,7 +288,7 @@ async function cargarTop() {
       params: {
         desde: topF.value.desde || undefined,
         hasta: topF.value.hasta || undefined,
-        tipo: topF.value.tipo || undefined,
+        canal: topF.value.canal || undefined,
         orden: topF.value.orden,
       },
     })

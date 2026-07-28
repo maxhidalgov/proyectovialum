@@ -637,7 +637,7 @@ class BsaleVentaSyncController extends Controller
     {
         $desde = $request->get('desde');
         $hasta = $request->get('hasta');
-        $tipo  = $request->get('tipo');
+        $canal = $request->get('canal'); // 'final' (consumidor final/mostrador) | 'cliente' (registrado) | null=todos
         $orden = $request->get('orden', 'ingreso'); // 'ingreso' | 'unidades'
 
         $query = DB::table('documento_items as di')
@@ -647,7 +647,8 @@ class BsaleVentaSyncController extends Controller
             ->where('di.nombre', '!=', '(sin detalle)')
             ->when($desde, fn ($w) => $w->whereDate('df.fecha_emision', '>=', $desde))
             ->when($hasta, fn ($w) => $w->whereDate('df.fecha_emision', '<=', $hasta))
-            ->when($tipo, fn ($w) => $w->where('df.tipo_documento_bsale_id', (int) $tipo))
+            ->when($canal === 'final', fn ($w) => $w->whereNull('df.cliente_id'))
+            ->when($canal === 'cliente', fn ($w) => $w->whereNotNull('df.cliente_id'))
             ->groupBy('di.nombre')
             ->selectRaw("di.nombre as producto,
                          SUM(di.cantidad) as unidades,
