@@ -80,7 +80,19 @@
           </template>
           <template #item.fecha_emision="{ item }">{{ fmtFecha(item.fecha_emision) }}</template>
           <template #item.monto="{ item }">{{ clp(item.monto) }}</template>
-          <template #item.forma_pago="{ item }">{{ item.forma_pago || '—' }}</template>
+          <template #item.forma_pago="{ item }">
+            <VMenu>
+              <template #activator="{ props }">
+                <VChip v-bind="props" size="x-small" variant="tonal" color="primary" style="cursor:pointer">
+                  {{ formaPagoLabel(item.forma_pago) }}
+                  <VIcon end size="11">mdi-pencil</VIcon>
+                </VChip>
+              </template>
+              <VList density="compact">
+                <VListItem v-for="fp in formasPagoEdit" :key="fp.value" :title="fp.label" @click="cambiarFormaPago(item, fp.value)" />
+              </VList>
+            </VMenu>
+          </template>
           <template #item.acciones="{ item }">
             <VBtn size="x-small" variant="tonal" color="primary" @click="verDetalle(item)">
               <VIcon start size="14">mdi-eye-outline</VIcon>Ver
@@ -237,6 +249,28 @@ async function buscarDocs() {
 }
 let docTimer = null
 function buscarDocsDeb() { clearTimeout(docTimer); docTimer = setTimeout(buscarDocs, 400) }
+
+// Editar forma de pago de un documento (boleta/factura)
+const formasPagoEdit = [
+  { label: 'Efectivo',        value: 'efectivo' },
+  { label: 'Transferencia',   value: 'transferencia' },
+  { label: 'Tarjeta Débito',  value: 'tarjeta_debito' },
+  { label: 'Tarjeta Crédito', value: 'tarjeta_credito' },
+  { label: 'Cheque',          value: 'cheque' },
+  { label: 'Webpay',          value: 'webpay' },
+]
+function formaPagoLabel(v) {
+  return formasPagoEdit.find(f => f.value === v)?.label || (v || 'Sin forma')
+}
+async function cambiarFormaPago(doc, val) {
+  try {
+    await api.patch(`/api/ventas/${doc.id}/forma-pago`, { forma_pago: val })
+    doc.forma_pago = val
+    snack.value = { show: true, color: 'success', msg: 'Forma de pago actualizada' }
+  } catch (e) {
+    snack.value = { show: true, color: 'error', msg: e.response?.data?.error || 'No se pudo actualizar' }
+  }
+}
 
 // Detalle (líneas) de un documento
 const detalle = ref({ show: false, loading: false, doc: null, items: [] })
