@@ -10,8 +10,39 @@
 
     <VTabs v-model="tab" class="mb-4">
       <VTab value="docs">Buscar boleta / factura</VTab>
+      <VTab value="top">Top productos</VTab>
       <VTab value="prod">Historial por producto</VTab>
     </VTabs>
+
+    <!-- ── TAB: TOP PRODUCTOS ─────────────────────────────────────────────── -->
+    <div v-if="tab === 'top'">
+      <VCard variant="outlined" class="mb-3">
+        <VCardText>
+          <VRow dense align="center">
+            <VCol cols="6" sm="3"><VTextField v-model="topF.desde" type="date" label="Desde" density="compact" variant="outlined" hide-details @update:model-value="cargarTop" /></VCol>
+            <VCol cols="6" sm="3"><VTextField v-model="topF.hasta" type="date" label="Hasta" density="compact" variant="outlined" hide-details @update:model-value="cargarTop" /></VCol>
+            <VCol cols="6" sm="3"><VSelect v-model="topF.tipo" :items="canales" label="Canal" density="compact" variant="outlined" hide-details @update:model-value="cargarTop" /></VCol>
+            <VCol cols="6" sm="3"><VSelect v-model="topF.orden" :items="ordenes" label="Ordenar por" density="compact" variant="outlined" hide-details @update:model-value="cargarTop" /></VCol>
+          </VRow>
+        </VCardText>
+      </VCard>
+
+      <VCard variant="outlined">
+        <VDataTable :headers="headersTop" :items="topItems" :loading="loadingTop" density="compact" :items-per-page="100">
+          <template #item.rank="{ index }">
+            <span class="font-weight-bold text-medium-emphasis">{{ index + 1 }}</span>
+          </template>
+          <template #item.unidades="{ item }">{{ fmtNum(item.unidades) }}</template>
+          <template #item.ingreso="{ item }"><span class="font-weight-bold">{{ clp(item.ingreso) }}</span></template>
+          <template #no-data>
+            <div class="text-center py-8 text-medium-emphasis">
+              <VIcon size="40" class="mb-2">mdi-trophy-outline</VIcon>
+              <p>Sin datos en el rango. Ajusta las fechas o el canal.</p>
+            </div>
+          </template>
+        </VDataTable>
+      </VCard>
+    </div>
 
     <!-- ── TAB: BUSCAR DOCUMENTO ──────────────────────────────────────────── -->
     <div v-if="tab === 'docs'">
@@ -227,6 +258,48 @@ const headersItems = [
   { title: 'Total (neto)', key: 'total_neto', align: 'end' },
 ]
 
+// ── Top productos ──────────────────────────────────────────────────────────
+const topItems = ref([])
+const loadingTop = ref(false)
+const _hoy = new Date().toISOString().slice(0, 10)
+const _inicioAnio = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
+const topF = ref({ desde: _inicioAnio, hasta: _hoy, tipo: null, orden: 'ingreso' })
+const canales = [
+  { title: 'Todos', value: null },
+  { title: 'Boleta (B2C)', value: 1 },
+  { title: 'Factura (B2B)', value: 5 },
+]
+const ordenes = [
+  { title: 'Ingreso ($)', value: 'ingreso' },
+  { title: 'Unidades', value: 'unidades' },
+]
+const headersTop = [
+  { title: '#', key: 'rank', sortable: false, width: 48 },
+  { title: 'Producto', key: 'producto' },
+  { title: 'Unidades', key: 'unidades', align: 'end' },
+  { title: 'Ingreso neto', key: 'ingreso', align: 'end' },
+  { title: 'N° docs', key: 'documentos', align: 'end' },
+]
+
+async function cargarTop() {
+  loadingTop.value = true
+  try {
+    const { data } = await api.get('/api/ventas/top-productos', {
+      params: {
+        desde: topF.value.desde || undefined,
+        hasta: topF.value.hasta || undefined,
+        tipo: topF.value.tipo || undefined,
+        orden: topF.value.orden,
+      },
+    })
+    topItems.value = Array.isArray(data) ? data : []
+  } catch {
+    topItems.value = []
+  } finally {
+    loadingTop.value = false
+  }
+}
+
 // ── Historial por producto (existente) ─────────────────────────────────────
 const filas   = ref([])
 const loading = ref(false)
@@ -304,6 +377,7 @@ const clp = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: '
 
 onMounted(() => {
   buscarDocs()
+  cargarTop()
   cargar()
   cargarPendientes()
 })

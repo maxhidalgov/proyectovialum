@@ -342,6 +342,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/ventas/historial-productos',     [\App\Http\Controllers\BsaleVentaSyncController::class, 'historialProductos']);
     Route::get('/ventas/buscar-documentos',       [\App\Http\Controllers\BsaleVentaSyncController::class, 'buscarDocumentos']);
     Route::get('/ventas/documento/{id}/items',    [\App\Http\Controllers\BsaleVentaSyncController::class, 'documentoItems']);
+    Route::get('/ventas/top-productos',           [\App\Http\Controllers\BsaleVentaSyncController::class, 'topProductos']);
 
     // Boletas — resúmenes mensuales por forma de pago
     Route::prefix('boletas')->group(function () {

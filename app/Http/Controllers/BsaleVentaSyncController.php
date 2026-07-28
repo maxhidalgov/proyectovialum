@@ -629,4 +629,34 @@ class BsaleVentaSyncController extends Controller
 
         return response()->json($items);
     }
+
+    // ── GET /api/ventas/top-productos ──────────────────────────────────────────
+    // Ranking de productos más vendidos (unidades e ingreso neto).
+    // Filtros: desde, hasta, tipo (1=boleta/B2C, 5=factura/B2B; vacío = ambos).
+    public function topProductos(Request $request)
+    {
+        $desde = $request->get('desde');
+        $hasta = $request->get('hasta');
+        $tipo  = $request->get('tipo');
+        $orden = $request->get('orden', 'ingreso'); // 'ingreso' | 'unidades'
+
+        $query = DB::table('documento_items as di')
+            ->join('documentos_facturacion as df', 'df.id', '=', 'di.documento_facturacion_id')
+            ->where('df.estado', 'emitido')
+            ->whereIn('df.tipo_documento_bsale_id', [1, 5]) // boletas y facturas (excluye NC)
+            ->where('di.nombre', '!=', '(sin detalle)')
+            ->when($desde, fn ($w) => $w->whereDate('df.fecha_emision', '>=', $desde))
+            ->when($hasta, fn ($w) => $w->whereDate('df.fecha_emision', '<=', $hasta))
+            ->when($tipo, fn ($w) => $w->where('df.tipo_documento_bsale_id', (int) $tipo))
+            ->groupBy('di.nombre')
+            ->selectRaw("di.nombre as producto,
+                         SUM(di.cantidad) as unidades,
+                         SUM(di.total_neto) as ingreso,
+                         COUNT(DISTINCT df.id) as documentos")
+            ->orderByDesc(DB::raw($orden === 'unidades' ? 'SUM(di.cantidad)' : 'SUM(di.total_neto)'))
+            ->limit(100)
+            ->get();
+
+        return response()->json($query);
+    }
 }
