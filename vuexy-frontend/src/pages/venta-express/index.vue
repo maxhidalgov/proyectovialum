@@ -201,7 +201,7 @@
               <VChip v-else size="x-small" color="grey" variant="tonal">Opcional</VChip>
             </div>
 
-            <div v-if="cliente" class="d-flex align-center justify-space-between pa-2 rounded bg-surface-variant mb-2">
+            <div v-if="cliente" class="d-flex align-center justify-space-between pa-2 rounded border mb-2">
               <div>
                 <div class="text-body-2 font-weight-medium">{{ cliente.nombre }}</div>
                 <div class="text-caption text-medium-emphasis">
@@ -468,7 +468,7 @@
             label="Pulido (+20%)"
           />
 
-          <div class="mt-3 pa-2 rounded bg-surface-variant">
+          <div class="mt-3 pa-3 rounded border">
             <div class="d-flex justify-space-between text-body-2">
               <span>Vidrio · {{ m2Calculado }} m²</span>
               <span>{{ clp(vidrioNeto) }}</span>
