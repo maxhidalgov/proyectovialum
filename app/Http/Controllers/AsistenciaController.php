@@ -84,25 +84,26 @@ class AsistenciaController extends Controller
         $attendance  = $this->workera->getAsistencia($desde, $hasta)['data'] ?? [];
         $permisos    = $this->workera->getPermisosRango($desde, $hasta);
 
-        // Índices por code+fecha: entrada = primera marcación tipo 0; salida = última tipo 1.
-        $entradas = []; // [code][fecha] => 'YYYY-MM-DDTHH:mm:ss' (más temprana)
-        $salidas  = []; // [code][fecha] => 'YYYY-MM-DDTHH:mm:ss' (más tardía)
+        // El reloj registra entrada Y salida como tipo 0, así que por code+fecha tomamos:
+        //   entrada = marca más TEMPRANA · salida = marca más TARDÍA (si es posterior).
+        // Consideramos tipos 0 (entrada) y 1 (salida); ignoramos descansos (4/5).
+        $entradas = [];
+        $salidas  = [];
         foreach ($attendance as $r) {
             $code = (string) ($r['employee']['code'] ?? '');
             if ($code === '') continue;
             if (strtoupper($r['attendanceStatus'] ?? 'ACTIVO') === 'INACTIVO') continue;
             $tipoMarca = (int) ($r['attendanceType'] ?? -1);
+            if (!in_array($tipoMarca, [0, 1], true)) continue;
             $fecha = substr((string) ($r['attendanceDate'] ?? ''), 0, 10);
             if (!$fecha) continue;
+            $ts = $r['attendanceDate'];
 
-            if ($tipoMarca === 0) { // Entrada → la más temprana
-                if (!isset($entradas[$code][$fecha]) || $r['attendanceDate'] < $entradas[$code][$fecha]) {
-                    $entradas[$code][$fecha] = $r['attendanceDate'];
-                }
-            } elseif ($tipoMarca === 1) { // Salida → la más tardía
-                if (!isset($salidas[$code][$fecha]) || $r['attendanceDate'] > $salidas[$code][$fecha]) {
-                    $salidas[$code][$fecha] = $r['attendanceDate'];
-                }
+            if (!isset($entradas[$code][$fecha]) || $ts < $entradas[$code][$fecha]) {
+                $entradas[$code][$fecha] = $ts;
+            }
+            if (!isset($salidas[$code][$fecha]) || $ts > $salidas[$code][$fecha]) {
+                $salidas[$code][$fecha] = $ts;
             }
         }
 
@@ -182,7 +183,12 @@ class AsistenciaController extends Controller
 
                 $resumen[$code]['dias_horario']++;
 
+                // Salida = marca más tardía, solo si es posterior a la entrada (si es la
+                // misma marca / mismo minuto, no hay salida real registrada).
                 $salidaStr = $salidas[$code][$fecha] ?? null;
+                if ($salidaStr && $realStr && $salidaStr <= $realStr) {
+                    $salidaStr = null;
+                }
 
                 $dias[] = [
                     'code'         => $code,
