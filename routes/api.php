@@ -180,6 +180,8 @@ Route::middleware('auth:api')->group(function () {
     // Rutas Lista de Precios - Las específicas ANTES del resource
     Route::post('/lista-precios/importar', [ListaPrecioController::class, 'importarDesdeProductoColorProveedor']);
     Route::get('/lista-precios/exportar', [ListaPrecioController::class, 'exportar']);
+    Route::post('/lista-precios/ajuste-masivo/preview', [ListaPrecioController::class, 'ajusteMasivoPreview']);
+    Route::post('/lista-precios/ajuste-masivo/aplicar', [ListaPrecioController::class, 'ajusteMasivoAplicar']);
     Route::apiResource('lista-precios', ListaPrecioController::class);
 
     // Rutas COMPRAS

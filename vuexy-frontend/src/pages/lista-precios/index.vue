@@ -10,6 +10,13 @@
         </div>
         <div class="d-flex gap-2">
           <v-btn
+            color="warning"
+            prepend-icon="mdi-percent"
+            @click="abrirAjuste"
+          >
+            Ajustar costos x proveedor
+          </v-btn>
+          <v-btn
             color="info"
             prepend-icon="mdi-upload"
             @click="dialogImportar = true"
@@ -263,6 +270,89 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Ajuste masivo de costos por proveedor -->
+    <v-dialog v-model="ajuste.show" max-width="620px">
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2">
+          <v-icon color="warning">mdi-percent</v-icon> Ajustar costos por proveedor
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pt-4">
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="ajuste.proveedor_id"
+                :items="proveedores"
+                item-title="nombre"
+                item-value="id"
+                label="Proveedor"
+                variant="outlined"
+                density="compact"
+                hide-details
+                @update:model-value="ajuste.preview = null"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="ajuste.soloCristales"
+                :items="[{title:'Todos los productos', value:false}, {title:'Solo cristales / vidrios', value:true}]"
+                label="Alcance"
+                variant="outlined"
+                density="compact"
+                hide-details
+                @update:model-value="ajuste.preview = null"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="ajuste.porcentaje"
+                type="number"
+                label="Variación de costo %"
+                suffix="%"
+                hint="Ej: 15 sube 15%. Usa -10 para bajar 10%."
+                persistent-hint
+                variant="outlined"
+                density="compact"
+                @update:model-value="ajuste.preview = null"
+              />
+            </v-col>
+            <v-col cols="12" sm="6" class="d-flex align-center">
+              <v-switch
+                v-model="ajuste.actualizarVenta"
+                color="primary"
+                hide-details
+                label="Subir también el precio de venta (mantener margen)"
+              />
+            </v-col>
+          </v-row>
+
+          <v-alert v-if="ajuste.preview" type="info" variant="tonal" density="compact" class="mt-3">
+            Se cambiarán <strong>{{ ajuste.preview.total }}</strong> combinaciones de costo.
+          </v-alert>
+
+          <v-table v-if="ajuste.preview && ajuste.preview.items.length" density="compact" class="mt-2" style="max-height:260px;overflow-y:auto">
+            <thead>
+              <tr><th>Producto</th><th class="text-right">Costo actual</th><th class="text-right">Costo nuevo</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(it, i) in ajuste.preview.items" :key="i">
+                <td>{{ it.producto }}</td>
+                <td class="text-right">{{ clpCosto(it.costo_actual) }}</td>
+                <td class="text-right font-weight-bold text-warning">{{ clpCosto(it.costo_nuevo) }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="ajuste.show = false">Cancelar</v-btn>
+          <v-btn color="info" variant="tonal" :loading="ajuste.loadingPreview" :disabled="!ajuste.proveedor_id || !ajuste.porcentaje" @click="previewAjuste">Vista previa</v-btn>
+          <v-btn color="warning" variant="elevated" :loading="ajuste.aplicando" :disabled="!ajuste.preview || !ajuste.preview.total" @click="aplicarAjuste">Aplicar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -287,6 +377,57 @@ const modoEdicion = ref(false)
 const precioEditando = ref(null)
 const precioAEliminar = ref(null)
 const margenImportacion = ref(45)
+
+// Ajuste masivo de costos por proveedor
+const proveedores = ref([])
+const ajuste = ref({
+  show: false, proveedor_id: null, soloCristales: true, porcentaje: null,
+  actualizarVenta: true, preview: null, loadingPreview: false, aplicando: false,
+})
+const clpCosto = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v || 0)
+
+async function abrirAjuste() {
+  ajuste.value = { show: true, proveedor_id: null, soloCristales: true, porcentaje: null, actualizarVenta: true, preview: null, loadingPreview: false, aplicando: false }
+  if (!proveedores.value.length) {
+    try { const { data } = await api.get('/api/proveedores'); proveedores.value = Array.isArray(data) ? data : (data.data || []) } catch { proveedores.value = [] }
+  }
+}
+
+function payloadAjuste() {
+  return {
+    proveedor_id: ajuste.value.proveedor_id,
+    porcentaje: ajuste.value.porcentaje,
+    tipos: ajuste.value.soloCristales ? [1, 2, 7] : undefined,
+    actualizar_venta: ajuste.value.actualizarVenta,
+  }
+}
+
+async function previewAjuste() {
+  ajuste.value.loadingPreview = true
+  try {
+    const { data } = await api.post('/api/lista-precios/ajuste-masivo/preview', payloadAjuste())
+    ajuste.value.preview = data
+  } catch (e) {
+    alert(e.response?.data?.message || 'Error al calcular la vista previa')
+  } finally {
+    ajuste.value.loadingPreview = false
+  }
+}
+
+async function aplicarAjuste() {
+  if (!confirm(`¿Aplicar el ajuste a ${ajuste.value.preview.total} combinaciones? Esto cambia costos${ajuste.value.actualizarVenta ? ' y precios de venta' : ''}.`)) return
+  ajuste.value.aplicando = true
+  try {
+    const { data } = await api.post('/api/lista-precios/ajuste-masivo/aplicar', payloadAjuste())
+    ajuste.value.show = false
+    alert(`✓ Listo — ${data.costos_actualizados} costos y ${data.precios_actualizados} precios actualizados`)
+    await cargarPrecios()
+  } catch (e) {
+    alert(e.response?.data?.message || 'Error al aplicar el ajuste')
+  } finally {
+    ajuste.value.aplicando = false
+  }
+}
 
 // Headers de la tabla
 const headers = [

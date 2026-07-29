@@ -6,6 +6,7 @@ use App\Models\ListaPrecio;
 use App\Models\Producto;
 use App\Models\ProductoColorProveedor;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -340,5 +341,97 @@ class ListaPrecioController extends Controller
             Log::error('Error al exportar precios: ' . $e->getMessage());
             return response()->json(['error' => 'Error al exportar precios'], 500);
         }
+    }
+
+    // ── Ajuste masivo de costos por proveedor ───────────────────────────────
+
+    /** Combinaciones producto+color+costo afectadas por el ajuste. */
+    private function pcpsAfectados(array $data)
+    {
+        return DB::table('producto_color_proveedor as pcp')
+            ->join('productos as p', 'p.id', '=', 'pcp.producto_id')
+            ->leftJoin('colores as c', 'c.id', '=', 'pcp.color_id')
+            ->where('pcp.proveedor_id', $data['proveedor_id'])
+            ->where('pcp.costo', '>', 0)
+            ->when(!empty($data['tipos']), fn ($w) => $w->whereIn('p.tipo_producto_id', $data['tipos']))
+            ->orderBy('p.nombre')
+            ->get(['pcp.id', 'pcp.producto_id', 'pcp.color_id', 'pcp.costo', 'p.nombre as producto', 'c.nombre as color']);
+    }
+
+    /** POST /api/lista-precios/ajuste-masivo/preview */
+    public function ajusteMasivoPreview(Request $request)
+    {
+        $data = $request->validate([
+            'proveedor_id' => 'required|integer',
+            'porcentaje'   => 'required|numeric',
+            'tipos'        => 'nullable|array',
+        ]);
+
+        $factor = 1 + $data['porcentaje'] / 100;
+        $rows = $this->pcpsAfectados($data);
+
+        $items = $rows->map(fn ($r) => [
+            'producto'     => trim($r->producto . ($r->color ? " - {$r->color}" : '')),
+            'costo_actual' => (float) $r->costo,
+            'costo_nuevo'  => round($r->costo * $factor, 2),
+        ]);
+
+        return response()->json(['total' => $items->count(), 'items' => $items->take(300)->values()]);
+    }
+
+    /** POST /api/lista-precios/ajuste-masivo/aplicar */
+    public function ajusteMasivoAplicar(Request $request)
+    {
+        $data = $request->validate([
+            'proveedor_id'     => 'required|integer',
+            'porcentaje'       => 'required|numeric',
+            'tipos'            => 'nullable|array',
+            'actualizar_venta' => 'nullable|boolean',
+        ]);
+
+        $factor = 1 + $data['porcentaje'] / 100;
+        $actualizarVenta = (bool) ($data['actualizar_venta'] ?? true);
+        $rows = $this->pcpsAfectados($data);
+
+        $costos = 0;
+        $precios = 0;
+
+        DB::transaction(function () use ($rows, $factor, $actualizarVenta, &$costos, &$precios) {
+            // 1) Actualizar el costo de cada combinación del proveedor
+            foreach ($rows as $r) {
+                DB::table('producto_color_proveedor')->where('id', $r->id)
+                    ->update(['costo' => round($r->costo * $factor, 2), 'updated_at' => now()]);
+                $costos++;
+            }
+
+            // 2) Recalcular precio_costo (máximo entre proveedores) y precio_venta (manteniendo margen)
+            foreach ($rows as $r) {
+                $lps = ListaPrecio::where('producto_id', $r->producto_id)
+                    ->where(function ($q) use ($r) {
+                        $q->where('color_id', $r->color_id)
+                          ->orWhere('producto_color_proveedor_id', $r->id);
+                    })->get();
+
+                foreach ($lps as $lp) {
+                    $cm = ListaPrecio::calcularCostoMaximo($lp->producto_id, $r->color_id);
+                    if ($cm['costo_maximo'] <= 0) continue;
+
+                    $lp->precio_costo = $cm['costo_maximo'];
+                    $lp->proveedor_sugerido_id = $cm['proveedor_id'];
+                    $lp->producto_color_proveedor_id = $cm['producto_color_proveedor_id'];
+                    if ($actualizarVenta && (float) $lp->margen < 100) {
+                        $lp->precio_venta = round($lp->precio_costo / (1 - $lp->margen / 100));
+                    }
+                    $lp->save();
+                    $precios++;
+                }
+            }
+        });
+
+        return response()->json([
+            'ok' => true,
+            'costos_actualizados'  => $costos,
+            'precios_actualizados' => $precios,
+        ]);
     }
 }
