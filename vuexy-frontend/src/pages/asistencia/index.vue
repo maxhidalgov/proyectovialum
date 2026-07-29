@@ -62,6 +62,7 @@
           <template #item.real="{ item }">
             <span :class="item.estado === 'Atraso' ? 'text-warning font-weight-medium' : ''">{{ item.real || '—' }}</span>
           </template>
+          <template #item.salida="{ item }">{{ item.salida || '—' }}</template>
           <template #item.atraso_min="{ item }">
             <span v-if="item.estado === 'Atraso'" class="text-warning font-weight-medium">+{{ item.atraso_min }} min</span>
             <span v-else class="text-disabled">—</span>
@@ -143,7 +144,7 @@
 
         <!-- Grilla diaria: hora de entrada por día -->
         <VCard v-else>
-          <VCardTitle class="text-subtitle-1">Hora de entrada por día</VCardTitle>
+          <VCardTitle class="text-subtitle-1">Hora de entrada → salida por día</VCardTitle>
           <VCardText style="overflow-x:auto">
             <VTable density="compact">
               <thead>
@@ -207,6 +208,7 @@ const headersDia = [
   { title: 'Turno', value: 'turno' },
   { title: 'Esperada', value: 'esperada' },
   { title: 'Entrada real', value: 'real' },
+  { title: 'Salida', value: 'salida' },
   { title: 'Atraso', value: 'atraso_min' },
   { title: 'Estado', value: 'estado' },
   { title: 'Permiso', value: 'permiso' },
@@ -286,7 +288,8 @@ function fmtDiaCol(fecha) {
 function celdaTexto(d) {
   if (d.estado === 'Permiso') return 'Perm.'
   if (d.estado === 'Ausente') return 'Ausente'
-  return d.real || '—'
+  const ent = d.real || '—'
+  return d.salida ? `${ent} → ${d.salida}` : ent
 }
 
 function celdaClase(d) {

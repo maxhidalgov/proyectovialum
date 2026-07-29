@@ -84,16 +84,25 @@ class AsistenciaController extends Controller
         $attendance  = $this->workera->getAsistencia($desde, $hasta)['data'] ?? [];
         $permisos    = $this->workera->getPermisosRango($desde, $hasta);
 
-        // Índice de entradas reales: primera marcación ACTIVA de tipo Entrada (0) por code+fecha
-        $entradas = []; // [code][fecha] => 'YYYY-MM-DDTHH:mm:ss'
+        // Índices por code+fecha: entrada = primera marcación tipo 0; salida = última tipo 1.
+        $entradas = []; // [code][fecha] => 'YYYY-MM-DDTHH:mm:ss' (más temprana)
+        $salidas  = []; // [code][fecha] => 'YYYY-MM-DDTHH:mm:ss' (más tardía)
         foreach ($attendance as $r) {
             $code = (string) ($r['employee']['code'] ?? '');
-            if ($code === '' || (int) ($r['attendanceType'] ?? -1) !== 0) continue;
+            if ($code === '') continue;
             if (strtoupper($r['attendanceStatus'] ?? 'ACTIVO') === 'INACTIVO') continue;
+            $tipoMarca = (int) ($r['attendanceType'] ?? -1);
             $fecha = substr((string) ($r['attendanceDate'] ?? ''), 0, 10);
             if (!$fecha) continue;
-            if (!isset($entradas[$code][$fecha]) || $r['attendanceDate'] < $entradas[$code][$fecha]) {
-                $entradas[$code][$fecha] = $r['attendanceDate'];
+
+            if ($tipoMarca === 0) { // Entrada → la más temprana
+                if (!isset($entradas[$code][$fecha]) || $r['attendanceDate'] < $entradas[$code][$fecha]) {
+                    $entradas[$code][$fecha] = $r['attendanceDate'];
+                }
+            } elseif ($tipoMarca === 1) { // Salida → la más tardía
+                if (!isset($salidas[$code][$fecha]) || $r['attendanceDate'] > $salidas[$code][$fecha]) {
+                    $salidas[$code][$fecha] = $r['attendanceDate'];
+                }
             }
         }
 
@@ -173,6 +182,8 @@ class AsistenciaController extends Controller
 
                 $resumen[$code]['dias_horario']++;
 
+                $salidaStr = $salidas[$code][$fecha] ?? null;
+
                 $dias[] = [
                     'code'         => $code,
                     'nombre'       => $nombre,
@@ -182,6 +193,7 @@ class AsistenciaController extends Controller
                     'turno'        => $sch['workshiftName'] ?? ($sch['scheduleName'] ?? ''),
                     'esperada'     => $esperada->format('H:i'),
                     'real'         => $realFmt,
+                    'salida'       => $salidaStr ? Carbon::parse($salidaStr)->format('H:i') : null,
                     'atraso_min'   => $atrasoMin > 0 ? $atrasoMin : 0,
                     'estado'       => $estado,
                     'permiso'      => $permiso,
