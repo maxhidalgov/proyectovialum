@@ -295,13 +295,33 @@ class CompraController extends Controller
         // Si no entró ningún doc nuevo en esta ronda, no tiene sentido seguir
         $hasMas = ($maxDocs === 0 && !$smart && $nuevas > 0) ? Compra::count() < $totalBsale : false;
 
+        // Red de seguridad: aplicar las reglas de categoría a las compras que
+        // quedaron SIN categoría (nuevas, o entradas antes de que existiera su regla).
+        // No toca las que ya tienen categoría (respeta las manuales).
+        $categorizadas = $this->categorizarSinCategoria();
+
         return response()->json([
-            'success'     => true,
-            'nuevas'      => $nuevas,
-            'errores'     => $errores,
-            'total_bsale' => $totalBsale,
-            'has_more'    => $hasMas,
+            'success'      => true,
+            'nuevas'       => $nuevas,
+            'errores'      => $errores,
+            'total_bsale'  => $totalBsale,
+            'has_more'     => $hasMas,
+            'categorizadas'=> $categorizadas,
         ]);
+    }
+
+    // Aplica las reglas de categoría SOLO a las compras sin categoría (no pisa las manuales).
+    private function categorizarSinCategoria(): int
+    {
+        return DB::update("
+            UPDATE compras c
+            JOIN reglas_categoria_proveedor r
+              ON REPLACE(REPLACE(LOWER(c.rut_emisor), '.', ''), ' ', '')
+               = REPLACE(REPLACE(LOWER(r.rut_emisor), '.', ''), ' ', '')
+            SET c.categoria = r.categoria, c.updated_at = NOW()
+            WHERE c.rut_emisor IS NOT NULL
+              AND (c.categoria IS NULL OR c.categoria = '' OR c.categoria = 'Sin categoría')
+        ");
     }
 
     // -------------------------------------------------------------------------
