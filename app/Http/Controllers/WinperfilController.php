@@ -162,8 +162,8 @@ class WinperfilController extends Controller
             $items = $this->fetchAllPages('presupuestos', $params);
 
             // Enriquecer con estado de sync local
-            // El número puede venir como PRESUPUESTO_NUMERO (mayúsc) o numfactura (minúsc)
-            $getNumero = fn($p) => $p['PRESUPUESTO_NUMERO'] ?? $p['numfactura'] ?? $p['NUMFACTURA'] ?? null;
+            // NUMFACTURA es el número REAL/único del documento (PRESUPUESTO_NUMERO se repite entre versiones)
+            $getNumero = fn($p) => $p['NUMFACTURA'] ?? $p['PRESUPUESTO_NUMERO'] ?? $p['numfactura'] ?? null;
             $numeros = collect($items)->map($getNumero)->filter()->toArray();
             $syncMap = DB::table('cotizaciones')
                 ->whereIn('winperfil_numero', $numeros)
@@ -389,8 +389,9 @@ class WinperfilController extends Controller
      */
     public function importarUno(Request $request)
     {
-        $serie  = $request->get('serie', $this->serieDefault);
-        $numero = $request->get('numero');
+        $serie      = $request->get('serie', $this->serieDefault);
+        $numero     = $request->get('numero');      // PRESUPUESTO_NUMERO (para consultar a Winperfil)
+        $numfactura = $request->get('numfactura');   // NUMFACTURA de la oferta específica a importar
 
         if (!$numero) {
             return response()->json(['error' => 'Falta el número de presupuesto'], 422);
@@ -407,8 +408,22 @@ class WinperfilController extends Controller
                 return response()->json(['error' => 'Winperfil no respondió correctamente'], 502);
             }
 
-            $body   = $res->json();
-            $oferta = $body['ofertas'][0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+            $body    = $res->json();
+            $ofertas = $body['ofertas'] ?? [];
+
+            // Un presupuesto puede tener varias ofertas/versiones (cada una con su NUMFACTURA).
+            // Elegimos la que pidió el usuario por NUMFACTURA; si no, la primera.
+            $oferta = null;
+            if ($numfactura && !empty($ofertas)) {
+                foreach ($ofertas as $o) {
+                    $cab = $o['cabecera'] ?? $o;
+                    if ((string) ($cab['NUMFACTURA'] ?? '') === (string) $numfactura) {
+                        $oferta = $o;
+                        break;
+                    }
+                }
+            }
+            $oferta = $oferta ?? ($ofertas[0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []]);
             $pres   = array_merge($oferta['cabecera'] ?? $oferta, ['DETALLES' => $oferta['detalle'] ?? []]);
 
             // Asegurar el número por si la cabecera no lo trae
@@ -1025,9 +1040,10 @@ class WinperfilController extends Controller
 
     private function upsertPresupuesto(array $pres, string $serie, array $estadoMap): string
     {
-        // La API puede devolver el número como 'PRESUPUESTO_NUMERO' (mayúsc) o 'numfactura' (minúsc)
-        $numero = $pres['PRESUPUESTO_NUMERO'] ?? $pres['numfactura'] ?? $pres['NUMFACTURA'] ?? null;
-        if (!$numero) throw new \Exception('Sin PRESUPUESTO_NUMERO/numfactura');
+        // NUMFACTURA es el número REAL del documento (único). PRESUPUESTO_NUMERO puede
+        // repetirse entre versiones/ofertas de un mismo presupuesto, así que priorizamos NUMFACTURA.
+        $numero = $pres['NUMFACTURA'] ?? $pres['PRESUPUESTO_NUMERO'] ?? $pres['numfactura'] ?? null;
+        if (!$numero) throw new \Exception('Sin NUMFACTURA/PRESUPUESTO_NUMERO');
 
         DB::beginTransaction();
         try {

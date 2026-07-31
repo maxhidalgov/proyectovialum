@@ -222,7 +222,7 @@
             <!-- Número -->
             <template #item.PRESUPUESTO_NUMERO="{ item }">
               <span class="font-weight-bold font-monospace">
-                {{ item.PRESUPUESTO_SERIE }}-{{ item.PRESUPUESTO_NUMERO }}
+                {{ item.PRESUPUESTO_SERIE }}-{{ item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO }}
               </span>
             </template>
 
@@ -285,7 +285,7 @@
                 size="x-small"
                 :color="item._synced ? 'success' : 'deep-purple'"
                 variant="tonal"
-                :loading="syncingId === item.PRESUPUESTO_NUMERO"
+                :loading="syncingId === (item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO)"
                 @click="syncUno(item)"
               >
                 {{ item._synced ? 'Re-sync' : 'Importar' }}
@@ -506,13 +506,16 @@ async function cargarPresupuestos() {
 }
 
 async function syncUno(item) {
-  const numero = item.PRESUPUESTO_NUMERO
-  syncingId.value = numero
+  const id = item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO
+  syncingId.value = id
   try {
-    // Importa SOLO este presupuesto (no todo el rango de fechas)
+    // Importa SOLO esta oferta específica:
+    //  - numero (PRESUPUESTO_NUMERO): con el que Winperfil devuelve TODAS las ofertas del presupuesto.
+    //  - numfactura (NUMFACTURA): identifica cuál de esas ofertas/versiones importar.
     await axios.post('/api/winperfil/importar-uno', {
       serie: item.PRESUPUESTO_SERIE || filtros.value.serie,
-      numero,
+      numero: item.PRESUPUESTO_NUMERO,
+      numfactura: item.NUMFACTURA,
     })
     // Refrescar estado sync
     await cargarPresupuestos()
