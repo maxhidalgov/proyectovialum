@@ -464,6 +464,25 @@ class BsaleController extends Controller
             $totalNeto += $netoUnitario * $cantidad;
         }
 
+        // ── Cuadrar con el total de la cotización ──────────────────────────────
+        // La suma de las líneas puede diferir del total de la cotización (Winperfil
+        // calcula el BASE con ajustes/redondeos que no reparte en cada línea). Si no
+        // corregimos, el documento sale por MENOS que el % pactado del total y no
+        // coincide con lo que la app registra (documentos_facturacion.monto = total × %).
+        // Escalamos las líneas proporcionalmente para que sumen exactamente el neto del total.
+        $totalNetoCot = ((float) $cotizacion->total) / 1.19;
+        if ($totalNeto > 0 && abs($totalNetoCot - $totalNeto) >= 1) {
+            $factor = $totalNetoCot / $totalNeto;
+            foreach ($detalles as &$d) {
+                $d['netUnitValue'] = round($d['netUnitValue'] * $factor, 4);
+            }
+            unset($d);
+            $totalNeto = $totalNetoCot;
+            Log::info('construirPayloadBsale: líneas escaladas para cuadrar total', [
+                'cotizacion' => $cotizacion->id, 'factor' => $factor, 'total_neto_cot' => round($totalNetoCot),
+            ]);
+        }
+
         $label = $porcentaje <= 50 ? 'Anticipo' : 'Saldo';
         $nota  = $porcentaje < 100
             ? "{$label} {$porcentaje}% sobre cotización #{$cotizacion->id}. Total cotización: $" . number_format($cotizacion->total, 0, ',', '.')
