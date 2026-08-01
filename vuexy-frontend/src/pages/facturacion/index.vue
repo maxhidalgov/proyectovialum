@@ -320,7 +320,7 @@
                       </div>
 
                       <!-- Totales globales cobro -->
-                      <div class="mt-2 pa-2 rounded bg-surface-variant">
+                      <div class="mt-2 pa-3 rounded border">
                         <!-- Boletas: el cobro no se cuadra aquí sino en el módulo Boletas -->
                         <template v-if="soloBoletas(item)">
                           <div class="d-flex justify-space-between align-center text-caption">
