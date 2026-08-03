@@ -1056,9 +1056,12 @@ class WinperfilController extends Controller
             $estadoId  = $estadoMap[$aceptado] ?? $estadoMap[''] ?? null;
 
             // ─── Total ──────────────────────────────────────────────────────
+            // Convención unificada: cotizaciones.total se guarda en NETO (igual que
+            // las cotizaciones de la app). El BASE de Winperfil YA es el neto oficial
+            // (incluye el % extra por ventana de la columna "Porcentaje"). Antes se
+            // guardaba base×1.19 (BRUTO) → la columna "TOTAL NETO" mostraba bruto.
             $base = (float) ($pres['BASE'] ?? $pres['base'] ?? 0);
-            $iva  = (float) ($pres['IVA']  ?? $pres['iva']  ?? 19);
-            $total = $base * (1 + $iva / 100);
+            $total = $base; // NETO
 
             // ─── Fecha ──────────────────────────────────────────────────────
             $fecha = $this->parseFecha($pres['FECHAFACTURA'] ?? $pres['fechafactura'] ?? null);
@@ -1123,13 +1126,41 @@ class WinperfilController extends Controller
 
             $detalles = $pres['DETALLES'] ?? $pres['detalle'] ?? $pres['items'] ?? [];
             if (is_array($detalles) && count($detalles)) {
+                // ── Factor de cuadre con el BASE ─────────────────────────────
+                // La API trae PRECIO por línea SIN el recargo por ventana (columna
+                // "Porcentaje" en Winperfil, ej. 3%), y SUBTOTAL siempre llega en 0.
+                // Ese recargo SÍ está incluido en el BASE. Escalamos cada línea por
+                // factor = BASE / Σ(PRECIO×cantidad) para que las líneas sumen el BASE
+                // (funciona para cualquier %, no hardcodeamos 3%). Así tabla, PDF y
+                // facturación cuadran al peso.
+                $sumaLineas = 0.0;
                 foreach ($detalles as $det) {
+                    $c = (float) ($det['CANTIDAD'] ?? 1);
+                    $p = (float) ($det['PRECIO']   ?? 0);
+                    $s = (float) ($det['SUBTOTAL'] ?? 0);
+                    $sumaLineas += $s > 0 ? $s : ($p * max($c, 1));
+                }
+                $factorBase = ($base > 0 && $sumaLineas > 0) ? $base / $sumaLineas : 1.0;
+                $acumulado  = 0;                 // para repartir el residual de redondeo
+                $ultimoIdx  = count($detalles) - 1;
+
+                foreach ($detalles as $idx => $det) {
                     // ── Cantidades y precios ─────────────────────────────────
                     $cantidad = (float) ($det['CANTIDAD'] ?? 1);
                     $precio   = (float) ($det['PRECIO']   ?? 0);
                     // SUBTOTAL siempre llega en 0 → calcular manualmente
                     $rawSub   = (float) ($det['SUBTOTAL'] ?? 0);
                     $subtotal = $rawSub > 0 ? $rawSub : ($precio * $cantidad);
+
+                    // Aplicar el factor de cuadre. La última línea recibe el residual
+                    // para que Σ líneas == BASE exacto (sin descuadre por redondeo).
+                    if ($idx === $ultimoIdx && $base > 0) {
+                        $subtotal = round($base) - $acumulado;
+                    } else {
+                        $subtotal = (int) round($subtotal * $factorBase);
+                        $acumulado += $subtotal;
+                    }
+                    $precio = $cantidad > 0 ? round($subtotal / $cantidad) : $subtotal;
 
                     // ── Dimensiones ──────────────────────────────────────────
                     // ANCHO/ALTO en DETPRE siempre son 0 para ventanas.

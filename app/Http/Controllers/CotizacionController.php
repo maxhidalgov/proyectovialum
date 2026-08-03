@@ -911,13 +911,9 @@ public function store(Request $request)
             return response()->json(['message' => 'Las ventanas no tienen precio base para distribuir el ajuste.'], 422);
         }
 
-        // Ratio de IVA implícito actual (total bruto guardado / neto de las líneas)
-        $ivaRatio = $cotizacion->total > 0 ? ((float) $cotizacion->total / $netoActual) : 1.19;
-        if ($ivaRatio <= 0) {
-            $ivaRatio = 1.19;
-        }
-
-        $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / $ivaRatio) : (float) $data['total'];
+        // Convención unificada: cotizaciones.total se guarda en NETO. Si el usuario
+        // ingresa un bruto, le quitamos el IVA (19%) para obtener el neto a distribuir.
+        $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / 1.19) : (float) $data['total'];
         $factor    = $nuevoNeto / $netoActual;
 
         \DB::beginTransaction();
@@ -942,7 +938,7 @@ public function store(Request $request)
             }
 
             $cotizacion->update([
-                'total'                 => round($nuevoNeto * $ivaRatio),
+                'total'                 => round($nuevoNeto), // NETO
                 'winperfil_precio_lock' => true,
             ]);
 

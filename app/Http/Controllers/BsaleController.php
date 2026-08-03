@@ -191,7 +191,8 @@ class BsaleController extends Controller
             Log::info("📥 Respuesta de BSALE:", $response);
 
             if ($response['success']) {
-                $monto = round($cotizacion->total * $porcentaje / 100);
+                // total = NETO → monto guardado es BRUTO (con IVA)
+                $monto = round($cotizacion->total * $porcentaje / 100 * 1.19);
 
                 // Guardar documento de facturación
                 $docFact = \App\Models\DocumentoFacturacion::create([
@@ -239,7 +240,8 @@ class BsaleController extends Controller
                 $totalEmitido = \App\Models\DocumentoFacturacion::where('cotizacion_id', $cotizacion->id)
                     ->where('estado', 'emitido')
                     ->sum('monto');
-                $estaCompleto = $totalEmitido >= $cotizacion->total;
+                // total = NETO; los montos emitidos son BRUTO → comparar en bruto
+                $estaCompleto = $totalEmitido >= round($cotizacion->total * 1.19);
 
                 $cotizacion->update([
                     'numero_documento_bsale' => $response['data']['number'] ?? null,
@@ -470,7 +472,7 @@ class BsaleController extends Controller
         // corregimos, el documento sale por MENOS que el % pactado del total y no
         // coincide con lo que la app registra (documentos_facturacion.monto = total × %).
         // Escalamos las líneas proporcionalmente para que sumen exactamente el neto del total.
-        $totalNetoCot = ((float) $cotizacion->total) / 1.19;
+        $totalNetoCot = (float) $cotizacion->total; // total ya es NETO
         if ($totalNeto > 0 && abs($totalNetoCot - $totalNeto) >= 1) {
             $factor = $totalNetoCot / $totalNeto;
             foreach ($detalles as &$d) {
@@ -539,10 +541,10 @@ class BsaleController extends Controller
                 'recordDate'    => time(),
             ])->all();
         } elseif ($metodoPago) {
-            // El monto del pago es el total del documento (ya con descuento aplicado)
-            $montoDocumento = $porcentaje < 100
-                ? (int)round($cotizacion->total * $porcentaje / 100)
-                : (int)round($totalNeto * 1.19);
+            // El monto del pago es el total del documento (ya con descuento aplicado).
+            // $totalNeto quedó cuadrado al neto de la cotización; el descuento por % se
+            // aplica por línea vía 'discount', así que el bruto pagado = neto × % × 1.19.
+            $montoDocumento = (int) round($totalNeto * ($porcentaje / 100) * 1.19);
             $payload['payments'] = [
                 [
                     "paymentTypeId" => $this->getPaymentTypeId($metodoPago),

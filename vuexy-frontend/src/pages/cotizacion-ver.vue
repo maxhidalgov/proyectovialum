@@ -164,7 +164,7 @@
           </v-col>
           <v-col cols="6" sm="3">
             <div class="text-caption text-medium-emphasis">Total (c/IVA)</div>
-            <div class="font-weight-bold">{{ clp(cotizacion?.total) }}</div>
+            <div class="font-weight-bold">{{ clp(Math.round((cotizacion?.total || 0) * 1.19)) }}</div>
           </v-col>
           <v-col cols="7" sm="3">
             <v-text-field
