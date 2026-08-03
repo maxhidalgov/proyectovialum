@@ -11,10 +11,10 @@
       </v-card-title>
 
       <v-card-subtitle class="px-4 pb-3">
-        {{ nombreCliente }} — Total: <strong>{{ clp(cotizacion.total) }}</strong>
+        {{ nombreCliente }} — Total: <strong>{{ clp(totalBruto) }}</strong>
         <span v-if="yaEmitido > 0" class="ml-2 text-caption">
           · Ya emitido: <strong class="text-success">{{ clp(yaEmitido) }}</strong>
-          · Saldo: <strong class="text-warning">{{ clp(cotizacion.total - yaEmitido) }}</strong>
+          · Saldo: <strong class="text-warning">{{ clp(totalBruto - yaEmitido) }}</strong>
         </span>
       </v-card-subtitle>
 
@@ -27,7 +27,7 @@
           type="info" density="compact" variant="tonal" class="mb-3 text-caption"
         >
           Ya se emitieron <strong>{{ clp(yaEmitido) }}</strong> ({{ pctYaEmitido }}%).
-          El saldo pendiente es <strong>{{ clp(cotizacion.total - yaEmitido) }}</strong> ({{ 100 - pctYaEmitido }}%).
+          El saldo pendiente es <strong>{{ clp(totalBruto - yaEmitido) }}</strong> ({{ 100 - pctYaEmitido }}%).
         </v-alert>
 
         <!-- ¿Cuánto vas a facturar? -->
@@ -276,8 +276,13 @@ const yaEmitido = computed(() => {
   return docs.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto), 0)
 })
 
+// cotizaciones.total se guarda en NETO; los documentos (doc.monto) y el pago a
+// Bsale van en BRUTO. Trabajamos el modal en bruto para que el monto a facturar,
+// el saldo y el pago registrado coincidan con el total del documento electrónico.
+const totalBruto = computed(() => Math.round((props.cotizacion?.total || 0) * 1.19))
+
 const pctYaEmitido = computed(() => {
-  const total = props.cotizacion?.total || 0
+  const total = totalBruto.value
   return total > 0 ? Math.round((yaEmitido.value / total) * 100) : 0
 })
 
@@ -297,7 +302,7 @@ const opcionesDisponibles = computed(() => {
 })
 
 const montoCalculado = computed(() =>
-  Math.round((props.cotizacion?.total || 0) * (porcentaje.value || 0) / 100)
+  Math.round(totalBruto.value * (porcentaje.value || 0) / 100)
 )
 
 // Si hay una sola forma de pago, se mantiene igual al monto del documento

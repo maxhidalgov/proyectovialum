@@ -546,7 +546,7 @@
           <span class="text-medium-emphasis">
             {{ cotizVinculando.cliente?.razon_social || `${cotizVinculando.cliente?.first_name || ''} ${cotizVinculando.cliente?.last_name || ''}`.trim() }}
           </span>
-          · Total: <span class="font-weight-bold">{{ clp(cotizVinculando.total) }}</span>
+          · Total: <span class="font-weight-bold">{{ clp(Math.round((cotizVinculando.total || 0) * 1.19)) }}</span>
         </v-card-subtitle>
         <v-divider />
 
@@ -596,7 +596,7 @@
                 <td class="text-caption">{{ doc.numero_documento_bsale || '-' }}</td>
                 <td class="text-caption font-weight-bold text-success">{{ clp(doc.monto) }}</td>
                 <td class="text-caption text-medium-emphasis">
-                  {{ cotizVinculando.total > 0 ? Math.round((doc.monto / cotizVinculando.total) * 100) + '%' : '-' }}
+                  {{ cotizVinculando.total > 0 ? Math.round((doc.monto / (cotizVinculando.total * 1.19)) * 100) + '%' : '-' }}
                 </td>
                 <td class="text-caption">{{ fmtFecha(doc.fecha_emision) }}</td>
                 <td>
@@ -716,11 +716,13 @@ const cotizacionesFiltradas = computed(() => {
 const statsPorFacturar = computed(() => stats('aprobada'))
 const statsFacturadas  = computed(() => stats('facturada'))
 const statsPagadas     = computed(() => stats('pagada'))
-const totalCartera     = computed(() => cotizacionesFiltradas.value.reduce((s, c) => s + Number(c.total), 0))
+// cotizaciones.total está en NETO; el módulo de facturación trabaja en BRUTO
+// (documentos, cobros y Bsale van con IVA), así que mostramos ×1.19.
+const totalCartera     = computed(() => Math.round(cotizacionesFiltradas.value.reduce((s, c) => s + Number(c.total), 0) * 1.19))
 
 function stats(estado) {
   const list = cotizacionesAprobadas.value.filter(c => c.estado_facturacion === estado)
-  return { count: list.length, monto: list.reduce((s, c) => s + Number(c.total), 0) }
+  return { count: list.length, monto: Math.round(list.reduce((s, c) => s + Number(c.total), 0) * 1.19) }
 }
 
 // ── Helpers de cobro por cotización ─────────────────────────────────
@@ -731,7 +733,9 @@ function totalCobrado(item) {
   return item.documentos_facturacion?.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto_cobrado || 0), 0) || 0
 }
 function pctEmitido(item) {
-  return item.total > 0 ? Math.round((totalEmitido(item) / item.total) * 100) : 0
+  // total en NETO; los documentos emitidos (monto) están en BRUTO → comparar en bruto
+  const totalBruto = Number(item.total) * 1.19
+  return totalBruto > 0 ? Math.min(100, Math.round((totalEmitido(item) / totalBruto) * 100)) : 0
 }
 function pctCobrado(item) {
   const emitido = totalEmitido(item)

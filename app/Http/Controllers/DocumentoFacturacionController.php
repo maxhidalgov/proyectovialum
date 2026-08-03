@@ -71,9 +71,10 @@ class DocumentoFacturacionController extends Controller
 
         $cotizacion = Cotizacion::findOrFail($request->cotizacion_id);
 
-        // Recalcular porcentaje respecto al total de la cotización
+        // Recalcular porcentaje respecto al total de la cotización.
+        // total en NETO; doc.monto en BRUTO → comparar en bruto (×1.19).
         $pct = $cotizacion->total > 0
-            ? round(($doc->monto / $cotizacion->total) * 100, 2)
+            ? round(($doc->monto / ($cotizacion->total * 1.19)) * 100, 2)
             : 0;
 
         $doc->update([
@@ -123,7 +124,8 @@ class DocumentoFacturacionController extends Controller
 
         $creados = [];
         foreach ($request->documentos as $doc) {
-            $monto = round($cotizacion->total * $doc['porcentaje'] / 100);
+            // total en NETO → monto del plan en BRUTO (con IVA)
+            $monto = round($cotizacion->total * $doc['porcentaje'] / 100 * 1.19);
             $creados[] = DocumentoFacturacion::create([
                 'cotizacion_id' => $cotizacion->id,
                 'tipo'          => $doc['tipo'],

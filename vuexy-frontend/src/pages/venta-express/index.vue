@@ -534,12 +534,16 @@ const tipo = ref('boleta')
 const items = ref([])
 
 function subtotalItem(it) {
-  const bruto = (Number(it.cantidad) || 0) * (Number(it.precio) || 0)
-  return Math.round(bruto * (1 - (Number(it.descuento) || 0) / 100))
+  // Neto de la línea SIN redondear a entero: it.precio puede tener 2 decimales
+  // (cuando se edita el subtotal c/IVA). Redondear aquí perdía los centavos y
+  // hacía saltar el c/IVA (ej: subtotal 9 → neto 7,56 → round 8 → ×1,19 = 10).
+  const neto = (Number(it.cantidad) || 0) * (Number(it.precio) || 0)
+  return neto * (1 - (Number(it.descuento) || 0) / 100)
 }
-const totalNeto  = computed(() => items.value.reduce((s, it) => s + subtotalItem(it), 0))
-const totalIva   = computed(() => Math.round(totalNeto.value * 0.19))
-const totalBruto = computed(() => totalNeto.value + totalIva.value)
+const netoRaw    = computed(() => items.value.reduce((s, it) => s + subtotalItem(it), 0))
+const totalNeto  = computed(() => Math.round(netoRaw.value))
+const totalBruto = computed(() => Math.round(netoRaw.value * 1.19))
+const totalIva   = computed(() => totalBruto.value - totalNeto.value)
 
 // Subtotal CON IVA por línea (editable → recalcula el precio unitario neto)
 function subtotalCivaItem(it) {
