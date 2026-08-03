@@ -68,7 +68,7 @@ Route::get('/cron/sync-diario', function (\Illuminate\Http\Request $r) {
 });
 
 // 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
-Route::middleware(['auth:api', 'permission:gestionar_usuarios'])->prefix('admin')->group(function () {
+Route::middleware(['auth:api', 'permission:area_admin'])->prefix('admin')->group(function () {
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
     Route::put('/users/{id}', [UserController::class, 'update']);
@@ -143,7 +143,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/perfiles-constructor', [ProductoController::class, 'perfilesConstructor']);
     Route::get('/productos', [ProductoController::class, 'index']);
     Route::get('/productos/{id}', [ProductoController::class, 'show']);
-    Route::middleware(['permission:gestionar_productos'])->group(function () {
+    Route::middleware(['permission:area_productos'])->group(function () {
         Route::post('/productos', [ProductoController::class, 'store']);
         Route::put('/productos/{id}', [ProductoController::class, 'update']);
         Route::delete('/productos/{id}', [ProductoController::class, 'destroy']);

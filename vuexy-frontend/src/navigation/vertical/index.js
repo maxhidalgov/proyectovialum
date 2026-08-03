@@ -19,7 +19,9 @@ const hasAnyPermission = (permissionList) => {
   return permissionList.some(p => permissions.includes(p))
 }
 
-// Configuración del menú con permisos
+// Configuración del menú con permisos POR ÁREA.
+// Cada sección (y sus hijos) se gatea con el permiso de su área. Ver
+// database/migrations/2026_08_03_140000_permisos_por_area.php
 const allMenuItems = [
   {
     title: 'Home',
@@ -30,45 +32,20 @@ const allMenuItems = [
     title: 'Dashboard',
     to: { name: 'dashboardventas' },
     icon: { icon: 'mdi mdi-view-dashboard' },
-    permission: 'ver_dashboard',
+    permission: 'area_ventas',
   },
 
   // ── Ventas ──────────────────────────────────────────────────────────────
   {
     title: 'Ventas',
     icon: { icon: 'mdi-point-of-sale' },
-    permissions: ['ver_cotizaciones', 'gestionar_cotizaciones'],
+    permission: 'area_ventas',
     children: [
-      {
-        title: 'Cotizador',
-        to: { name: 'cotizador' },
-        icon: { icon: 'mdi-calculator' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Cotizaciones',
-        to: { name: 'cotizaciones' },
-        icon: { icon: 'tabler-file' },
-        permissions: ['ver_cotizaciones', 'gestionar_cotizaciones'],
-      },
-      {
-        title: 'Venta Express',
-        to: { name: 'venta-express' },
-        icon: { icon: 'mdi-flash' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Facturación',
-        to: { name: 'facturacion' },
-        icon: { icon: 'mdi-file-document-multiple' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Órdenes de Corte',
-        to: { name: 'ordenes-corte' },
-        icon: { icon: 'mdi-content-cut' },
-        permission: 'gestionar_cotizaciones',
-      },
+      { title: 'Cotizador',       to: { name: 'cotizador' },     icon: { icon: 'mdi-calculator' },              permission: 'area_ventas' },
+      { title: 'Cotizaciones',    to: { name: 'cotizaciones' },  icon: { icon: 'tabler-file' },                 permission: 'area_ventas' },
+      { title: 'Venta Express',   to: { name: 'venta-express' }, icon: { icon: 'mdi-flash' },                   permission: 'area_ventas' },
+      { title: 'Facturación',     to: { name: 'facturacion' },   icon: { icon: 'mdi-file-document-multiple' },  permission: 'area_ventas' },
+      { title: 'Órdenes de Corte',to: { name: 'ordenes-corte' }, icon: { icon: 'mdi-content-cut' },             permission: 'area_ventas' },
     ],
   },
 
@@ -76,20 +53,10 @@ const allMenuItems = [
   {
     title: 'Clientes',
     icon: { icon: 'mdi-account-multiple' },
-    permissions: ['ver_clientes', 'gestionar_clientes', 'ver_cotizaciones', 'gestionar_cotizaciones'],
+    permission: 'area_clientes',
     children: [
-      {
-        title: 'Clientes',
-        to: { name: 'clientes' },
-        icon: { icon: 'mdi-account-multiple' },
-        permissions: ['ver_clientes', 'gestionar_clientes'],
-      },
-      {
-        title: 'CRM',
-        to: { name: 'crm' },
-        icon: { icon: 'mdi-view-kanban' },
-        permissions: ['ver_cotizaciones', 'gestionar_cotizaciones'],
-      },
+      { title: 'Clientes', to: { name: 'clientes' }, icon: { icon: 'mdi-account-multiple' }, permission: 'area_clientes' },
+      { title: 'CRM',      to: { name: 'crm' },      icon: { icon: 'mdi-view-kanban' },      permission: 'area_clientes' },
     ],
   },
 
@@ -97,38 +64,13 @@ const allMenuItems = [
   {
     title: 'Producción',
     icon: { icon: 'mdi-factory' },
-    permissions: ['gestionar_cotizaciones', 'ver_dashboard'],
+    permission: 'area_produccion',
     children: [
-      {
-        title: 'Operaciones',
-        to: { name: 'operaciones' },
-        icon: { icon: 'mdi-view-column' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Producción',
-        to: { name: 'produccion' },
-        icon: { icon: 'mdi-scissors-cutting' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Órdenes de Compra',
-        to: { name: 'ordenes-compra' },
-        icon: { icon: 'mdi-cart-arrow-down' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Calendario',
-        to: { name: 'calendario' },
-        icon: { icon: 'mdi-calendar-month' },
-        permission: 'gestionar_cotizaciones',
-      },
-      {
-        title: 'Winperfil',
-        to: { name: 'winperfil' },
-        icon: { icon: 'mdi-window-maximize' },
-        permission: 'ver_dashboard',
-      },
+      { title: 'Operaciones',        to: { name: 'operaciones' },    icon: { icon: 'mdi-view-column' },     permission: 'area_produccion' },
+      { title: 'Producción',         to: { name: 'produccion' },     icon: { icon: 'mdi-scissors-cutting' },permission: 'area_produccion' },
+      { title: 'Órdenes de Compra',  to: { name: 'ordenes-compra' }, icon: { icon: 'mdi-cart-arrow-down' }, permission: 'area_produccion' },
+      { title: 'Calendario',         to: { name: 'calendario' },     icon: { icon: 'mdi-calendar-month' },  permission: 'area_produccion' },
+      { title: 'Winperfil',          to: { name: 'winperfil' },      icon: { icon: 'mdi-window-maximize' }, permission: 'area_produccion' },
     ],
   },
 
@@ -136,32 +78,12 @@ const allMenuItems = [
   {
     title: 'Productos',
     icon: { icon: 'mdi-cube' },
-    permissions: ['ver_productos', 'gestionar_productos'],
+    permission: 'area_productos',
     children: [
-      {
-        title: 'Agregar Producto',
-        to: { name: 'agregar-producto' },
-        icon: { icon: 'mdi-plus-box' },
-        permission: 'gestionar_productos',
-      },
-      {
-        title: 'Lista de Precios',
-        to: { name: 'lista-precios' },
-        icon: { icon: 'mdi-currency-usd' },
-        permission: 'ver_productos',
-      },
-      {
-        title: 'Importador',
-        to: { name: 'importador' },
-        icon: { icon: 'tabler-file-import' },
-        permission: 'gestionar_productos',
-      },
-      {
-        title: 'Inventario',
-        to: { name: 'inventario' },
-        icon: { icon: 'mdi-warehouse' },
-        permissions: ['ver_productos', 'gestionar_productos'],
-      },
+      { title: 'Agregar Producto', to: { name: 'agregar-producto' }, icon: { icon: 'mdi-plus-box' },      permission: 'area_productos' },
+      { title: 'Lista de Precios', to: { name: 'lista-precios' },    icon: { icon: 'mdi-currency-usd' },  permission: 'area_productos' },
+      { title: 'Importador',       to: { name: 'importador' },       icon: { icon: 'tabler-file-import' },permission: 'area_productos' },
+      { title: 'Inventario',       to: { name: 'inventario' },       icon: { icon: 'mdi-warehouse' },     permission: 'area_productos' },
     ],
   },
 
@@ -169,26 +91,11 @@ const allMenuItems = [
   {
     title: 'Compras',
     icon: { icon: 'mdi-cart-arrow-down' },
-    permissions: ['ver_dashboard', 'gestionar_usuarios'],
+    permission: 'area_compras',
     children: [
-      {
-        title: 'Facturas de Compra',
-        to: { name: 'compras' },
-        icon: { icon: 'mdi-file-document-outline' },
-        permission: 'ver_dashboard',
-      },
-      {
-        title: 'Compras Mensuales',
-        to: { name: 'comprasmensuales' },
-        icon: { icon: 'mdi-chart-bar' },
-        permission: 'ver_dashboard',
-      },
-      {
-        title: 'Proveedores',
-        to: { name: 'proveedores' },
-        icon: { icon: 'mdi-truck' },
-        permission: 'gestionar_usuarios',
-      },
+      { title: 'Facturas de Compra', to: { name: 'compras' },          icon: { icon: 'mdi-file-document-outline' }, permission: 'area_compras' },
+      { title: 'Compras Mensuales',  to: { name: 'comprasmensuales' },  icon: { icon: 'mdi-chart-bar' },             permission: 'area_compras' },
+      { title: 'Proveedores',        to: { name: 'proveedores' },       icon: { icon: 'mdi-truck' },                 permission: 'area_compras' },
     ],
   },
 
@@ -196,90 +103,21 @@ const allMenuItems = [
   {
     title: 'Finanzas',
     icon: { icon: 'mdi-bank' },
-    permission: 'gestionar_usuarios',
+    permission: 'area_finanzas',
     children: [
-      // Reportes
-      {
-        title: 'Dashboard',
-        to: { name: 'dashboard-financiero' },
-        icon: { icon: 'mdi-view-dashboard-outline' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Estado de Resultados',
-        to: { name: 'eerr' },
-        icon: { icon: 'mdi-chart-line' },
-        permission: 'gestionar_usuarios',
-      },
-      // Conciliación
-      {
-        title: 'Sugerencias ⚡',
-        to: { name: 'sugerencias-conciliacion' },
-        icon: { icon: 'mdi-lightning-bolt' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Conciliación',
-        to: { name: 'conciliacion' },
-        icon: { icon: 'mdi-bank-outline' },
-        permission: 'gestionar_usuarios',
-      },
-      // Ingresos
-      {
-        title: 'Registro de Ventas',
-        to: { name: 'registro-ventas' },
-        icon: { icon: 'mdi-format-list-bulleted' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Ventas (buscar boleta/factura)',
-        to: { name: 'historial-ventas' },
-        icon: { icon: 'mdi-receipt-text-outline' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Cuentas por Cobrar',
-        to: { name: 'cuentas-por-cobrar' },
-        icon: { icon: 'mdi-file-document-plus' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Boletas',
-        to: { name: 'boletas' },
-        icon: { icon: 'mdi-receipt-text-outline' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Transbank',
-        to: { name: 'transbank' },
-        icon: { icon: 'mdi-credit-card-outline' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Ingresos sin doc SII',
-        to: { name: 'ingresos-manuales' },
-        icon: { icon: 'mdi-receipt-text-plus' },
-        permission: 'gestionar_usuarios',
-      },
-      // Egresos
-      {
-        title: 'Registro de Compras',
-        to: { name: 'registro-compras' },
-        icon: { icon: 'mdi-format-list-bulleted-type' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Cuentas por Pagar',
-        to: { name: 'cuentas-por-pagar' },
-        icon: { icon: 'mdi-file-document-minus' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Gastos Generales',
-        to: { name: 'gastos-generales' },
-        icon: { icon: 'mdi-receipt-text-minus' },
-        permission: 'gestionar_usuarios',
-      },
+      { title: 'Dashboard',                     to: { name: 'dashboard-financiero' },      icon: { icon: 'mdi-view-dashboard-outline' },   permission: 'area_finanzas' },
+      { title: 'Estado de Resultados',          to: { name: 'eerr' },                      icon: { icon: 'mdi-chart-line' },              permission: 'area_finanzas' },
+      { title: 'Sugerencias ⚡',                to: { name: 'sugerencias-conciliacion' },  icon: { icon: 'mdi-lightning-bolt' },          permission: 'area_finanzas' },
+      { title: 'Conciliación',                  to: { name: 'conciliacion' },              icon: { icon: 'mdi-bank-outline' },            permission: 'area_finanzas' },
+      { title: 'Registro de Ventas',            to: { name: 'registro-ventas' },           icon: { icon: 'mdi-format-list-bulleted' },    permission: 'area_finanzas' },
+      { title: 'Ventas (buscar boleta/factura)',to: { name: 'historial-ventas' },          icon: { icon: 'mdi-receipt-text-outline' },    permission: 'area_finanzas' },
+      { title: 'Cuentas por Cobrar',            to: { name: 'cuentas-por-cobrar' },        icon: { icon: 'mdi-file-document-plus' },      permission: 'area_finanzas' },
+      { title: 'Boletas',                       to: { name: 'boletas' },                   icon: { icon: 'mdi-receipt-text-outline' },    permission: 'area_finanzas' },
+      { title: 'Transbank',                     to: { name: 'transbank' },                 icon: { icon: 'mdi-credit-card-outline' },     permission: 'area_finanzas' },
+      { title: 'Ingresos sin doc SII',          to: { name: 'ingresos-manuales' },         icon: { icon: 'mdi-receipt-text-plus' },       permission: 'area_finanzas' },
+      { title: 'Registro de Compras',           to: { name: 'registro-compras' },          icon: { icon: 'mdi-format-list-bulleted-type' },permission: 'area_finanzas' },
+      { title: 'Cuentas por Pagar',             to: { name: 'cuentas-por-pagar' },         icon: { icon: 'mdi-file-document-minus' },     permission: 'area_finanzas' },
+      { title: 'Gastos Generales',              to: { name: 'gastos-generales' },          icon: { icon: 'mdi-receipt-text-minus' },      permission: 'area_finanzas' },
     ],
   },
 
@@ -287,20 +125,10 @@ const allMenuItems = [
   {
     title: 'RR.HH.',
     icon: { icon: 'mdi-account-group' },
-    permission: 'gestionar_usuarios',
+    permission: 'area_rrhh',
     children: [
-      {
-        title: 'Empleados',
-        to: { name: 'empleados' },
-        icon: { icon: 'mdi-account-group' },
-        permission: 'gestionar_usuarios',
-      },
-      {
-        title: 'Asistencia',
-        to: { name: 'asistencia' },
-        icon: { icon: 'mdi-clock-check-outline' },
-        permission: 'gestionar_usuarios',
-      },
+      { title: 'Empleados',  to: { name: 'empleados' },  icon: { icon: 'mdi-account-group' },       permission: 'area_rrhh' },
+      { title: 'Asistencia', to: { name: 'asistencia' }, icon: { icon: 'mdi-clock-check-outline' }, permission: 'area_rrhh' },
     ],
   },
 
@@ -309,19 +137,14 @@ const allMenuItems = [
     title: 'Asistente IA',
     to: { name: 'ia-produccion' },
     icon: { icon: 'mdi-robot' },
-    permission: 'gestionar_cotizaciones',
+    permission: 'area_produccion',
   },
   {
     title: 'Administración',
     icon: { icon: 'tabler-settings' },
-    permission: 'gestionar_usuarios',
+    permission: 'area_admin',
     children: [
-      {
-        title: 'Gestión de Usuarios',
-        to: { name: 'admin-secret-panel' },
-        icon: { icon: 'tabler-users' },
-        permission: 'gestionar_usuarios',
-      },
+      { title: 'Gestión de Usuarios', to: { name: 'admin-secret-panel' }, icon: { icon: 'tabler-users' }, permission: 'area_admin' },
     ],
   },
 ]

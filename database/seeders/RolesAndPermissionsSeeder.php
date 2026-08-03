@@ -15,18 +15,16 @@ class RolesAndPermissionsSeeder extends Seeder
      */
     public function run(): void
     {
-        // 🔐 CREAR PERMISOS
+        // 🔐 CREAR PERMISOS POR ÁREA (uno por sección del menú)
         $permissions = [
-            ['nombre' => 'gestionar_usuarios', 'descripcion' => 'Crear, editar y eliminar usuarios'],
-            ['nombre' => 'gestionar_roles', 'descripcion' => 'Asignar roles y permisos'],
-            ['nombre' => 'gestionar_productos', 'descripcion' => 'Crear, editar y eliminar productos'],
-            ['nombre' => 'ver_productos', 'descripcion' => 'Ver listado de productos'],
-            ['nombre' => 'gestionar_cotizaciones', 'descripcion' => 'Crear, editar y eliminar cotizaciones'],
-            ['nombre' => 'ver_cotizaciones', 'descripcion' => 'Ver listado de cotizaciones'],
-            ['nombre' => 'aprobar_cotizaciones', 'descripcion' => 'Aprobar o rechazar cotizaciones'],
-            ['nombre' => 'gestionar_clientes', 'descripcion' => 'Crear, editar y eliminar clientes'],
-            ['nombre' => 'ver_clientes', 'descripcion' => 'Ver listado de clientes'],
-            ['nombre' => 'ver_dashboard', 'descripcion' => 'Acceso al dashboard y estadísticas'],
+            ['nombre' => 'area_ventas',     'descripcion' => 'Ventas: Dashboard, Cotizador, Cotizaciones, Venta Express, Facturación, Órdenes de Corte'],
+            ['nombre' => 'area_clientes',   'descripcion' => 'Clientes: Clientes y CRM'],
+            ['nombre' => 'area_produccion', 'descripcion' => 'Producción: Operaciones, Producción, Órdenes de Compra, Calendario, Winperfil, Asistente IA'],
+            ['nombre' => 'area_productos',  'descripcion' => 'Productos: Agregar, Lista de Precios, Importador, Inventario'],
+            ['nombre' => 'area_compras',    'descripcion' => 'Compras: Facturas de Compra, Compras Mensuales, Proveedores'],
+            ['nombre' => 'area_finanzas',   'descripcion' => 'Finanzas: Conciliación, Boletas, CxC, CxP, Gastos, Transbank, Registros, EERR'],
+            ['nombre' => 'area_rrhh',       'descripcion' => 'RR.HH.: Empleados y Asistencia'],
+            ['nombre' => 'area_admin',      'descripcion' => 'Administración: Gestión de usuarios, roles y permisos'],
         ];
 
         foreach ($permissions as $perm) {
@@ -43,27 +41,24 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // 🔗 ASIGNAR PERMISOS A ROLES
 
-        // Admin tiene TODOS los permisos
+        // Admin tiene TODAS las áreas
         $adminRole->permissions()->sync(Permission::all()->pluck('id'));
 
-        // Vendedor: puede gestionar cotizaciones y clientes, ver productos
+        // Vendedor: comercial y producción, sin finanzas/rrhh/admin
         $vendedorRole->permissions()->sync(
             Permission::whereIn('nombre', [
-                'gestionar_cotizaciones',
-                'ver_cotizaciones',
-                'aprobar_cotizaciones',
-                'gestionar_clientes',
-                'ver_clientes',
-                'ver_productos',
-                'ver_dashboard',
+                'area_ventas',
+                'area_clientes',
+                'area_produccion',
+                'area_productos',
+                'area_compras',
             ])->pluck('id')
         );
 
-        // Practicante: solo puede gestionar productos (crear y editar)
+        // Practicante: solo productos
         $practicanteRole->permissions()->sync(
             Permission::whereIn('nombre', [
-                'gestionar_productos',
-                'ver_productos',
+                'area_productos',
             ])->pluck('id')
         );
 
