@@ -54,6 +54,23 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * Renueva el token de sesión. Funciona con un token vencido siempre que esté
+     * dentro del refresh_ttl (14 días). La ruta NO usa auth:api porque ese
+     * middleware rechazaría el token vencido antes de llegar aquí; el token se lee
+     * del header Authorization que envía el front.
+     */
+    public function refresh()
+    {
+        try {
+            $newToken = Auth::guard('api')->refresh();
+
+            return response()->json(['token' => $newToken]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'No se pudo refrescar la sesión'], 401);
+        }
+    }
+
     public function register(Request $request)
     {
         $request->validate([

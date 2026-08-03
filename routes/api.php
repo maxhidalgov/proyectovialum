@@ -29,6 +29,8 @@ use App\Http\Controllers\IaProduccionController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
+// Renovación de sesión: sin auth:api (acepta token vencido dentro del refresh_ttl)
+Route::post('/refresh', [AuthController::class, 'refresh']);
 // ⛔ REGISTRO PÚBLICO DESHABILITADO - Solo admin puede crear usuarios
 // Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
