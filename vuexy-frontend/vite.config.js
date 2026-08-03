@@ -96,6 +96,17 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 5000,
+    // Quita el ruido de debug del bundle de producción (dev conserva todo).
+    // Usa Terser para eliminar console.log/debug/info y debugger, pero DEJA
+    // console.error/warn (reporte de errores real). El esbuild.drop de Vite 5
+    // no funcionaba en este setup.
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['vuetify'],

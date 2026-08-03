@@ -1,1 +1,0 @@
-import{a as t}from"./VistaVentanaCorredera-DsZ_Vhcb.js";import{f as a,e,cB as o,o as r,b as p}from"./index-D3EMTAEd.js";import"./VSwitch-ds1E6M0K.js";import"./VInput-DxzTK69h.js";import"./transition-Bf3R60ki.js";import"./VSelectionControl-Ba_Oxf5Y.js";const d={__name:"index",setup(s){return(c,m)=>(r(),a(o,null,{default:e(()=>[p(t)]),_:1}))}};export{d as default};

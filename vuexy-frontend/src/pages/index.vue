@@ -185,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/axiosInstance'
 
 // ✅ Estado reactivo
@@ -234,9 +234,7 @@ const headersCompras = [
 // ✅ ENDPOINT CORRECTO PARA VENTAS (dashboardventas/index.vue)
 const cargarVentas = async () => {
   loadingVentas.value = true
-  console.log('🔍 DEBUG VENTAS - Endpoint: /api/dashboard/ventas-mensuales')
-  console.log('📅 Parámetros:', { mes: mes.value, anio: anio.value })
-  
+
   try {
     const response = await api.get('/api/dashboard/ventas-mensuales', {
       params: {
@@ -244,17 +242,12 @@ const cargarVentas = async () => {
         anio: anio.value,
       }
     })
-    
-    console.log('📈 Respuesta ventas completa:', response.data)
-    
+
     datosVentas.value = {
       total_mes: response.data.total_mes || 0,
       cantidad: response.data.cantidad || 0,
       clientes: response.data.clientes || []
     }
-    
-    console.log('✅ Datos ventas procesados:', datosVentas.value)
-    
   } catch (err) {
     console.error('❌ Error al cargar ventas:', err)
     console.error('❌ Error.response:', err.response?.data)
@@ -267,9 +260,7 @@ const cargarVentas = async () => {
 // ✅ ENDPOINT CORRECTO PARA COMPRAS (comprasmensuales/index.vue)
 const cargarCompras = async () => {
   loadingCompras.value = true
-  console.log('🔍 DEBUG COMPRAS - Endpoint: /api/compras-terceros-mensuales')
-  console.log('📅 Parámetros:', { mes: mes.value, anio: anio.value })
-  
+
   try {
     const response = await api.get('/api/compras-terceros-mensuales', {
       params: {
@@ -277,17 +268,12 @@ const cargarCompras = async () => {
         anio: anio.value,
       }
     })
-    
-    console.log('📉 Respuesta compras completa:', response.data)
-    
+
     datosCompras.value = {
       total_mes: response.data.total_mes || 0,
       cantidad: response.data.cantidad || 0,
       proveedores: response.data.proveedores || {}
     }
-    
-    console.log('✅ Datos compras procesados:', datosCompras.value)
-    
   } catch (err) {
     console.error('❌ Error al cargar compras:', err)
     console.error('❌ Error.response:', err.response?.data)
@@ -366,60 +352,34 @@ const topClientes = computed(() => {
 // ✅ Top proveedores - CORREGIDO para arrays
 const topCompras = computed(() => {
   if (!datosCompras.value?.proveedores) return []
-  
-  console.log('🔍 DEBUG tipo de proveedores:', Array.isArray(datosCompras.value.proveedores))
-  console.log('🔍 DEBUG proveedores:', datosCompras.value.proveedores)
-  
+
   // ✅ Si es un array, úsalo directamente
   if (Array.isArray(datosCompras.value.proveedores)) {
-    const proveedoresArray = datosCompras.value.proveedores
-      .map(proveedor => {
-        console.log(`📦 Proveedor del array:`, proveedor)
-        return {
-          proveedor: proveedor.proveedor || proveedor.nombre || 'Sin nombre',
-          cantidad: proveedor.cantidad || 0,
-          total: proveedor.total || 0
-        }
-      })
+    return datosCompras.value.proveedores
+      .map(proveedor => ({
+        proveedor: proveedor.proveedor || proveedor.nombre || 'Sin nombre',
+        cantidad: proveedor.cantidad || 0,
+        total: proveedor.total || 0
+      }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 10)
-    
-    console.log('✅ Proveedores procesados desde array:', proveedoresArray)
-    return proveedoresArray
   }
-  
+
   // ✅ Si es un objeto, úsalo como antes
-  const proveedoresArray = Object.entries(datosCompras.value.proveedores)
-    .map(([nombreProveedor, data]) => {
-      console.log(`📦 Procesando proveedor objeto: "${nombreProveedor}":`, data)
-      return {
-        proveedor: nombreProveedor,
-        cantidad: data.cantidad || 0,
-        total: data.total || 0
-      }
-    })
+  return Object.entries(datosCompras.value.proveedores)
+    .map(([nombreProveedor, data]) => ({
+      proveedor: nombreProveedor,
+      cantidad: data.cantidad || 0,
+      total: data.total || 0
+    }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
-  
-  console.log('✅ Proveedores procesados desde objeto:', proveedoresArray)
-  return proveedoresArray
 })
 
 // ✅ Función para formatear números
 const formatNumber = (number) => {
   return Number(number || 0).toLocaleString('es-CL')
 }
-
-// ✅ Watch para debuggear
-watch(datosVentas, (newVal) => {
-  console.log('🔄 datosVentas cambió:', newVal)
-  console.log('💰 totalVentas calculado:', totalVentas.value)
-}, { deep: true })
-
-watch(datosCompras, (newVal) => {
-  console.log('🔄 datosCompras cambió:', newVal)
-  console.log('💰 totalCompras calculado:', totalCompras.value)
-}, { deep: true })
 
 // ✅ Cargar datos al inicio
 // ── Estado de la actualización automática (cron) ───────────────────────────
