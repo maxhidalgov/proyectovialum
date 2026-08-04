@@ -113,6 +113,9 @@
                 </v-list-item>
               </template>
             </v-autocomplete>
+            <v-btn size="x-small" variant="text" color="primary" prepend-icon="mdi-account-plus" class="mt-1" @click="abrirCrearCliente">
+              Crear cliente nuevo
+            </v-btn>
           </v-col>
         </v-row>
 
@@ -153,6 +156,22 @@
           <span>{{ clp(totalPagos) }} / {{ clp(montoCalculado) }}{{ pagosOk ? ' ✓' : '' }}</span>
         </div>
 
+        <!-- Glosa personalizada (reemplaza el detalle de ventanas) -->
+        <v-textarea
+          v-model="glosa"
+          label="Glosa personalizada (opcional)"
+          placeholder="Ej: Suministro e instalación de ventanas de PVC según cotización"
+          density="compact"
+          variant="outlined"
+          rows="2"
+          auto-grow
+          hide-details
+          class="mt-2"
+        />
+        <div class="text-caption text-medium-emphasis mt-1">
+          Si la completas, el documento sale con <strong>una sola línea</strong> con este texto en vez de listar las ventanas. El monto no cambia.
+        </div>
+
         <!-- Observaciones -->
         <v-textarea
           v-model="form.observaciones"
@@ -162,7 +181,7 @@
           rows="2"
           auto-grow
           hide-details
-          class="mt-2"
+          class="mt-3"
         />
 
         <!-- Referencias (ej. orden de compra) -->
@@ -201,6 +220,46 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- ── Dialog crear cliente ─────────────────────────────────────────── -->
+  <v-dialog v-model="cliDialog.show" max-width="520">
+    <v-card>
+      <v-card-title class="d-flex align-center gap-2">
+        <v-icon color="primary">mdi-account-plus</v-icon> Crear cliente
+      </v-card-title>
+      <v-card-text>
+        <v-btn-toggle v-model="cliDialog.tipo" mandatory color="primary" density="compact" variant="outlined" class="mb-3">
+          <v-btn value="empresa" size="small">Empresa</v-btn>
+          <v-btn value="persona" size="small">Persona</v-btn>
+        </v-btn-toggle>
+        <v-text-field v-if="cliDialog.tipo === 'empresa'" v-model="cliDialog.company" label="Razón social" variant="outlined" density="compact" class="mb-2" hide-details />
+        <v-row v-else dense>
+          <v-col cols="6"><v-text-field v-model="cliDialog.firstName" label="Nombre" variant="outlined" density="compact" hide-details /></v-col>
+          <v-col cols="6"><v-text-field v-model="cliDialog.lastName" label="Apellido" variant="outlined" density="compact" hide-details /></v-col>
+        </v-row>
+        <v-text-field v-model="cliDialog.code" label="RUT (ej: 12345678-9)" variant="outlined" density="compact" class="mt-2 mb-2" hide-details />
+        <v-row dense>
+          <v-col cols="6"><v-text-field v-model="cliDialog.email" label="Email" variant="outlined" density="compact" hide-details /></v-col>
+          <v-col cols="6"><v-text-field v-model="cliDialog.phone" label="Teléfono" variant="outlined" density="compact" hide-details /></v-col>
+        </v-row>
+        <v-text-field v-model="cliDialog.activity" label="Giro" variant="outlined" density="compact" class="mt-2" hide-details />
+        <v-text-field v-model="cliDialog.address" label="Dirección" variant="outlined" density="compact" class="mt-2" hide-details />
+        <v-row dense class="mt-1">
+          <v-col cols="6"><v-text-field v-model="cliDialog.municipality" label="Comuna" variant="outlined" density="compact" hide-details /></v-col>
+          <v-col cols="6"><v-text-field v-model="cliDialog.city" label="Ciudad" variant="outlined" density="compact" hide-details /></v-col>
+        </v-row>
+        <div class="text-caption text-medium-emphasis mt-2">
+          Para <strong>facturas</strong>, Bsale suele exigir giro, dirección, comuna y ciudad.
+        </div>
+        <v-alert v-if="cliDialog.error" type="error" density="compact" variant="tonal" class="mt-3">{{ cliDialog.error }}</v-alert>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="cliDialog.show = false">Cancelar</v-btn>
+        <v-btn color="primary" :loading="cliDialog.loading" @click="guardarCliente">Crear</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
@@ -223,6 +282,47 @@ const cargando          = ref(false)
 const cargandoClientes  = ref(false)
 const generando         = ref(false)
 const error             = ref('')
+const glosa             = ref('')
+
+// Crear cliente (mismo flujo que Venta Express)
+const cliDialog = ref({ show: false, loading: false, error: '', tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' })
+
+function abrirCrearCliente() {
+  cliDialog.value = { show: true, loading: false, error: '', tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' }
+}
+
+async function guardarCliente() {
+  const d = cliDialog.value
+  if (!d.code) { d.error = 'Ingresa el RUT del cliente'; return }
+  d.loading = true
+  d.error = ''
+  try {
+    const payload = {
+      code: d.code,
+      email: d.email || undefined,
+      phone: d.phone || undefined,
+      activity: d.activity || undefined,
+      address: d.address || undefined,
+      municipality: d.municipality || undefined,
+      city: d.city || undefined,
+    }
+    if (d.tipo === 'empresa') payload.company = d.company
+    else { payload.firstName = d.firstName; payload.lastName = d.lastName }
+
+    const { data } = await api.post('/api/bsale-clientes/crear', payload)
+    const c = data.cliente
+    // Agregar a la lista y seleccionarlo
+    if (c && !clientesSincronizados.value.some(x => x.id === c.id)) {
+      clientesSincronizados.value.unshift(c)
+    }
+    if (c) form.value.cliente_facturacion_id = c.id
+    cliDialog.value.show = false
+  } catch (e) {
+    d.error = e.response?.data?.error || 'Error al crear el cliente'
+  } finally {
+    d.loading = false
+  }
+}
 const personalizado     = ref(false)
 const porcentaje        = ref(100)
 const tiposDocumento    = ref([])
@@ -327,6 +427,7 @@ async function inicializar() {
   form.value = { tipo_documento: null, observaciones: '', cliente_facturacion_id: null }
   pagos.value = [{ forma_pago: 'transferencia', monto: 0, voucher: '' }]
   referencias.value = []
+  glosa.value = ''
   // Pre-seleccionar saldo si ya hay documentos emitidos
   porcentaje.value = pctSaldo.value > 0 && pctSaldo.value < 100 ? pctSaldo.value : 100
 
@@ -382,6 +483,7 @@ async function generar() {
       tipo_documento:         form.value.tipo_documento,
       cliente_facturacion_id: form.value.cliente_facturacion_id,
       observaciones:          form.value.observaciones || undefined,
+      glosa:                  glosa.value || undefined,
       porcentaje:             porcentaje.value,
       pagos:                  pagos.value.map(p => ({ forma_pago: p.forma_pago, monto: Number(p.monto), voucher: p.voucher || undefined })),
       referencias:            referencias.value

@@ -74,6 +74,7 @@ class BsaleController extends Controller
             $observaciones        = $request->input('observaciones', '');
             $pagos                = $request->input('pagos', []);
             $referencias          = $request->input('referencias', []);
+            $glosa                = $request->input('glosa'); // glosa personalizada: 1 línea en vez de ventanas
             $porcentaje           = (float) $request->input('porcentaje', 100); // 100 = total completo
             $tipoEmision          = $porcentaje == 100 ? 'total' : ($porcentaje <= 50 ? 'anticipo' : 'saldo');
 
@@ -173,7 +174,8 @@ class BsaleController extends Controller
                     $observaciones,
                     $porcentaje,
                     $pagos,
-                    $referencias
+                    $referencias,
+                    $glosa
                 );
                 Log::info("✅ Payload construido exitosamente");
             } catch (\Exception $e) {
@@ -367,7 +369,8 @@ class BsaleController extends Controller
         $observaciones,
         $porcentaje = 100,
         array $pagos = [],
-        array $referencias = []
+        array $referencias = [],
+        $glosa = null
     ) {
         $detalles = [];
         $totalNeto = 0;
@@ -483,6 +486,20 @@ class BsaleController extends Controller
             Log::info('construirPayloadBsale: líneas escaladas para cuadrar total', [
                 'cotizacion' => $cotizacion->id, 'factor' => $factor, 'total_neto_cot' => round($totalNetoCot),
             ]);
+        }
+
+        // Glosa personalizada: reemplaza el detalle de ventanas por UNA sola línea
+        // con este texto. El monto no cambia (netUnitValue = neto ya cuadrado; el
+        // descuento por % se aplica igual con 'discount').
+        $glosaTxt = trim((string) $glosa);
+        if ($glosaTxt !== '') {
+            $detalles = [[
+                'netUnitValue' => round($totalNeto, 4),
+                'quantity'     => 1,
+                'taxId'        => '[1]',
+                'comment'      => $glosaTxt,
+                'discount'     => $descuentoLinea,
+            ]];
         }
 
         $label = $porcentaje <= 50 ? 'Anticipo' : 'Saldo';
