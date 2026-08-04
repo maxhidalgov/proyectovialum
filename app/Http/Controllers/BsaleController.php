@@ -497,7 +497,7 @@ class BsaleController extends Controller
                 'netUnitValue' => round($totalNeto, 4),
                 'quantity'     => 1,
                 'taxId'        => '[1]',
-                'comment'      => $glosaTxt,
+                'comment'      => mb_substr($glosaTxt, 0, 250),
                 'discount'     => $descuentoLinea,
             ]];
         }

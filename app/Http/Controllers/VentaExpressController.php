@@ -227,7 +227,7 @@ class VentaExpressController extends Controller
                 'netUnitValue' => round($neto, 4),
                 'quantity'     => $cant,
                 'taxId'        => '[1]',
-                'comment'      => mb_substr(trim($it['nombre']), 0, 100),
+                'comment'      => mb_substr(trim($it['nombre']), 0, 250), // Bsale/SII admiten glosas largas
                 'discount'     => $desc,
             ];
 
@@ -238,7 +238,7 @@ class VentaExpressController extends Controller
         // Observaciones (nota libre) → en boleta se antepone al primer ítem; en factura va como atributo "Nota"
         $obs = trim($data['observaciones'] ?? '');
         if ($obs !== '' && $esBoleta && !empty($details)) {
-            $details[0]['comment'] = mb_substr('[' . $obs . '] ' . $details[0]['comment'], 0, 100);
+            $details[0]['comment'] = mb_substr('[' . $obs . '] ' . $details[0]['comment'], 0, 250);
         }
 
         // Pagos (uno o varios). La forma de pago "principal" (mayor monto) se guarda para el resumen.

@@ -112,6 +112,7 @@
                       density="compact"
                       variant="plain"
                       hide-details
+                      maxlength="250"
                       placeholder="Detalle"
                     />
                     <span v-else class="text-body-2">{{ it.nombre }}</span>
@@ -155,6 +156,7 @@
                         density="compact"
                         variant="outlined"
                         hide-details
+                        maxlength="250"
                         placeholder="Detalle"
                       />
                       <span v-else class="text-body-2 font-weight-medium">{{ it.nombre }}</span>

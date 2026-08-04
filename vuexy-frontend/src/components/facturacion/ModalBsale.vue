@@ -165,7 +165,8 @@
           variant="outlined"
           rows="2"
           auto-grow
-          hide-details
+          maxlength="250"
+          counter="250"
           class="mt-2"
         />
         <div class="text-caption text-medium-emphasis mt-1">
