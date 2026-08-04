@@ -528,14 +528,23 @@ const kpis = computed(() => {
     prom_atraso: r.atrasos > 0 ? r.min_atraso / r.atrasos : 0,
   }))
   const top = sel => m.reduce((a, b) => (sel(b) > sel(a) ? b : a))
-  const mejor = top(r => r.pct_asist)
-  const punt = top(r => r.pct_punt)
+  // Solo quienes marcaron (a tiempo o atrasados) cuentan para asistencia/puntualidad
+  const conMarcas = m.filter(r => (r.a_tiempo + r.atrasos) > 0)
+  const mejor = conMarcas.length
+    ? conMarcas.reduce((a, b) => (b.pct_asist > a.pct_asist || (b.pct_asist === a.pct_asist && b.dias_horario > a.dias_horario)) ? b : a)
+    : null
+  const punt = conMarcas.length
+    ? conMarcas.reduce((a, b) => {
+        const ma = a.a_tiempo + a.atrasos, mb = b.a_tiempo + b.atrasos
+        return (b.pct_punt > a.pct_punt || (b.pct_punt === a.pct_punt && mb > ma)) ? b : a
+      })
+    : null
   const atras = top(r => r.min_atraso)
   const ausen = top(r => r.ausentes)
   const prom = top(r => r.prom_atraso)
   return [
-    { label: 'Mejor asistencia', icon: 'mdi-trophy', color: 'success', nombre: mejor.nombre, detalle: `${Math.round(mejor.pct_asist * 100)}% · ${mejor.ausentes} faltas` },
-    { label: 'Más puntual', icon: 'mdi-clock-check-outline', color: 'info', nombre: punt.nombre, detalle: `${Math.round(punt.pct_punt * 100)}% a tiempo` },
+    { label: 'Mejor asistencia', icon: 'mdi-trophy', color: 'success', nombre: mejor ? mejor.nombre : '—', detalle: mejor ? `${Math.round(mejor.pct_asist * 100)}% · ${mejor.ausentes} faltas` : 'sin marcas' },
+    { label: 'Más puntual', icon: 'mdi-clock-check-outline', color: 'info', nombre: punt ? punt.nombre : '—', detalle: punt ? `${Math.round(punt.pct_punt * 100)}% a tiempo (${punt.a_tiempo}/${punt.a_tiempo + punt.atrasos})` : 'sin marcas' },
     { label: 'Más atrasado', icon: 'mdi-timer-sand', color: 'warning', nombre: atras.min_atraso > 0 ? atras.nombre : '—', detalle: atras.min_atraso > 0 ? `${atras.min_atraso} min · ${atras.atrasos} atrasos` : 'sin atrasos' },
     { label: 'Más ausencias', icon: 'mdi-account-off-outline', color: 'error', nombre: ausen.ausentes > 0 ? ausen.nombre : '—', detalle: ausen.ausentes > 0 ? `${ausen.ausentes} faltas` : 'sin faltas' },
     { label: 'Peor prom. atraso', icon: 'mdi-chart-timeline-variant', color: 'warning', nombre: prom.prom_atraso > 0 ? prom.nombre : '—', detalle: prom.prom_atraso > 0 ? `${Math.round(prom.prom_atraso)} min/atraso` : 'sin atrasos' },

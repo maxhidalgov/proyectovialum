@@ -40,12 +40,6 @@ return [
         'api_key' => env('ANTHROPIC_API_KEY'),
     ],
 
-    'workera' => [
-        'api_user'     => env('WORKERA_API_USER'),
-        'api_key'      => env('WORKERA_API_KEY'),
-        'turno_inicio' => env('WORKERA_TURNO_INICIO', '09:00'), // HH:MM — hora de inicio del turno laboral
-    ],
-
     'bch' => [
         'token_url'      => env('BCH_TOKEN_URL', 'https://gw.apistore.bancochile.cl/token'),
         'api_base'       => env('BCH_API_BASE', 'https://gw.apistore.bancochile.cl/banco-chile/sandbox/v1/movimientos-cuenta'),
@@ -79,9 +73,13 @@ return [
 
     'workera' => [
         // Default: workera.com (el host que funciona; api.workera.com del manual NO responde)
-        'base_url' => env('WORKERA_BASE_URL', 'https://workera.com/apiClient/v1/'),
-        'api_user' => env('WORKERA_API_USER'),
-        'api_key'  => env('WORKERA_API_KEY'),
+        'base_url'     => env('WORKERA_BASE_URL', 'https://workera.com/apiClient/v1/'),
+        'api_user'     => env('WORKERA_API_USER'),
+        'api_key'      => env('WORKERA_API_KEY'),
+        'turno_inicio' => env('WORKERA_TURNO_INICIO', '09:00'), // HH:MM — usado por el analizador legacy del asistente IA
+        // Codes de empleados a EXCLUIR de los reportes de asistencia (no marcan, ej. dueño).
+        // CSV. Default: 17744090 (Max Hidalgo, dueño).
+        'excluir_codes' => array_values(array_filter(array_map('trim', explode(',', (string) env('WORKERA_EXCLUIR_CODES', '17744090'))))),
     ],
 
     // Token secreto para disparar la actualización diaria vía HTTP (cron externo)

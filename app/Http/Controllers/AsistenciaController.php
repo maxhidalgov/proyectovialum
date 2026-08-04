@@ -84,6 +84,9 @@ class AsistenciaController extends Controller
         $attendance  = $this->workera->getAsistencia($desde, $hasta)['data'] ?? [];
         $permisos    = $this->workera->getPermisosRango($desde, $hasta);
 
+        // Empleados a excluir de los reportes (no marcan, ej. dueño). Config CSV.
+        $excluir = (array) config('services.workera.excluir_codes', []);
+
         // El reloj registra entrada Y salida como tipo 0, así que por code+fecha tomamos:
         //   entrada = marca más TEMPRANA · salida = marca más TARDÍA (si es posterior).
         // Consideramos tipos 0 (entrada) y 1 (salida); ignoramos descansos (4/5).
@@ -125,6 +128,11 @@ class AsistenciaController extends Controller
         foreach ($schedules as $emp) {
             $e    = $emp['employee'] ?? [];
             $code = (string) ($e['code'] ?? '');
+
+            // Excluir empleados configurados (dueño u otros que no marcan)
+            if (in_array($code, $excluir, true)) {
+                continue;
+            }
 
             // Excluir trabajadores que ya no trabajan (inactivos / sin contrato)
             $estadoEmp = strtoupper($e['employeeStatus'] ?? 'ACTIVO');
