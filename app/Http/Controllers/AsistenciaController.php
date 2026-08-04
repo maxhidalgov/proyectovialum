@@ -87,6 +87,9 @@ class AsistenciaController extends Controller
         // Empleados a excluir de los reportes (no marcan, ej. dueño). Config CSV.
         $excluir = (array) config('services.workera.excluir_codes', []);
 
+        // Feriados de Chile en el rango: no cuentan como ausencia.
+        $feriados = app(\App\Services\FeriadosService::class)->set($desde, $hasta);
+
         // El reloj registra entrada Y salida como tipo 0, así que por code+fecha tomamos:
         //   entrada = marca más TEMPRANA · salida = marca más TARDÍA (si es posterior).
         // Consideramos tipos 0 (entrada) y 1 (salida); ignoramos descansos (4/5).
@@ -149,7 +152,7 @@ class AsistenciaController extends Controller
                     'code' => $code, 'nombre' => $nombre,
                     'sucursal' => $sucursal, 'departamento' => $departamento,
                     'dias_horario' => 0, 'a_tiempo' => 0, 'atrasos' => 0,
-                    'ausentes' => 0, 'permisos' => 0, 'min_atraso' => 0,
+                    'ausentes' => 0, 'permisos' => 0, 'min_atraso' => 0, 'feriados' => 0,
                 ];
             }
 
@@ -168,8 +171,18 @@ class AsistenciaController extends Controller
 
                 $atrasoMin = 0;
                 $realFmt   = null;
+                $esFeriado = isset($feriados[$fecha]);
 
-                if ($permiso !== null) {
+                if ($esFeriado) {
+                    // Feriado: no cuenta como ausencia ni como día de horario. Si igual
+                    // marcó (trabajó el feriado), mostramos la hora pero sin afectar stats.
+                    $estado = 'Feriado';
+                    $permiso = $feriados[$fecha];
+                    $resumen[$code]['feriados']++;
+                    if ($realStr !== null) {
+                        $realFmt = Carbon::parse($realStr)->format('H:i');
+                    }
+                } elseif ($permiso !== null) {
                     $estado = 'Permiso';
                     $resumen[$code]['permisos']++;
                 } elseif ($realStr === null) {
@@ -189,7 +202,10 @@ class AsistenciaController extends Controller
                     }
                 }
 
-                $resumen[$code]['dias_horario']++;
+                // El feriado no suma a "días con horario" (no es día laboral).
+                if (!$esFeriado) {
+                    $resumen[$code]['dias_horario']++;
+                }
 
                 // Salida = marca más tardía, solo si es posterior a la entrada (si es la
                 // misma marca / mismo minuto, no hay salida real registrada).

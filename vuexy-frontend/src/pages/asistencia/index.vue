@@ -168,7 +168,8 @@
               <span class="text-success">verde</span> = a tiempo ·
               <span class="text-warning">naranjo</span> = atraso ·
               <span class="text-error">rojo</span> = ausente ·
-              <span class="text-info">azul</span> = permiso · · = sin horario
+              <span class="text-info">azul</span> = permiso ·
+              <span class="text-secondary">gris</span> = feriado · · = sin horario
             </div>
           </VCardText>
         </VCard>
@@ -399,7 +400,7 @@ const tarjetasDia = computed(() => {
 })
 
 function colorEstado(e) {
-  return { 'A tiempo': 'success', 'Atraso': 'warning', 'Ausente': 'error', 'Permiso': 'info' }[e] || 'default'
+  return { 'A tiempo': 'success', 'Atraso': 'warning', 'Ausente': 'error', 'Permiso': 'info', 'Feriado': 'secondary' }[e] || 'default'
 }
 
 // ── Filtro por trabajador y grilla diaria ──────────────────────────────────
@@ -446,6 +447,7 @@ function fmtDiaCol(fecha) {
 }
 
 function celdaTexto(d) {
+  if (d.estado === 'Feriado') return d.real ? `Fer. ${d.real}` : 'Feriado'
   if (d.estado === 'Permiso') return 'Perm.'
   if (d.estado === 'Ausente') return 'Ausente'
   const ent = d.real || '—'
@@ -458,6 +460,7 @@ function celdaClase(d) {
     'Atraso': 'text-warning font-weight-bold',
     'Ausente': 'text-error',
     'Permiso': 'text-info',
+    'Feriado': 'text-secondary',
   }[d.estado] || ''
 }
 
