@@ -85,6 +85,41 @@ class DocumentoFacturacionController extends Controller
         return response()->json($doc->fresh());
     }
 
+    /**
+     * Anula un documento de facturación local (cuando la factura se anuló en Bsale
+     * con NC y se re-emitió por fuera). Queda 'anulado': no cuenta como facturado.
+     * Si la cotización estaba marcada Facturada y ya no cubre el total, se revierte.
+     */
+    public function anular($id)
+    {
+        $doc = DocumentoFacturacion::findOrFail($id);
+
+        if ($doc->estado === 'anulado') {
+            return response()->json(['message' => 'El documento ya está anulado'], 422);
+        }
+
+        $doc->update(['estado' => 'anulado']);
+
+        // Revertir el estado de la cotización si ya no está totalmente facturada
+        if ($doc->cotizacion_id) {
+            $cot = Cotizacion::find($doc->cotizacion_id);
+            if ($cot) {
+                $emitido = DocumentoFacturacion::where('cotizacion_id', $cot->id)
+                    ->where('estado', 'emitido')->sum('monto');
+                $totalBruto = round(((float) $cot->total) * 1.19); // total es NETO
+                $facturadaId = optional(\App\Models\EstadoCotizacion::where('nombre', 'Facturada')->first())->id;
+                if ($emitido < $totalBruto && $facturadaId && $cot->estado_cotizacion_id == $facturadaId) {
+                    $aprobadaId = optional(\App\Models\EstadoCotizacion::where('nombre', 'Aprobada')->first())->id;
+                    if ($aprobadaId) {
+                        $cot->update(['estado_cotizacion_id' => $aprobadaId]);
+                    }
+                }
+            }
+        }
+
+        return response()->json($doc->fresh());
+    }
+
 
     // Listar documentos de una cotización
     public function index($cotizacionId)

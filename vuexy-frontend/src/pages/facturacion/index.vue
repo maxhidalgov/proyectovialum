@@ -247,24 +247,36 @@
                         <!-- Cabecera del doc -->
                         <div class="d-flex align-center justify-space-between mb-2">
                           <div class="d-flex align-center gap-1">
-                            <v-icon size="14" :color="doc.estado === 'emitido' ? 'success' : 'warning'">
-                              {{ doc.estado === 'emitido' ? 'mdi-check-circle' : 'mdi-clock-outline' }}
+                            <v-icon size="14" :color="doc.estado === 'emitido' ? 'success' : doc.estado === 'anulado' ? 'error' : 'warning'">
+                              {{ doc.estado === 'emitido' ? 'mdi-check-circle' : doc.estado === 'anulado' ? 'mdi-cancel' : 'mdi-clock-outline' }}
                             </v-icon>
-                            <span class="text-body-2 font-weight-medium text-capitalize">{{ doc.tipo }}</span>
+                            <span class="text-body-2 font-weight-medium text-capitalize"
+                                  :class="doc.estado === 'anulado' ? 'text-decoration-line-through text-disabled' : ''">{{ doc.tipo }}</span>
                             <span class="text-caption text-medium-emphasis">({{ doc.porcentaje }}%)</span>
+                            <v-chip v-if="doc.estado === 'anulado'" size="x-small" color="error" variant="tonal" class="ml-1">Anulado</v-chip>
                           </div>
-                          <v-btn
-                            v-if="doc.url_pdf_bsale"
-                            icon size="x-small" variant="text" color="info"
-                            :href="doc.url_pdf_bsale" target="_blank"
-                          >
-                            <v-icon size="14">mdi-file-pdf-box</v-icon>
-                          </v-btn>
+                          <div class="d-flex align-center">
+                            <v-btn
+                              v-if="doc.url_pdf_bsale"
+                              icon size="x-small" variant="text" color="info"
+                              :href="doc.url_pdf_bsale" target="_blank"
+                            >
+                              <v-icon size="14">mdi-file-pdf-box</v-icon>
+                            </v-btn>
+                            <v-btn
+                              v-if="doc.estado === 'emitido'"
+                              size="x-small" variant="text" color="error" class="text-none"
+                              @click.stop="anularDocumento(doc, item)"
+                            >
+                              Anular
+                            </v-btn>
+                          </div>
                         </div>
 
                         <!-- Monto y N° doc -->
                         <div class="text-caption text-medium-emphasis mb-2">
-                          <span class="font-weight-medium text-body-2">{{ clp(doc.monto) }}</span>
+                          <span class="font-weight-medium text-body-2"
+                                :class="doc.estado === 'anulado' ? 'text-decoration-line-through text-disabled' : ''">{{ clp(doc.monto) }}</span>
                           <span v-if="doc.numero_documento_bsale" class="ml-2">· Doc #{{ doc.numero_documento_bsale }}</span>
                           <span v-if="doc.fecha_emision" class="ml-2">· {{ doc.fecha_emision }}</span>
                         </div>
@@ -308,7 +320,8 @@
                             </v-btn>
                           </template>
                         </template>
-                        <v-chip v-else size="x-small" color="warning" variant="tonal">Pendiente de emisión</v-chip>
+                        <v-chip v-else-if="doc.estado === 'pendiente'" size="x-small" color="warning" variant="tonal">Pendiente de emisión</v-chip>
+                        <div v-else-if="doc.estado === 'anulado'" class="text-caption text-disabled">Anulado en Bsale (no cuenta como facturado)</div>
                       </div>
 
                       <!-- Vincular doc Bsale huérfano -->
@@ -785,6 +798,21 @@ async function eliminarCotizacion(item) {
 async function onDocumentoGenerado() {
   mostrarSnack('Documento generado correctamente')
   await cargarCotizaciones()
+}
+
+async function anularDocumento(doc, item) {
+  if (!confirm(
+    `¿Anular el documento ${doc.tipo} (${doc.porcentaje}%) de $${Number(doc.monto).toLocaleString('es-CL')}?\n\n` +
+    `Úsalo si anulaste esta factura en Bsale (nota de crédito). Dejará de contar como facturado. ` +
+    `Si re-emitiste otra factura en Bsale, luego vincúlala con "Vincular doc Bsale".`,
+  )) return
+  try {
+    await api.patch(`/api/documentos-facturacion/${doc.id}/anular`)
+    mostrarSnack('Documento anulado')
+    await cargarCotizaciones()
+  } catch (e) {
+    mostrarSnack(e.response?.data?.message || 'Error al anular el documento', 'error')
+  }
 }
 
 function limpiarFiltros() {
