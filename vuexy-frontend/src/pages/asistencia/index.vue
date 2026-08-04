@@ -15,6 +15,7 @@
     <VTabs v-model="tab" class="mb-4">
       <VTab value="diario">Diario</VTab>
       <VTab value="semanal">Semanal</VTab>
+      <VTab value="periodo">Resumen / KPIs</VTab>
     </VTabs>
 
     <!-- ── DIARIO ──────────────────────────────────────────────────────────── -->
@@ -173,6 +174,148 @@
         </VCard>
       </template>
     </div>
+
+    <!-- ── RESUMEN / KPIs ──────────────────────────────────────────────────── -->
+    <div v-if="tab === 'periodo'">
+      <VCard class="mb-4">
+        <VCardText class="d-flex flex-wrap align-center" style="gap:16px">
+          <div class="d-flex" style="gap:8px">
+            <VBtn
+              :variant="modoPeriodo === 'mes' ? 'flat' : 'outlined'"
+              :color="modoPeriodo === 'mes' ? 'primary' : undefined"
+              class="text-none" size="small"
+              @click="modoPeriodo = 'mes'"
+            >Por mes</VBtn>
+            <VBtn
+              :variant="modoPeriodo === 'rango' ? 'flat' : 'outlined'"
+              :color="modoPeriodo === 'rango' ? 'primary' : undefined"
+              class="text-none" size="small"
+              @click="modoPeriodo = 'rango'"
+            >Rango</VBtn>
+          </div>
+
+          <template v-if="modoPeriodo === 'mes'">
+            <VSelect v-model.number="mesSel" :items="mesesOpts" label="Mes" density="compact" hide-details style="max-width:170px" />
+            <VSelect v-model.number="anioSel" :items="aniosOpts" label="Año" density="compact" hide-details style="max-width:120px" />
+          </template>
+          <template v-else>
+            <VTextField v-model="pDesde" type="date" label="Desde" density="compact" hide-details style="max-width:180px" />
+            <VTextField v-model="pHasta" type="date" label="Hasta" density="compact" hide-details style="max-width:180px" />
+          </template>
+
+          <VTextField v-model.number="tolerancia" type="number" label="Tolerancia (min)" density="compact" hide-details style="max-width:150px" />
+          <VBtn color="primary" :loading="loadingPer" @click="cargarPeriodo">
+            <VIcon start>mdi-chart-box-outline</VIcon>Ver resumen
+          </VBtn>
+        </VCardText>
+      </VCard>
+
+      <template v-if="repPer">
+        <!-- KPIs -->
+        <VRow class="mb-1">
+          <VCol v-for="k in kpis" :key="k.label" cols="12" sm="6" md="4" lg="">
+            <VCard :color="k.color" variant="tonal" height="100%">
+              <VCardText class="py-3">
+                <div class="d-flex align-center mb-1" style="gap:6px">
+                  <VIcon size="18">{{ k.icon }}</VIcon>
+                  <span class="text-caption font-weight-medium">{{ k.label }}</span>
+                </div>
+                <div class="text-subtitle-1 font-weight-bold text-truncate" :title="k.nombre">{{ k.nombre || '—' }}</div>
+                <div class="text-caption">{{ k.detalle }}</div>
+              </VCardText>
+            </VCard>
+          </VCol>
+        </VRow>
+
+        <!-- Resumen por trabajador -->
+        <VCard>
+          <VCardText class="pb-0">
+            <VAutocomplete
+              v-model="filtroTrabajador"
+              :items="trabajadoresPer"
+              item-title="nombre" item-value="code"
+              label="Filtrar por trabajador"
+              density="compact" variant="outlined" clearable hide-details
+              style="max-width:320px"
+            />
+          </VCardText>
+          <VDataTable :headers="headersPer" :items="resumenPerFiltrado" :items-per-page="50" density="compact"
+                      :sort-by="[{ key: 'ausentes', order: 'desc' }]">
+            <template #item.pct_asistencia="{ item }">
+              <VChip size="x-small" :color="item.pct_asistencia >= 95 ? 'success' : item.pct_asistencia >= 85 ? 'warning' : 'error'" variant="tonal">
+                {{ item.pct_asistencia }}%
+              </VChip>
+            </template>
+            <template #item.atrasos="{ item }">
+              <span :class="item.atrasos > 0 ? 'text-warning' : 'text-disabled'">{{ item.atrasos }}</span>
+            </template>
+            <template #item.min_atraso="{ item }">
+              <span :class="item.min_atraso > 0 ? 'text-warning' : 'text-disabled'">{{ item.min_atraso || '—' }}</span>
+            </template>
+            <template #item.ausentes="{ item }">
+              <VChip v-if="item.ausentes > 0" size="x-small" color="error" variant="tonal">{{ item.ausentes }}</VChip>
+              <span v-else class="text-disabled">0</span>
+            </template>
+            <template #item.acciones="{ item }">
+              <VBtn size="x-small" variant="text" color="primary" class="text-none"
+                    :disabled="item.ausentes === 0 && item.atrasos === 0" @click="abrirDetalle(item)">
+                Ver detalle
+              </VBtn>
+            </template>
+            <template #bottom>
+              <div class="pa-3 text-caption text-medium-emphasis">{{ resumenPerFiltrado.length }} trabajadores · {{ repPer.desde }} a {{ repPer.hasta }}</div>
+            </template>
+          </VDataTable>
+        </VCard>
+      </template>
+    </div>
+
+    <!-- Detalle de faltas/atrasos por persona -->
+    <VDialog v-model="dlgDetalle" max-width="620">
+      <VCard v-if="detalleSel">
+        <VCardTitle class="d-flex align-center justify-space-between">
+          <span class="text-subtitle-1">{{ detalleSel.nombre }}</span>
+          <VBtn icon="mdi-close" variant="text" size="small" @click="dlgDetalle = false" />
+        </VCardTitle>
+        <VCardText>
+          <div class="d-flex flex-wrap mb-3" style="gap:8px">
+            <VChip size="small" color="error" variant="tonal">{{ detalleSel.ausentes }} faltas</VChip>
+            <VChip size="small" color="warning" variant="tonal">{{ detalleSel.atrasos }} atrasos ({{ detalleSel.min_atraso }} min)</VChip>
+            <VChip size="small" color="success" variant="tonal">{{ detalleSel.pct_asistencia }}% asistencia</VChip>
+          </div>
+
+          <div v-if="detalleDias.ausentes.length" class="mb-3">
+            <div class="text-caption font-weight-bold text-error mb-1">Días que faltó ({{ detalleDias.ausentes.length }})</div>
+            <VTable density="compact">
+              <tbody>
+                <tr v-for="d in detalleDias.ausentes" :key="d.fecha">
+                  <td class="text-no-wrap">{{ fmtFechaLarga(d.fecha) }}</td>
+                  <td class="text-medium-emphasis">{{ d.turno || '—' }}</td>
+                  <td class="text-medium-emphasis">esperado {{ d.esperada }}</td>
+                </tr>
+              </tbody>
+            </VTable>
+          </div>
+
+          <div v-if="detalleDias.atrasos.length">
+            <div class="text-caption font-weight-bold text-warning mb-1">Días con atraso ({{ detalleDias.atrasos.length }})</div>
+            <VTable density="compact">
+              <tbody>
+                <tr v-for="d in detalleDias.atrasos" :key="d.fecha">
+                  <td class="text-no-wrap">{{ fmtFechaLarga(d.fecha) }}</td>
+                  <td>llegó {{ d.real }}</td>
+                  <td class="text-warning">+{{ d.atraso_min }} min</td>
+                </tr>
+              </tbody>
+            </VTable>
+          </div>
+
+          <div v-if="!detalleDias.ausentes.length && !detalleDias.atrasos.length" class="text-center text-medium-emphasis py-4">
+            Sin faltas ni atrasos en el período 🎉
+          </div>
+        </VCardText>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -201,6 +344,23 @@ const desde = ref(lunesDeEstaSemana())
 const hasta = ref(hoy)
 const loadingSem = ref(false)
 const repSem = ref(null)
+
+// Período / KPIs
+const now2 = new Date()
+const modoPeriodo = ref('mes')
+const mesSel = ref(now2.getMonth() + 1)
+const anioSel = ref(now2.getFullYear())
+const pDesde = ref(lunesDeEstaSemana())
+const pHasta = ref(hoy)
+const loadingPer = ref(false)
+const repPer = ref(null)
+const mesesOpts = [
+  { title: 'Enero', value: 1 }, { title: 'Febrero', value: 2 }, { title: 'Marzo', value: 3 },
+  { title: 'Abril', value: 4 }, { title: 'Mayo', value: 5 }, { title: 'Junio', value: 6 },
+  { title: 'Julio', value: 7 }, { title: 'Agosto', value: 8 }, { title: 'Septiembre', value: 9 },
+  { title: 'Octubre', value: 10 }, { title: 'Noviembre', value: 11 }, { title: 'Diciembre', value: 12 },
+]
+const aniosOpts = [now2.getFullYear() - 1, now2.getFullYear(), now2.getFullYear() + 1]
 
 const headersDia = [
   { title: 'Trabajador', value: 'nombre' },
@@ -326,6 +486,107 @@ async function cargarSemanal() {
     repSem.value = null
   } finally {
     loadingSem.value = false
+  }
+}
+
+// ── Período / KPIs ─────────────────────────────────────────────────────────
+const headersPer = [
+  { title: 'Trabajador', value: 'nombre' },
+  { title: 'Días c/horario', value: 'dias_horario' },
+  { title: 'A tiempo', value: 'a_tiempo' },
+  { title: 'Atrasos', value: 'atrasos' },
+  { title: 'Min. atraso', value: 'min_atraso' },
+  { title: 'Ausencias', value: 'ausentes' },
+  { title: '% Asist.', value: 'pct_asistencia' },
+  { title: '', value: 'acciones', sortable: false },
+]
+
+const resumenPer = computed(() =>
+  (repPer.value?.resumen || []).map(r => ({
+    ...r,
+    pct_asistencia: r.dias_horario > 0 ? Math.round((r.dias_horario - r.ausentes) / r.dias_horario * 100) : 0,
+  })),
+)
+
+const trabajadoresPer = computed(() =>
+  (repPer.value?.resumen || [])
+    .map(r => ({ code: r.code, nombre: r.nombre }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+)
+
+const resumenPerFiltrado = computed(() =>
+  filtroTrabajador.value ? resumenPer.value.filter(r => r.code === filtroTrabajador.value) : resumenPer.value,
+)
+
+const kpis = computed(() => {
+  const arr = (repPer.value?.resumen || []).filter(r => r.dias_horario > 0)
+  if (!arr.length) return []
+  const m = arr.map(r => ({
+    ...r,
+    pct_asist: (r.dias_horario - r.ausentes) / r.dias_horario,
+    pct_punt: (r.a_tiempo + r.atrasos) > 0 ? r.a_tiempo / (r.a_tiempo + r.atrasos) : 1,
+    prom_atraso: r.atrasos > 0 ? r.min_atraso / r.atrasos : 0,
+  }))
+  const top = sel => m.reduce((a, b) => (sel(b) > sel(a) ? b : a))
+  const mejor = top(r => r.pct_asist)
+  const punt = top(r => r.pct_punt)
+  const atras = top(r => r.min_atraso)
+  const ausen = top(r => r.ausentes)
+  const prom = top(r => r.prom_atraso)
+  return [
+    { label: 'Mejor asistencia', icon: 'mdi-trophy', color: 'success', nombre: mejor.nombre, detalle: `${Math.round(mejor.pct_asist * 100)}% · ${mejor.ausentes} faltas` },
+    { label: 'Más puntual', icon: 'mdi-clock-check-outline', color: 'info', nombre: punt.nombre, detalle: `${Math.round(punt.pct_punt * 100)}% a tiempo` },
+    { label: 'Más atrasado', icon: 'mdi-timer-sand', color: 'warning', nombre: atras.min_atraso > 0 ? atras.nombre : '—', detalle: atras.min_atraso > 0 ? `${atras.min_atraso} min · ${atras.atrasos} atrasos` : 'sin atrasos' },
+    { label: 'Más ausencias', icon: 'mdi-account-off-outline', color: 'error', nombre: ausen.ausentes > 0 ? ausen.nombre : '—', detalle: ausen.ausentes > 0 ? `${ausen.ausentes} faltas` : 'sin faltas' },
+    { label: 'Peor prom. atraso', icon: 'mdi-chart-timeline-variant', color: 'warning', nombre: prom.prom_atraso > 0 ? prom.nombre : '—', detalle: prom.prom_atraso > 0 ? `${Math.round(prom.prom_atraso)} min/atraso` : 'sin atrasos' },
+  ]
+})
+
+// Detalle de faltas/atrasos por persona
+const dlgDetalle = ref(false)
+const detalleSel = ref(null)
+function abrirDetalle(item) {
+  detalleSel.value = { ...item, min_atraso: item.min_atraso || 0 }
+  dlgDetalle.value = true
+}
+const detalleDias = computed(() => {
+  const res = { ausentes: [], atrasos: [] }
+  if (!detalleSel.value || !repPer.value) return res
+  for (const d of repPer.value.dias) {
+    if (d.code !== detalleSel.value.code) continue
+    if (d.estado === 'Ausente') res.ausentes.push(d)
+    else if (d.estado === 'Atraso') res.atrasos.push(d)
+  }
+  res.ausentes.sort((a, b) => a.fecha.localeCompare(b.fecha))
+  res.atrasos.sort((a, b) => a.fecha.localeCompare(b.fecha))
+  return res
+})
+function fmtFechaLarga(f) {
+  return new Date(f + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'long' })
+}
+
+async function cargarPeriodo() {
+  loadingPer.value = true
+  error.value = ''
+  try {
+    let d, h
+    if (modoPeriodo.value === 'mes') {
+      const mm = String(mesSel.value).padStart(2, '0')
+      const last = new Date(anioSel.value, mesSel.value, 0).getDate()
+      d = `${anioSel.value}-${mm}-01`
+      h = `${anioSel.value}-${mm}-${String(last).padStart(2, '0')}`
+    } else {
+      d = pDesde.value
+      h = pHasta.value
+    }
+    const { data } = await axios.get('/api/asistencia/semanal', { params: { desde: d, hasta: h, tolerancia: tolerancia.value } })
+    repPer.value = data
+    filtroTrabajador.value = null
+  } catch (e) {
+    error.value = e.response?.data?.error || 'No se pudo cargar el resumen del período'
+    repPer.value = null
+  } finally {
+    loadingPer.value = false
   }
 }
 
