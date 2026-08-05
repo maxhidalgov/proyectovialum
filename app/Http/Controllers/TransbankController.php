@@ -529,6 +529,7 @@ class TransbankController extends Controller
             ->leftJoin('transbank_factura as tvf', 'tvf.transaccion_id', '=', 'tt.id')
             ->leftJoin('ingresos_manuales as im', 'im.transbank_transaccion_id', '=', 'tt.id')
             ->where('tt.tipo', 'Venta')
+            ->where('tt.monto_original', '>', 0) // ignorar transacciones en $0 (anulaciones/auth)
             ->whereNotNull('tt.fecha_movimiento')
             ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
             ->where(fn($q) => $q->whereNull('tt.codigo_autorizacion')->orWhere('tt.codigo_autorizacion', '!=', '000000'))
@@ -955,6 +956,9 @@ class TransbankController extends Controller
         $query = DB::table('documentos_facturacion as df')
             ->where('df.estado', 'emitido')
             ->whereNotNull('df.numero_documento_bsale')
+            // Excluir BOLETAS (tipo 1): se concilian por resumen mensual, no 1×1.
+            // Aquí solo se vinculan facturas/notas de venta.
+            ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->whereBetween('df.fecha_emision', [$desde, $hasta])
             ->when($soloTarjeta, fn($q2) => $q2->where('df.pagado_con_tarjeta', 1))
             // Solo mostrar documentos donde el monto Transbank ya vinculado < monto del documento
