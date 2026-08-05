@@ -12,7 +12,7 @@ Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']
 Route::post('/importar-productos', [ImportacionController::class, 'importarProductos']);
 Route::post('/importar-pcp', [ImportacionController::class, 'importarProductoColorProveedor']);
 
-Route::get('/{any}', function (string $any) {
+Route::get('/{any}', function (string $any = '') {
     // Un asset con hash que ya no existe (deploy nuevo) NO debe devolver el SPA:
     // eso genera el error de MIME "Expected a JavaScript module ... text/html".
     // Si existe lo servimos (por si el server no maneja estáticos); si no, 404
