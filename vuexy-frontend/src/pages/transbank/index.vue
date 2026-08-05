@@ -1546,13 +1546,19 @@ async function abrirMatchManual(deposito) {
   try {
     const { data } = await axios.get('/api/conciliacion/movimientos', {
       params: {
-        tipo:       'C',
-        desde:      offsetDias(deposito.fecha_abono, -5),
-        hasta:      offsetDias(deposito.fecha_abono, +3),
-        conciliado: false, // solo movimientos disponibles (no ya conciliados)
+        tipo:  'C',
+        desde: offsetDias(deposito.fecha_abono, -5),
+        hasta: offsetDias(deposito.fecha_abono, +3),
       },
     })
-    movimientosDisponibles.value = (data.data ?? data).filter(m => Number(m.monto) > 0)
+    // El endpoint responde { movimientos: { data: [...] (paginado) }, totales }.
+    // NO filtramos por 'conciliado': en abonos Transbank el 85% queda marcado
+    // conciliado/categoria=Transbank aunque su abono aún no esté vinculado.
+    const lista = data.movimientos?.data ?? data.movimientos ?? data.data ?? data
+    const total = Number(deposito.total_neto ?? 0)
+    movimientosDisponibles.value = (Array.isArray(lista) ? lista : [])
+      .filter(m => Number(m.monto) > 0)
+      .sort((a, b) => Math.abs(Number(a.monto) - total) - Math.abs(Number(b.monto) - total))
   } catch {
     movimientosDisponibles.value = []
   } finally {
