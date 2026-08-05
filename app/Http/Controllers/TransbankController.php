@@ -514,8 +514,15 @@ class TransbankController extends Controller
             ->get();
 
         // 4. Transacciones sin documento vinculado.
-        //    Excluye: BOLETA (se concilian a nivel período), ajustes Transbank (cod_autorizacion = '000000'),
-        //    y transacciones que ya tienen un ingreso manual registrado.
+        //    Excluye:
+        //      - ajustes Transbank (cod_autorizacion = '000000'),
+        //      - transacciones ya vinculadas a una factura (transbank_factura),
+        //      - transacciones con ingreso manual,
+        //      - BOLETAS: transacciones cuyo voucher calza con una boleta emitida
+        //        (tipo_documento_bsale_id = 1). Las boletas se concilian por resumen
+        //        mensual, no 1×1; el voucher (obligatorio en Venta Express) permite
+        //        identificarlas y sacarlas de este listado. Boletas sin voucher
+        //        (históricas / efectivo) no se pueden filtrar así y pueden aparecer.
         $sinDocBase = DB::table('transbank_transacciones as tt')
             ->join('transbank_abonos as ta', 'ta.id', '=', 'tt.abono_id')
             ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
@@ -526,7 +533,14 @@ class TransbankController extends Controller
             ->whereRaw("DATE_FORMAT(tt.fecha_movimiento, '%Y-%m') = ?", [$periodo])
             ->where(fn($q) => $q->whereNull('tt.codigo_autorizacion')->orWhere('tt.codigo_autorizacion', '!=', '000000'))
             ->whereNull('tvf.transaccion_id')
-            ->whereNull('im.id');
+            ->whereNull('im.id')
+            ->whereRaw("(tt.nro_voucher IS NULL OR tt.nro_voucher = '' OR NOT EXISTS (
+                SELECT 1 FROM documentos_facturacion dfb
+                WHERE dfb.tipo_documento_bsale_id = 1
+                  AND dfb.nro_comprobante_transbank IS NOT NULL
+                  AND dfb.nro_comprobante_transbank <> ''
+                  AND CAST(dfb.nro_comprobante_transbank AS UNSIGNED) = CAST(tt.nro_voucher AS UNSIGNED)
+            ))");
 
         $sinDocRows = (clone $sinDocBase)
             // Intenta inferir el tipo buscando un doc de Bsale con voucher coincidente (no vinculado aún)
