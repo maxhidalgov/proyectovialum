@@ -1544,11 +1544,12 @@ async function abrirMatchManual(deposito) {
   dialogMatch.value            = true
   loadingMovimientos.value     = true
   try {
-    const { data } = await axios.get('/api/movimientos-bancarios', {
+    const { data } = await axios.get('/api/conciliacion/movimientos', {
       params: {
-        tipo:  'C',
-        desde: offsetDias(deposito.fecha_abono, -5),
-        hasta: offsetDias(deposito.fecha_abono, +3),
+        tipo:       'C',
+        desde:      offsetDias(deposito.fecha_abono, -5),
+        hasta:      offsetDias(deposito.fecha_abono, +3),
+        conciliado: false, // solo movimientos disponibles (no ya conciliados)
       },
     })
     movimientosDisponibles.value = (data.data ?? data).filter(m => Number(m.monto) > 0)
