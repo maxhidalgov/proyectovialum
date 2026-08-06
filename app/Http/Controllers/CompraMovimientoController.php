@@ -69,6 +69,12 @@ class CompraMovimientoController extends Controller
         $ncPagado    = DB::table('compra_nc_aplicacion')->where('factura_id', $compraId)->sum('monto');
         $saldoPendiente = max(0, (float) $compra->total - (float) $bancoPagado - (float) $ncPagado);
 
+        // Ventana de fecha: solo movimientos desde 90 días antes de la emisión de la
+        // factura en adelante. Un pago es en/después de la factura (a veces un poco
+        // antes); no tiene sentido ofrecer movimientos de años anteriores.
+        $fechaRef   = $compra->fecha_emision ?? $compra->fecha_recepcion;
+        $desdeFecha = $fechaRef ? date('Y-m-d', strtotime($fechaRef . ' -90 days')) : null;
+
         // Saldo real = monto − lo asignado en TODAS las tablas de asignación de débitos
         $movimientos = DB::table('movimientos_bancarios as m')
             ->leftJoin(
@@ -91,6 +97,7 @@ class CompraMovimientoController extends Controller
             })
             ->where('m.tipo', 'D')
             ->where('m.conciliado', false)
+            ->when($desdeFecha, fn($q) => $q->where('m.fecha_contable', '>=', $desdeFecha))
             ->when($buscar, function ($q) use ($buscar) {
                 $q->where(function ($sq) use ($buscar) {
                     $sq->where('m.descripcion', 'like', "%$buscar%")
