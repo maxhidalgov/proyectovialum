@@ -237,7 +237,17 @@
                   </td>
                   <!-- Montos -->
                   <td class="text-right text-caption">{{ fmt(item.total) }}</td>
-                  <td class="text-right text-caption" :class="item.total_abonado > 0 ? 'text-success' : ''">{{ fmt(item.total_abonado) }}</td>
+                  <td class="text-right">
+                    <div class="text-caption" :class="item.total_abonado > 0 ? 'text-success' : ''">{{ fmt(item.total_abonado) }}</div>
+                    <v-tooltip v-if="item.falta_conciliar > 0" location="top"
+                      :text="`Pagado al emitir (${fmt(item.falta_conciliar)}) pero aún sin conciliar en el banco. Al conciliar se pone en verde.`">
+                      <template #activator="{ props }">
+                        <v-chip v-bind="props" size="x-small" color="warning" variant="tonal" class="cursor-pointer mt-1" to="/facturacion">
+                          <v-icon start size="11">mdi-alert-circle-outline</v-icon>Falta conciliar
+                        </v-chip>
+                      </template>
+                    </v-tooltip>
+                  </td>
                   <td class="text-right">
                     <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">{{ fmt(item.saldo) }}</v-chip>
                   </td>

@@ -29,23 +29,43 @@ class OperacionesController extends Controller
 
         $cotizacionIds = $cotizaciones->pluck('id');
 
-        // Abonado = lo cobrado por TODAS las fuentes contra los documentos de cada
-        // cotización: transferencia bancaria (venta_movimiento) + tarjeta/Transbank
-        // (transbank_factura) + cobro manual (monto_cobrado_manual). Antes solo
-        // sumaba venta_movimiento, así que los pagos con tarjeta nunca aparecían.
-        $cobrados = DB::table('documentos_facturacion as df')
+        // Abono con lógica de "preconciliación":
+        //  - Un documento emitido CON pago registrado (forma_pago o voucher Transbank)
+        //    = la plata ya entró al emitir → cuenta como abono desde ya, aunque el banco
+        //    aún no esté conciliado ("preconciliado"). La conciliación posterior
+        //    (venta_movimiento / transbank_factura / cobro manual) NO cambia el monto,
+        //    solo confirma el cuadre con el banco.
+        //  - Un documento SIN pago registrado (crédito) cuenta solo lo conciliado.
+        // 'falta_conciliar' = monto pagado al emitir que aún no cuadra con el banco.
+        $docRows = DB::table('documentos_facturacion as df')
             ->leftJoin(DB::raw('(SELECT venta_id, SUM(monto) m FROM venta_movimiento GROUP BY venta_id) vm'), 'vm.venta_id', '=', 'df.id')
             ->leftJoin(DB::raw('(SELECT tf.documento_id, SUM(tt.monto_original) m
                                  FROM transbank_factura tf
                                  JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
                                  GROUP BY tf.documento_id) tbk'), 'tbk.documento_id', '=', 'df.id')
             ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [2]) // sin notas de crédito
             ->whereIn('df.cotizacion_id', $cotizacionIds)
-            ->groupBy('df.cotizacion_id')
-            ->selectRaw('df.cotizacion_id, SUM(COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as total')
-            ->pluck('total', 'cotizacion_id');
+            ->selectRaw('df.cotizacion_id,
+                df.monto,
+                (df.forma_pago IS NOT NULL OR (df.nro_comprobante_transbank IS NOT NULL AND df.nro_comprobante_transbank <> "")) as pagado_emision,
+                (COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as conciliado')
+            ->get();
 
-        $items = $cotizaciones->map(function ($c) use ($cobrados) {
+        $cobrados  = [];
+        $faltaConc = [];
+        foreach ($docRows as $r) {
+            $cid   = $r->cotizacion_id;
+            $paid  = (int) $r->pagado_emision === 1;
+            $monto = (float) $r->monto;
+            $conc  = (float) $r->conciliado;
+            $cobrados[$cid] = ($cobrados[$cid] ?? 0) + ($paid ? max($monto, $conc) : $conc);
+            if ($paid && $conc < $monto) {
+                $faltaConc[$cid] = ($faltaConc[$cid] ?? 0) + ($monto - $conc);
+            }
+        }
+
+        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc) {
             $totalAbonado = (float) ($cobrados[$c->id] ?? 0);
             // cotizaciones.total está en NETO; el abono conciliado (venta_movimiento)
             // es BRUTO (plata real). Para que Total/Abono/Deuda cuadren, el total del
@@ -81,6 +101,7 @@ class OperacionesController extends Controller
                 'total'              => $totalBruto,
                 'total_abonado'      => $totalAbonado,
                 'saldo'              => $totalBruto - $totalAbonado,
+                'falta_conciliar'    => (float) ($faltaConc[$c->id] ?? 0),
                 'pedido_proveedor'   => (bool) $c->pedido_proveedor,
                 'estado_produccion'  => $c->estado_produccion,
                 'fecha_entrega'      => $c->fecha_entrega,
