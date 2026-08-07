@@ -8,6 +8,7 @@
         <p class="text-caption text-grey mt-1">Cotizaciones aprobadas y seguimiento de producción</p>
       </div>
       <v-btn-toggle v-model="vista" mandatory color="primary" variant="outlined" density="compact">
+        <v-btn value="tablero" prepend-icon="mdi-view-dashboard-variant">Tablero</v-btn>
         <v-btn value="tabla" prepend-icon="mdi-table">Tabla</v-btn>
         <v-btn value="kanban" prepend-icon="mdi-view-column">Kanban</v-btn>
       </v-btn-toggle>
@@ -111,6 +112,147 @@
     </v-card>
 
     <!-- ── VISTA TABLA ─────────────────────────────────────────── -->
+    <!-- ── VISTA TABLERO (agrupada por material, estilo Monday) ──────── -->
+    <template v-if="vista === 'tablero'">
+      <div v-if="!gruposTablero.length && !cargando" class="text-center text-medium-emphasis py-10">
+        No hay proyectos que coincidan con los filtros.
+      </div>
+
+      <div v-for="g in gruposTablero" :key="g.material" class="mb-5">
+        <!-- Encabezado del grupo -->
+        <div class="tablero-group-header" :style="{ '--g-color': g.color }">
+          <v-icon :color="g.color" size="18">mdi-shape</v-icon>
+          <span class="font-weight-bold text-body-1">{{ g.material }}</span>
+          <v-chip size="x-small" :color="g.color" variant="flat" class="ml-1">{{ g.items.length }}</v-chip>
+          <v-spacer />
+          <span class="text-caption text-medium-emphasis d-none d-sm-inline">
+            Total <strong>{{ fmt(g.totalBruto) }}</strong> ·
+            Abono <strong class="text-success">{{ fmt(g.totalAbono) }}</strong> ·
+            Deuda <strong :class="g.totalDeuda > 0 ? 'text-warning' : 'text-success'">{{ fmt(g.totalDeuda) }}</strong>
+          </span>
+        </div>
+
+        <v-card variant="outlined" class="tablero-card">
+          <div style="overflow-x:auto">
+            <table class="tablero-table">
+              <thead>
+                <tr>
+                  <th style="min-width:170px">Elemento</th>
+                  <th style="min-width:110px">Tipo</th>
+                  <th style="min-width:140px">EETT / Color</th>
+                  <th style="min-width:185px">Estado</th>
+                  <th class="text-center">Cant</th>
+                  <th class="text-right">M²</th>
+                  <th class="text-center">Pedido Prov.</th>
+                  <th style="min-width:160px">Estado Obra</th>
+                  <th class="text-center">Postventa</th>
+                  <th style="min-width:140px">Inicio</th>
+                  <th class="text-right">Total Bruto</th>
+                  <th class="text-right">Abono</th>
+                  <th class="text-right">Deuda</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in g.items" :key="item.id" :class="{ 'row-vencida': estaVencida(item) }">
+                  <!-- Elemento (cliente) -->
+                  <td>
+                    <div class="d-flex align-center gap-1">
+                      <span class="font-weight-medium">{{ item.cliente }}</span>
+                      <v-icon v-if="estaVencida(item)" color="error" size="13" title="Entrega vencida">mdi-calendar-alert</v-icon>
+                      <v-icon v-if="sinMoverMucho(item)" color="warning" size="13" title="Sin avanzar hace días">mdi-clock-alert</v-icon>
+                    </div>
+                  </td>
+                  <!-- Tipo / material -->
+                  <td>
+                    <v-select
+                      :model-value="item.material" :items="materiales"
+                      density="compact" variant="plain" hide-details
+                      @update:model-value="val => updateCampo(item, 'material', val)"
+                    >
+                      <template #selection="{ item: sel }">
+                        <v-chip :color="colorMaterial(sel.value)" size="x-small" variant="flat">{{ sel.value }}</v-chip>
+                      </template>
+                    </v-select>
+                  </td>
+                  <!-- EETT / Color -->
+                  <td>
+                    <v-text-field
+                      :model-value="item.eett" density="compact" variant="plain" hide-details
+                      placeholder="—" style="min-width:130px"
+                      @blur="e => e.target.value !== (item.eett ?? '') && updateCampo(item, 'eett', e.target.value || null)"
+                    />
+                  </td>
+                  <!-- Estado producción -->
+                  <td>
+                    <v-select
+                      :model-value="item.estado_produccion" :items="estadosProduccion"
+                      density="compact" variant="plain" hide-details clearable
+                      @update:model-value="val => updateCampo(item, 'estado_produccion', val)"
+                    >
+                      <template #selection="{ item: sel }">
+                        <v-chip :color="colorEstadoProd(sel.value)" size="small" variant="flat">{{ sel.value || '—' }}</v-chip>
+                      </template>
+                    </v-select>
+                  </td>
+                  <!-- Cant / M2 -->
+                  <td class="text-center"><v-chip size="x-small" color="blue" variant="tonal">{{ item.cant_ventanas }}</v-chip></td>
+                  <td class="text-right text-caption">{{ item.m2 }}</td>
+                  <!-- Pedido proveedor -->
+                  <td class="text-center">
+                    <v-chip
+                      size="small" variant="flat"
+                      :color="item.pedido_proveedor ? 'success' : 'grey-lighten-1'"
+                      class="cursor-pointer"
+                      @click="updateCampo(item, 'pedido_proveedor', !item.pedido_proveedor)"
+                    >{{ item.pedido_proveedor ? 'Listo' : 'Pendiente' }}</v-chip>
+                  </td>
+                  <!-- Estado obra -->
+                  <td>
+                    <v-select
+                      :model-value="item.estado_obra" :items="estadosObra"
+                      density="compact" variant="plain" hide-details clearable placeholder="—"
+                      @update:model-value="val => updateCampo(item, 'estado_obra', val)"
+                    >
+                      <template #selection="{ item: sel }">
+                        <v-chip :color="colorEstadoObra(sel.value)" size="small" variant="flat">{{ sel.value || '—' }}</v-chip>
+                      </template>
+                    </v-select>
+                  </td>
+                  <!-- Postventa -->
+                  <td class="text-center">
+                    <v-chip
+                      size="small" variant="flat"
+                      :color="item.postventa ? 'deep-purple' : 'grey-lighten-1'"
+                      class="cursor-pointer"
+                      @click="updateCampo(item, 'postventa', !item.postventa)"
+                    >{{ item.postventa ? 'Sí' : 'No' }}</v-chip>
+                  </td>
+                  <!-- Inicio -->
+                  <td>
+                    <span class="text-caption">{{ fmtFechaCorta(item.fecha) }}</span>
+                  </td>
+                  <!-- Montos -->
+                  <td class="text-right text-caption">{{ fmt(item.total) }}</td>
+                  <td class="text-right text-caption" :class="item.total_abonado > 0 ? 'text-success' : ''">{{ fmt(item.total_abonado) }}</td>
+                  <td class="text-right">
+                    <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">{{ fmt(item.saldo) }}</v-chip>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="tablero-subtotal">
+                  <td colspan="10" class="text-right">Subtotal {{ g.material }}</td>
+                  <td class="text-right">{{ fmt(g.totalBruto) }}</td>
+                  <td class="text-right text-success">{{ fmt(g.totalAbono) }}</td>
+                  <td class="text-right" :class="g.totalDeuda > 0 ? 'text-warning' : 'text-success'">{{ fmt(g.totalDeuda) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </v-card>
+      </div>
+    </template>
+
     <template v-if="vista === 'tabla'">
       <v-card>
         <v-data-table
@@ -457,7 +599,7 @@ import api from '@/axiosInstance'
 
 const DIAS_ALERTA = 7   // días sin cambio de estado para mostrar alerta
 
-const vista        = ref('tabla')
+const vista        = ref('tablero')
 const cargando     = ref(false)
 const cotizaciones = ref([])
 const stats        = ref({})
@@ -557,6 +699,45 @@ const estadosProduccion = [
   'Fabricadas OK',
   'Instalada',
 ]
+
+// ── Tablero (agrupado por material) ──────────────────────────────
+const materiales  = ['PVC', 'Aluminio', 'Otros']
+const estadosObra = ['Obra No Emitida', 'Obra Emitida', 'En Ejecución', 'Terminada']
+
+function colorMaterial(m) {
+  return { 'PVC': 'indigo', 'Aluminio': 'blue-grey', 'Otros': 'brown' }[m] ?? 'grey'
+}
+function colorEstadoObra(e) {
+  return {
+    'Obra No Emitida': 'grey',
+    'Obra Emitida':    'blue',
+    'En Ejecución':    'orange',
+    'Terminada':       'green',
+  }[e] ?? 'grey'
+}
+
+// Agrupa las cotizaciones filtradas por material, en el orden PVC → Aluminio → Otros
+const gruposTablero = computed(() => {
+  const orden = ['PVC', 'Aluminio', 'Otros']
+  const porMat = {}
+  for (const c of cotizacionesFiltradas.value) {
+    const m = materiales.includes(c.material) ? c.material : 'Otros'
+    ;(porMat[m] ??= []).push(c)
+  }
+  return orden
+    .filter(m => porMat[m]?.length)
+    .map(m => {
+      const items = porMat[m]
+      return {
+        material:    m,
+        color:       colorMaterial(m),
+        items,
+        totalBruto:  items.reduce((s, i) => s + Number(i.total || 0), 0),
+        totalAbono:  items.reduce((s, i) => s + Number(i.total_abonado || 0), 0),
+        totalDeuda:  items.reduce((s, i) => s + Number(i.saldo || 0), 0),
+      }
+    })
+})
 
 const columnasKanban = [
   { estado: null,                   label: 'Sin asignar',       color: 'grey',   icon: 'mdi-help-circle-outline' },
@@ -792,6 +973,36 @@ function fmtFechaCorta(iso) {
 .kanban-card--vencida {
   border-color: rgba(244, 67, 54, 0.5) !important;
 }
+
+/* ── Tablero (estilo Monday) ── */
+.tablero-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; margin-bottom: 6px;
+  border-left: 4px solid rgba(var(--v-border-color), 0.4);
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-radius: 6px;
+}
+.tablero-card { overflow: hidden; }
+.tablero-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.tablero-table th {
+  text-align: left; padding: 8px 10px; white-space: nowrap;
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: .04em;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-on-surface), 0.02);
+}
+.tablero-table td {
+  padding: 3px 10px; vertical-align: middle;
+  border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
+}
+.tablero-table tbody tr:hover { background: rgba(var(--v-theme-on-surface), 0.03); }
+.tablero-table tbody tr.row-vencida { background: rgba(var(--v-theme-error), 0.06); }
+.tablero-subtotal td {
+  padding: 8px 10px; font-weight: 700;
+  border-top: 2px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-on-surface), 0.03);
+}
+.cursor-pointer { cursor: pointer; }
 
 .kanban-card--alerta {
   border-color: rgba(255, 152, 0, 0.5) !important;

@@ -35,11 +35,17 @@ class Cotizacion extends Model
         'tipo_vidrio',
         'fabricar_termopanel',
         'cortar_vidrio_cnc',
+        // Tablero de Operaciones
+        'material',
+        'estado_obra',
+        'postventa',
+        'eett',
     ];
 
     protected $casts = [
         'pedido_proveedor'      => 'boolean',
         'winperfil_precio_lock' => 'boolean',
+        'postventa'             => 'boolean',
     ];
 
     public function cliente()

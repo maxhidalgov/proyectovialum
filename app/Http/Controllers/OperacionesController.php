@@ -73,6 +73,11 @@ class OperacionesController extends Controller
                 'estado_produccion'  => $c->estado_produccion,
                 'fecha_entrega'      => $c->fecha_entrega,
                 'notas_operaciones'  => $c->notas_operaciones,
+                // Tablero de Operaciones
+                'material'           => $c->material ?: 'PVC',
+                'estado_obra'        => $c->estado_obra,
+                'postventa'          => (bool) $c->postventa,
+                'eett'               => $c->eett,
                 'cant_ventanas'      => (int) $cantVentanas,
                 'm2'                 => round($m2, 2),
                 // Métricas de tiempo (T0 = medición)
@@ -122,11 +127,17 @@ class OperacionesController extends Controller
             'estado_produccion' => 'sometimes|nullable|in:En Espera de Medidas,Lista para Corte,En Fabricación,Fabricadas OK,Instalada',
             'fecha_entrega'     => 'sometimes|nullable|date',
             'notas_operaciones' => 'sometimes|nullable|string|max:1000',
+            // Tablero de Operaciones
+            'material'          => 'sometimes|nullable|string|max:40',
+            'estado_obra'       => 'sometimes|nullable|string|max:60',
+            'postventa'         => 'sometimes|boolean',
+            'eett'              => 'sometimes|nullable|string|max:120',
         ]);
 
         $cotizacion = Cotizacion::findOrFail($id);
         $cotizacion->update($request->only([
             'pedido_proveedor', 'estado_produccion', 'fecha_entrega', 'notas_operaciones',
+            'material', 'estado_obra', 'postventa', 'eett',
         ]));
 
         return response()->json(['success' => true]);
