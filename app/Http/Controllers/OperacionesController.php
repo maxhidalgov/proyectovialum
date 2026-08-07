@@ -66,15 +66,26 @@ class OperacionesController extends Controller
         }
 
         $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc) {
-            $totalAbonado = (float) ($cobrados[$c->id] ?? 0);
-            // cotizaciones.total está en NETO; el abono conciliado (venta_movimiento)
-            // es BRUTO (plata real). Para que Total/Abono/Deuda cuadren, el total del
-            // tablero va en BRUTO (neto × 1.19).
-            $totalBruto = round((float) $c->total * 1.19);
+            $esManual = (bool) $c->es_manual;
 
-            // App: ventanas viven en la tabla `ventanas`. Winperfil: viven en
-            // `cotizacion_detalles` (esVidrio=false, con ancho_mm/alto_mm).
-            if ($c->ventanas->isNotEmpty()) {
+            // Manual: total y abono se ingresan a mano (el total ya es BRUTO, lo que
+            // paga el cliente; no hay facturas de las que derivar). Cotización normal:
+            // total en NETO → ×1.19 para cuadrar con el abono conciliado (bruto).
+            if ($esManual) {
+                $totalBruto   = (float) $c->total;
+                $totalAbonado = (float) $c->abono_manual;
+                $faltaCon     = 0.0;
+            } else {
+                $totalBruto   = round((float) $c->total * 1.19);
+                $totalAbonado = (float) ($cobrados[$c->id] ?? 0);
+                $faltaCon     = (float) ($faltaConc[$c->id] ?? 0);
+            }
+
+            // Cant/M²: manual → campos propios; cotización → ventanas/detalles.
+            if ($esManual) {
+                $cantVentanas = (int) ($c->cant_manual ?? 0);
+                $m2           = (float) ($c->m2_manual ?? 0);
+            } elseif ($c->ventanas->isNotEmpty()) {
                 $cantVentanas = $c->ventanas->sum('cantidad');
                 $m2           = $c->ventanas->sum(fn($v) =>
                     ($v->ancho / 1000) * ($v->alto / 1000) * ($v->cantidad ?? 1)
@@ -91,17 +102,21 @@ class OperacionesController extends Controller
 
             $tiempos = $this->tiempos($c);
 
+            $nombre = $esManual
+                ? ($c->nombre_manual ?: 'Proyecto manual')
+                : ($c->cliente?->razon_social ?? trim(($c->cliente?->first_name ?? '') . ' ' . ($c->cliente?->last_name ?? '')));
+
             return [
                 'id'                 => $c->id,
-                'cliente'            => $c->cliente?->razon_social
-                                    ?? trim(($c->cliente?->first_name ?? '') . ' ' . ($c->cliente?->last_name ?? '')),
+                'es_manual'          => $esManual,
+                'cliente'            => $nombre,
                 'vendedor'           => $c->vendedor?->name,
                 'fecha'              => $c->fecha,
                 'estado'             => $c->estado?->nombre,
                 'total'              => $totalBruto,
                 'total_abonado'      => $totalAbonado,
                 'saldo'              => $totalBruto - $totalAbonado,
-                'falta_conciliar'    => (float) ($faltaConc[$c->id] ?? 0),
+                'falta_conciliar'    => $faltaCon,
                 'pedido_proveedor'   => (bool) $c->pedido_proveedor,
                 'estado_produccion'  => $c->estado_produccion,
                 'fecha_entrega'      => $c->fecha_entrega,
@@ -165,13 +180,79 @@ class OperacionesController extends Controller
             'estado_obra'       => 'sometimes|nullable|string|max:60',
             'postventa'         => 'sometimes|boolean',
             'eett'              => 'sometimes|nullable|string|max:120',
+            // Proyectos manuales (editables solo en filas manuales)
+            'nombre_manual'     => 'sometimes|nullable|string|max:150',
+            'total'             => 'sometimes|numeric|min:0',
+            'abono_manual'      => 'sometimes|numeric|min:0',
+            'cant_manual'       => 'sometimes|nullable|integer|min:0',
+            'm2_manual'         => 'sometimes|nullable|numeric|min:0',
+            'fecha'             => 'sometimes|date',
         ]);
 
         $cotizacion = Cotizacion::findOrFail($id);
-        $cotizacion->update($request->only([
+
+        $campos = [
             'pedido_proveedor', 'estado_produccion', 'fecha_entrega', 'notas_operaciones',
             'material', 'estado_obra', 'postventa', 'eett',
-        ]));
+        ];
+        // Campos manuales solo se aceptan si el proyecto es manual
+        if ($cotizacion->es_manual) {
+            $campos = array_merge($campos, ['nombre_manual', 'total', 'abono_manual', 'cant_manual', 'm2_manual', 'fecha']);
+        }
+
+        $cotizacion->update($request->only($campos));
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Crear un proyecto manual en el tablero (sin cotización real). Se guarda como
+     * una cotización con es_manual=true para reusar todo el módulo de operaciones.
+     */
+    public function storeManual(Request $request)
+    {
+        $data = $request->validate([
+            'nombre_manual'     => 'required|string|max:150',
+            'material'          => 'nullable|string|max:40',
+            'total'             => 'nullable|numeric|min:0',
+            'abono_manual'      => 'nullable|numeric|min:0',
+            'cant_manual'       => 'nullable|integer|min:0',
+            'm2_manual'         => 'nullable|numeric|min:0',
+            'eett'              => 'nullable|string|max:120',
+            'fecha'             => 'nullable|date',
+            'estado_produccion' => 'nullable|in:En Espera de Medidas,Lista para Corte,En Fabricación,Fabricadas OK,Instalada',
+        ]);
+
+        // Estado que pasa el filtro de operaciones (no Evaluación/Rechazada/Anulada)
+        $estadoId = optional(\App\Models\EstadoCotizacion::where('nombre', 'Aprobada')->first())->id
+                 ?? \App\Models\EstadoCotizacion::whereNotIn('nombre', ['Evaluación', 'Rechazada', 'Anulada'])->value('id');
+
+        $cot = Cotizacion::create([
+            'es_manual'           => true,
+            'nombre_manual'       => $data['nombre_manual'],
+            'cliente_id'          => null,
+            'vendedor_id'         => auth()->id() ?? 1,
+            'estado_cotizacion_id'=> $estadoId,
+            'fecha'               => $data['fecha'] ?? now()->toDateString(),
+            'total'               => $data['total'] ?? 0,      // BRUTO (lo que paga el cliente)
+            'abono_manual'        => $data['abono_manual'] ?? 0,
+            'cant_manual'         => $data['cant_manual'] ?? null,
+            'm2_manual'           => $data['m2_manual'] ?? null,
+            'material'            => $data['material'] ?? 'PVC',
+            'eett'                => $data['eett'] ?? null,
+            'estado_produccion'   => $data['estado_produccion'] ?? null,
+        ]);
+
+        return response()->json(['success' => true, 'id' => $cot->id]);
+    }
+
+    /**
+     * Borrar un proyecto manual (solo manuales; las cotizaciones reales no se borran aquí).
+     */
+    public function destroyManual($id)
+    {
+        $cot = Cotizacion::where('id', $id)->where('es_manual', true)->firstOrFail();
+        $cot->delete();
 
         return response()->json(['success' => true]);
     }

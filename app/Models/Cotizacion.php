@@ -40,12 +40,19 @@ class Cotizacion extends Model
         'estado_obra',
         'postventa',
         'eett',
+        // Proyectos manuales (Fase 2)
+        'es_manual',
+        'nombre_manual',
+        'abono_manual',
+        'cant_manual',
+        'm2_manual',
     ];
 
     protected $casts = [
         'pedido_proveedor'      => 'boolean',
         'winperfil_precio_lock' => 'boolean',
         'postventa'             => 'boolean',
+        'es_manual'             => 'boolean',
     ];
 
     public function cliente()

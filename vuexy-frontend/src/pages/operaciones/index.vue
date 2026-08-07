@@ -7,17 +7,22 @@
         <h2 class="text-h5 font-weight-bold">Panel de Operaciones</h2>
         <p class="text-caption text-grey mt-1">Cotizaciones aprobadas y seguimiento de producción</p>
       </div>
-      <v-btn-toggle v-model="vista" mandatory color="primary" variant="outlined" divided rounded="lg">
-        <v-btn value="tablero" size="small" class="text-none px-3">
-          <v-icon start size="18">mdi-view-dashboard-variant</v-icon>Tablero
+      <div class="d-flex align-center" style="gap:12px">
+        <v-btn color="primary" variant="flat" size="small" class="text-none" prepend-icon="mdi-plus" @click="abrirCrearManual">
+          Agregar proyecto
         </v-btn>
-        <v-btn value="tabla" size="small" class="text-none px-3">
-          <v-icon start size="18">mdi-table</v-icon>Tabla
-        </v-btn>
-        <v-btn value="kanban" size="small" class="text-none px-3">
-          <v-icon start size="18">mdi-view-column</v-icon>Kanban
-        </v-btn>
-      </v-btn-toggle>
+        <v-btn-toggle v-model="vista" mandatory color="primary" variant="outlined" divided rounded="lg">
+          <v-btn value="tablero" size="small" class="text-none px-3">
+            <v-icon start size="18">mdi-view-dashboard-variant</v-icon>Tablero
+          </v-btn>
+          <v-btn value="tabla" size="small" class="text-none px-3">
+            <v-icon start size="18">mdi-table</v-icon>Tabla
+          </v-btn>
+          <v-btn value="kanban" size="small" class="text-none px-3">
+            <v-icon start size="18">mdi-view-column</v-icon>Kanban
+          </v-btn>
+        </v-btn-toggle>
+      </div>
     </div>
 
     <v-progress-linear v-if="cargando" indeterminate color="primary" class="mb-2" />
@@ -170,12 +175,27 @@
               </thead>
               <tbody>
                 <tr v-for="item in g.items" :key="item.id" :class="{ 'row-vencida': estaVencida(item) }">
-                  <!-- Elemento (cliente) -->
+                  <!-- Elemento (cliente / nombre manual) -->
                   <td>
                     <div class="d-flex align-center gap-1">
-                      <span class="font-weight-medium">{{ item.cliente }}</span>
-                      <v-icon v-if="estaVencida(item)" color="error" size="13" title="Entrega vencida">mdi-calendar-alert</v-icon>
-                      <v-icon v-if="sinMoverMucho(item)" color="warning" size="13" title="Sin avanzar hace días">mdi-clock-alert</v-icon>
+                      <template v-if="item.es_manual">
+                        <v-tooltip text="Proyecto manual" location="top">
+                          <template #activator="{ props }">
+                            <v-icon v-bind="props" size="13" color="primary">mdi-hand-back-right-outline</v-icon>
+                          </template>
+                        </v-tooltip>
+                        <v-text-field :model-value="item.cliente" density="compact" variant="plain" hide-details
+                          style="min-width:130px" class="font-weight-medium"
+                          @blur="e => e.target.value !== item.cliente && updateCampo(item, 'nombre_manual', e.target.value)" />
+                        <v-btn icon size="x-small" variant="text" color="error" title="Borrar proyecto" @click="borrarManual(item)">
+                          <v-icon size="14">mdi-delete-outline</v-icon>
+                        </v-btn>
+                      </template>
+                      <template v-else>
+                        <span class="font-weight-medium">{{ item.cliente }}</span>
+                        <v-icon v-if="estaVencida(item)" color="error" size="13" title="Entrega vencida">mdi-calendar-alert</v-icon>
+                        <v-icon v-if="sinMoverMucho(item)" color="warning" size="13" title="Sin avanzar hace días">mdi-clock-alert</v-icon>
+                      </template>
                     </div>
                   </td>
                   <!-- Tipo / material -->
@@ -211,8 +231,18 @@
                     </v-select>
                   </td>
                   <!-- Cant / M2 -->
-                  <td class="text-center"><v-chip size="x-small" color="blue" variant="tonal">{{ item.cant_ventanas }}</v-chip></td>
-                  <td class="text-right text-caption">{{ item.m2 }}</td>
+                  <td class="text-center">
+                    <v-text-field v-if="item.es_manual" :model-value="item.cant_ventanas" type="number" min="0"
+                      density="compact" variant="plain" hide-details style="max-width:56px"
+                      @blur="e => updateCampo(item, 'cant_manual', Number(e.target.value) || 0)" />
+                    <v-chip v-else size="x-small" color="blue" variant="tonal">{{ item.cant_ventanas }}</v-chip>
+                  </td>
+                  <td class="text-right text-caption">
+                    <v-text-field v-if="item.es_manual" :model-value="item.m2" type="number" min="0"
+                      density="compact" variant="plain" hide-details reverse style="max-width:70px"
+                      @blur="e => updateCampo(item, 'm2_manual', Number(e.target.value) || 0)" />
+                    <span v-else>{{ item.m2 }}</span>
+                  </td>
                   <!-- Pedido proveedor -->
                   <td class="text-center">
                     <v-chip
@@ -236,8 +266,17 @@
                     <span class="text-caption">{{ fmtFechaCorta(item.fecha) }}</span>
                   </td>
                   <!-- Montos -->
-                  <td class="text-right text-caption">{{ fmt(item.total) }}</td>
+                  <td class="text-right text-caption">
+                    <v-text-field v-if="item.es_manual" :model-value="item.total" type="number" min="0" prefix="$"
+                      density="compact" variant="plain" hide-details reverse style="max-width:120px"
+                      @blur="e => updateCampo(item, 'total', Number(e.target.value) || 0)" />
+                    <span v-else>{{ fmt(item.total) }}</span>
+                  </td>
                   <td class="text-right">
+                    <v-text-field v-if="item.es_manual" :model-value="item.total_abonado" type="number" min="0" prefix="$"
+                      density="compact" variant="plain" hide-details reverse style="max-width:120px"
+                      @blur="e => updateCampo(item, 'abono_manual', Number(e.target.value) || 0)" />
+                    <template v-else>
                     <div class="text-caption" :class="item.total_abonado > 0 ? 'text-success' : ''">{{ fmt(item.total_abonado) }}</div>
                     <v-tooltip v-if="item.falta_conciliar > 0" location="top"
                       :text="`Pagado al emitir (${fmt(item.falta_conciliar)}) pero aún sin conciliar en el banco. Al conciliar se pone en verde.`">
@@ -247,6 +286,7 @@
                         </v-chip>
                       </template>
                     </v-tooltip>
+                    </template>
                   </td>
                   <td class="text-right">
                     <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">{{ fmt(item.saldo) }}</v-chip>
@@ -506,6 +546,43 @@
         </div>
       </div>
     </template>
+
+    <!-- Agregar proyecto manual -->
+    <v-dialog v-model="dialogManual.show" max-width="560">
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="primary">mdi-plus-box</v-icon> Agregar proyecto
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <v-text-field v-model="dialogManual.nombre_manual" label="Nombre / cliente" variant="outlined" density="compact" class="mb-3" hide-details autofocus />
+          <v-row dense>
+            <v-col cols="6">
+              <v-select v-model="dialogManual.material" :items="materiales" label="Tipo / material" variant="outlined" density="compact" hide-details />
+            </v-col>
+            <v-col cols="6">
+              <v-select v-model="dialogManual.estado_produccion" :items="estadosProduccion" label="Estado (opcional)" variant="outlined" density="compact" clearable hide-details />
+            </v-col>
+          </v-row>
+          <v-text-field v-model="dialogManual.eett" label="EETT / Color (opcional)" variant="outlined" density="compact" class="mt-3" hide-details />
+          <v-row dense class="mt-1">
+            <v-col cols="6"><v-text-field v-model.number="dialogManual.cant_manual" type="number" min="0" label="Cantidad" variant="outlined" density="compact" hide-details /></v-col>
+            <v-col cols="6"><v-text-field v-model.number="dialogManual.m2_manual" type="number" min="0" label="M²" variant="outlined" density="compact" hide-details /></v-col>
+          </v-row>
+          <v-row dense class="mt-1">
+            <v-col cols="6"><v-text-field v-model.number="dialogManual.total" type="number" min="0" label="Total (bruto)" prefix="$" variant="outlined" density="compact" hide-details /></v-col>
+            <v-col cols="6"><v-text-field v-model.number="dialogManual.abono_manual" type="number" min="0" label="Abono" prefix="$" variant="outlined" density="compact" hide-details /></v-col>
+          </v-row>
+          <v-text-field v-model="dialogManual.fecha" type="date" label="Inicio" variant="outlined" density="compact" class="mt-3" hide-details />
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogManual.show = false">Cancelar</v-btn>
+          <v-btn color="primary" variant="flat" :loading="dialogManual.loading" :disabled="!dialogManual.nombre_manual" @click="crearManual">Crear</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Línea de tiempo -->
     <v-dialog v-model="timeline.show" max-width="540">
@@ -823,15 +900,60 @@ async function cargar() {
 onMounted(cargar)
 
 // ── Edición inline ───────────────────────────────────────────────
+const CAMPOS_RECARGAR = ['estado_produccion', 'total', 'abono_manual', 'cant_manual', 'm2_manual', 'nombre_manual']
 async function updateCampo(item, campo, valor) {
   item[campo] = valor
   try {
     await api.patch(`/api/operaciones/${item.id}`, { [campo]: valor })
-    // Cambiar el estado de producción genera un hito → refrescar tiempos/línea de tiempo
-    if (campo === 'estado_produccion') await cargar()
+    // Estos afectan valores derivados (tiempos, saldo, display) → refrescar
+    if (CAMPOS_RECARGAR.includes(campo)) await cargar()
   } catch {
     mostrarSnack('Error al guardar', 'error')
     cargar()
+  }
+}
+
+// ── Proyectos manuales ───────────────────────────────────────────
+const dialogManual = ref({ show: false, loading: false, nombre_manual: '', material: 'PVC', estado_produccion: null, eett: '', cant_manual: null, m2_manual: null, total: null, abono_manual: null, fecha: new Date().toISOString().slice(0, 10) })
+
+function abrirCrearManual() {
+  dialogManual.value = { show: true, loading: false, nombre_manual: '', material: 'PVC', estado_produccion: null, eett: '', cant_manual: null, m2_manual: null, total: null, abono_manual: null, fecha: new Date().toISOString().slice(0, 10) }
+}
+
+async function crearManual() {
+  const d = dialogManual.value
+  if (!d.nombre_manual) return
+  d.loading = true
+  try {
+    await api.post('/api/operaciones/manual', {
+      nombre_manual: d.nombre_manual,
+      material: d.material,
+      estado_produccion: d.estado_produccion || undefined,
+      eett: d.eett || undefined,
+      cant_manual: d.cant_manual ?? undefined,
+      m2_manual: d.m2_manual ?? undefined,
+      total: d.total ?? undefined,
+      abono_manual: d.abono_manual ?? undefined,
+      fecha: d.fecha || undefined,
+    })
+    d.show = false
+    await cargar()
+    mostrarSnack('Proyecto creado')
+  } catch {
+    mostrarSnack('Error al crear el proyecto', 'error')
+  } finally {
+    d.loading = false
+  }
+}
+
+async function borrarManual(item) {
+  if (!confirm(`¿Borrar el proyecto "${item.cliente}"?`)) return
+  try {
+    await api.delete(`/api/operaciones/manual/${item.id}`)
+    cotizaciones.value = cotizaciones.value.filter(c => c.id !== item.id)
+    mostrarSnack('Proyecto borrado')
+  } catch {
+    mostrarSnack('Error al borrar', 'error')
   }
 }
 

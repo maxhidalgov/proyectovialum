@@ -418,6 +418,8 @@ Route::middleware('auth:api')->group(function () {
 
     // Operaciones
     Route::get('/operaciones', [OperacionesController::class, 'index']);
+    Route::post('/operaciones/manual', [OperacionesController::class, 'storeManual']);
+    Route::delete('/operaciones/manual/{id}', [OperacionesController::class, 'destroyManual']);
     Route::patch('/operaciones/{id}', [OperacionesController::class, 'update']);
     Route::patch('/operaciones/historial/{id}', [OperacionesController::class, 'actualizarHistorial']);
     Route::post('/operaciones/{id}/historial', [OperacionesController::class, 'storeHistorial']);
