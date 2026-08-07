@@ -29,12 +29,20 @@ class OperacionesController extends Controller
 
         $cotizacionIds = $cotizaciones->pluck('id');
 
-        // Abonado = lo conciliado del banco contra documentos de cada cotización
-        $cobrados = DB::table('venta_movimiento as vm')
-            ->join('documentos_facturacion as df', 'df.id', '=', 'vm.venta_id')
+        // Abonado = lo cobrado por TODAS las fuentes contra los documentos de cada
+        // cotización: transferencia bancaria (venta_movimiento) + tarjeta/Transbank
+        // (transbank_factura) + cobro manual (monto_cobrado_manual). Antes solo
+        // sumaba venta_movimiento, así que los pagos con tarjeta nunca aparecían.
+        $cobrados = DB::table('documentos_facturacion as df')
+            ->leftJoin(DB::raw('(SELECT venta_id, SUM(monto) m FROM venta_movimiento GROUP BY venta_id) vm'), 'vm.venta_id', '=', 'df.id')
+            ->leftJoin(DB::raw('(SELECT tf.documento_id, SUM(tt.monto_original) m
+                                 FROM transbank_factura tf
+                                 JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
+                                 GROUP BY tf.documento_id) tbk'), 'tbk.documento_id', '=', 'df.id')
+            ->where('df.estado', 'emitido')
             ->whereIn('df.cotizacion_id', $cotizacionIds)
             ->groupBy('df.cotizacion_id')
-            ->selectRaw('df.cotizacion_id, SUM(vm.monto) as total')
+            ->selectRaw('df.cotizacion_id, SUM(COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as total')
             ->pluck('total', 'cotizacion_id');
 
         $items = $cotizaciones->map(function ($c) use ($cobrados) {

@@ -161,7 +161,6 @@
                   <th class="text-center">Cant</th>
                   <th class="text-right">M²</th>
                   <th class="text-center">Pedido Prov.</th>
-                  <th style="min-width:160px">Estado Obra</th>
                   <th class="text-center">Postventa</th>
                   <th style="min-width:140px">Inicio</th>
                   <th class="text-right">Total Bruto</th>
@@ -223,18 +222,6 @@
                       @click="updateCampo(item, 'pedido_proveedor', !item.pedido_proveedor)"
                     >{{ item.pedido_proveedor ? 'Listo' : 'Pendiente' }}</v-chip>
                   </td>
-                  <!-- Estado obra -->
-                  <td>
-                    <v-select
-                      :model-value="item.estado_obra" :items="estadosObra"
-                      density="compact" variant="plain" hide-details clearable placeholder="—"
-                      @update:model-value="val => updateCampo(item, 'estado_obra', val)"
-                    >
-                      <template #selection="{ item: sel }">
-                        <v-chip :color="colorEstadoObra(sel.value)" size="small" variant="flat">{{ sel.value || '—' }}</v-chip>
-                      </template>
-                    </v-select>
-                  </td>
                   <!-- Postventa -->
                   <td class="text-center">
                     <v-chip
@@ -258,7 +245,7 @@
               </tbody>
               <tfoot>
                 <tr class="tablero-subtotal">
-                  <td colspan="10" class="text-right">Subtotal {{ g.material }}</td>
+                  <td colspan="9" class="text-right">Subtotal {{ g.material }}</td>
                   <td class="text-right">{{ fmt(g.totalBruto) }}</td>
                   <td class="text-right text-success">{{ fmt(g.totalAbono) }}</td>
                   <td class="text-right" :class="g.totalDeuda > 0 ? 'text-warning' : 'text-success'">{{ fmt(g.totalDeuda) }}</td>
