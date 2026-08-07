@@ -185,8 +185,11 @@
                           </template>
                         </v-tooltip>
                         <v-text-field :model-value="item.cliente" density="compact" variant="plain" hide-details
-                          style="min-width:130px" class="font-weight-medium"
+                          style="min-width:120px" class="font-weight-medium"
                           @blur="e => e.target.value !== item.cliente && updateCampo(item, 'nombre_manual', e.target.value)" />
+                        <v-btn icon size="x-small" variant="text" color="info" title="Vincular a cotización" @click="abrirVincular(item)">
+                          <v-icon size="14">mdi-link-variant</v-icon>
+                        </v-btn>
                         <v-btn icon size="x-small" variant="text" color="error" title="Borrar proyecto" @click="borrarManual(item)">
                           <v-icon size="14">mdi-delete-outline</v-icon>
                         </v-btn>
@@ -273,20 +276,22 @@
                     <span v-else>{{ fmt(item.total) }}</span>
                   </td>
                   <td class="text-right">
-                    <v-text-field v-if="item.es_manual" :model-value="item.total_abonado" type="number" min="0" prefix="$"
-                      density="compact" variant="plain" hide-details reverse style="max-width:120px"
-                      @blur="e => updateCampo(item, 'abono_manual', Number(e.target.value) || 0)" />
-                    <template v-else>
-                    <div class="text-caption" :class="item.total_abonado > 0 ? 'text-success' : ''">{{ fmt(item.total_abonado) }}</div>
-                    <v-tooltip v-if="item.falta_conciliar > 0" location="top"
+                    <div class="text-caption cursor-pointer d-inline-flex align-center"
+                      :class="item.total_abonado > 0 ? 'text-success' : 'text-medium-emphasis'"
+                      title="Ver / editar abonos" @click="abrirAbonos(item)">
+                      {{ fmt(item.total_abonado) }}
+                      <v-icon size="12" class="ml-1">mdi-format-list-bulleted</v-icon>
+                    </div>
+                    <v-tooltip v-if="!item.es_manual && item.falta_conciliar > 0" location="top"
                       :text="`Pagado al emitir (${fmt(item.falta_conciliar)}) pero aún sin conciliar en el banco. Al conciliar se pone en verde.`">
                       <template #activator="{ props }">
-                        <v-chip v-bind="props" size="x-small" color="warning" variant="tonal" class="cursor-pointer mt-1" to="/facturacion">
-                          <v-icon start size="11">mdi-alert-circle-outline</v-icon>Falta conciliar
-                        </v-chip>
+                        <div>
+                          <v-chip v-bind="props" size="x-small" color="warning" variant="tonal" class="cursor-pointer mt-1" to="/facturacion">
+                            <v-icon start size="11">mdi-alert-circle-outline</v-icon>Falta conciliar
+                          </v-chip>
+                        </div>
                       </template>
                     </v-tooltip>
-                    </template>
                   </td>
                   <td class="text-right">
                     <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">{{ fmt(item.saldo) }}</v-chip>
@@ -580,6 +585,91 @@
           <v-spacer />
           <v-btn variant="text" @click="dialogManual.show = false">Cancelar</v-btn>
           <v-btn color="primary" variant="flat" :loading="dialogManual.loading" :disabled="!dialogManual.nombre_manual" @click="crearManual">Crear</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Detalle de abonos -->
+    <v-dialog v-model="dialogAbonos.show" max-width="520">
+      <v-card v-if="dialogAbonos.item">
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="success">mdi-cash-multiple</v-icon>
+          Abonos — {{ dialogAbonos.item.cliente }}
+          <v-spacer />
+          <span class="text-body-2 font-weight-bold text-success">{{ fmt(sumaAbonos) }}</span>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <div v-if="dialogAbonos.loading" class="text-center py-4"><v-progress-circular indeterminate size="24" /></div>
+          <template v-else>
+            <div v-if="!dialogAbonos.abonos.length" class="text-center text-medium-emphasis py-3">Sin abonos registrados.</div>
+            <v-table v-else density="compact" class="mb-2">
+              <tbody>
+                <tr v-for="(a, i) in dialogAbonos.abonos" :key="a.id ?? i">
+                  <td class="text-no-wrap">{{ fmtFechaCorta(a.fecha) }}</td>
+                  <td><v-chip size="x-small" variant="tonal" :color="a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">{{ a.fuente }}</v-chip></td>
+                  <td class="text-right font-weight-medium">{{ fmt(a.monto) }}</td>
+                  <td class="text-right" style="width:36px">
+                    <v-btn v-if="a.editable" icon size="x-small" variant="text" color="error" @click="borrarAbono(a)"><v-icon size="14">mdi-close</v-icon></v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+
+            <!-- Agregar abono (solo manuales) -->
+            <template v-if="dialogAbonos.item.es_manual">
+              <v-divider class="my-2" />
+              <div class="text-caption font-weight-bold mb-2">Agregar abono</div>
+              <div class="d-flex align-center flex-wrap" style="gap:8px">
+                <v-text-field v-model="nuevoAbono.fecha" type="date" density="compact" variant="outlined" hide-details style="max-width:150px" />
+                <v-text-field v-model.number="nuevoAbono.monto" type="number" min="0" prefix="$" placeholder="Monto" density="compact" variant="outlined" hide-details style="max-width:130px" />
+                <v-text-field v-model="nuevoAbono.nota" placeholder="Nota (opcional)" density="compact" variant="outlined" hide-details style="min-width:120px;flex:1" />
+                <v-btn color="primary" size="small" :disabled="!nuevoAbono.monto" :loading="dialogAbonos.saving" @click="agregarAbono">Agregar</v-btn>
+              </div>
+            </template>
+            <div v-else class="text-caption text-medium-emphasis mt-1">
+              Abonos automáticos desde las facturas/conciliación (solo lectura).
+            </div>
+          </template>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogAbonos.show = false">Cerrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Vincular manual a cotización -->
+    <v-dialog v-model="dialogVincular.show" max-width="560">
+      <v-card v-if="dialogVincular.item">
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="info">mdi-link-variant</v-icon> Vincular a cotización
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            El seguimiento de <strong>{{ dialogVincular.item.cliente }}</strong> se pasa a la cotización que elijas, y este proyecto manual se elimina (para no duplicar).
+          </p>
+          <v-text-field v-model="dialogVincular.buscar" label="Buscar cotización (cliente o #)" density="compact" variant="outlined"
+            prepend-inner-icon="mdi-magnify" hide-details clearable class="mb-3" @update:model-value="buscarCotizaciones" />
+          <div v-if="dialogVincular.loading" class="text-center py-3"><v-progress-circular indeterminate size="22" /></div>
+          <v-table v-else-if="dialogVincular.resultados.length" density="compact">
+            <tbody>
+              <tr v-for="r in dialogVincular.resultados" :key="r.id" class="cursor-pointer" @click="confirmarVincular(r)">
+                <td>#{{ r.id }}</td>
+                <td>{{ r.cliente }}</td>
+                <td class="text-right">{{ fmt(r.total) }}</td>
+                <td><v-btn size="x-small" color="info" variant="tonal">Vincular</v-btn></td>
+              </tr>
+            </tbody>
+          </v-table>
+          <div v-else class="text-center text-medium-emphasis py-3 text-caption">Escribe para buscar una cotización.</div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogVincular.show = false">Cancelar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -954,6 +1044,76 @@ async function borrarManual(item) {
     mostrarSnack('Proyecto borrado')
   } catch {
     mostrarSnack('Error al borrar', 'error')
+  }
+}
+
+// ── Detalle de abonos ────────────────────────────────────────────
+const dialogAbonos = ref({ show: false, loading: false, saving: false, item: null, abonos: [] })
+const nuevoAbono   = ref({ fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' })
+const sumaAbonos   = computed(() => dialogAbonos.value.abonos.reduce((s, a) => s + Number(a.monto || 0), 0))
+
+async function abrirAbonos(item) {
+  dialogAbonos.value = { show: true, loading: true, saving: false, item, abonos: [] }
+  nuevoAbono.value = { fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' }
+  try {
+    const { data } = await api.get(`/api/operaciones/${item.id}/abonos`)
+    dialogAbonos.value.abonos = data.abonos || []
+  } catch {
+    mostrarSnack('Error al cargar abonos', 'error')
+  } finally {
+    dialogAbonos.value.loading = false
+  }
+}
+async function recargarAbonos() {
+  const { data } = await api.get(`/api/operaciones/${dialogAbonos.value.item.id}/abonos`)
+  dialogAbonos.value.abonos = data.abonos || []
+}
+async function agregarAbono() {
+  const n = nuevoAbono.value
+  if (!n.monto) return
+  dialogAbonos.value.saving = true
+  try {
+    await api.post(`/api/operaciones/${dialogAbonos.value.item.id}/abonos`, { fecha: n.fecha, monto: Number(n.monto), nota: n.nota || undefined })
+    nuevoAbono.value = { fecha: n.fecha, monto: null, nota: '' }
+    await recargarAbonos()
+    await cargar()
+  } catch {
+    mostrarSnack('Error al agregar el abono', 'error')
+  } finally {
+    dialogAbonos.value.saving = false
+  }
+}
+async function borrarAbono(a) {
+  try {
+    await api.delete(`/api/operaciones/abonos/${a.id}`)
+    await recargarAbonos()
+    await cargar()
+  } catch {
+    mostrarSnack('Error al borrar el abono', 'error')
+  }
+}
+
+// ── Vincular manual → cotización ─────────────────────────────────
+const dialogVincular = ref({ show: false, loading: false, item: null, buscar: '', resultados: [] })
+function abrirVincular(item) {
+  dialogVincular.value = { show: true, loading: false, item, buscar: '', resultados: [] }
+}
+function buscarCotizaciones(term) {
+  const t = (term || '').toLowerCase().trim()
+  if (!t) { dialogVincular.value.resultados = []; return }
+  dialogVincular.value.resultados = cotizaciones.value
+    .filter(c => !c.es_manual && (String(c.id).includes(t) || c.cliente?.toLowerCase().includes(t)))
+    .slice(0, 20)
+}
+async function confirmarVincular(cot) {
+  if (!confirm(`¿Vincular "${dialogVincular.value.item.cliente}" a la cotización #${cot.id} (${cot.cliente})?\nEl proyecto manual se eliminará y su seguimiento pasa a la cotización.`)) return
+  try {
+    await api.post(`/api/operaciones/manual/${dialogVincular.value.item.id}/vincular`, { cotizacion_id: cot.id })
+    dialogVincular.value.show = false
+    await cargar()
+    mostrarSnack('Vinculado — el seguimiento pasó a la cotización')
+  } catch {
+    mostrarSnack('Error al vincular', 'error')
   }
 }
 

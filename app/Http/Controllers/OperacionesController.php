@@ -65,15 +65,22 @@ class OperacionesController extends Controller
             }
         }
 
-        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc) {
+        // Abonos manuales (proyecto_abonos) por cotización → suma
+        $abonosManual = DB::table('proyecto_abonos')
+            ->whereIn('cotizacion_id', $cotizacionIds)
+            ->groupBy('cotizacion_id')
+            ->selectRaw('cotizacion_id, SUM(monto) as total')
+            ->pluck('total', 'cotizacion_id');
+
+        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc, $abonosManual) {
             $esManual = (bool) $c->es_manual;
 
-            // Manual: total y abono se ingresan a mano (el total ya es BRUTO, lo que
-            // paga el cliente; no hay facturas de las que derivar). Cotización normal:
-            // total en NETO → ×1.19 para cuadrar con el abono conciliado (bruto).
+            // Manual: total ya es BRUTO (lo que paga el cliente); abono = suma de sus
+            // abonos (proyecto_abonos). Cotización normal: total NETO ×1.19 y abono
+            // derivado de facturas/conciliación.
             if ($esManual) {
                 $totalBruto   = (float) $c->total;
-                $totalAbonado = (float) $c->abono_manual;
+                $totalAbonado = (float) ($abonosManual[$c->id] ?? 0);
                 $faltaCon     = 0.0;
             } else {
                 $totalBruto   = round((float) $c->total * 1.19);
@@ -243,6 +250,18 @@ class OperacionesController extends Controller
             'estado_produccion'   => $data['estado_produccion'] ?? null,
         ]);
 
+        // El abono inicial se guarda como un registro en proyecto_abonos (con fecha)
+        if (($data['abono_manual'] ?? 0) > 0) {
+            DB::table('proyecto_abonos')->insert([
+                'cotizacion_id' => $cot->id,
+                'fecha'         => $cot->fecha,
+                'monto'         => $data['abono_manual'],
+                'nota'          => 'Abono inicial',
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ]);
+        }
+
         return response()->json(['success' => true, 'id' => $cot->id]);
     }
 
@@ -252,9 +271,122 @@ class OperacionesController extends Controller
     public function destroyManual($id)
     {
         $cot = Cotizacion::where('id', $id)->where('es_manual', true)->firstOrFail();
-        $cot->delete();
+        $cot->delete(); // proyecto_abonos cae por FK cascade
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Detalle de abonos de un proyecto (para el modal clickeable).
+     * Manual → registros de proyecto_abonos (editables). No manual → abonos reales
+     * de las facturas: transferencia (venta_movimiento), tarjeta (transbank) y cobro
+     * manual, cada uno con su fecha/fuente (solo lectura).
+     */
+    public function abonosDetalle($id)
+    {
+        $cot = Cotizacion::findOrFail($id);
+
+        if ($cot->es_manual) {
+            $abonos = DB::table('proyecto_abonos')
+                ->where('cotizacion_id', $id)
+                ->orderBy('fecha')
+                ->get(['id', 'fecha', 'monto', 'nota'])
+                ->map(fn ($a) => [
+                    'id'     => $a->id,
+                    'fecha'  => $a->fecha,
+                    'monto'  => (float) $a->monto,
+                    'fuente' => $a->nota ?: 'Abono',
+                    'editable' => true,
+                ]);
+            return response()->json(['es_manual' => true, 'abonos' => $abonos->values()]);
+        }
+
+        // No manual: reunir abonos reales de los documentos de la cotización
+        $docIds = DB::table('documentos_facturacion')
+            ->where('cotizacion_id', $id)->where('estado', 'emitido')
+            ->whereNotIn('tipo_documento_bsale_id', [2])->pluck('id');
+
+        $abonos = collect();
+        if ($docIds->isNotEmpty()) {
+            foreach (DB::table('venta_movimiento as vm')
+                ->join('movimientos_bancarios as mb', 'mb.id', '=', 'vm.movimiento_id')
+                ->whereIn('vm.venta_id', $docIds)
+                ->get(['vm.monto', 'mb.fecha_contable']) as $r) {
+                $abonos->push(['fecha' => substr((string) $r->fecha_contable, 0, 10), 'monto' => (float) $r->monto, 'fuente' => 'Transferencia', 'editable' => false]);
+            }
+            foreach (DB::table('transbank_factura as tf')
+                ->join('transbank_transacciones as tt', 'tt.id', '=', 'tf.transaccion_id')
+                ->whereIn('tf.documento_id', $docIds)
+                ->get(['tt.monto_original', 'tt.fecha_movimiento']) as $r) {
+                $abonos->push(['fecha' => substr((string) $r->fecha_movimiento, 0, 10), 'monto' => (float) $r->monto_original, 'fuente' => 'Tarjeta / Transbank', 'editable' => false]);
+            }
+            foreach (DB::table('documentos_facturacion')
+                ->whereIn('id', $docIds)->where('monto_cobrado_manual', '>', 0)
+                ->get(['monto_cobrado_manual', 'cobrado_manual_nota', 'fecha_emision']) as $r) {
+                $abonos->push(['fecha' => substr((string) $r->fecha_emision, 0, 10), 'monto' => (float) $r->monto_cobrado_manual, 'fuente' => $r->cobrado_manual_nota ?: 'Cobro manual', 'editable' => false]);
+            }
+        }
+
+        return response()->json(['es_manual' => false, 'abonos' => $abonos->sortBy('fecha')->values()]);
+    }
+
+    /** Agregar un abono manual (solo proyectos manuales). */
+    public function storeAbono(Request $request, $id)
+    {
+        $data = $request->validate([
+            'fecha' => 'required|date',
+            'monto' => 'required|numeric|min:1',
+            'nota'  => 'nullable|string|max:150',
+        ]);
+
+        $cot = Cotizacion::where('id', $id)->where('es_manual', true)->firstOrFail();
+
+        $abonoId = DB::table('proyecto_abonos')->insertGetId([
+            'cotizacion_id' => $cot->id,
+            'fecha'         => $data['fecha'],
+            'monto'         => $data['monto'],
+            'nota'          => $data['nota'] ?? null,
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        return response()->json(['success' => true, 'id' => $abonoId]);
+    }
+
+    /** Borrar un abono manual. */
+    public function destroyAbono($abonoId)
+    {
+        DB::table('proyecto_abonos')->where('id', $abonoId)->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Vincular un proyecto manual con una cotización real: transfiere el seguimiento
+     * (estado producción, pedido proveedor, postventa, material, EETT, notas) a la
+     * cotización y borra el manual (para que no quede duplicado).
+     */
+    public function vincularCotizacion(Request $request, $id)
+    {
+        $data = $request->validate(['cotizacion_id' => 'required|exists:cotizaciones,id']);
+
+        $manual = Cotizacion::where('id', $id)->where('es_manual', true)->firstOrFail();
+        $real   = Cotizacion::findOrFail($data['cotizacion_id']);
+
+        // Transferir los campos de seguimiento no vacíos del manual a la cotización real
+        $transfer = [];
+        foreach (['estado_produccion', 'pedido_proveedor', 'postventa', 'material', 'eett', 'notas_operaciones'] as $campo) {
+            if (!empty($manual->$campo)) {
+                $transfer[$campo] = $manual->$campo;
+            }
+        }
+        if ($transfer) {
+            $real->update($transfer);
+        }
+
+        $manual->delete(); // borra el manual + sus proyecto_abonos (cascade)
+
+        return response()->json(['success' => true, 'cotizacion_id' => $real->id]);
     }
 
     /**
