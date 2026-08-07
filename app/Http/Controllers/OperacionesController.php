@@ -39,6 +39,10 @@ class OperacionesController extends Controller
 
         $items = $cotizaciones->map(function ($c) use ($cobrados) {
             $totalAbonado = (float) ($cobrados[$c->id] ?? 0);
+            // cotizaciones.total está en NETO; el abono conciliado (venta_movimiento)
+            // es BRUTO (plata real). Para que Total/Abono/Deuda cuadren, el total del
+            // tablero va en BRUTO (neto × 1.19).
+            $totalBruto = round((float) $c->total * 1.19);
 
             // App: ventanas viven en la tabla `ventanas`. Winperfil: viven en
             // `cotizacion_detalles` (esVidrio=false, con ancho_mm/alto_mm).
@@ -66,9 +70,9 @@ class OperacionesController extends Controller
                 'vendedor'           => $c->vendedor?->name,
                 'fecha'              => $c->fecha,
                 'estado'             => $c->estado?->nombre,
-                'total'              => (float) $c->total,
+                'total'              => $totalBruto,
                 'total_abonado'      => $totalAbonado,
-                'saldo'              => (float) ($c->total - $totalAbonado),
+                'saldo'              => $totalBruto - $totalAbonado,
                 'pedido_proveedor'   => (bool) $c->pedido_proveedor,
                 'estado_produccion'  => $c->estado_produccion,
                 'fecha_entrega'      => $c->fecha_entrega,
