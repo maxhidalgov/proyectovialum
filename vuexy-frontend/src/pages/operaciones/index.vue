@@ -104,14 +104,25 @@
         </v-col>
       </v-row>
 
-      <!-- Alertas resumen -->
-      <v-row dense class="mt-2" v-if="alertas.vencidas > 0 || alertas.sinMover > 0">
-        <v-col>
-          <v-chip v-if="alertas.vencidas > 0" color="error" size="small" class="mr-2" prepend-icon="mdi-calendar-alert">
+      <!-- Alertas resumen + toggle terminados -->
+      <v-row dense class="mt-2">
+        <v-col class="d-flex align-center flex-wrap" style="gap:8px">
+          <v-chip v-if="alertas.vencidas > 0" color="error" size="small" prepend-icon="mdi-calendar-alert">
             {{ alertas.vencidas }} entrega{{ alertas.vencidas > 1 ? 's' : '' }} vencida{{ alertas.vencidas > 1 ? 's' : '' }}
           </v-chip>
           <v-chip v-if="alertas.sinMover > 0" color="warning" size="small" prepend-icon="mdi-clock-alert">
             {{ alertas.sinMover }} sin mover hace +{{ DIAS_ALERTA }} días
+          </v-chip>
+          <v-spacer />
+          <v-chip
+            size="small"
+            :color="verTerminados ? 'success' : undefined"
+            :variant="verTerminados ? 'flat' : 'outlined'"
+            class="cursor-pointer"
+            @click="verTerminados = !verTerminados"
+          >
+            <v-icon start size="14">{{ verTerminados ? 'mdi-eye' : 'mdi-eye-off-outline' }}</v-icon>
+            {{ verTerminados ? 'Ocultar terminados' : `Ver terminados (${terminadosCount})` }}
           </v-chip>
         </v-col>
       </v-row>
@@ -613,6 +624,16 @@ const stats        = ref({})
 // ── Filtros ──────────────────────────────────────────────────────
 const filtros = ref({ busqueda: '', estado: null, estadoProd: null, vendedor: null, saldo: null })
 
+// Ver los proyectos terminados (instalados + pagados + sin postventa). Por defecto ocultos.
+const verTerminados = ref(false)
+
+// Un proyecto está "terminado" (sale del tablero activo) si: Instalada + saldo≤0 + sin postventa.
+// Si está instalado pero aún debe, o tiene postventa pendiente, sigue siendo activo.
+function esTerminado(c) {
+  return c.estado_produccion === 'Instalada' && Number(c.saldo) <= 0 && !c.postventa
+}
+const terminadosCount = computed(() => cotizaciones.value.filter(esTerminado).length)
+
 const vendedoresUnicos = computed(() =>
   [...new Set(cotizaciones.value.map(c => c.vendedor).filter(Boolean))]
 )
@@ -623,6 +644,7 @@ function limpiarFiltros() {
 
 const cotizacionesFiltradas = computed(() => {
   return cotizaciones.value.filter(c => {
+    if (!verTerminados.value && esTerminado(c)) return false
     if (filtros.value.busqueda && !c.cliente?.toLowerCase().includes(filtros.value.busqueda.toLowerCase())) return false
     if (filtros.value.estado && c.estado !== filtros.value.estado) return false
     if (filtros.value.estadoProd) {
@@ -670,15 +692,21 @@ function rowProps({ item }) {
 }
 
 // ── Stat cards ───────────────────────────────────────────────────
-const statCards = computed(() => [
-  { label: 'Cotizaciones',   valor: stats.value.total_cotizaciones ?? 0,      color: 'primary', icon: 'mdi-file-multiple'  },
-  { label: 'Ventanas',       valor: stats.value.total_ventanas ?? 0,           color: 'blue',    icon: 'mdi-window-open'    },
-  { label: 'M² fabricados',  valor: `${stats.value.total_m2 ?? 0} m²`,        color: 'teal',    icon: 'mdi-ruler-square'   },
-  { label: 'Total a cobrar', valor: fmt(stats.value.total_facturado),          color: 'green',   icon: 'mdi-currency-usd'   },
-  { label: 'Abonado',        valor: fmt(stats.value.total_abonado),            color: 'success', icon: 'mdi-cash-check'     },
-  { label: 'Saldo pendiente',valor: fmt(stats.value.total_saldo),              color: 'warning', icon: 'mdi-cash-clock'     },
-  { label: 'Días prod. prom',valor: stats.value.dias_produccion_prom != null ? `${stats.value.dias_produccion_prom} d` : '—', color: 'indigo', icon: 'mdi-timer-outline' },
-])
+// Cuentan sobre lo VISIBLE (respeta el filtro y "ver terminados") para que los
+// números cuadren con las filas del tablero. Días prod prom viene del backend.
+const statCards = computed(() => {
+  const l = cotizacionesFiltradas.value
+  const sum = (k) => l.reduce((s, i) => s + Number(i[k] || 0), 0)
+  return [
+    { label: 'Proyectos',      valor: l.length,                                  color: 'primary', icon: 'mdi-file-multiple'  },
+    { label: 'Ventanas',       valor: l.reduce((s, i) => s + Number(i.cant_ventanas || 0), 0), color: 'blue', icon: 'mdi-window-open' },
+    { label: 'M²',             valor: `${Math.round(sum('m2') * 100) / 100} m²`, color: 'teal',    icon: 'mdi-ruler-square'   },
+    { label: 'Total a cobrar', valor: fmt(sum('total')),                         color: 'green',   icon: 'mdi-currency-usd'   },
+    { label: 'Abonado',        valor: fmt(sum('total_abonado')),                 color: 'success', icon: 'mdi-cash-check'     },
+    { label: 'Saldo pendiente',valor: fmt(sum('saldo')),                         color: 'warning', icon: 'mdi-cash-clock'     },
+    { label: 'Días prod. prom',valor: stats.value.dias_produccion_prom != null ? `${stats.value.dias_produccion_prom} d` : '—', color: 'indigo', icon: 'mdi-timer-outline' },
+  ]
+})
 
 // ── Tabla ────────────────────────────────────────────────────────
 const headers = [
