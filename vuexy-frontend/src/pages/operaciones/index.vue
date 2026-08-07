@@ -7,10 +7,16 @@
         <h2 class="text-h5 font-weight-bold">Panel de Operaciones</h2>
         <p class="text-caption text-grey mt-1">Cotizaciones aprobadas y seguimiento de producción</p>
       </div>
-      <v-btn-toggle v-model="vista" mandatory color="primary" variant="outlined" density="compact">
-        <v-btn value="tablero" prepend-icon="mdi-view-dashboard-variant">Tablero</v-btn>
-        <v-btn value="tabla" prepend-icon="mdi-table">Tabla</v-btn>
-        <v-btn value="kanban" prepend-icon="mdi-view-column">Kanban</v-btn>
+      <v-btn-toggle v-model="vista" mandatory color="primary" variant="outlined" divided rounded="lg">
+        <v-btn value="tablero" size="small" class="text-none px-3">
+          <v-icon start size="18">mdi-view-dashboard-variant</v-icon>Tablero
+        </v-btn>
+        <v-btn value="tabla" size="small" class="text-none px-3">
+          <v-icon start size="18">mdi-table</v-icon>Tabla
+        </v-btn>
+        <v-btn value="kanban" size="small" class="text-none px-3">
+          <v-icon start size="18">mdi-view-column</v-icon>Kanban
+        </v-btn>
       </v-btn-toggle>
     </div>
 
@@ -416,7 +422,7 @@
     </template>
 
     <!-- ── VISTA KANBAN ────────────────────────────────────────── -->
-    <template v-else>
+    <template v-if="vista === 'kanban'">
       <div class="kanban-board">
         <div v-for="col in columnasKanban" :key="col.estado ?? 'sin'" class="kanban-col">
           <div class="kanban-col-header" :style="{ borderColor: col.color }">
