@@ -159,16 +159,16 @@
             <table class="tablero-table">
               <thead>
                 <tr>
-                  <th style="min-width:170px">Elemento</th>
-                  <th style="min-width:110px">Tipo</th>
-                  <th style="min-width:140px">EETT / Color</th>
-                  <th style="min-width:185px">Estado</th>
+                  <th style="min-width:150px">Elemento</th>
+                  <th>Tipo</th>
+                  <th style="min-width:110px">EETT / Color</th>
+                  <th style="min-width:150px">Estado</th>
                   <th class="text-center">Cant</th>
                   <th class="text-right">M²</th>
-                  <th class="text-center">Pedido Prov.</th>
-                  <th class="text-center">Postventa</th>
-                  <th style="min-width:140px">Inicio</th>
-                  <th class="text-right">Total Bruto</th>
+                  <th class="text-center">Pedido</th>
+                  <th class="text-center">Postv.</th>
+                  <th class="text-center" style="min-width:70px">Inicio</th>
+                  <th class="text-right">Total</th>
                   <th class="text-right">Abono</th>
                   <th class="text-right">Deuda</th>
                 </tr>
@@ -203,15 +203,19 @@
                   </td>
                   <!-- Tipo / material -->
                   <td>
-                    <v-select
-                      :model-value="item.material" :items="materiales"
-                      density="compact" variant="plain" hide-details
-                      @update:model-value="val => updateCampo(item, 'material', val)"
-                    >
-                      <template #selection="{ item: sel }">
-                        <v-chip :color="colorMaterial(sel.value)" size="x-small" variant="flat">{{ sel.value }}</v-chip>
+                    <v-menu>
+                      <template #activator="{ props }">
+                        <v-chip v-bind="props" :color="colorMaterial(item.material)" size="small" variant="tonal" class="cursor-pointer text-no-wrap">
+                          {{ item.material }}<v-icon end size="14">mdi-menu-down</v-icon>
+                        </v-chip>
                       </template>
-                    </v-select>
+                      <v-list density="compact">
+                        <v-list-item v-for="m in materiales" :key="m" @click="updateCampo(item, 'material', m)">
+                          <template #prepend><v-icon :color="colorMaterial(m)" size="12">mdi-circle</v-icon></template>
+                          <v-list-item-title>{{ m }}</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
                   </td>
                   <!-- EETT / Color -->
                   <td>
@@ -223,15 +227,31 @@
                   </td>
                   <!-- Estado producción -->
                   <td>
-                    <v-select
-                      :model-value="item.estado_produccion" :items="estadosProduccion"
-                      density="compact" variant="plain" hide-details clearable
-                      @update:model-value="val => updateCampo(item, 'estado_produccion', val)"
-                    >
-                      <template #selection="{ item: sel }">
-                        <v-chip :color="colorEstadoProd(sel.value)" size="small" variant="flat">{{ sel.value || '—' }}</v-chip>
-                      </template>
-                    </v-select>
+                    <div class="d-flex align-center gap-1">
+                      <v-menu>
+                        <template #activator="{ props }">
+                          <v-chip v-bind="props" :color="colorEstadoProd(item.estado_produccion)" size="small"
+                            :variant="item.estado_produccion ? 'tonal' : 'outlined'" class="cursor-pointer text-no-wrap">
+                            {{ item.estado_produccion || 'Sin estado' }}<v-icon end size="14">mdi-menu-down</v-icon>
+                          </v-chip>
+                        </template>
+                        <v-list density="compact">
+                          <v-list-item v-for="e in estadosProduccion" :key="e" @click="updateCampo(item, 'estado_produccion', e)">
+                            <template #prepend><v-icon :color="colorEstadoProd(e)" size="12">mdi-circle</v-icon></template>
+                            <v-list-item-title>{{ e }}</v-list-item-title>
+                          </v-list-item>
+                          <v-divider />
+                          <v-list-item @click="updateCampo(item, 'estado_produccion', null)">
+                            <v-list-item-title class="text-medium-emphasis">Quitar</v-list-item-title>
+                          </v-list-item>
+                        </v-list>
+                      </v-menu>
+                      <v-tooltip v-if="sinMoverMucho(item)" :text="`${diasEnEstado(item)} días en este estado`" location="top">
+                        <template #activator="{ props }">
+                          <v-chip v-bind="props" color="warning" size="x-small" variant="tonal">{{ diasEnEstado(item) }}d</v-chip>
+                        </template>
+                      </v-tooltip>
+                    </div>
                   </td>
                   <!-- Cant / M2 -->
                   <td class="text-center">
@@ -249,8 +269,9 @@
                   <!-- Pedido proveedor -->
                   <td class="text-center">
                     <v-chip
-                      size="small" variant="flat"
-                      :color="item.pedido_proveedor ? 'success' : 'grey-lighten-1'"
+                      size="small" variant="tonal"
+                      :color="item.pedido_proveedor ? 'success' : 'grey'"
+                      :prepend-icon="item.pedido_proveedor ? 'mdi-check' : 'mdi-clock-outline'"
                       class="cursor-pointer"
                       @click="updateCampo(item, 'pedido_proveedor', !item.pedido_proveedor)"
                     >{{ item.pedido_proveedor ? 'Listo' : 'Pendiente' }}</v-chip>
@@ -258,15 +279,15 @@
                   <!-- Postventa -->
                   <td class="text-center">
                     <v-chip
-                      size="small" variant="flat"
-                      :color="item.postventa ? 'deep-purple' : 'grey-lighten-1'"
+                      size="small" variant="tonal"
+                      :color="item.postventa ? 'deep-purple' : 'grey'"
                       class="cursor-pointer"
                       @click="updateCampo(item, 'postventa', !item.postventa)"
                     >{{ item.postventa ? 'Sí' : 'No' }}</v-chip>
                   </td>
                   <!-- Inicio -->
-                  <td>
-                    <span class="text-caption">{{ fmtFechaCorta(item.fecha) }}</span>
+                  <td class="text-center">
+                    <span class="text-caption text-medium-emphasis">{{ fmtFechaCorta(item.fecha) }}</span>
                   </td>
                   <!-- Montos -->
                   <td class="text-right text-caption">
@@ -1305,11 +1326,19 @@ function fmtFechaCorta(iso) {
   background: rgba(var(--v-theme-on-surface), 0.02);
 }
 .tablero-table td {
-  padding: 3px 10px; vertical-align: middle;
+  padding: 4px 10px; vertical-align: middle;
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
 }
-.tablero-table tbody tr:hover { background: rgba(var(--v-theme-on-surface), 0.03); }
+.tablero-table tbody tr:nth-child(even) { background: rgba(var(--v-theme-on-surface), 0.018); }
+.tablero-table tbody tr:hover { background: rgba(var(--v-theme-primary), 0.06); }
 .tablero-table tbody tr.row-vencida { background: rgba(var(--v-theme-error), 0.06); }
+/* Primera columna (Elemento) fija al hacer scroll horizontal */
+.tablero-table th:first-child,
+.tablero-table td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: rgb(var(--v-theme-surface));
+}
+.tablero-table tbody tr:nth-child(even) td:first-child { background: rgb(var(--v-theme-surface)); }
 .tablero-subtotal td {
   padding: 8px 10px; font-weight: 700;
   border-top: 2px solid rgba(var(--v-border-color), var(--v-border-opacity));
