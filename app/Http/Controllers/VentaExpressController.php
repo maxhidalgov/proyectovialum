@@ -373,7 +373,7 @@ class VentaExpressController extends Controller
             'success'   => true,
             'documento' => [
                 'numero' => $bsale['number'] ?? null,
-                'pdf'    => $bsale['urlPdfOriginal'] ?? $bsale['urlPdf'] ?? null,
+                'pdf'    => url("/boleta/{$doc->id}/pdf"), // PDF formato completo (original Bsale o propio)
                 'total'  => $totalBruto,
                 'tipo'   => $esBoleta ? 'Boleta' : 'Factura',
                 'cliente'=> $clienteNombre,

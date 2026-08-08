@@ -91,7 +91,7 @@
             <VBtn size="x-small" variant="tonal" color="primary" @click="verDetalle(item)">
               <VIcon start size="14">mdi-eye-outline</VIcon>Ver
             </VBtn>
-            <VBtn v-if="item.url_pdf_bsale" size="x-small" variant="text" icon :href="item.url_pdf_bsale" target="_blank" class="ml-1">
+            <VBtn v-if="item.url_pdf_bsale || item.id_documento_bsale" size="x-small" variant="text" icon :href="`/boleta/${item.id}/pdf`" target="_blank" class="ml-1" title="Ver PDF (formato completo)">
               <VIcon size="16">mdi-file-pdf-box</VIcon>
             </VBtn>
           </template>
@@ -187,7 +187,7 @@
           </VDataTable>
         </VCardText>
         <VCardActions>
-          <VBtn v-if="detalle.doc.url_pdf_bsale" variant="tonal" color="error" prepend-icon="mdi-file-pdf-box" :href="detalle.doc.url_pdf_bsale" target="_blank">Ver PDF</VBtn>
+          <VBtn v-if="detalle.doc.url_pdf_bsale || detalle.doc.id_documento_bsale" variant="tonal" color="error" prepend-icon="mdi-file-pdf-box" :href="`/boleta/${detalle.doc.id}/pdf`" target="_blank">Ver PDF</VBtn>
           <VSpacer />
           <VBtn variant="text" @click="detalle.show = false">Cerrar</VBtn>
         </VCardActions>

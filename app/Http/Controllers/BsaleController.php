@@ -966,7 +966,28 @@ class BsaleController extends Controller
      */
     public function boletaPdfLocal($id)
     {
-        $doc   = \App\Models\DocumentoFacturacion::findOrFail($id);
+        $doc = \App\Models\DocumentoFacturacion::findOrFail($id);
+
+        // 1) Preferir el PDF ORIGINAL oficial de Bsale (formato completo A4). Se pide
+        //    en vivo a la API porque las URLs guardadas pueden ser del formato térmico
+        //    (?sfd=99 / show_pdf?...&sfd=0) que acorta los nombres largos.
+        if ($doc->id_documento_bsale && $this->accessToken) {
+            try {
+                $resp = Http::withHeaders($this->getBsaleHeaders())->timeout(15)
+                    ->get($this->baseUrl . "documents/{$doc->id_documento_bsale}.json");
+                if ($resp->successful()) {
+                    $d = $resp->json();
+                    $url = $d['urlPdfOriginal'] ?? $d['urlPdfOrigin'] ?? null;
+                    if ($url) {
+                        return redirect($url);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // sigue al PDF propio
+            }
+        }
+
+        // 2) Fallback: PDF propio (formato carta) desde el detalle local
         $items = \App\Models\DocumentoItem::where('documento_facturacion_id', $id)->get();
 
         if ($items->isEmpty()) {
