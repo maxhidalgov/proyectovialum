@@ -585,7 +585,7 @@
                       @click="abrirVincularDoc(f)"
                     >Vincular</VBtn>
                     <VBtn v-if="f.url_pdf_bsale" size="x-small" variant="text" color="error"
-                      :href="f.url_pdf_bsale" target="_blank" icon
+                      :href="`/boleta/${f.id}/pdf`" target="_blank" icon
                     ><VIcon size="16">mdi-file-pdf-box</VIcon></VBtn>
                     <VBtn v-if="f.monto_vinculado > 0" size="x-small" variant="text" color="warning"
                       :loading="desvinculandoDoc === f.id"

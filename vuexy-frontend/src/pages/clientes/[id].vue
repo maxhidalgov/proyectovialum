@@ -227,7 +227,7 @@
                   size="small"
                   variant="text"
                   color="error"
-                  :href="item.url_pdf_bsale"
+                  :href="`/boleta/${item.id}/pdf`"
                   target="_blank"
                 />
               </template>

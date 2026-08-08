@@ -259,7 +259,7 @@
                             <v-btn
                               v-if="doc.url_pdf_bsale"
                               icon size="x-small" variant="text" color="info"
-                              :href="doc.url_pdf_bsale" target="_blank"
+                              :href="`/boleta/${doc.id}/pdf`" target="_blank"
                             >
                               <v-icon size="14">mdi-file-pdf-box</v-icon>
                             </v-btn>

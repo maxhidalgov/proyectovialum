@@ -448,7 +448,7 @@
                             size="x-small"
                             variant="text"
                             icon
-                            :href="f.url_pdf_bsale"
+                            :href="`/boleta/${f.id}/pdf`"
                             target="_blank"
                           >
                             <VIcon size="14">mdi-file-pdf-box</VIcon>
