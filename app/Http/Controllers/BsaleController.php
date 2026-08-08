@@ -206,7 +206,7 @@ class BsaleController extends Controller
                     'estado'                 => 'emitido',
                     'id_documento_bsale'     => $response['data']['id'] ?? null,
                     'numero_documento_bsale' => $response['data']['number'] ?? null,
-                    'url_pdf_bsale'          => $response['data']['urlPdf'] ?? null,
+                    'url_pdf_bsale'          => $response['data']['urlPdfOriginal'] ?? $response['data']['urlPdf'] ?? null,
                     'fecha_emision'          => now()->toDateString(),
                     // Clasificación (igual que Venta Express) para que boletas caigan
                     // en el resumen mensual y CxC clasifique bien.
@@ -249,7 +249,7 @@ class BsaleController extends Controller
                     'numero_documento_bsale' => $response['data']['number'] ?? null,
                     'id_documento_bsale'     => $response['data']['id'] ?? null,
                     'fecha_documento_bsale'  => now(),
-                    'url_pdf_bsale'          => $response['data']['urlPdf'] ?? null,
+                    'url_pdf_bsale'          => $response['data']['urlPdfOriginal'] ?? $response['data']['urlPdf'] ?? null,
                     'token_bsale'            => $response['data']['token'] ?? null,
                     // Solo marcar como Facturada si se emitió el 100%
                     ...($estaCompleto ? ['estado_cotizacion_id' => 6] : []),
@@ -956,6 +956,65 @@ class BsaleController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Boleta/factura PDF generada por Vialum (formato carta, nombres completos).
+     * La boleta térmica de Bsale (tuboleta) acorta los nombres largos; esta usa el
+     * detalle local (documento_items) y los muestra completos. Si no hay detalle
+     * local, redirige al PDF de Bsale.
+     */
+    public function boletaPdfLocal($id)
+    {
+        $doc   = \App\Models\DocumentoFacturacion::findOrFail($id);
+        $items = \App\Models\DocumentoItem::where('documento_facturacion_id', $id)->get();
+
+        if ($items->isEmpty()) {
+            return $doc->url_pdf_bsale ? redirect($doc->url_pdf_bsale) : abort(404, 'Sin detalle local de la boleta');
+        }
+
+        $neto  = (float) $items->sum('total_neto');
+        $total = round($neto * 1.19);
+        $iva   = $total - $neto;
+
+        $tipoNombre = ((int) $doc->tipo_documento_bsale_id === 5) ? 'Factura Electrónica' : 'Boleta Electrónica';
+
+        $cliente = $doc->cliente_id ? \App\Models\Cliente::find($doc->cliente_id) : null;
+        $clienteNombre = $cliente
+            ? ($cliente->razon_social ?: trim(($cliente->first_name ?? '') . ' ' . ($cliente->last_name ?? '')))
+            : ($doc->bsale_cliente_nombre ?: 'Consumidor Final');
+        $clienteRut = $cliente->identification ?? null;
+
+        $formaPago = $doc->forma_pago ? ucfirst(str_replace('_', ' ', $doc->forma_pago)) : '—';
+        $fecha     = $doc->fecha_emision ? \Carbon\Carbon::parse($doc->fecha_emision)->format('d/m/Y') : '';
+
+        $logoBase64 = null;
+        try {
+            $logoUrl = env('LOGO_URL', 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png');
+            $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+            $logoData = @file_get_contents($logoUrl, false, $ctx);
+            if ($logoData !== false) {
+                $logoBase64 = 'data:image/png;base64,' . base64_encode($logoData);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $emisor = [
+            'nombre'    => 'HIDALGO E HIDALGO LIMITADA',
+            'rut'       => '76.096.031-4',
+            'giro'      => 'Vidriería, aluminios y artículos de ferretería',
+            'direccion' => 'Balmaceda 454',
+            'comuna'    => 'Los Ángeles',
+            'fono'      => '43 2 311859',
+            'mail'      => 'contacto@vialum.cl',
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('boletas.pdf', compact(
+            'doc', 'items', 'neto', 'iva', 'total', 'tipoNombre',
+            'clienteNombre', 'clienteRut', 'formaPago', 'fecha', 'logoBase64', 'emisor'
+        ))->setPaper('letter');
+
+        return $pdf->stream('boleta-' . ($doc->numero_documento_bsale ?? $doc->id) . '.pdf');
     }
 
     /**

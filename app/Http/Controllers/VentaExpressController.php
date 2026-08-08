@@ -328,7 +328,7 @@ class VentaExpressController extends Controller
             'bsale_cliente_nombre'    => $clienteNombre,
             'id_documento_bsale'      => $bsale['id'] ?? null,
             'numero_documento_bsale'  => $bsale['number'] ?? null,
-            'url_pdf_bsale'           => $bsale['urlPdf'] ?? null,
+            'url_pdf_bsale'           => $bsale['urlPdfOriginal'] ?? $bsale['urlPdf'] ?? null, // Original = formato completo (no el térmico ?sfd=99)
             'fecha_emision'           => now()->toDateString(),
         ]);
 
@@ -373,7 +373,7 @@ class VentaExpressController extends Controller
             'success'   => true,
             'documento' => [
                 'numero' => $bsale['number'] ?? null,
-                'pdf'    => $bsale['urlPdf'] ?? null,
+                'pdf'    => $bsale['urlPdfOriginal'] ?? $bsale['urlPdf'] ?? null,
                 'total'  => $totalBruto,
                 'tipo'   => $esBoleta ? 'Boleta' : 'Factura',
                 'cliente'=> $clienteNombre,

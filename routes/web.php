@@ -6,6 +6,7 @@ use App\Http\Controllers\ImportacionController;
 use Illuminate\Support\Facades\File;
 
 Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
+Route::get('/boleta/{id}/pdf', [\App\Http\Controllers\BsaleController::class, 'boletaPdfLocal']);
 
 
 
