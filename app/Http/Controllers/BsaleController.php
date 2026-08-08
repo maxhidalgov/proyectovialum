@@ -977,7 +977,10 @@ class BsaleController extends Controller
                     ->get($this->baseUrl . "documents/{$doc->id_documento_bsale}.json");
                 if ($resp->successful()) {
                     $d = $resp->json();
-                    $url = $d['urlPdfOriginal'] ?? $d['urlPdfOrigin'] ?? null;
+                    // La VISTA PÚBLICA (urlPublicView*) muestra el formato COMPLETO;
+                    // los .pdf (incluso "original") renderizan el térmico que acorta.
+                    $url = $d['urlPublicViewOriginal'] ?? $d['urlPublicView']
+                        ?? $d['urlPdfOriginal'] ?? $d['urlPdf'] ?? null;
                     if ($url) {
                         return redirect($url);
                     }
