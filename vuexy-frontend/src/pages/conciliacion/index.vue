@@ -1350,7 +1350,7 @@
                           <td class="font-weight-bold text-success">{{ formatMonto(v.saldo_por_cobrar) }}</td>
                           <td>{{ formatMonto(v.monto) }}</td>
                           <td class="text-caption">{{ formatFecha(v.fecha_emision) }}</td>
-                          <td><VChip size="x-small" color="success" variant="tonal" class="mr-1">{{ v.tipo_doc }}</VChip>{{ v.folio }}</td>
+                          <td><VChip v-if="v.tipo_doc && v.tipo_doc !== 'total'" size="x-small" color="warning" variant="tonal" class="mr-1 text-capitalize">{{ v.tipo_doc }}</VChip>{{ v.folio }}</td>
                           <td class="text-caption">{{ v.nombre_receptor }}<br><span class="text-medium-emphasis">{{ v.rut_receptor }}</span></td>
                           <td>
                             <VBtn size="x-small" color="success" variant="tonal"
@@ -1836,7 +1836,7 @@
                   <td class="font-weight-bold text-success">{{ formatMonto(v.saldo_por_cobrar) }}</td>
                   <td>{{ formatMonto(v.monto) }}</td>
                   <td class="text-caption">{{ formatFecha(v.fecha_emision) }}</td>
-                  <td><VChip size="x-small" color="success" variant="tonal" class="mr-1">{{ v.tipo_doc }}</VChip>{{ v.folio }}</td>
+                  <td><VChip v-if="v.tipo_doc && v.tipo_doc !== 'total'" size="x-small" color="warning" variant="tonal" class="mr-1 text-capitalize">{{ v.tipo_doc }}</VChip>{{ v.folio }}</td>
                   <td class="text-caption">{{ v.nombre_receptor }}<br><span class="text-medium-emphasis">{{ v.rut_receptor }}</span></td>
                   <td>
                     <VBtn size="x-small" color="success" variant="tonal"

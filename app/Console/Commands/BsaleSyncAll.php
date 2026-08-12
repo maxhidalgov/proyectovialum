@@ -48,6 +48,15 @@ class BsaleSyncAll extends Command
         // ── Ventas ────────────────────────────────────────────────────────────
         if ($ambos || $soloVentas) {
             $this->syncVentas();
+
+            // Vincula las Notas de Crédito nuevas con su factura anulada
+            // (pobla nc_referencia_df_id parseando el FolioRef del XML del DTE).
+            try {
+                $this->call('bsale:vincular-notas-credito');
+            } catch (\Throwable $e) {
+                $this->error('     ✗ Error vinculando notas de crédito: ' . $e->getMessage());
+                Log::error('BsaleSyncAll::vincularNc', ['error' => $e->getMessage()]);
+            }
         }
 
         // ── Compras ───────────────────────────────────────────────────────────

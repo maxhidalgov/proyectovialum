@@ -237,6 +237,14 @@ class VentaMovimientoController extends Controller
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [1, 2])
             ->whereRaw('df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) > 0')
+            // Sin búsqueda: acotar a facturas cercanas al movimiento (12 meses atrás →
+            // 5 días después). Un pago no puede ser por una factura futura, y evita que
+            // aparezcan facturas de años previos con monto parecido. Al buscar se ve todo.
+            ->when(!$buscar && $mov->fecha_contable, function ($q) use ($mov) {
+                $desde = date('Y-m-d', strtotime($mov->fecha_contable . ' -12 months'));
+                $hasta = date('Y-m-d', strtotime($mov->fecha_contable . ' +5 days'));
+                $q->whereBetween('df.fecha_emision', [$desde, $hasta]);
+            })
             ->select(
                 'df.id',
                 DB::raw('df.numero_documento_bsale as folio'),
