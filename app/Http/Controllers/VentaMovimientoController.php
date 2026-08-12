@@ -199,6 +199,15 @@ class VentaMovimientoController extends Controller
             ->sum('monto');
         $saldoMov = max(0, $mov->monto - $asignadoMov);
 
+        // Cobrado efectivo de cada factura: el MAYOR entre lo conciliado localmente
+        // (venta_movimiento + transbank + NC) y lo que Chipax reporta ya pagado
+        // (monto - chipax_monto_por_cobrar). Muchas facturas históricas se conciliaron
+        // en Chipax (Transbank) y no en la app; sin esto saldrían acá como pendientes.
+        // GREATEST evita doble conteo cuando ambas fuentes tienen datos.
+        $cobradoExpr = "GREATEST("
+            . "COALESCE(vm.cobrado,0) + COALESCE(tb.cobrado_transbank,0) + COALESCE(vnca.cobrado_nc,0) + COALESCE(ncref.cobrado_nc_ref,0), "
+            . "CASE WHEN df.chipax_monto_por_cobrar IS NOT NULL THEN df.monto - df.chipax_monto_por_cobrar ELSE 0 END)";
+
         $ventas = DB::table('documentos_facturacion as df')
             ->leftJoin('cotizaciones as c',    'c.id',    '=', 'df.cotizacion_id')
             ->leftJoin('clientes as cl_cot',   'cl_cot.id', '=', 'c.cliente_id')
@@ -236,15 +245,7 @@ class VentaMovimientoController extends Controller
             })
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [1, 2])
-            ->whereRaw('df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) > 0')
-            // Sin búsqueda: acotar a facturas cercanas al movimiento (12 meses atrás →
-            // 5 días después). Un pago no puede ser por una factura futura, y evita que
-            // aparezcan facturas de años previos con monto parecido. Al buscar se ve todo.
-            ->when(!$buscar && $mov->fecha_contable, function ($q) use ($mov) {
-                $desde = date('Y-m-d', strtotime($mov->fecha_contable . ' -12 months'));
-                $hasta = date('Y-m-d', strtotime($mov->fecha_contable . ' +5 days'));
-                $q->whereBetween('df.fecha_emision', [$desde, $hasta]);
-            })
+            ->whereRaw("df.monto - $cobradoExpr > 0")
             ->select(
                 'df.id',
                 DB::raw('df.numero_documento_bsale as folio'),
@@ -253,7 +254,7 @@ class VentaMovimientoController extends Controller
                 DB::raw('COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut_receptor'),
                 'df.monto',
                 DB::raw('df.tipo as tipo_doc'),
-                DB::raw('df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) as saldo_por_cobrar')
+                DB::raw("df.monto - $cobradoExpr as saldo_por_cobrar")
             )
             ->when($buscar, fn($q) => $q->where(function ($q2) use ($buscar) {
                 $q2->where('df.numero_documento_bsale', 'like', "%$buscar%")
@@ -261,7 +262,7 @@ class VentaMovimientoController extends Controller
                    ->orWhere('cl_cot.razon_social',       'like', "%$buscar%")
                    ->orWhere('cl_dir.razon_social',       'like', "%$buscar%");
             }))
-            ->orderByRaw('ABS(df.monto - COALESCE(vm.cobrado,0) - COALESCE(tb.cobrado_transbank,0) - COALESCE(vnca.cobrado_nc,0) - COALESCE(ncref.cobrado_nc_ref,0) - ?) ASC', [$saldoMov])
+            ->orderByRaw("ABS(df.monto - $cobradoExpr - ?) ASC", [$saldoMov])
             ->paginate(30);
 
         return response()->json($ventas);

@@ -18,15 +18,23 @@ class CuentasPorCobrarController extends Controller
         return DB::raw("(
             SELECT
                 df.id AS df_id,
-                COALESCE(vm.monto_cobrado, 0)
-                  + COALESCE(tbk.monto_tbk, 0)
-                  + COALESCE(df.monto_cobrado_manual, 0)
-                  + CASE WHEN df.tipo_documento_bsale_id = 2
-                         -- NC: cuánto de su monto ya fue aplicado a facturas (venta_nc_aplicacion)
-                         THEN COALESCE(ncnc.monto_nc, 0)
-                         -- Factura normal: NC aplicada manualmente + NC de Bsale que la referencia
-                         ELSE COALESCE(ncf.monto_nc, 0) + COALESCE(ncref.monto_nc, 0)
-                    END AS monto_cobrado_efectivo
+                CASE WHEN df.tipo_documento_bsale_id = 2
+                     -- NC: pagos locales + cuánto de su monto ya fue aplicado a facturas (venta_nc_aplicacion)
+                     THEN COALESCE(vm.monto_cobrado, 0) + COALESCE(tbk.monto_tbk, 0)
+                          + COALESCE(df.monto_cobrado_manual, 0) + COALESCE(ncnc.monto_nc, 0)
+                     -- Factura: el MAYOR entre lo cobrado localmente (conciliación en la app)
+                     -- y lo que Chipax reporta ya pagado (monto - saldoDeudor). Muchas facturas
+                     -- históricas se conciliaron en Chipax (Transbank) y no en la app, así que
+                     -- localmente saldrían en \$0 cobrado. GREATEST evita doble conteo cuando
+                     -- ambas fuentes tienen datos.
+                     ELSE GREATEST(
+                            COALESCE(vm.monto_cobrado, 0) + COALESCE(tbk.monto_tbk, 0)
+                              + COALESCE(df.monto_cobrado_manual, 0)
+                              + COALESCE(ncf.monto_nc, 0) + COALESCE(ncref.monto_nc, 0),
+                            CASE WHEN df.chipax_monto_por_cobrar IS NOT NULL
+                                 THEN df.monto - df.chipax_monto_por_cobrar ELSE 0 END
+                          )
+                END AS monto_cobrado_efectivo
             FROM documentos_facturacion df
             LEFT JOIN (SELECT venta_id, SUM(monto) monto_cobrado FROM venta_movimiento GROUP BY venta_id) vm
                    ON vm.venta_id = df.id
