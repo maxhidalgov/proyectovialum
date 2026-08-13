@@ -44,6 +44,7 @@ const allMenuItems = [
       { title: 'Cotizador',       to: { name: 'cotizador' },     icon: { icon: 'mdi-calculator' },              permission: 'area_ventas' },
       { title: 'Cotizaciones',    to: { name: 'cotizaciones' },  icon: { icon: 'tabler-file' },                 permission: 'area_ventas' },
       { title: 'Venta Express',   to: { name: 'venta-express' }, icon: { icon: 'mdi-flash' },                   permission: 'area_ventas' },
+      { title: 'Venta Express (nuevo)', to: { name: 'venta-express-nuevo' }, icon: { icon: 'mdi-flash-outline' }, permission: 'area_ventas' },
       { title: 'Facturación',     to: { name: 'facturacion' },   icon: { icon: 'mdi-file-document-multiple' },  permission: 'area_ventas' },
       { title: 'Boletas/Facturas',to: { name: 'historial-ventas' }, icon: { icon: 'mdi-receipt-text-outline' }, permission: 'area_ventas' },
       { title: 'Órdenes de Corte',to: { name: 'ordenes-corte' }, icon: { icon: 'mdi-content-cut' },             permission: 'area_ventas' },
