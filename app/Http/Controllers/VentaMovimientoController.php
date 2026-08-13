@@ -204,9 +204,11 @@ class VentaMovimientoController extends Controller
         // (monto - chipax_monto_por_cobrar). Muchas facturas históricas se conciliaron
         // en Chipax (Transbank) y no en la app; sin esto saldrían acá como pendientes.
         // GREATEST evita doble conteo cuando ambas fuentes tienen datos.
-        $cobradoExpr = "GREATEST("
+        // Topado a df.monto: una factura no puede tener cobrado > monto (evita saldos
+        // negativos cuando acumula pago Y NC).
+        $cobradoExpr = "LEAST(df.monto, GREATEST("
             . "COALESCE(vm.cobrado,0) + COALESCE(tb.cobrado_transbank,0) + COALESCE(vnca.cobrado_nc,0) + COALESCE(ncref.cobrado_nc_ref,0), "
-            . "CASE WHEN df.chipax_monto_por_cobrar IS NOT NULL THEN df.monto - df.chipax_monto_por_cobrar ELSE 0 END)";
+            . "CASE WHEN df.chipax_monto_por_cobrar IS NOT NULL THEN df.monto - df.chipax_monto_por_cobrar ELSE 0 END))";
 
         $ventas = DB::table('documentos_facturacion as df')
             ->leftJoin('cotizaciones as c',    'c.id',    '=', 'df.cotizacion_id')

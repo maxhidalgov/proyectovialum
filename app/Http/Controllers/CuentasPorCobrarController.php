@@ -18,10 +18,20 @@ class CuentasPorCobrarController extends Controller
         return DB::raw("(
             SELECT
                 df.id AS df_id,
-                CASE WHEN df.tipo_documento_bsale_id = 2
-                     -- NC: pagos locales + cuánto de su monto ya fue aplicado a facturas (venta_nc_aplicacion)
+                -- Topado al monto del propio documento: un doc no puede tener cobrado > monto.
+                -- Evita pendientes negativos / avances >100% cuando un mismo doc acumula
+                -- pago Y NC (p.ej. factura anulada por NC que además tiene un pago asignado).
+                LEAST(df.monto, CASE WHEN df.tipo_documento_bsale_id = 2
+                     -- NC: pagos locales + cuánto de su monto ya fue aplicado a facturas (venta_nc_aplicacion).
+                     -- Además, si la NC está vinculada a una factura por nc_referencia_df_id (y NO vía
+                     -- venta_nc_aplicacion), se considera consumida por su monto: así su línea no vuelve
+                     -- a restar el saldo del cliente (ya lo resta en la factura vía ncref). Sin esto la
+                     -- NC se descuenta dos veces (en la factura y como línea propia).
                      THEN COALESCE(vm.monto_cobrado, 0) + COALESCE(tbk.monto_tbk, 0)
                           + COALESCE(df.monto_cobrado_manual, 0) + COALESCE(ncnc.monto_nc, 0)
+                          + CASE WHEN df.nc_referencia_df_id IS NOT NULL
+                                      AND NOT EXISTS (SELECT 1 FROM venta_nc_aplicacion vex WHERE vex.nc_id = df.id)
+                                 THEN df.monto ELSE 0 END
                      -- Factura: el MAYOR entre lo cobrado localmente (conciliación en la app)
                      -- y lo que Chipax reporta ya pagado (monto - saldoDeudor). Muchas facturas
                      -- históricas se conciliaron en Chipax (Transbank) y no en la app, así que
@@ -34,7 +44,7 @@ class CuentasPorCobrarController extends Controller
                             CASE WHEN df.chipax_monto_por_cobrar IS NOT NULL
                                  THEN df.monto - df.chipax_monto_por_cobrar ELSE 0 END
                           )
-                END AS monto_cobrado_efectivo
+                END) AS monto_cobrado_efectivo
             FROM documentos_facturacion df
             LEFT JOIN (SELECT venta_id, SUM(monto) monto_cobrado FROM venta_movimiento GROUP BY venta_id) vm
                    ON vm.venta_id = df.id
