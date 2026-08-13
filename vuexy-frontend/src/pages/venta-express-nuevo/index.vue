@@ -112,6 +112,11 @@ const tipoDocOpts = [
 
 const btnLabel = computed(() => tipo.value === 'cotizacion' ? 'Guardar cotización' : 'Realizar venta')
 
+const previewOpen = ref(false)
+const clienteNombre = computed(() => cliente.value ? (cliente.value.razon_social || cliente.value.nombre) : 'Consumidor Final')
+const tipoLabel = computed(() => ({ boleta: 'Boleta electrónica', factura: 'Factura electrónica', cotizacion: 'Cotización' }[tipo.value]))
+function imprimir() { window.print() }
+
 const resumen = ref(null)
 function realizar() {
   resumen.value = {
@@ -224,37 +229,33 @@ function realizar() {
           <VDivider class="my-6 border-dashed" />
 
           <!-- Ítems -->
-          <div class="d-none d-md-flex text-caption font-weight-bold text-medium-emphasis text-uppercase mb-2 px-1" style="letter-spacing:.06em">
-            <div style="flex:1">Detalle</div>
-            <div style="inline-size:110px" class="text-end">Cantidad</div>
-            <div style="inline-size:150px" class="text-end">Precio unit. (neto)</div>
-            <div style="inline-size:150px" class="text-end">Subtotal</div>
-            <div style="inline-size:44px"></div>
+          <div class="items-grid items-head d-none d-md-grid text-caption font-weight-bold text-medium-emphasis text-uppercase mb-2" style="letter-spacing:.06em">
+            <div>Detalle</div>
+            <div class="text-end">Cantidad</div>
+            <div class="text-end">Precio unit. (neto)</div>
+            <div class="text-end">Subtotal</div>
+            <div></div>
           </div>
 
-          <VCard v-for="(it, i) in items" :key="i" flat border class="pa-3 mb-3">
-            <div class="d-flex flex-wrap align-center gap-3">
-              <div style="flex:1; min-inline-size: 200px">
-                <VTextField v-model="it.nombre" density="compact" hide-details variant="plain"
-                  :readonly="it.es_vidrio" class="font-weight-medium" />
-                <div class="d-flex align-center gap-2 px-3">
-                  <VChip v-if="it.es_vidrio" size="x-small" color="primary" variant="tonal" label>VIDRIO · m²</VChip>
-                  <span v-if="margen(it) !== null" class="text-caption"
-                    :class="margen(it) < MARGEN_MIN ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
-                    margen {{ Math.round(margen(it) * 100) }}%
-                  </span>
-                </div>
+          <div v-for="(it, i) in items" :key="i" class="items-grid item-row mb-3">
+            <div class="detalle-cell">
+              <VTextField v-model="it.nombre" density="compact" hide-details variant="plain"
+                :readonly="it.es_vidrio" class="font-weight-medium" />
+              <div class="d-flex align-center gap-2 px-3">
+                <VChip v-if="it.es_vidrio" size="x-small" color="primary" variant="tonal" label>VIDRIO · m²</VChip>
+                <span v-if="margen(it) !== null" class="text-caption"
+                  :class="margen(it) < MARGEN_MIN ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
+                  margen {{ Math.round(margen(it) * 100) }}%
+                </span>
               </div>
-              <VTextField v-model.number="it.cantidad" type="number" density="compact" hide-details
-                style="inline-size:110px" class="text-end" reverse />
-              <VTextField v-model.number="it.precio" type="number" density="compact" hide-details
-                style="inline-size:150px" prefix="$" reverse />
-              <div style="inline-size:150px" class="text-end font-weight-bold">{{ CLP(subtotal(it)) }}</div>
-              <VBtn icon variant="text" size="small" color="error" style="inline-size:44px" @click="quitar(i)">
-                <VIcon size="20">mdi-close</VIcon>
-              </VBtn>
             </div>
-          </VCard>
+            <VTextField v-model.number="it.cantidad" type="number" density="compact" hide-details reverse />
+            <VTextField v-model.number="it.precio" type="number" density="compact" hide-details prefix="$" reverse />
+            <div class="text-end font-weight-bold align-self-center">{{ CLP(subtotal(it)) }}</div>
+            <VBtn icon variant="text" size="small" color="error" class="align-self-center" @click="quitar(i)">
+              <VIcon size="20">mdi-close</VIcon>
+            </VBtn>
+          </div>
 
           <div class="d-flex flex-wrap align-center gap-3 mt-2">
             <VAutocomplete
@@ -315,7 +316,7 @@ function realizar() {
         <VCard class="mb-4">
           <VCardText class="d-flex flex-column gap-3">
             <VBtn block color="success" prepend-icon="mdi-flash" @click="realizar">{{ btnLabel }}</VBtn>
-            <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-eye-outline">Vista previa</VBtn>
+            <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-eye-outline" @click="previewOpen = true">Vista previa</VBtn>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-content-save-outline">Guardar borrador</VBtn>
           </VCardText>
         </VCard>
@@ -352,5 +353,126 @@ function realizar() {
         </VAlert>
       </VCol>
     </VRow>
+
+    <!-- ══════════ Vista Previa del documento ══════════ -->
+    <VDialog v-model="previewOpen" max-width="820" scrollable>
+      <VCard class="doc-preview">
+        <VCardText class="pa-0">
+          <div id="doc-print" class="pa-8 pa-sm-10">
+            <!-- Header -->
+            <div class="d-flex flex-wrap justify-space-between gap-6 mb-8">
+              <div>
+                <div class="d-flex align-center gap-3 mb-3">
+                  <VAvatar color="primary" variant="tonal" rounded size="40"><span class="text-h6 font-weight-bold">V</span></VAvatar>
+                  <div>
+                    <div class="text-h5 font-weight-bold">VIALUM</div>
+                    <div class="text-caption text-primary" style="letter-spacing:.14em">VENTANAS PVC · ALUMINIO</div>
+                  </div>
+                </div>
+                <p class="mb-0 font-weight-medium">HIDALGO E HIDALGO LIMITADA</p>
+                <p class="mb-0 text-medium-emphasis">RUT 76.096.031-4 · Balmaceda 454, Los Ángeles</p>
+                <p class="mb-0 text-medium-emphasis">contacto@vialum.cl · +56 43 2 311859</p>
+              </div>
+              <div class="doc-stamp text-center">
+                <div class="text-error font-weight-bold">R.U.T. 76.096.031-4</div>
+                <div class="text-error font-weight-bold text-uppercase my-1">{{ tipoLabel }}</div>
+                <div class="text-error font-weight-bold">N° — (al emitir)</div>
+                <div class="text-caption text-medium-emphasis mt-1">S.I.I. - Los Ángeles</div>
+              </div>
+            </div>
+
+            <VRow class="mb-6">
+              <VCol cols="12" sm="7">
+                <div class="text-overline text-medium-emphasis mb-1">{{ tipo === 'boleta' ? 'Cliente' : 'Señor(es)' }}</div>
+                <p class="mb-0 font-weight-medium">{{ clienteNombre }}</p>
+                <template v-if="cliente">
+                  <p class="mb-0 text-medium-emphasis" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
+                  <p class="mb-0 text-medium-emphasis" v-if="cliente.direccion">{{ cliente.direccion }}</p>
+                </template>
+              </VCol>
+              <VCol cols="12" sm="5">
+                <table class="w-100 text-body-2">
+                  <tbody>
+                    <tr><td class="text-medium-emphasis py-1">Fecha emisión</td><td class="text-end">{{ fecha }}</td></tr>
+                    <tr><td class="text-medium-emphasis py-1">Forma de pago</td><td class="text-end">{{ pagoLabels[formaPago] }}</td></tr>
+                  </tbody>
+                </table>
+              </VCol>
+            </VRow>
+
+            <VTable class="doc-table border mb-6">
+              <thead>
+                <tr>
+                  <th>DETALLE</th>
+                  <th class="text-end">CANT.</th>
+                  <th class="text-end">P. UNIT (NETO)</th>
+                  <th class="text-end">SUBTOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(it, i) in items" :key="i">
+                  <td>{{ it.nombre }}</td>
+                  <td class="text-end">{{ it.cantidad }}</td>
+                  <td class="text-end">{{ CLP(it.precio) }}</td>
+                  <td class="text-end font-weight-medium">{{ CLP(subtotal(it)) }}</td>
+                </tr>
+              </tbody>
+            </VTable>
+
+            <div class="d-flex justify-end">
+              <table style="min-inline-size: 280px">
+                <tbody>
+                  <tr><td class="text-medium-emphasis py-1 pe-8">Neto</td><td class="text-end">{{ CLP(neto) }}</td></tr>
+                  <tr><td class="text-medium-emphasis py-1 pe-8">IVA 19%</td><td class="text-end">{{ CLP(iva) }}</td></tr>
+                  <tr class="doc-total"><td class="py-2 pe-8 text-h6">TOTAL</td><td class="text-end text-h6 font-weight-bold">{{ CLP(total) }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <template v-if="nota">
+              <VDivider class="my-6 border-dashed" />
+              <p class="mb-0"><span class="font-weight-medium me-1">Nota:</span>{{ nota }}</p>
+            </template>
+          </div>
+        </VCardText>
+
+        <VDivider />
+        <VCardActions class="pa-4 d-print-none">
+          <VChip size="small" color="secondary" variant="tonal" label>Vista previa · no emitida</VChip>
+          <VSpacer />
+          <VBtn variant="tonal" color="secondary" prepend-icon="mdi-printer" @click="imprimir">Imprimir</VBtn>
+          <VBtn color="primary" @click="previewOpen = false">Cerrar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
+
+<style scoped>
+.items-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 160px 130px 40px;
+  gap: 12px;
+  align-items: center;
+}
+.items-head { padding-inline: 13px; }        /* alinea con el contenido de las filas (borde 1px + padding 12px) */
+.items-head .text-end { text-align: end; }
+.item-row {
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+}
+.item-row:hover { border-color: rgba(var(--v-border-color), 0.9); }
+.detalle-cell { min-inline-size: 0; }
+
+/* Responsivo: en móvil apila (el header md se oculta con d-none d-md-grid) */
+@media (max-width: 959px) {
+  .items-grid { grid-template-columns: 1fr 1fr; }
+  .detalle-cell { grid-column: 1 / -1; }
+}
+
+/* Documento de vista previa */
+.doc-stamp { border: 2px solid rgb(var(--v-theme-error)); border-radius: 8px; padding: 10px 16px; min-inline-size: 190px; }
+.doc-table :deep(th) { font-size: .72rem; letter-spacing: .05em; }
+.doc-total td { border-top: 2px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+</style>
