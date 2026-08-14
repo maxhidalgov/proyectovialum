@@ -192,7 +192,55 @@ const btnLabel = computed(() => esCotizacion.value ? 'Guardar cotización' : 'Re
 const previewOpen = ref(false)
 const clienteNombre = computed(() => cliente.value ? (cliente.value.razon_social || cliente.value.nombre) : 'Consumidor Final')
 const tipoLabel = computed(() => ({ boleta: 'Boleta electrónica', factura: 'Factura electrónica', cotizacion: 'Cotización' }[tipo.value]))
-function imprimir() { window.print() }
+// CSS de la hoja carta para impresión (sin scope; se inyecta en el iframe).
+const PRINT_CSS = `
+  @page { size: Letter; margin: 14mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #2b2f42; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .coti-paper { background: #fff; color: #2b2f42; font-size: 13px; line-height: 1.5; }
+  .coti-head { display: flex; justify-content: space-between; gap: 24px; }
+  .coti-head img { height: 40px; display: block; }
+  .coti-sub { color: #1e4d8b; letter-spacing: .14em; font-size: 10px; font-weight: 700; margin: 3px 0 12px; }
+  .coti-strong { font-weight: 700; margin: 0; }
+  .coti-muted { color: #6b7180; font-size: 12px; margin: 0; }
+  .coti-box { border: 1.5px solid #1e4d8b; border-radius: 8px; padding: 10px 16px; min-width: 180px; height: fit-content; }
+  .coti-box-title { color: #1e4d8b; font-weight: 800; letter-spacing: .08em; text-align: center; border-bottom: 1px solid #d9dee6; padding-bottom: 6px; margin-bottom: 6px; }
+  .coti-box table { width: 100%; }
+  .coti-box td { padding: 2px 0; font-size: 12px; }
+  .coti-box td:last-child { text-align: right; font-weight: 600; }
+  .coti-rule { height: 3px; background: #1e4d8b; border-radius: 2px; margin: 20px 0; }
+  .coti-label { text-transform: uppercase; letter-spacing: .06em; font-size: 10px; color: #6b7180; font-weight: 700; margin-bottom: 4px; }
+  .coti-intro { margin: 18px 0; }
+  .coti-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .coti-table th { background: #f2f5f9; color: #4a5060; text-align: left; font-size: 11px; letter-spacing: .04em; padding: 8px 10px; border-bottom: 2px solid #1e4d8b; }
+  .coti-table th.r, .coti-table td.r { text-align: right; }
+  .coti-table td { padding: 8px 10px; border-bottom: 1px solid #eceef3; font-size: 12.5px; }
+  .coti-totales { display: flex; justify-content: flex-end; margin-top: 16px; }
+  .coti-totales table { min-width: 260px; }
+  .coti-totales td { padding: 4px 0; color: #6b7180; }
+  .coti-totales td.r { text-align: right; color: #2b2f42; font-weight: 600; }
+  .coti-totales tr.tot td { border-top: 2px solid #d9dee6; padding-top: 10px; font-size: 16px; font-weight: 800; color: #1e4d8b; }
+  .coti-nota { margin-top: 18px; padding: 10px 12px; background: #f6f8fb; border-left: 3px solid #1e4d8b; border-radius: 4px; font-size: 12.5px; }
+  .coti-cond { margin-top: 24px; }
+  .coti-cond ul { margin: 6px 0 0; padding-left: 18px; color: #4a5060; font-size: 12px; }
+  .coti-cond li { margin: 3px 0; }
+  .coti-firma { margin-top: 48px; display: flex; justify-content: flex-end; text-align: center; }
+  .coti-line { width: 220px; border-top: 1px solid #9aa1b0; margin-bottom: 4px; }
+`
+function imprimir() {
+  const el = document.getElementById('doc-print')
+  if (!el) return
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
+  document.body.appendChild(iframe)
+  const doc = iframe.contentWindow.document
+  doc.open()
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><base href="${location.origin}/"><title>Cotización VIALUM</title><style>${PRINT_CSS}</style></head><body>${el.outerHTML}</body></html>`)
+  doc.close()
+  const done = () => { try { iframe.contentWindow.focus(); iframe.contentWindow.print() } catch (e) {} setTimeout(() => iframe.remove(), 800) }
+  if (iframe.contentWindow.document.readyState === 'complete') setTimeout(done, 150)
+  else iframe.onload = () => setTimeout(done, 150)
+}
 
 const resumen = ref(null)
 function realizar() {
@@ -659,13 +707,4 @@ function realizar() {
 .coti-cond li { margin: 3px 0; }
 .coti-firma { margin-top: 48px; display: flex; justify-content: flex-end; text-align: center; }
 .coti-line { inline-size: 220px; border-top: 1px solid #9aa1b0; margin-bottom: 4px; }
-</style>
-
-<!-- Impresión: aislar solo la hoja de cotización -->
-<style>
-@media print {
-  body * { visibility: hidden !important; }
-  #doc-print, #doc-print * { visibility: visible !important; }
-  #doc-print { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 100%; padding: 0 !important; }
-}
 </style>
