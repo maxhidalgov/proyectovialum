@@ -133,6 +133,8 @@ const voucher   = ref('')
 const pagoLabels = { tarjeta_debito: 'Tarjeta débito', tarjeta_credito: 'Tarjeta crédito', transferencia: 'Transferencia', efectivo: 'Efectivo' }
 const pagoItems = Object.entries(pagoLabels).map(([value, title]) => ({ value, title }))
 const necesitaVoucher = computed(() => ['tarjeta_debito', 'tarjeta_credito'].includes(formaPago.value))
+// Voucher obligatorio en pagos con tarjeta (igual que Venta Express: vouchersOk)
+const voucherFalta = computed(() => !esCotizacion.value && necesitaVoucher.value && !String(voucher.value).trim())
 
 const optCorte = ref(false)
 const optRef   = ref(false)
@@ -159,6 +161,7 @@ function imprimir() { window.print() }
 
 const resumen = ref(null)
 function realizar() {
+  if (voucherFalta.value) return
   resumen.value = {
     tipo: tipo.value, cliente: clienteNombre.value, forma_pago: pagoLabels[formaPago.value],
     voucher: necesitaVoucher.value ? (voucher.value || '— (falta)') : null,
@@ -344,7 +347,8 @@ function realizar() {
       <VCol cols="12" md="3">
         <VCard class="mb-4">
           <VCardText class="d-flex flex-column gap-3">
-            <VBtn block color="success" prepend-icon="mdi-flash" @click="realizar">{{ btnLabel }}</VBtn>
+            <VBtn block color="success" prepend-icon="mdi-flash" :disabled="voucherFalta" @click="realizar">{{ btnLabel }}</VBtn>
+            <p v-if="voucherFalta" class="text-caption text-error mb-0 mt-n1">Falta el N° de voucher Transbank.</p>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-eye-outline" @click="previewOpen = true">Vista previa</VBtn>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-content-save-outline">Guardar borrador</VBtn>
           </VCardText>
@@ -354,7 +358,9 @@ function realizar() {
           <VCardText>
             <p class="text-caption font-weight-bold text-uppercase text-disabled mb-2" style="letter-spacing:.06em">Forma de pago</p>
             <VSelect v-model="formaPago" :items="pagoItems" density="compact" hide-details />
-            <VTextField v-if="necesitaVoucher" v-model="voucher" class="mt-3" density="compact" hide-details placeholder="N° voucher Transbank (obligatorio)" />
+            <VTextField v-if="necesitaVoucher" v-model="voucher" class="mt-3" density="compact"
+              placeholder="N° voucher Transbank (obligatorio)"
+              :error="voucherFalta" :messages="voucherFalta ? 'Obligatorio para pago con tarjeta' : ''" />
           </VCardText>
         </VCard>
 
