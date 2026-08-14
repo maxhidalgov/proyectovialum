@@ -3,5 +3,5 @@ import DocumentoExpress from '@/components/documentos/DocumentoExpress.vue'
 </script>
 
 <template>
-  <DocumentoExpress mode="venta" />
+  <DocumentoExpress mode="cotizacion" />
 </template>

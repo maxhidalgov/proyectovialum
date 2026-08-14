@@ -35,6 +35,7 @@ declare module 'vue-router/auto-routes' {
     'comprasmensuales': RouteRecordInfo<'comprasmensuales', '/comprasmensuales', Record<never, never>, Record<never, never>>,
     'conciliacion': RouteRecordInfo<'conciliacion', '/conciliacion', Record<never, never>, Record<never, never>>,
     'cotizacion-editar-eliminarparece': RouteRecordInfo<'cotizacion-editar-eliminarparece', '/cotizacion-editarELIMINARPARECE', Record<never, never>, Record<never, never>>,
+    'cotizacion-rapida': RouteRecordInfo<'cotizacion-rapida', '/cotizacion-rapida', Record<never, never>, Record<never, never>>,
     'cotizacion-ver': RouteRecordInfo<'cotizacion-ver', '/cotizacion-ver', Record<never, never>, Record<never, never>>,
     'cotizaciones': RouteRecordInfo<'cotizaciones', '/cotizaciones', Record<never, never>, Record<never, never>>,
     'cotizaciones-importar-pvc': RouteRecordInfo<'cotizaciones-importar-pvc', '/cotizaciones/importar-pvc', Record<never, never>, Record<never, never>>,
