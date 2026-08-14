@@ -155,13 +155,28 @@ const bajoMargen = it => { const m = margen(it); return m !== null && m < MARGEN
 const hayBajoMargen = computed(() => items.value.some(bajoMargen))
 
 // ── Pago / opciones ───────────────────────────────────────────────────────────
-const formaPago = ref('tarjeta_debito')
-const voucher   = ref('')
 const pagoLabels = { tarjeta_debito: 'Tarjeta débito', tarjeta_credito: 'Tarjeta crédito', transferencia: 'Transferencia', efectivo: 'Efectivo' }
-const pagoItems = Object.entries(pagoLabels).map(([value, title]) => ({ value, title }))
-const necesitaVoucher = computed(() => ['tarjeta_debito', 'tarjeta_credito'].includes(formaPago.value))
-// Voucher obligatorio en pagos con tarjeta (igual que Venta Express: vouchersOk)
-const voucherFalta = computed(() => !esCotizacion.value && necesitaVoucher.value && !String(voucher.value).trim())
+const formasPago = Object.entries(pagoLabels).map(([value, label]) => ({ value, label }))
+const esTarjeta = fp => ['tarjeta_debito', 'tarjeta_credito'].includes(fp)
+
+// Pagos: uno o varios (split), igual que Venta Express. Default tarjeta_debito a
+// propósito (exige voucher → obliga a elegir la forma correcta).
+const pagos = ref([{ forma_pago: 'tarjeta_debito', monto: 0, voucher: '' }])
+const totalPagos = computed(() => pagos.value.reduce((s, p) => s + (Number(p.monto) || 0), 0))
+const pagosOk    = computed(() => Math.abs(totalPagos.value - total.value) < 1)
+const vouchersOk = computed(() => pagos.value.every(p => !esTarjeta(p.forma_pago) || !!p.voucher))
+function agregarPago() {
+  const restante = Math.max(0, Math.round(total.value - totalPagos.value))
+  pagos.value.push({ forma_pago: 'transferencia', monto: restante, voucher: '' })
+}
+// Con un solo pago, su monto sigue al total automáticamente
+watch(total, t => { if (pagos.value.length === 1) pagos.value[0].monto = Math.round(t) }, { immediate: true })
+// Forma de pago principal (mayor monto) — la que se guarda para el resumen de boletas
+const formaPagoResumen = computed(() => {
+  if (!pagos.value.length) return '—'
+  if (pagos.value.length > 1) return `Varios (${pagos.value.length})`
+  return pagoLabels[pagos.value[0].forma_pago]
+})
 
 const optRef   = ref(false)
 const optDesc  = ref(true)
@@ -197,13 +212,14 @@ const puedeRealizar = computed(() => {
   if (!items.value.length) return false
   if (hayBajoMargen.value) return false
   if (esCotizacion.value) return !!cliente.value
-  return !voucherFalta.value && !refsIncompletas.value
+  return pagosOk.value && vouchersOk.value && !refsIncompletas.value
 })
 const bloqueoMsg = computed(() => {
   if (!items.value.length) return 'Agrega al menos un ítem.'
   if (hayBajoMargen.value) return `Hay una línea bajo el margen mínimo (${Math.round(MARGEN_MIN * 100)}%). Sube el precio.`
   if (esCotizacion.value && !cliente.value) return 'La cotización requiere cliente.'
-  if (voucherFalta.value) return 'Falta el N° de voucher Transbank.'
+  if (!vouchersOk.value) return 'Falta el N° de voucher Transbank.'
+  if (!pagosOk.value) return 'Los pagos no cuadran con el total.'
   if (refsIncompletas.value) return 'Completa el N° de las referencias.'
   return ''
 })
@@ -281,8 +297,7 @@ const resumen = ref(null)
 function realizar() {
   if (!puedeRealizar.value) return
   resumen.value = {
-    tipo: tipo.value, cliente: clienteNombre.value, forma_pago: pagoLabels[formaPago.value],
-    voucher: necesitaVoucher.value ? (voucher.value || '— (falta)') : null,
+    tipo: tipo.value, cliente: clienteNombre.value, forma_pago: esCotizacion.value ? null : formaPagoResumen.value,
     neto: CLP(neto.value), iva: CLP(iva.value), total: CLP(total.value), items: items.value.length,
   }
 }
@@ -378,7 +393,7 @@ function realizar() {
               <h6 class="text-h6 mb-3">Pago</h6>
               <table class="text-body-2">
                 <tbody>
-                  <tr><td class="text-medium-emphasis pe-6 py-1">Forma de pago</td><td class="font-weight-medium">{{ pagoLabels[formaPago] }}</td></tr>
+                  <tr><td class="text-medium-emphasis pe-6 py-1">Forma de pago</td><td class="font-weight-medium">{{ formaPagoResumen }}</td></tr>
                   <tr><td class="text-medium-emphasis pe-6 py-1">Total a pagar</td><td class="font-weight-medium">{{ CLP(total) }}</td></tr>
                   <tr><td class="text-medium-emphasis pe-6 py-1">Vendedor</td><td class="font-weight-medium">{{ vendedor }}</td></tr>
                 </tbody>
@@ -496,11 +511,23 @@ function realizar() {
 
         <VCard v-if="!esCotizacion" class="mb-4">
           <VCardText>
-            <p class="text-caption font-weight-bold text-uppercase text-disabled mb-2" style="letter-spacing:.06em">Forma de pago</p>
-            <VSelect v-model="formaPago" :items="pagoItems" density="compact" hide-details />
-            <VTextField v-if="necesitaVoucher" v-model="voucher" class="mt-3" density="compact"
-              placeholder="N° voucher Transbank (obligatorio)"
-              :error="voucherFalta" :messages="voucherFalta ? 'Obligatorio para pago con tarjeta' : ''" />
+            <div class="d-flex align-center justify-space-between mb-2">
+              <p class="text-caption font-weight-bold text-uppercase text-disabled mb-0" style="letter-spacing:.06em">Formas de pago</p>
+              <VBtn size="x-small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarPago">Dividir</VBtn>
+            </div>
+            <div v-for="(p, i) in pagos" :key="i" class="mb-3">
+              <div class="d-flex align-center gap-2">
+                <VSelect v-model="p.forma_pago" :items="formasPago" item-title="label" item-value="value" density="compact" hide-details style="max-inline-size:150px" />
+                <MoneyField v-model="p.monto" />
+                <VBtn v-if="pagos.length > 1" icon size="x-small" variant="text" color="error" @click="pagos.splice(i, 1)"><VIcon size="16">mdi-close</VIcon></VBtn>
+              </div>
+              <VTextField v-if="esTarjeta(p.forma_pago)" v-model="p.voucher" class="mt-2" density="compact" hide-details
+                placeholder="N° voucher Transbank" prepend-inner-icon="mdi-credit-card-outline" :error="!p.voucher" />
+            </div>
+            <div v-if="pagos.length > 1" class="d-flex justify-space-between text-caption" :class="pagosOk ? 'text-success' : 'text-warning'">
+              <span>Asignado</span>
+              <span>{{ CLP(totalPagos) }} / {{ CLP(total) }}{{ pagosOk ? ' ✓' : '' }}</span>
+            </div>
           </VCardText>
         </VCard>
 
@@ -528,7 +555,7 @@ function realizar() {
         <VAlert v-if="resumen" type="success" variant="tonal" class="mt-4 text-body-2">
           <div class="font-weight-bold mb-1">Prototipo — resumen de {{ resumen.tipo }}</div>
           Cliente: {{ resumen.cliente }}<br>
-          Forma de pago: {{ resumen.forma_pago }}<span v-if="resumen.voucher"> · voucher {{ resumen.voucher }}</span><br>
+          <template v-if="resumen.forma_pago">Forma de pago: {{ resumen.forma_pago }}<br></template>
           Ítems: {{ resumen.items }} · Neto {{ resumen.neto }} · IVA {{ resumen.iva }}<br>
           <span class="text-h6">Total {{ resumen.total }}</span>
           <div class="text-caption text-medium-emphasis mt-1">(No se emitió nada — es solo el prototipo.)</div>
