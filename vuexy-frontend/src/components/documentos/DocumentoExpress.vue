@@ -46,13 +46,18 @@ function buscarClientes(q) {
 function descuentoCliente() { return Number(cliente.value?.descuento || 0) }
 
 // Crear cliente (prototipo: lo agrega localmente; el módulo real llama a Bsale)
-const nuevoCli = ref({ show: false, razon_social: '', identification: '', direccion: '', comuna: '', ciudad: '' })
+const nuevoCliVacio = () => ({ show: false, tipo: 'empresa', razon_social: '', identification: '', giro: '', email: '', telefono: '', direccion: '', comuna: '', ciudad: '' })
+const nuevoCli = ref(nuevoCliVacio())
 function abrirNuevoCliente() {
-  nuevoCli.value = { show: true, razon_social: clienteSearch.value || '', identification: '', direccion: '', comuna: '', ciudad: '' }
+  nuevoCli.value = { ...nuevoCliVacio(), show: true, razon_social: clienteSearch.value || '' }
 }
 function guardarCliente() {
   const c = nuevoCli.value
-  cliente.value = { razon_social: c.razon_social, identification: c.identification, direccion: [c.direccion, c.comuna, c.ciudad].filter(Boolean).join(', ') }
+  cliente.value = {
+    razon_social: c.razon_social, identification: c.identification, giro: c.giro,
+    email: c.email, telefono: c.telefono, tipo: c.tipo,
+    direccion: [c.direccion, c.comuna, c.ciudad].filter(Boolean).join(', '),
+  }
   nuevoCli.value.show = false
 }
 
@@ -146,6 +151,7 @@ const optCorte = ref(false)
 const optRef   = ref(false)
 const optDesc  = ref(true)
 const nota     = ref('')
+const validez  = ref(15) // días de validez de la cotización
 
 // Descuento por cliente: al elegir cliente o (des)activar el switch, aplicar a
 // las líneas de catálogo (con producto_id). Las líneas manuales no se tocan.
@@ -446,109 +452,151 @@ function realizar() {
     </VDialog>
 
     <!-- ══════════ Modal: nuevo cliente ══════════ -->
-    <VDialog v-model="nuevoCli.show" max-width="480">
+    <VDialog v-model="nuevoCli.show" max-width="560">
       <VCard>
-        <VCardItem><VCardTitle>Nuevo cliente</VCardTitle></VCardItem>
+        <VCardItem>
+          <VCardTitle>Nuevo cliente</VCardTitle>
+          <VCardSubtitle>Se crea en Bsale y queda seleccionado</VCardSubtitle>
+        </VCardItem>
         <VCardText>
           <VRow>
-            <VCol cols="12"><VTextField v-model="nuevoCli.razon_social" label="Razón social / Nombre" density="compact" /></VCol>
-            <VCol cols="6"><VTextField v-model="nuevoCli.identification" label="RUT" density="compact" /></VCol>
-            <VCol cols="6"><VTextField v-model="nuevoCli.direccion" label="Dirección" density="compact" /></VCol>
-            <VCol cols="6"><VTextField v-model="nuevoCli.comuna" label="Comuna" density="compact" /></VCol>
-            <VCol cols="6"><VTextField v-model="nuevoCli.ciudad" label="Ciudad" density="compact" /></VCol>
+            <VCol cols="12" sm="8"><VTextField v-model="nuevoCli.razon_social" label="Razón social / Nombre" density="compact" /></VCol>
+            <VCol cols="12" sm="4">
+              <VSelect v-model="nuevoCli.tipo" :items="[{title:'Empresa',value:'empresa'},{title:'Persona',value:'persona'}]" label="Tipo" density="compact" />
+            </VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.identification" label="RUT" density="compact" placeholder="12.345.678-9" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.giro" label="Giro" density="compact" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.email" label="Email" type="email" density="compact" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.telefono" label="Teléfono" density="compact" /></VCol>
+            <VCol cols="12"><VTextField v-model="nuevoCli.direccion" label="Dirección" density="compact" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.comuna" label="Comuna" density="compact" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.ciudad" label="Ciudad" density="compact" /></VCol>
           </VRow>
-          <VAlert type="info" variant="tonal" density="compact" class="text-caption">Prototipo: se selecciona localmente. En el módulo real se crea en Bsale (POST /api/bsale-clientes/crear).</VAlert>
+          <VAlert type="info" variant="tonal" density="compact" class="text-caption">
+            Comuna y ciudad son obligatorias para facturar. Prototipo: se selecciona localmente; en el módulo real se crea en Bsale (POST /api/bsale-clientes/crear).
+          </VAlert>
         </VCardText>
         <VCardActions class="pa-4 pt-0">
           <VSpacer />
           <VBtn variant="tonal" color="secondary" @click="nuevoCli.show = false">Cancelar</VBtn>
-          <VBtn color="primary" :disabled="!nuevoCli.razon_social" @click="guardarCliente">Guardar</VBtn>
+          <VBtn color="primary" :disabled="!nuevoCli.razon_social || !nuevoCli.identification" @click="guardarCliente">Guardar</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
 
     <!-- ══════════ Vista Previa del documento ══════════ -->
-    <VDialog v-model="previewOpen" max-width="820" scrollable>
-      <VCard class="doc-preview">
-        <VCardText class="pa-0">
-          <div id="doc-print" class="pa-8 pa-sm-10">
-            <div class="d-flex flex-wrap justify-space-between gap-6 mb-8">
+    <VDialog v-model="previewOpen" :max-width="esCotizacion ? 840 : 640" scrollable>
+      <VCard>
+        <!-- ═══ COTIZACIÓN: hoja carta bien presentada ═══ -->
+        <VCardText v-if="esCotizacion" class="pa-0">
+          <div id="doc-print" class="coti-paper">
+            <div class="coti-head">
               <div>
-                <img :src="logoVialum" alt="VIALUM" height="32" class="mb-1" style="display:block">
-                <div class="text-caption text-primary mb-2" style="letter-spacing:.14em">VENTANAS PVC · ALUMINIO</div>
-                <p class="mb-0 font-weight-medium">HIDALGO E HIDALGO LIMITADA</p>
-                <p class="mb-0 text-medium-emphasis">RUT 76.096.031-4 · Balmaceda 454, Los Ángeles</p>
-                <p class="mb-0 text-medium-emphasis">contacto@vialum.cl · +56 43 2 311859</p>
+                <img :src="logoVialum" alt="VIALUM" height="40" style="display:block">
+                <div class="coti-sub">VENTANAS PVC · ALUMINIO</div>
+                <p class="coti-strong mb-0">HIDALGO E HIDALGO LIMITADA</p>
+                <p class="coti-muted mb-0">RUT 76.096.031-4 · Vidriería, aluminios y ferretería</p>
+                <p class="coti-muted mb-0">Balmaceda 454, Los Ángeles</p>
+                <p class="coti-muted mb-0">contacto@vialum.cl · +56 43 2 311859</p>
               </div>
-              <div class="doc-stamp text-center">
-                <div class="text-error font-weight-bold">R.U.T. 76.096.031-4</div>
-                <div class="text-error font-weight-bold text-uppercase my-1">{{ tipoLabel }}</div>
-                <div class="text-error font-weight-bold">N° — (al emitir)</div>
-                <div class="text-caption text-medium-emphasis mt-1">S.I.I. - Los Ángeles</div>
+              <div class="coti-box">
+                <div class="coti-box-title">COTIZACIÓN</div>
+                <table>
+                  <tbody>
+                    <tr><td>N°</td><td>—</td></tr>
+                    <tr><td>Fecha</td><td>{{ fecha }}</td></tr>
+                    <tr><td>Validez</td><td>{{ validez }} días</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            <VRow class="mb-6">
-              <VCol cols="12" sm="7">
-                <div class="text-overline text-medium-emphasis mb-1">{{ tipo === 'boleta' ? 'Cliente' : 'Señor(es)' }}</div>
-                <p class="mb-0 font-weight-medium">{{ clienteNombre }}</p>
-                <template v-if="cliente">
-                  <p class="mb-0 text-medium-emphasis" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
-                  <p class="mb-0 text-medium-emphasis" v-if="cliente.direccion">{{ cliente.direccion }}</p>
-                </template>
-              </VCol>
-              <VCol cols="12" sm="5">
-                <table class="w-100 text-body-2">
-                  <tbody>
-                    <tr><td class="text-medium-emphasis py-1">{{ esCotizacion ? 'Fecha' : 'Fecha emisión' }}</td><td class="text-end">{{ fecha }}</td></tr>
-                    <tr v-if="!esCotizacion"><td class="text-medium-emphasis py-1">Forma de pago</td><td class="text-end">{{ pagoLabels[formaPago] }}</td></tr>
-                  </tbody>
-                </table>
-              </VCol>
-            </VRow>
+            <div class="coti-rule"></div>
 
-            <VTable class="doc-table border mb-6">
+            <div class="coti-label">Señor(es)</div>
+            <p class="coti-strong mb-0">{{ clienteNombre }}</p>
+            <template v-if="cliente">
+              <p class="coti-muted mb-0" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
+              <p class="coti-muted mb-0" v-if="cliente.direccion">{{ cliente.direccion }}</p>
+              <p class="coti-muted mb-0" v-if="cliente.email">{{ cliente.email }}</p>
+            </template>
+
+            <p class="coti-intro">Junto con saludar, tenemos el agrado de presentar la siguiente cotización según su solicitud:</p>
+
+            <table class="coti-table">
               <thead>
-                <tr>
-                  <th>DETALLE</th>
-                  <th class="text-end">CANT.</th>
-                  <th class="text-end">P. UNIT</th>
-                  <th class="text-end">DESC.</th>
-                  <th class="text-end">SUBTOTAL</th>
-                </tr>
+                <tr><th>Detalle</th><th class="r">Cant.</th><th class="r">P. Unit</th><th class="r">Desc.</th><th class="r">Subtotal</th></tr>
               </thead>
               <tbody>
                 <tr v-for="(it, i) in items" :key="i">
                   <td>{{ it.nombre }}</td>
-                  <td class="text-end">{{ it.cantidad }}</td>
-                  <td class="text-end">{{ CLP(it.precio) }}</td>
-                  <td class="text-end">{{ it.descuento ? it.descuento + '%' : '—' }}</td>
-                  <td class="text-end font-weight-medium">{{ CLP(subtotal(it)) }}</td>
+                  <td class="r">{{ it.cantidad }}</td>
+                  <td class="r">{{ CLP(it.precio) }}</td>
+                  <td class="r">{{ it.descuento ? it.descuento + '%' : '—' }}</td>
+                  <td class="r">{{ CLP(subtotal(it)) }}</td>
                 </tr>
               </tbody>
-            </VTable>
+            </table>
 
-            <div class="d-flex justify-end">
-              <table style="min-inline-size: 280px">
+            <div class="coti-totales">
+              <table>
                 <tbody>
-                  <tr><td class="text-medium-emphasis py-1 pe-8">Neto</td><td class="text-end">{{ CLP(neto) }}</td></tr>
-                  <tr><td class="text-medium-emphasis py-1 pe-8">IVA 19%</td><td class="text-end">{{ CLP(iva) }}</td></tr>
-                  <tr class="doc-total"><td class="py-2 pe-8 text-h6">TOTAL</td><td class="text-end text-h6 font-weight-bold">{{ CLP(total) }}</td></tr>
+                  <tr><td>Neto</td><td class="r">{{ CLP(neto) }}</td></tr>
+                  <tr><td>IVA 19%</td><td class="r">{{ CLP(iva) }}</td></tr>
+                  <tr class="tot"><td>TOTAL</td><td class="r">{{ CLP(total) }}</td></tr>
                 </tbody>
               </table>
             </div>
 
-            <template v-if="nota">
-              <VDivider class="my-6 border-dashed" />
-              <p class="mb-0"><span class="font-weight-medium me-1">Nota:</span>{{ nota }}</p>
-            </template>
+            <div v-if="nota" class="coti-nota"><strong>Nota:</strong> {{ nota }}</div>
+
+            <div class="coti-cond">
+              <div class="coti-label">Condiciones comerciales</div>
+              <ul>
+                <li>Validez de la oferta: {{ validez }} días corridos.</li>
+                <li>Valores en pesos chilenos, IVA incluido.</li>
+                <li>Forma de pago y plazo de entrega: a convenir.</li>
+                <li>Despacho e instalación se cotizan por separado si aplica.</li>
+              </ul>
+            </div>
+
+            <div class="coti-firma">
+              <div>
+                <div class="coti-line"></div>
+                <div class="coti-muted">VIALUM · contacto@vialum.cl</div>
+              </div>
+            </div>
           </div>
         </VCardText>
+
+        <!-- ═══ VENTA: el documento final es de Bsale ═══ -->
+        <VCardText v-else class="pa-6">
+          <div class="d-flex align-center gap-3 mb-4">
+            <VIcon color="info" size="30">mdi-information-outline</VIcon>
+            <div>
+              <div class="text-h6">El documento final lo genera Bsale</div>
+              <div class="text-medium-emphasis text-body-2">La {{ tipo }} se emite con el formato oficial de Bsale. Esto es solo un resumen.</div>
+            </div>
+          </div>
+          <VTable class="border">
+            <thead><tr><th>Detalle</th><th class="text-end">Cant.</th><th class="text-end">P. Unit</th><th class="text-end">Subtotal</th></tr></thead>
+            <tbody>
+              <tr v-for="(it, i) in items" :key="i">
+                <td>{{ it.nombre }}</td><td class="text-end">{{ it.cantidad }}</td><td class="text-end">{{ CLP(it.precio) }}</td><td class="text-end">{{ CLP(subtotal(it)) }}</td>
+              </tr>
+            </tbody>
+          </VTable>
+          <div class="d-flex justify-space-between align-baseline mt-4">
+            <span class="text-medium-emphasis">Total (IVA incluido)</span>
+            <span class="text-h5 font-weight-bold text-success">{{ CLP(total) }}</span>
+          </div>
+        </VCardText>
+
         <VDivider />
         <VCardActions class="pa-4 d-print-none">
-          <VChip size="small" color="secondary" variant="tonal" label>Vista previa · no emitida</VChip>
+          <VChip size="small" color="secondary" variant="tonal" label>Vista previa · no {{ esCotizacion ? 'guardada' : 'emitida' }}</VChip>
           <VSpacer />
-          <VBtn variant="tonal" color="secondary" prepend-icon="mdi-printer" @click="imprimir">Imprimir</VBtn>
+          <VBtn v-if="esCotizacion" variant="tonal" color="secondary" prepend-icon="mdi-printer" @click="imprimir">Imprimir</VBtn>
           <VBtn color="primary" @click="previewOpen = false">Cerrar</VBtn>
         </VCardActions>
       </VCard>
@@ -582,7 +630,42 @@ function realizar() {
   .detalle-cell { grid-column: 1 / -1; }
 }
 
-.doc-stamp { border: 2px solid rgb(var(--v-theme-error)); border-radius: 8px; padding: 10px 16px; min-inline-size: 190px; block-size: fit-content; }
-.doc-table :deep(th) { font-size: .72rem; letter-spacing: .05em; }
-.doc-total td { border-top: 2px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+/* ── Hoja carta de cotización (papel blanco, se ve igual en claro/oscuro y al imprimir) ── */
+.coti-paper { background: #fff; color: #2b2f42; padding: 48px 52px; font-size: 13px; line-height: 1.5; }
+.coti-head { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.coti-sub { color: #1e4d8b; letter-spacing: .14em; font-size: 10px; font-weight: 700; margin: 3px 0 12px; }
+.coti-strong { font-weight: 700; }
+.coti-muted { color: #6b7180; font-size: 12px; }
+.coti-box { border: 1.5px solid #1e4d8b; border-radius: 8px; padding: 10px 16px; min-inline-size: 180px; block-size: fit-content; }
+.coti-box-title { color: #1e4d8b; font-weight: 800; letter-spacing: .08em; text-align: center; border-bottom: 1px solid #d9dee6; padding-bottom: 6px; margin-bottom: 6px; }
+.coti-box table { inline-size: 100%; }
+.coti-box td { padding: 2px 0; font-size: 12px; }
+.coti-box td:last-child { text-align: right; font-weight: 600; }
+.coti-rule { block-size: 3px; background: #1e4d8b; border-radius: 2px; margin: 20px 0; }
+.coti-label { text-transform: uppercase; letter-spacing: .06em; font-size: 10px; color: #6b7180; font-weight: 700; margin-bottom: 4px; }
+.coti-intro { margin: 18px 0; }
+.coti-table { inline-size: 100%; border-collapse: collapse; margin-top: 8px; }
+.coti-table th { background: #f2f5f9; color: #4a5060; text-align: left; font-size: 11px; letter-spacing: .04em; padding: 8px 10px; border-bottom: 2px solid #1e4d8b; }
+.coti-table th.r, .coti-table td.r { text-align: right; }
+.coti-table td { padding: 8px 10px; border-bottom: 1px solid #eceef3; font-size: 12.5px; }
+.coti-totales { display: flex; justify-content: flex-end; margin-top: 16px; }
+.coti-totales table { min-inline-size: 260px; }
+.coti-totales td { padding: 4px 0; color: #6b7180; }
+.coti-totales td.r { text-align: right; color: #2b2f42; font-weight: 600; }
+.coti-totales tr.tot td { border-top: 2px solid #d9dee6; padding-top: 10px; font-size: 16px; font-weight: 800; color: #1e4d8b; }
+.coti-nota { margin-top: 18px; padding: 10px 12px; background: #f6f8fb; border-left: 3px solid #1e4d8b; border-radius: 4px; font-size: 12.5px; }
+.coti-cond { margin-top: 24px; }
+.coti-cond ul { margin: 6px 0 0; padding-inline-start: 18px; color: #4a5060; font-size: 12px; }
+.coti-cond li { margin: 3px 0; }
+.coti-firma { margin-top: 48px; display: flex; justify-content: flex-end; text-align: center; }
+.coti-line { inline-size: 220px; border-top: 1px solid #9aa1b0; margin-bottom: 4px; }
+</style>
+
+<!-- Impresión: aislar solo la hoja de cotización -->
+<style>
+@media print {
+  body * { visibility: hidden !important; }
+  #doc-print, #doc-print * { visibility: visible !important; }
+  #doc-print { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 100%; padding: 0 !important; }
+}
 </style>
