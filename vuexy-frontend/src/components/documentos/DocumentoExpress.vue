@@ -163,9 +163,22 @@ const necesitaVoucher = computed(() => ['tarjeta_debito', 'tarjeta_credito'].inc
 // Voucher obligatorio en pagos con tarjeta (igual que Venta Express: vouchersOk)
 const voucherFalta = computed(() => !esCotizacion.value && necesitaVoucher.value && !String(voucher.value).trim())
 
-const optCorte = ref(false)
 const optRef   = ref(false)
 const optDesc  = ref(true)
+
+// Orden de corte: NO es opcional — es automática si la venta incluye vidrios
+// (igual que el Venta Express antiguo: al emitir aparece "Imprimir orden de corte").
+const tieneVidrios = computed(() => items.value.some(it => it.es_vidrio))
+
+// Referencias (OC / nota de pedido / guía) — mismos códigos SII que Venta Express
+const referencias = ref([])
+const tiposReferencia = [
+  { label: 'Orden de Compra', value: 801 },
+  { label: 'Nota de Pedido',  value: 802 },
+  { label: 'Guía de Despacho', value: 52 },
+]
+function agregarReferencia() { referencias.value.push({ code_sii: 801, numero: '', fecha: '' }) }
+watch(optRef, v => { if (v && !referencias.value.length) agregarReferencia() })
 const nota     = ref('')
 const validez     = ref(15)  // días de validez de la cotización
 const dirDespacho = ref('')  // dirección de despacho/obra (opcional), aparece en la hoja
@@ -179,17 +192,19 @@ function aplicarDescuentoCliente() {
 watch([cliente, optDesc], aplicarDescuentoCliente)
 
 // Puede realizar: reglas de bloqueo (margen, voucher, cliente en cotización)
+const refsIncompletas = computed(() => optRef.value && referencias.value.some(r => !r.numero))
 const puedeRealizar = computed(() => {
   if (!items.value.length) return false
   if (hayBajoMargen.value) return false
   if (esCotizacion.value) return !!cliente.value
-  return !voucherFalta.value
+  return !voucherFalta.value && !refsIncompletas.value
 })
 const bloqueoMsg = computed(() => {
   if (!items.value.length) return 'Agrega al menos un ítem.'
   if (hayBajoMargen.value) return `Hay una línea bajo el margen mínimo (${Math.round(MARGEN_MIN * 100)}%). Sube el precio.`
   if (esCotizacion.value && !cliente.value) return 'La cotización requiere cliente.'
   if (voucherFalta.value) return 'Falta el N° de voucher Transbank.'
+  if (refsIncompletas.value) return 'Completa el N° de las referencias.'
   return ''
 })
 
@@ -449,6 +464,22 @@ function realizar() {
           <VDivider class="my-6 border-dashed" />
           <h6 class="text-h6 mb-2">Observaciones</h6>
           <VTextarea v-model="nota" rows="2" placeholder="Nota que aparece en el documento (opcional)…" hide-details />
+
+          <!-- Referencias (OC / nota de pedido / guía) — solo venta, cuando se activa el switch -->
+          <template v-if="!esCotizacion && optRef">
+            <VDivider class="my-6 border-dashed" />
+            <div class="d-flex align-center justify-space-between mb-3">
+              <h6 class="text-h6 mb-0">Referencias</h6>
+              <VBtn size="small" variant="tonal" color="primary" prepend-icon="mdi-plus" @click="agregarReferencia">Agregar</VBtn>
+            </div>
+            <div v-for="(r, i) in referencias" :key="'ref' + i" class="d-flex align-center gap-2 mb-2 flex-wrap">
+              <VSelect v-model="r.code_sii" :items="tiposReferencia" item-title="label" item-value="value" density="compact" hide-details style="max-inline-size:190px" />
+              <VTextField v-model="r.numero" label="N° documento" density="compact" hide-details style="max-inline-size:150px" :error="!r.numero" />
+              <VTextField v-model="r.fecha" type="date" density="compact" hide-details style="max-inline-size:170px" title="Fecha del documento (opcional)" />
+              <VBtn icon size="small" variant="text" color="error" @click="referencias.splice(i, 1)"><VIcon size="18">mdi-close</VIcon></VBtn>
+            </div>
+            <p v-if="!referencias.length" class="text-caption text-medium-emphasis">Sin referencias. Agrega una orden de compra, nota de pedido o guía.</p>
+          </template>
         </VCard>
       </VCol>
 
@@ -484,7 +515,9 @@ function realizar() {
         <VCard class="mb-4">
           <VCardText>
             <p class="text-caption font-weight-bold text-uppercase text-disabled mb-2" style="letter-spacing:.06em">Opciones</p>
-            <VSwitch v-if="!esCotizacion" v-model="optCorte" label="Requiere orden de corte" density="compact" hide-details color="primary" />
+            <div v-if="!esCotizacion && tieneVidrios" class="d-flex align-center gap-2 text-body-2 text-info mb-3">
+              <VIcon size="18">mdi-content-cut</VIcon> Incluye vidrios → se generará orden de corte
+            </div>
             <VSwitch v-if="!esCotizacion" v-model="optRef" label="Agregar referencias (OC / guía)" density="compact" hide-details color="primary" />
             <VSwitch v-model="optDesc" label="Aplicar descuento por cliente" density="compact" hide-details color="primary" />
           </VCardText>
