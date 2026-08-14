@@ -1,8 +1,23 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import api from '@/axiosInstance'
 import logoVialum from '@/assets/images/logo-vialum.png'
 import MoneyField from './MoneyField.vue'
+
+// Vendedor = usuario logeado (desde localStorage, igual que el nav)
+const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+const vendedor = computed(() => currentUser.name || currentUser.nombre || currentUser.email || 'Mostrador')
+
+// Logo como data URI para que sí aparezca al imprimir en el iframe aislado
+const logoDataUrl = ref('')
+onMounted(async () => {
+  try {
+    const blob = await (await fetch(logoVialum)).blob()
+    const reader = new FileReader()
+    reader.onload = () => { logoDataUrl.value = reader.result }
+    reader.readAsDataURL(blob)
+  } catch (e) { /* si falla, el print usa la URL normal */ }
+})
 
 // ── Componente compartido: emisión de documento (mostrador) ──────────────────
 // Un solo componente en dos modos:
@@ -65,6 +80,7 @@ function guardarCliente() {
 const prodSearch  = ref('')
 const prodResults = ref([])
 const prodLoading = ref(false)
+const prodSel     = ref(null)
 let prodTimer
 
 function buscarProductos(q) {
@@ -82,8 +98,8 @@ function buscarProductos(q) {
 
 function agregarProducto(p) {
   if (!p) return
-  prodSearch.value = ''
-  prodResults.value = []
+  // Limpiar el buscador (si no, queda el último producto seleccionado)
+  nextTick(() => { prodSel.value = null; prodSearch.value = ''; prodResults.value = [] })
   if (p.es_vidrio) {
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
     return
@@ -151,7 +167,8 @@ const optCorte = ref(false)
 const optRef   = ref(false)
 const optDesc  = ref(true)
 const nota     = ref('')
-const validez  = ref(15) // días de validez de la cotización
+const validez     = ref(15)  // días de validez de la cotización
+const dirDespacho = ref('')  // dirección de despacho/obra (opcional), aparece en la hoja
 
 // Descuento por cliente: al elegir cliente o (des)activar el switch, aplicar a
 // las líneas de catálogo (con producto_id). Las líneas manuales no se tocan.
@@ -233,9 +250,12 @@ function imprimir() {
   const iframe = document.createElement('iframe')
   iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
   document.body.appendChild(iframe)
+  // Reemplazar el logo por el data URI para que aparezca sí o sí al imprimir
+  let cuerpo = el.outerHTML
+  if (logoDataUrl.value) cuerpo = cuerpo.replace(/<img\b[^>]*>/, `<img src="${logoDataUrl.value}" alt="VIALUM" style="height:40px;display:block">`)
   const doc = iframe.contentWindow.document
   doc.open()
-  doc.write(`<!doctype html><html><head><meta charset="utf-8"><base href="${location.origin}/"><title>Cotización VIALUM</title><style>${PRINT_CSS}</style></head><body>${el.outerHTML}</body></html>`)
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><base href="${location.origin}/"><title>Cotización VIALUM</title><style>${PRINT_CSS}</style></head><body>${cuerpo}</body></html>`)
   doc.close()
   const done = () => { try { iframe.contentWindow.focus(); iframe.contentWindow.print() } catch (e) {} setTimeout(() => iframe.remove(), 800) }
   if (iframe.contentWindow.document.readyState === 'complete') setTimeout(done, 150)
@@ -336,6 +356,7 @@ function realizar() {
                 <p class="font-weight-medium mb-0">Consumidor Final</p>
                 <p class="text-medium-emphasis mb-0">Venta de mostrador sin datos de cliente.</p>
               </template>
+              <p v-if="dirDespacho" class="text-medium-emphasis mb-0 mt-1">Despacho: {{ dirDespacho }}</p>
             </VCol>
 
             <VCol v-if="!esCotizacion" cols="12" sm="5">
@@ -344,7 +365,7 @@ function realizar() {
                 <tbody>
                   <tr><td class="text-medium-emphasis pe-6 py-1">Forma de pago</td><td class="font-weight-medium">{{ pagoLabels[formaPago] }}</td></tr>
                   <tr><td class="text-medium-emphasis pe-6 py-1">Total a pagar</td><td class="font-weight-medium">{{ CLP(total) }}</td></tr>
-                  <tr><td class="text-medium-emphasis pe-6 py-1">Vendedor</td><td class="font-weight-medium">Mostrador</td></tr>
+                  <tr><td class="text-medium-emphasis pe-6 py-1">Vendedor</td><td class="font-weight-medium">{{ vendedor }}</td></tr>
                 </tbody>
               </table>
             </VCol>
@@ -386,6 +407,7 @@ function realizar() {
 
           <div class="d-flex flex-wrap align-center gap-3 mt-2">
             <VAutocomplete
+              v-model="prodSel"
               v-model:search="prodSearch"
               :items="prodResults" :loading="prodLoading"
               item-title="nombre" return-object no-filter hide-details density="compact"
@@ -410,7 +432,7 @@ function realizar() {
           <!-- Totales -->
           <div class="d-flex flex-wrap justify-space-between gap-6">
             <div>
-              <p class="mb-1"><span class="font-weight-medium">Vendedor:</span> Mostrador</p>
+              <p class="mb-1"><span class="font-weight-medium">Vendedor:</span> {{ vendedor }}</p>
               <p class="text-medium-emphasis text-body-2 mb-0">Gracias por su compra.</p>
             </div>
             <div style="min-inline-size: 260px">
@@ -448,6 +470,14 @@ function realizar() {
             <VTextField v-if="necesitaVoucher" v-model="voucher" class="mt-3" density="compact"
               placeholder="N° voucher Transbank (obligatorio)"
               :error="voucherFalta" :messages="voucherFalta ? 'Obligatorio para pago con tarjeta' : ''" />
+          </VCardText>
+        </VCard>
+
+        <VCard v-if="esCotizacion" class="mb-4">
+          <VCardText>
+            <p class="text-caption font-weight-bold text-uppercase text-disabled mb-2" style="letter-spacing:.06em">Datos de la cotización</p>
+            <VTextField v-model.number="validez" type="number" label="Validez (días)" density="compact" hide-details class="mb-3" />
+            <VTextField v-model="dirDespacho" label="Dirección de despacho (opcional)" density="compact" hide-details />
           </VCardText>
         </VCard>
 
@@ -568,6 +598,7 @@ function realizar() {
               <p class="coti-muted mb-0" v-if="cliente.direccion">{{ cliente.direccion }}</p>
               <p class="coti-muted mb-0" v-if="cliente.email">{{ cliente.email }}</p>
             </template>
+            <p class="coti-muted mb-0" v-if="dirDespacho"><strong>Despacho:</strong> {{ dirDespacho }}</p>
 
             <p class="coti-intro">Junto con saludar, tenemos el agrado de presentar la siguiente cotización según su solicitud:</p>
 
@@ -611,6 +642,7 @@ function realizar() {
             <div class="coti-firma">
               <div>
                 <div class="coti-line"></div>
+                <div class="coti-strong" style="font-size:12px">{{ vendedor }}</div>
                 <div class="coti-muted">VIALUM · contacto@vialum.cl</div>
               </div>
             </div>
