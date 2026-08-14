@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import api from '@/axiosInstance'
 import logoVialum from '@/assets/images/logo-vialum.png'
+import MoneyField from './MoneyField.vue'
 
 // ── Componente compartido: emisión de documento (mostrador) ──────────────────
 // Un solo componente en dos modos:
@@ -41,6 +42,9 @@ function buscarClientes(q) {
   }, 300)
 }
 
+// Descuento % configurado en la ficha del cliente (mismo campo que Venta Express)
+function descuentoCliente() { return Number(cliente.value?.descuento || 0) }
+
 // Crear cliente (prototipo: lo agrega localmente; el módulo real llama a Bsale)
 const nuevoCli = ref({ show: false, razon_social: '', identification: '', direccion: '', comuna: '', ciudad: '' })
 function abrirNuevoCliente() {
@@ -79,7 +83,7 @@ function agregarProducto(p) {
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
     return
   }
-  items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, costo: p.costo, descuento: 0, producto_id: p.producto_id, es_vidrio: false })
+  items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, costo: p.costo, descuento: optDesc.value ? descuentoCliente() : 0, producto_id: p.producto_id, stock: p.stock, es_vidrio: false })
 }
 function agregarManual() {
   items.value.push({ nombre: 'Nuevo ítem', cantidad: 1, precio: 0, costo: 0, descuento: 0, producto_id: null, es_vidrio: false })
@@ -104,7 +108,7 @@ function confirmarMedidas() {
   if (!(Number(m.ancho) > 0) || !(Number(m.alto) > 0) || !(Number(m.piezas) > 0)) return
   items.value.push({
     nombre: m.producto.nombre + (m.pulido ? ' · con pulido' : '') + ` (${m.ancho}×${m.alto}mm ×${m.piezas})`,
-    cantidad: m2Calc.value, precio: precioM2.value, costo: m.producto.costo, descuento: 0,
+    cantidad: m2Calc.value, precio: precioM2.value, costo: m.producto.costo, descuento: optDesc.value ? descuentoCliente() : 0,
     producto_id: m.producto.producto_id, es_vidrio: true,
   })
   medidas.value.show = false
@@ -126,6 +130,8 @@ const margen = it => {
   const c = Number(it.costo) || 0, p = Number(it.precio) || 0
   return c > 0 && p > 0 ? (p - c) / p : null
 }
+const bajoMargen = it => { const m = margen(it); return m !== null && m < MARGEN_MIN }
+const hayBajoMargen = computed(() => items.value.some(bajoMargen))
 
 // ── Pago / opciones ───────────────────────────────────────────────────────────
 const formaPago = ref('tarjeta_debito')
@@ -140,6 +146,29 @@ const optCorte = ref(false)
 const optRef   = ref(false)
 const optDesc  = ref(true)
 const nota     = ref('')
+
+// Descuento por cliente: al elegir cliente o (des)activar el switch, aplicar a
+// las líneas de catálogo (con producto_id). Las líneas manuales no se tocan.
+function aplicarDescuentoCliente() {
+  const d = (optDesc.value && cliente.value) ? descuentoCliente() : 0
+  items.value.forEach(it => { if (it.producto_id) it.descuento = d })
+}
+watch([cliente, optDesc], aplicarDescuentoCliente)
+
+// Puede realizar: reglas de bloqueo (margen, voucher, cliente en cotización)
+const puedeRealizar = computed(() => {
+  if (!items.value.length) return false
+  if (hayBajoMargen.value) return false
+  if (esCotizacion.value) return !!cliente.value
+  return !voucherFalta.value
+})
+const bloqueoMsg = computed(() => {
+  if (!items.value.length) return 'Agrega al menos un ítem.'
+  if (hayBajoMargen.value) return `Hay una línea bajo el margen mínimo (${Math.round(MARGEN_MIN * 100)}%). Sube el precio.`
+  if (esCotizacion.value && !cliente.value) return 'La cotización requiere cliente.'
+  if (voucherFalta.value) return 'Falta el N° de voucher Transbank.'
+  return ''
+})
 
 const tipoHint = computed(() => {
   if (tipo.value === 'boleta')  return { color: 'info',    icon: 'mdi-receipt-text-outline', text: 'Boleta: cliente opcional. Se emite a Bsale y entra al resumen mensual de boletas.' }
@@ -161,7 +190,7 @@ function imprimir() { window.print() }
 
 const resumen = ref(null)
 function realizar() {
-  if (voucherFalta.value) return
+  if (!puedeRealizar.value) return
   resumen.value = {
     tipo: tipo.value, cliente: clienteNombre.value, forma_pago: pagoLabels[formaPago.value],
     voucher: necesitaVoucher.value ? (voucher.value || '— (falta)') : null,
@@ -242,7 +271,10 @@ function realizar() {
               </div>
 
               <template v-if="cliente">
-                <p class="font-weight-medium mb-0">{{ cliente.razon_social || cliente.nombre }}</p>
+                <p class="font-weight-medium mb-0">
+                  {{ cliente.razon_social || cliente.nombre }}
+                  <VChip v-if="descuentoCliente() > 0" size="x-small" color="success" variant="tonal" label class="ml-1">Descuento {{ descuentoCliente() }}%</VChip>
+                </p>
                 <p class="text-medium-emphasis mb-0" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
                 <p class="text-medium-emphasis mb-0" v-if="cliente.direccion">{{ cliente.direccion }}</p>
               </template>
@@ -286,11 +318,11 @@ function realizar() {
                   :class="margen(it) < MARGEN_MIN ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
                   margen {{ Math.round(margen(it) * 100) }}%
                 </span>
+                <VChip v-if="it.stock != null && it.stock <= 0" size="x-small" color="warning" variant="tonal" label>sin stock</VChip>
               </div>
             </div>
             <VTextField v-model.number="it.cantidad" type="number" density="compact" hide-details reverse />
-            <VTextField :model-value="miles(it.precio)" @update:model-value="v => it.precio = parseMiles(v)"
-              density="compact" hide-details prefix="$" reverse inputmode="numeric" />
+            <MoneyField v-model="it.precio" />
             <VTextField v-model.number="it.descuento" type="number" density="compact" hide-details reverse suffix="%" />
             <div class="text-end font-weight-bold align-self-center">{{ CLP(subtotal(it)) }}</div>
             <VBtn icon variant="text" size="small" color="error" class="align-self-center" @click="quitar(i)">
@@ -309,7 +341,8 @@ function realizar() {
               @update:model-value="agregarProducto"
             >
               <template #item="{ props: p, item }">
-                <VListItem v-bind="p" :title="item.raw.nombre" :subtitle="CLP(item.raw.precio_venta) + (item.raw.es_vidrio ? ' /m²' : '')" />
+                <VListItem v-bind="p" :title="item.raw.nombre"
+                  :subtitle="CLP(item.raw.precio_venta) + (item.raw.es_vidrio ? ' /m²' : '') + (item.raw.stock != null ? ' · ' + (item.raw.stock > 0 ? item.raw.stock + ' disp.' : 'sin stock') : '')" />
               </template>
               <template #no-data>
                 <div class="px-4 py-2 text-caption text-medium-emphasis">{{ prodSearch ? 'Sin productos' : 'Escribe para buscar productos…' }}</div>
@@ -347,8 +380,8 @@ function realizar() {
       <VCol cols="12" md="3">
         <VCard class="mb-4">
           <VCardText class="d-flex flex-column gap-3">
-            <VBtn block color="success" prepend-icon="mdi-flash" :disabled="voucherFalta" @click="realizar">{{ btnLabel }}</VBtn>
-            <p v-if="voucherFalta" class="text-caption text-error mb-0 mt-n1">Falta el N° de voucher Transbank.</p>
+            <VBtn block color="success" prepend-icon="mdi-flash" :disabled="!puedeRealizar" @click="realizar">{{ btnLabel }}</VBtn>
+            <p v-if="bloqueoMsg" class="text-caption text-error mb-0 mt-n1">{{ bloqueoMsg }}</p>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-eye-outline" @click="previewOpen = true">Vista previa</VBtn>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-content-save-outline">Guardar borrador</VBtn>
           </VCardText>
@@ -367,8 +400,8 @@ function realizar() {
         <VCard class="mb-4">
           <VCardText>
             <p class="text-caption font-weight-bold text-uppercase text-disabled mb-2" style="letter-spacing:.06em">Opciones</p>
-            <VSwitch v-model="optCorte" label="Requiere orden de corte" density="compact" hide-details color="primary" />
-            <VSwitch v-model="optRef" label="Agregar referencias (OC / guía)" density="compact" hide-details color="primary" />
+            <VSwitch v-if="!esCotizacion" v-model="optCorte" label="Requiere orden de corte" density="compact" hide-details color="primary" />
+            <VSwitch v-if="!esCotizacion" v-model="optRef" label="Agregar referencias (OC / guía)" density="compact" hide-details color="primary" />
             <VSwitch v-model="optDesc" label="Aplicar descuento por cliente" density="compact" hide-details color="primary" />
           </VCardText>
         </VCard>

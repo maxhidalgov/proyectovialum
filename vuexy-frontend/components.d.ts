@@ -61,6 +61,7 @@ declare module 'vue' {
     ModalBsale: typeof import('./src/components/facturacion/ModalBsale.vue')['default']
     ModalCrearClienteBsale: typeof import('./src/components/facturacion/ModalCrearClienteBsale.vue')['default']
     ModalFacturacion: typeof import('./src/components/ModalFacturacion.vue')['default']
+    MoneyField: typeof import('./src/components/documentos/MoneyField.vue')['default']
     MoreBtn: typeof import('./src/@core/components/MoreBtn.vue')['default']
     NodoEstructura: typeof import('./src/components/armador/NodoEstructura.vue')['default']
     NodoVista: typeof import('./src/components/armador/NodoVista.vue')['default']
