@@ -25,56 +25,51 @@
       <VCol cols="12" md="8">
         <VCard>
           <VCardText>
-            <!-- Buscador de productos -->
-            <VMenu v-model="prodMenu" :close-on-content-click="false" location="bottom">
-              <template #activator="{ props }">
-                <VTextField
-                  v-bind="props"
-                  ref="prodField"
-                  v-model="prodSearch"
-                  label="Buscar producto o servicio"
-                  prepend-inner-icon="mdi-magnify"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  clearable
-                  autofocus
-                  @update:model-value="buscarProductos"
-                  @keydown.enter="onEnterBuscar"
-                />
-              </template>
-              <VList v-if="prodResults.length" density="compact" style="max-height:280px">
-                <VListItem
-                  v-for="p in prodResults"
-                  :key="p.id"
-                  @click="agregarProducto(p)"
-                >
-                  <VListItemTitle>
-                    {{ p.nombre }}
-                    <VChip v-if="p.es_vidrio" size="x-small" color="info" variant="tonal" class="ml-1">por m²</VChip>
-                    <VChip
-                      v-if="p.stock !== null && p.stock !== undefined"
-                      size="x-small"
-                      :color="p.stock > 0 ? 'success' : 'error'"
-                      variant="tonal"
-                      class="ml-1"
-                    >
-                      {{ p.stock > 0 ? p.stock + ' disp.' : 'Sin stock' }}
-                    </VChip>
-                  </VListItemTitle>
-                  <template #append>
-                    <span class="text-body-2 font-weight-bold">
-                      {{ clp(Math.round(p.precio_venta * 1.19)) }}<span class="text-caption text-medium-emphasis">{{ p.es_vidrio ? '/m² c/IVA' : ' c/IVA' }}</span>
-                    </span>
-                  </template>
-                </VListItem>
-              </VList>
-              <VList v-else-if="prodSearch && prodSearch.length >= 2" density="compact">
-                <VListItem>
-                  <VListItemTitle class="text-caption text-medium-emphasis">Sin resultados</VListItemTitle>
-                </VListItem>
-              </VList>
-            </VMenu>
+            <!-- Buscador de productos (dropdown inline, anclado al campo) -->
+            <div class="prod-search">
+              <VTextField
+                ref="prodField"
+                v-model="prodSearch"
+                label="Buscar producto o servicio"
+                prepend-inner-icon="mdi-magnify"
+                variant="outlined"
+                density="compact"
+                hide-details
+                clearable
+                autofocus
+                @update:model-value="buscarProductos"
+                @keydown.enter="onEnterBuscar"
+                @focus="prodFocused = true"
+                @blur="onBlurProd"
+              />
+              <VCard v-if="prodFocused && prodResults.length" class="prod-dropdown" elevation="8">
+                <VList density="compact" style="max-height:300px; overflow-y:auto">
+                  <VListItem v-for="p in prodResults" :key="p.id" @mousedown.prevent="agregarProducto(p)">
+                    <VListItemTitle>
+                      {{ p.nombre }}
+                      <VChip v-if="p.es_vidrio" size="x-small" color="info" variant="tonal" class="ml-1">por m²</VChip>
+                      <VChip
+                        v-if="p.stock !== null && p.stock !== undefined"
+                        size="x-small"
+                        :color="p.stock > 0 ? 'success' : 'error'"
+                        variant="tonal"
+                        class="ml-1"
+                      >
+                        {{ p.stock > 0 ? p.stock + ' disp.' : 'Sin stock' }}
+                      </VChip>
+                    </VListItemTitle>
+                    <template #append>
+                      <span class="text-body-2 font-weight-bold">
+                        {{ clp(Math.round(p.precio_venta * 1.19)) }}<span class="text-caption text-medium-emphasis">{{ p.es_vidrio ? '/m² c/IVA' : ' c/IVA' }}</span>
+                      </span>
+                    </template>
+                  </VListItem>
+                </VList>
+              </VCard>
+              <VCard v-else-if="prodFocused && prodSearch && prodSearch.length >= 2" class="prod-dropdown" elevation="8">
+                <div class="pa-3 text-caption text-medium-emphasis">Sin resultados</div>
+              </VCard>
+            </div>
 
             <div class="d-flex justify-end mt-2">
               <VBtn size="small" variant="text" color="primary" prepend-icon="mdi-plus" @click="agregarManual">
@@ -122,7 +117,7 @@
                     <span v-else class="text-body-2">{{ it.nombre }}</span>
                   </td>
                   <td class="text-right">
-                    <span :class="bajoMargen(it) ? 'text-error font-weight-medium' : ''">{{ fmtNeto(it.precio) }}</span>
+                    <span class="text-body-2" :class="bajoMargen(it) ? 'text-error font-weight-medium' : ''">{{ clp(it.precio) }}</span>
                     <div v-if="bajoMargen(it)" class="text-caption text-error font-weight-bold">
                       margen {{ Math.round(margenItem(it)) }}% ⚠
                     </div>
@@ -131,8 +126,8 @@
                     <VTextField v-model.number="it.descuento" type="number" min="0" max="100" density="compact" variant="plain" hide-details reverse />
                   </td>
                   <td>
-                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" prefix="$" density="compact" variant="plain" hide-details reverse
-                                class="font-weight-medium" @update:model-value="setSubtotalCiva(it, $event)" />
+                    <MoneyField :model-value="subtotalCivaItem(it)" variant="plain" class="font-weight-medium"
+                                @update:model-value="setSubtotalCiva(it, $event)" />
                   </td>
                   <td>
                     <VBtn icon size="x-small" variant="text" color="error" @click="items.splice(i, 1)">
@@ -175,8 +170,8 @@
                       <VTextField v-model.number="it.cantidad" type="number" min="0" label="Cant." density="compact" variant="outlined" hide-details />
                     </VCol>
                     <VCol cols="4">
-                      <div class="text-caption text-medium-emphasis">Neto</div>
-                      <div class="text-body-2" :class="bajoMargen(it) ? 'text-error font-weight-bold' : ''">{{ fmtNeto(it.precio) }}</div>
+                      <div class="text-caption text-medium-emphasis">$/unidad neto</div>
+                      <div class="text-body-2" :class="bajoMargen(it) ? 'text-error font-weight-bold' : ''">{{ clp(it.precio) }}</div>
                     </VCol>
                     <VCol cols="4">
                       <VTextField v-model.number="it.descuento" type="number" min="0" max="100" label="% desc." density="compact" variant="outlined" hide-details />
@@ -187,7 +182,7 @@
                   </div>
                   <div class="d-flex align-center justify-space-between mt-2">
                     <span class="text-caption text-medium-emphasis">Subtotal (c/IVA)</span>
-                    <VTextField :model-value="subtotalCivaItem(it)" type="number" min="0" prefix="$" density="compact" variant="outlined" hide-details reverse style="max-width:160px" class="font-weight-bold" @update:model-value="setSubtotalCiva(it, $event)" />
+                    <MoneyField :model-value="subtotalCivaItem(it)" variant="outlined" style="max-width:160px" class="font-weight-bold" @update:model-value="setSubtotalCiva(it, $event)" />
                   </div>
                 </VCardText>
               </VCard>
@@ -545,6 +540,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
+import MoneyField from '@/components/documentos/MoneyField.vue'
 import api from '@/axiosInstance'
 
 const tipo = ref('boleta')
@@ -593,21 +589,26 @@ function bajoMargen(it) {
 const hayBajoMargen = computed(() => items.value.some(it => bajoMargen(it)))
 
 // ── Buscador de productos ────────────────────────────────────────────────
-const prodSearch  = ref('')
-const prodResults = ref([])
-const prodMenu    = ref(false)
+const prodSearch   = ref('')
+const prodResults  = ref([])
+const prodFocused  = ref(false)
 let prodTimer = null
+let prodBlurTimer = null
 
 function buscarProductos(q) {
   clearTimeout(prodTimer)
-  if (!q || q.length < 2) { prodResults.value = []; prodMenu.value = false; return }
+  if (!q || q.length < 2) { prodResults.value = []; return }
   prodTimer = setTimeout(async () => {
     try {
       const { data } = await api.get('/api/venta-express/productos', { params: { q } })
       prodResults.value = data
-      prodMenu.value = true
     } catch { prodResults.value = [] }
   }, 300)
+}
+function onBlurProd() {
+  // Delay para que el click en un ítem (mousedown) alcance a dispararse
+  clearTimeout(prodBlurTimer)
+  prodBlurTimer = setTimeout(() => { prodFocused.value = false }, 150)
 }
 
 // Buscador: foco de vuelta + resalte de la fila recién agregada (velocidad POS)
@@ -626,7 +627,6 @@ function onEnterBuscar() {
 }
 
 function agregarProducto(p) {
-  prodMenu.value = false
   // Aviso de stock (no bloquea la venta, solo avisa)
   if (p.stock !== null && p.stock !== undefined && p.stock <= 0) {
     snackMsg(`⚠️ ${p.nombre} sin stock — se vende igual`, 'warning')
@@ -1002,6 +1002,16 @@ const fmtNeto = v => new Intl.NumberFormat('es-CL', { style: 'currency', currenc
 </script>
 
 <style scoped>
+/* Buscador con dropdown anclado al campo (evita que el menú se escape) */
+.prod-search { position: relative; }
+.prod-dropdown {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 4px);
+  z-index: 20;
+  max-block-size: 320px;
+  overflow: hidden;
+}
 /* Resalte de la fila recién agregada */
 .nuevo-row { animation: flashRow 1.3s ease-out; }
 @keyframes flashRow {

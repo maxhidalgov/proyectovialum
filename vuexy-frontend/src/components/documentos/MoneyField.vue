@@ -6,6 +6,7 @@ import { ref, watch } from 'vue'
 const props = defineProps({
   modelValue: { type: [Number, String], default: 0 },
   prefix: { type: String, default: '$' },
+  variant: { type: String, default: undefined },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -27,7 +28,7 @@ function onBlur() { focused.value = false; display.value = miles(props.modelValu
 
 <template>
   <VTextField
-    :model-value="display" :prefix="prefix"
+    :model-value="display" :prefix="prefix" :variant="variant"
     density="compact" hide-details reverse inputmode="numeric"
     @update:model-value="onInput" @focus="onFocus" @blur="onBlur"
   />
