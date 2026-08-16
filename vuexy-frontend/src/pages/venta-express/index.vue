@@ -345,7 +345,7 @@
               Realizar venta
             </VBtn>
             <p class="text-caption text-medium-emphasis mt-2 mb-0 text-center">
-              Al confirmar eliges Boleta, Factura o Cotización.
+              Al confirmar eliges Boleta o Factura.
             </p>
           </VCardText>
         </VCard>
