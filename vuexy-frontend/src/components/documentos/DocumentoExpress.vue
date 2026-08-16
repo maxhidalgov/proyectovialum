@@ -131,6 +131,7 @@ function confirmarMedidas() {
     nombre: m.producto.nombre + (m.pulido ? ' · con pulido' : '') + ` (${m.ancho}×${m.alto}mm ×${m.piezas})`,
     cantidad: m2Calc.value, precio: precioM2.value, costo: m.producto.costo, descuento: optDesc.value ? descuentoCliente() : 0,
     producto_id: m.producto.producto_id, es_vidrio: true,
+    ancho: m.ancho, alto: m.alto, piezas: m.piezas, pulido: m.pulido,
   })
   medidas.value.show = false
 }
@@ -211,13 +212,14 @@ const refsIncompletas = computed(() => optRef.value && referencias.value.some(r 
 const puedeRealizar = computed(() => {
   if (!items.value.length) return false
   if (hayBajoMargen.value) return false
-  if (esCotizacion.value) return !!cliente.value
+  if (esCotizacion.value) return !!(cliente.value && cliente.value.id)
   return pagosOk.value && vouchersOk.value && !refsIncompletas.value
 })
 const bloqueoMsg = computed(() => {
   if (!items.value.length) return 'Agrega al menos un ítem.'
   if (hayBajoMargen.value) return `Hay una línea bajo el margen mínimo (${Math.round(MARGEN_MIN * 100)}%). Sube el precio.`
   if (esCotizacion.value && !cliente.value) return 'La cotización requiere cliente.'
+  if (esCotizacion.value && !cliente.value.id) return 'El cliente debe estar registrado (créalo primero).'
   if (!vouchersOk.value) return 'Falta el N° de voucher Transbank.'
   if (!pagosOk.value) return 'Los pagos no cuadran con el total.'
   if (refsIncompletas.value) return 'Completa el N° de las referencias.'
@@ -293,13 +295,56 @@ function imprimir() {
   else iframe.onload = () => setTimeout(done, 150)
 }
 
-const resumen = ref(null)
-function realizar() {
-  if (!puedeRealizar.value) return
+const resumen    = ref(null)      // venta (prototipo): resumen en pantalla
+const guardando  = ref(false)
+const errorMsg   = ref('')
+const cotGuardada = ref(null)     // { id, total, cliente }
+
+async function realizar() {
+  if (!puedeRealizar.value || guardando.value) return
+  if (esCotizacion.value) return guardarCotizacion()
+  // Venta: la emisión real vive en el Venta Express actual; aquí solo resumen.
   resumen.value = {
-    tipo: tipo.value, cliente: clienteNombre.value, forma_pago: esCotizacion.value ? null : formaPagoResumen.value,
+    tipo: tipo.value, cliente: clienteNombre.value, forma_pago: formaPagoResumen.value,
     neto: CLP(neto.value), iva: CLP(iva.value), total: CLP(total.value), items: items.value.length,
   }
+}
+
+async function guardarCotizacion() {
+  errorMsg.value = ''
+  guardando.value = true
+  try {
+    const { data } = await api.post('/api/venta-express/cotizacion', {
+      cliente_id: cliente.value.id,
+      observaciones: nota.value || undefined,
+      items: items.value.map(it => ({
+        nombre: it.nombre,
+        cantidad: Number(it.cantidad),
+        precio: Number(it.precio),
+        descuento: Number(it.descuento) || 0,
+        producto_id: it.producto_id || undefined,
+        es_vidrio: !!it.es_vidrio,
+        ancho: it.ancho ?? undefined,
+        alto: it.alto ?? undefined,
+        piezas: it.piezas ?? undefined,
+        pulido: it.pulido ?? undefined,
+      })),
+    })
+    cotGuardada.value = { id: data.cotizacion_id, total: CLP(total.value), cliente: clienteNombre.value }
+  } catch (e) {
+    errorMsg.value = e.response?.data?.error || e.response?.data?.message || 'No se pudo guardar la cotización.'
+  } finally {
+    guardando.value = false
+  }
+}
+
+function nuevaCotizacion() {
+  cotGuardada.value = null
+  errorMsg.value = ''
+  items.value = []
+  cliente.value = null
+  nota.value = ''
+  dirDespacho.value = ''
 }
 </script>
 
@@ -502,7 +547,7 @@ function realizar() {
       <VCol cols="12" md="3">
         <VCard class="mb-4">
           <VCardText class="d-flex flex-column gap-3">
-            <VBtn block color="success" prepend-icon="mdi-flash" :disabled="!puedeRealizar" @click="realizar">{{ btnLabel }}</VBtn>
+            <VBtn block color="success" prepend-icon="mdi-flash" :disabled="!puedeRealizar" :loading="guardando" @click="realizar">{{ btnLabel }}</VBtn>
             <p v-if="bloqueoMsg" class="text-caption text-error mb-0 mt-n1">{{ bloqueoMsg }}</p>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-eye-outline" @click="previewOpen = true">Vista previa</VBtn>
             <VBtn block color="secondary" variant="tonal" prepend-icon="mdi-content-save-outline">Guardar borrador</VBtn>
@@ -552,7 +597,19 @@ function realizar() {
 
         <VAlert :type="tipoHint.color" variant="tonal" density="compact" :icon="tipoHint.icon" class="text-body-2">{{ tipoHint.text }}</VAlert>
 
-        <VAlert v-if="resumen" type="success" variant="tonal" class="mt-4 text-body-2">
+        <VAlert v-if="errorMsg" type="error" variant="tonal" class="mt-4 text-body-2">{{ errorMsg }}</VAlert>
+
+        <VAlert v-if="cotGuardada" type="success" variant="tonal" class="mt-4 text-body-2">
+          <div class="font-weight-bold mb-1">✓ Cotización guardada</div>
+          N° {{ cotGuardada.id }} · {{ cotGuardada.cliente }}<br>
+          <span class="text-h6">Total {{ cotGuardada.total }}</span>
+          <div class="d-flex gap-2 mt-3">
+            <VBtn size="small" color="primary" :to="{ name: 'cotizaciones' }">Ver en Cotizaciones</VBtn>
+            <VBtn size="small" variant="tonal" @click="nuevaCotizacion">Nueva</VBtn>
+          </div>
+        </VAlert>
+
+        <VAlert v-if="resumen && !esCotizacion" type="success" variant="tonal" class="mt-4 text-body-2">
           <div class="font-weight-bold mb-1">Prototipo — resumen de {{ resumen.tipo }}</div>
           Cliente: {{ resumen.cliente }}<br>
           <template v-if="resumen.forma_pago">Forma de pago: {{ resumen.forma_pago }}<br></template>
