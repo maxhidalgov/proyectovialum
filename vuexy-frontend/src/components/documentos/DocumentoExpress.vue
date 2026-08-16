@@ -61,19 +61,40 @@ function buscarClientes(q) {
 function descuentoCliente() { return Number(cliente.value?.descuento || 0) }
 
 // Crear cliente (prototipo: lo agrega localmente; el módulo real llama a Bsale)
-const nuevoCliVacio = () => ({ show: false, tipo: 'empresa', razon_social: '', identification: '', giro: '', email: '', telefono: '', direccion: '', comuna: '', ciudad: '' })
+const nuevoCliVacio = () => ({ show: false, loading: false, error: '', tipo: 'empresa', razon_social: '', identification: '', giro: '', email: '', telefono: '', direccion: '', comuna: '', ciudad: '' })
 const nuevoCli = ref(nuevoCliVacio())
 function abrirNuevoCliente() {
   nuevoCli.value = { ...nuevoCliVacio(), show: true, razon_social: clienteSearch.value || '' }
 }
-function guardarCliente() {
+async function guardarCliente() {
   const c = nuevoCli.value
-  cliente.value = {
-    razon_social: c.razon_social, identification: c.identification, giro: c.giro,
-    email: c.email, telefono: c.telefono, tipo: c.tipo,
-    direccion: [c.direccion, c.comuna, c.ciudad].filter(Boolean).join(', '),
+  c.error = ''
+  c.loading = true
+  try {
+    const payload = {
+      code: c.identification,
+      email: c.email || undefined,
+      phone: c.telefono || undefined,
+      activity: c.giro || undefined,
+      address: c.direccion || undefined,
+      municipality: c.comuna || undefined,
+      city: c.ciudad || undefined,
+    }
+    if (c.tipo === 'empresa') {
+      payload.company = c.razon_social
+    } else {
+      const parts = (c.razon_social || '').trim().split(/\s+/)
+      payload.firstName = parts.shift() || ''
+      payload.lastName = parts.join(' ')
+    }
+    const { data } = await api.post('/api/bsale-clientes/crear', payload)
+    cliente.value = data.cliente     // trae id, razon_social/first_name, descuento, etc.
+    nuevoCli.value.show = false
+  } catch (e) {
+    c.error = e.response?.data?.error || e.response?.data?.message || 'No se pudo crear el cliente.'
+  } finally {
+    c.loading = false
   }
-  nuevoCli.value.show = false
 }
 
 // ── Productos ────────────────────────────────────────────────────────────────
@@ -240,7 +261,8 @@ const btnLabel = computed(() => esCotizacion.value ? 'Guardar cotización' : 'Re
 
 // ── Preview / resumen ─────────────────────────────────────────────────────────
 const previewOpen = ref(false)
-const clienteNombre = computed(() => cliente.value ? (cliente.value.razon_social || cliente.value.nombre) : 'Consumidor Final')
+const nombreCli = c => c ? (c.razon_social || [c.first_name, c.last_name].filter(Boolean).join(' ') || c.nombre || '') : ''
+const clienteNombre = computed(() => cliente.value ? nombreCli(cliente.value) : 'Consumidor Final')
 const tipoLabel = computed(() => ({ boleta: 'Boleta electrónica', factura: 'Factura electrónica', cotizacion: 'Cotización' }[tipo.value]))
 // CSS de la hoja carta para impresión (sin scope; se inyecta en el iframe).
 const PRINT_CSS = `
@@ -403,7 +425,7 @@ function nuevaCotizacion() {
                   v-model="cliente"
                   v-model:search="clienteSearch"
                   :items="clientes"
-                  :item-title="i => i.razon_social || i.nombre || ''"
+                  :item-title="nombreCli"
                   return-object no-filter clearable hide-details density="compact"
                   placeholder="Buscar cliente por nombre o RUT…"
                   @update:search="buscarClientes"
@@ -421,7 +443,7 @@ function nuevaCotizacion() {
 
               <template v-if="cliente">
                 <p class="font-weight-medium mb-0">
-                  {{ cliente.razon_social || cliente.nombre }}
+                  {{ nombreCli(cliente) }}
                   <VChip v-if="descuentoCliente() > 0" size="x-small" color="success" variant="tonal" label class="ml-1">Descuento {{ descuentoCliente() }}%</VChip>
                 </p>
                 <p class="text-medium-emphasis mb-0" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
@@ -668,13 +690,14 @@ function nuevaCotizacion() {
             <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.ciudad" label="Ciudad" density="compact" /></VCol>
           </VRow>
           <VAlert type="info" variant="tonal" density="compact" class="text-caption">
-            Comuna y ciudad son obligatorias para facturar. Prototipo: se selecciona localmente; en el módulo real se crea en Bsale (POST /api/bsale-clientes/crear).
+            Comuna y ciudad son obligatorias para facturar. Se crea en Bsale y en la app, y queda seleccionado.
           </VAlert>
+          <VAlert v-if="nuevoCli.error" type="error" variant="tonal" density="compact" class="text-caption mt-2">{{ nuevoCli.error }}</VAlert>
         </VCardText>
         <VCardActions class="pa-4 pt-0">
           <VSpacer />
           <VBtn variant="tonal" color="secondary" @click="nuevoCli.show = false">Cancelar</VBtn>
-          <VBtn color="primary" :disabled="!nuevoCli.razon_social || !nuevoCli.identification" @click="guardarCliente">Guardar</VBtn>
+          <VBtn color="primary" :loading="nuevoCli.loading" :disabled="!nuevoCli.razon_social || !nuevoCli.identification" @click="guardarCliente">Guardar</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
