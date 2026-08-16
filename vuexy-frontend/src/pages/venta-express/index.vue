@@ -17,7 +17,6 @@
       >
         <VBtn value="boleta" class="text-none flex-grow-1 flex-md-grow-0 px-md-6">Boleta</VBtn>
         <VBtn value="factura" class="text-none flex-grow-1 flex-md-grow-0 px-md-6">Factura</VBtn>
-        <VBtn value="cotizacion" class="text-none flex-grow-1 flex-md-grow-0 px-md-6">Cotización</VBtn>
       </VBtnToggle>
     </div>
 
@@ -382,10 +381,6 @@
                   :loading="emitiendo && tipoElegido === 'factura'" @click="confirmarTipo('factura')">
               <VIcon start>mdi-file-document-outline</VIcon> Factura
             </VBtn>
-            <VBtn size="large" color="info" variant="tonal" :disabled="!puedeCotizacion"
-                  :loading="emitiendo && tipoElegido === 'cotizacion'" @click="confirmarTipo('cotizacion')">
-              <VIcon start>mdi-content-save-outline</VIcon> Cotización
-            </VBtn>
           </div>
 
           <p v-if="!puedeBoleta" class="text-caption text-warning mt-3 mb-0">
@@ -393,9 +388,6 @@
           </p>
           <p v-if="!puedeFactura" class="text-caption text-warning mt-1 mb-0">
             Factura: requiere cliente con RUT sincronizado en Bsale.
-          </p>
-          <p v-if="!puedeCotizacion" class="text-caption text-warning mt-1 mb-0">
-            Cotización: requiere seleccionar un cliente.
           </p>
         </VCardText>
         <VCardActions>
