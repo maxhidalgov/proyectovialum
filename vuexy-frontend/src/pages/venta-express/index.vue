@@ -30,6 +30,7 @@
               <template #activator="{ props }">
                 <VTextField
                   v-bind="props"
+                  ref="prodField"
                   v-model="prodSearch"
                   label="Buscar producto o servicio"
                   prepend-inner-icon="mdi-magnify"
@@ -37,7 +38,9 @@
                   density="compact"
                   hide-details
                   clearable
+                  autofocus
                   @update:model-value="buscarProductos"
+                  @keydown.enter="onEnterBuscar"
                 />
               </template>
               <VList v-if="prodResults.length" density="compact" style="max-height:280px">
@@ -94,11 +97,13 @@
               </thead>
               <tbody>
                 <tr v-if="!items.length">
-                  <td colspan="6" class="text-center text-caption text-medium-emphasis py-6">
-                    Busca un producto o agrega un ítem manual para empezar
+                  <td colspan="6" class="text-center py-8">
+                    <VIcon size="40" color="disabled">mdi-barcode-scan</VIcon>
+                    <div class="text-body-2 text-medium-emphasis mt-2">Escanea o escribe para buscar un producto</div>
+                    <div class="text-caption text-disabled">o agrega un ítem manual</div>
                   </td>
                 </tr>
-                <tr v-for="(it, i) in items" :key="i">
+                <tr v-for="(it, i) in items" :key="i" :class="{ 'nuevo-row': i === nuevoIdx }">
                   <td>
                     <VTextField v-model.number="it.cantidad" type="number" min="0" density="compact" variant="plain" hide-details style="width:70px" />
                   </td>
@@ -118,9 +123,8 @@
                   </td>
                   <td class="text-right">
                     <span :class="bajoMargen(it) ? 'text-error font-weight-medium' : ''">{{ fmtNeto(it.precio) }}</span>
-                    <div v-if="margenItem(it) !== null" class="text-caption"
-                         :class="bajoMargen(it) ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
-                      margen {{ Math.round(margenItem(it)) }}%
+                    <div v-if="bajoMargen(it)" class="text-caption text-error font-weight-bold">
+                      margen {{ Math.round(margenItem(it)) }}% ⚠
                     </div>
                   </td>
                   <td>
@@ -142,10 +146,12 @@
 
             <!-- Ítems como tarjetas (solo móvil) -->
             <div class="d-md-none mt-2">
-              <div v-if="!items.length" class="text-center text-caption text-medium-emphasis py-6">
-                Busca un producto o agrega un ítem manual para empezar
+              <div v-if="!items.length" class="text-center py-8">
+                <VIcon size="40" color="disabled">mdi-barcode-scan</VIcon>
+                <div class="text-body-2 text-medium-emphasis mt-2">Escanea o escribe para buscar</div>
+                <div class="text-caption text-disabled">o agrega un ítem manual</div>
               </div>
-              <VCard v-for="(it, i) in items" :key="i" variant="tonal" class="mb-3">
+              <VCard v-for="(it, i) in items" :key="i" variant="tonal" class="mb-3" :class="{ 'nuevo-row': i === nuevoIdx }">
                 <VCardText class="pa-3">
                   <div class="d-flex align-start justify-space-between mb-2">
                     <div class="flex-grow-1 pr-2">
@@ -176,9 +182,8 @@
                       <VTextField v-model.number="it.descuento" type="number" min="0" max="100" label="% desc." density="compact" variant="outlined" hide-details />
                     </VCol>
                   </VRow>
-                  <div v-if="margenItem(it) !== null" class="text-caption mt-1"
-                       :class="bajoMargen(it) ? 'text-error font-weight-bold' : 'text-medium-emphasis'">
-                    Margen {{ Math.round(margenItem(it)) }}%
+                  <div v-if="bajoMargen(it)" class="text-caption mt-1 text-error font-weight-bold">
+                    Margen {{ Math.round(margenItem(it)) }}% ⚠ bajo el mínimo
                   </div>
                   <div class="d-flex align-center justify-space-between mt-2">
                     <span class="text-caption text-medium-emphasis">Subtotal (c/IVA)</span>
@@ -209,6 +214,9 @@
                   {{ cliente.identification || 'Sin RUT' }}
                   <span v-if="!cliente.bsale_id" class="text-warning"> · sin Bsale</span>
                 </div>
+                <VChip v-if="cliente.descuento > 0" size="x-small" color="success" variant="tonal" class="mt-1">
+                  Descuento {{ cliente.descuento }}% aplicado
+                </VChip>
               </div>
               <VBtn icon size="x-small" variant="text" @click="cliente = null"><VIcon size="16">mdi-close</VIcon></VBtn>
             </div>
@@ -317,13 +325,14 @@
 
             <!-- Totales -->
             <div class="d-flex justify-space-between text-body-2 mb-1">
-              <span>Neto</span><span>{{ clp(totalNeto) }}</span>
+              <span class="text-medium-emphasis">Neto</span><span>{{ clp(totalNeto) }}</span>
             </div>
-            <div class="d-flex justify-space-between text-body-2 mb-1">
-              <span>IVA (19%)</span><span>{{ clp(totalIva) }}</span>
+            <div class="d-flex justify-space-between text-body-2 mb-2">
+              <span class="text-medium-emphasis">IVA (19%)</span><span>{{ clp(totalIva) }}</span>
             </div>
-            <div class="d-flex justify-space-between text-h6 font-weight-bold mt-1">
-              <span>Total</span><span>{{ clp(totalBruto) }}</span>
+            <div class="total-hero d-flex align-center justify-space-between rounded-lg pa-3">
+              <span class="text-subtitle-1 font-weight-bold">Total</span>
+              <span class="text-h4 font-weight-bold">{{ clp(totalBruto) }}</span>
             </div>
 
             <VAlert
@@ -351,6 +360,22 @@
         </VCard>
       </VCol>
     </VRow>
+
+    <!-- Spacer para que la barra fija no tape el contenido en móvil -->
+    <div class="d-md-none" style="height:84px"></div>
+
+    <!-- Barra fija de Total + CTA (solo móvil) -->
+    <div v-if="items.length" class="d-md-none sticky-total pa-3">
+      <div class="d-flex align-center justify-space-between gap-3">
+        <div>
+          <div class="text-caption text-medium-emphasis">Total ({{ tipo }})</div>
+          <div class="text-h6 font-weight-bold">{{ clp(totalBruto) }}</div>
+        </div>
+        <VBtn color="primary" size="large" :disabled="!itemsOk" append-icon="mdi-arrow-right" @click="dialogConfirmar = true">
+          Realizar venta
+        </VBtn>
+      </div>
+    </div>
 
     <!-- ── Dialog confirmar tipo de documento (poka-yoke) ────────────────── -->
     <VDialog v-model="dialogConfirmar" max-width="470">
@@ -519,7 +544,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import api from '@/axiosInstance'
 
 const tipo = ref('boleta')
@@ -585,6 +610,21 @@ function buscarProductos(q) {
   }, 300)
 }
 
+// Buscador: foco de vuelta + resalte de la fila recién agregada (velocidad POS)
+const prodField = ref(null)
+const nuevoIdx  = ref(-1)
+function marcarNuevo() {
+  nuevoIdx.value = items.value.length - 1
+  const i = nuevoIdx.value
+  setTimeout(() => { if (nuevoIdx.value === i) nuevoIdx.value = -1 }, 1300)
+}
+function focoBuscador() {
+  nextTick(() => { try { prodField.value?.focus?.() } catch (e) { /* noop */ } })
+}
+function onEnterBuscar() {
+  if (prodResults.value.length) agregarProducto(prodResults.value[0])
+}
+
 function agregarProducto(p) {
   prodMenu.value = false
   // Aviso de stock (no bloquea la venta, solo avisa)
@@ -596,6 +636,8 @@ function agregarProducto(p) {
     medidas.value = { show: true, producto: p, ancho: null, alto: null, piezas: 1, pulido: false }
   } else {
     items.value.push({ nombre: p.nombre, cantidad: 1, precio: p.precio_venta, costo: p.costo, descuento: descuentoCliente(), producto_id: p.producto_id, color_id: p.color_id })
+    marcarNuevo()
+    focoBuscador()
   }
   prodSearch.value = ''
   prodResults.value = []
@@ -645,10 +687,13 @@ function confirmarMedidas() {
     },
   })
   medidas.value.show = false
+  marcarNuevo()
+  focoBuscador()
 }
 
 function agregarManual() {
   items.value.push({ nombre: '', cantidad: 1, precio: 0, descuento: 0 })
+  marcarNuevo()
 }
 
 // ── Cliente ──────────────────────────────────────────────────────────────
@@ -955,3 +1000,28 @@ const clp = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: '
 // Neto con 2 decimales: $20.000,00 (punto miles, coma decimales)
 const fmtNeto = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0)
 </script>
+
+<style scoped>
+/* Resalte de la fila recién agregada */
+.nuevo-row { animation: flashRow 1.3s ease-out; }
+@keyframes flashRow {
+  0%   { background-color: rgba(var(--v-theme-success), 0.20); }
+  100% { background-color: transparent; }
+}
+/* Total protagonista */
+.total-hero {
+  margin-top: 4px;
+  background: rgba(var(--v-theme-primary), 0.10);
+  color: rgb(var(--v-theme-primary));
+}
+/* Barra fija de total + CTA en móvil */
+.sticky-total {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 5;
+  background: rgb(var(--v-theme-surface));
+  border-block-start: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+}
+</style>
