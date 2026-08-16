@@ -82,11 +82,11 @@
             <VTable density="compact" class="mt-2" style="min-width:640px">
               <thead>
                 <tr>
-                  <th style="width:90px">Cant.</th>
+                  <th style="width:90px; white-space:nowrap">Cant.</th>
                   <th>Detalle</th>
-                  <th style="width:120px" class="text-right">$/unidad (neto)</th>
-                  <th style="width:80px" class="text-right">% desc.</th>
-                  <th style="width:140px" class="text-right">Subtotal (c/IVA)</th>
+                  <th class="text-right" style="white-space:nowrap">$/unidad (neto)</th>
+                  <th class="text-right" style="white-space:nowrap">% desc.</th>
+                  <th class="text-right" style="white-space:nowrap">Subtotal (c/IVA)</th>
                   <th style="width:40px"></th>
                 </tr>
               </thead>
@@ -100,7 +100,7 @@
                 </tr>
                 <tr v-for="(it, i) in items" :key="i" :class="{ 'nuevo-row': i === nuevoIdx }">
                   <td>
-                    <VTextField v-model.number="it.cantidad" type="number" min="0" density="compact" variant="plain" hide-details style="width:70px" />
+                    <VTextField v-model.number="it.cantidad" type="number" min="0" density="compact" variant="outlined" hide-details reverse style="width:76px" />
                   </td>
                   <td>
                     <!-- Productos del catálogo (con producto_id) y vidrios: nombre fijo (no se edita
@@ -123,10 +123,10 @@
                     </div>
                   </td>
                   <td>
-                    <VTextField v-model.number="it.descuento" type="number" min="0" max="100" density="compact" variant="plain" hide-details reverse />
+                    <VTextField v-model.number="it.descuento" type="number" min="0" max="100" density="compact" variant="outlined" hide-details reverse style="width:80px" />
                   </td>
                   <td>
-                    <MoneyField :model-value="subtotalCivaItem(it)" variant="plain" class="font-weight-medium"
+                    <MoneyField :model-value="subtotalCivaItem(it)" variant="outlined" class="font-weight-medium" style="width:130px"
                                 @update:model-value="setSubtotalCiva(it, $event)" />
                   </td>
                   <td>
