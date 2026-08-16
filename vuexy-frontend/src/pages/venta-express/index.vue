@@ -1012,6 +1012,9 @@ const fmtNeto = v => new Intl.NumberFormat('es-CL', { style: 'currency', currenc
   max-block-size: 320px;
   overflow: hidden;
 }
+/* Resalte al pasar el mouse sobre un producto del dropdown */
+.prod-dropdown :deep(.v-list-item) { cursor: pointer; transition: background-color .12s ease; }
+.prod-dropdown :deep(.v-list-item:hover) { background: rgba(var(--v-theme-primary), 0.14); }
 /* Resalte de la fila recién agregada */
 .nuevo-row { animation: flashRow 1.3s ease-out; }
 @keyframes flashRow {
