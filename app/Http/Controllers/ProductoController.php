@@ -5,10 +5,75 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Producto;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\ProductoColorProveedor;
 
 class ProductoController extends Controller
 {
+    /**
+     * Crea varios productos de una (desde "Productos por crear" en Compras).
+     * Por cada ítem: producto + producto_color_proveedor (código + costo) +
+     * entrada en lista_precios (precio_costo, margen → precio_venta).
+     */
+    public function crearLote(Request $request)
+    {
+        $data = $request->validate([
+            'items'                     => 'required|array|min:1',
+            'items.*.nombre'            => 'required|string|max:255',
+            'items.*.codigo_proveedor'  => 'nullable|string',
+            'items.*.costo'             => 'required|numeric|min:0',
+            'items.*.margen'            => 'nullable|numeric|min:0',
+            'items.*.proveedor_id'      => 'required|exists:proveedors,id',
+            'items.*.color_id'          => 'required|exists:colores,id',
+            'items.*.tipo_producto_id'  => 'nullable|exists:tipos_producto,id',
+            'items.*.unidad_id'         => 'nullable|exists:unidades,id',
+        ]);
+
+        $creados = 0;
+        $errores = [];
+
+        foreach ($data['items'] as $it) {
+            try {
+                DB::transaction(function () use ($it, &$creados) {
+                    $producto = Producto::create([
+                        'nombre'           => $it['nombre'],
+                        'tipo_producto_id' => $it['tipo_producto_id'] ?? null,
+                        'unidad_id'        => $it['unidad_id'] ?? null,
+                    ]);
+
+                    $pcp = ProductoColorProveedor::create([
+                        'producto_id'      => $producto->id,
+                        'proveedor_id'     => $it['proveedor_id'],
+                        'color_id'         => $it['color_id'],
+                        'costo'            => $it['costo'],
+                        'codigo_proveedor' => $it['codigo_proveedor'] ?: null,
+                        'stock'            => 0,
+                    ]);
+
+                    $margen = (float) ($it['margen'] ?? 0);
+                    DB::table('lista_precios')->insert([
+                        'producto_id'                 => $producto->id,
+                        'color_id'                    => $it['color_id'],
+                        'proveedor_sugerido_id'       => $it['proveedor_id'],
+                        'producto_color_proveedor_id' => $pcp->id,
+                        'precio_costo'                => $it['costo'],
+                        'margen'                      => $margen,
+                        'precio_venta'                => round($it['costo'] * (1 + $margen / 100)),
+                        'vigencia_desde'              => now()->toDateString(),
+                        'activo'                      => 1,
+                        'created_at'                  => now(),
+                        'updated_at'                  => now(),
+                    ]);
+                    $creados++;
+                });
+            } catch (\Throwable $e) {
+                $errores[] = ['nombre' => $it['nombre'] ?? '?', 'error' => $e->getMessage()];
+            }
+        }
+
+        return response()->json(['creados' => $creados, 'errores' => $errores]);
+    }
+
     public function index()
     {
         try {

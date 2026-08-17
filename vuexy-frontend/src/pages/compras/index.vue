@@ -71,6 +71,7 @@
         Sin Código
         <VBadge v-if="sinCodigo.length" :content="sinCodigo.length" color="warning" inline class="ml-1" />
       </VTab>
+      <VTab value="porcrear" @click="initPorCrear">Por crear a lista</VTab>
     </VTabs>
 
     <!-- TAB: FACTURAS -->
@@ -422,6 +423,95 @@
         <VIcon size="48" class="mb-2">mdi-check-circle</VIcon>
         <div>Todos los productos tienen código asignado.</div>
       </div>
+    </div>
+
+    <!-- TAB: Por crear a lista de precios -->
+    <div v-if="tab === 'porcrear'">
+      <VAlert type="info" variant="tonal" density="compact" class="mb-4 text-body-2">
+        Detecta los productos más comprados que <strong>aún no están en el sistema</strong> y créalos en lote
+        (producto + código/costo + lista de precios). Elige proveedor, ajusta color y margen, selecciona y crea.
+      </VAlert>
+
+      <VRow dense class="mb-3">
+        <VCol cols="12" md="5">
+          <VTextField v-model="pcProveedor" label="Proveedor (nombre como aparece en las facturas)"
+                      prepend-inner-icon="mdi-magnify" density="compact" variant="outlined" hide-details
+                      @keydown.enter="cargarPorCrear" />
+        </VCol>
+        <VCol cols="8" md="3">
+          <VSelect v-model="pcAnios" :items="[{title:'Últimos 2 años',value:2},{title:'Últimos 3 años',value:3},{title:'Todo el histórico',value:99}]"
+                   label="Período" density="compact" variant="outlined" hide-details />
+        </VCol>
+        <VCol cols="4" md="2" class="d-flex align-center">
+          <VBtn color="primary" :loading="pcLoading" block @click="cargarPorCrear">Cargar</VBtn>
+        </VCol>
+      </VRow>
+
+      <VCard v-if="pcItems.length" variant="tonal" class="mb-3">
+        <VCardText class="py-3">
+          <div class="text-caption font-weight-bold text-uppercase text-medium-emphasis mb-2">Valores por defecto del lote</div>
+          <VRow dense>
+            <VCol cols="12" md="3"><VSelect v-model="pcProveedorId" :items="proveedores" item-title="nombre" item-value="id" label="Proveedor (a vincular) *" density="compact" variant="outlined" hide-details /></VCol>
+            <VCol cols="12" md="3"><VSelect v-model="pcColorId" :items="colores" item-title="nombre" item-value="id" label="Color por defecto *" density="compact" variant="outlined" hide-details /></VCol>
+            <VCol cols="6" md="3"><VSelect v-model="pcTipoId" :items="tiposProducto" item-title="nombre" item-value="id" label="Tipo (opcional)" density="compact" variant="outlined" hide-details clearable /></VCol>
+            <VCol cols="4" md="2"><VTextField v-model.number="pcMargen" type="number" label="Margen %" density="compact" variant="outlined" hide-details reverse /></VCol>
+            <VCol cols="2" md="1" class="d-flex align-center"><VBtn size="small" variant="tonal" title="Aplicar color y margen a todas las filas" @click="aplicarDefaults">Aplicar</VBtn></VCol>
+          </VRow>
+        </VCardText>
+      </VCard>
+
+      <div v-if="pcLoading" class="text-center py-8"><VProgressCircular indeterminate color="primary" /></div>
+
+      <div v-else-if="pcItems.length">
+        <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-2">
+          <span class="text-caption text-medium-emphasis">{{ pcSeleccionados.length }} seleccionados de {{ pcItems.length }} faltantes</span>
+          <VBtn color="success" :disabled="!pcSeleccionados.length || !pcProveedorId || !pcColorId" :loading="pcCreando"
+                prepend-icon="mdi-playlist-plus" @click="crearSeleccionados">
+            Crear seleccionados ({{ pcSeleccionados.length }})
+          </VBtn>
+        </div>
+        <div style="overflow-x:auto">
+        <VTable density="compact" style="min-width:900px">
+          <thead>
+            <tr>
+              <th style="width:40px"><VCheckbox :model-value="todosSel" hide-details density="compact" @update:model-value="toggleTodos" /></th>
+              <th>Producto</th>
+              <th>Código</th>
+              <th class="text-right" style="white-space:nowrap">Veces</th>
+              <th class="text-right" style="white-space:nowrap">Últ. costo</th>
+              <th style="width:160px">Color</th>
+              <th style="width:100px" class="text-right">Margen %</th>
+              <th class="text-right" style="white-space:nowrap">P. venta</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, i) in pcItems" :key="i">
+              <td><VCheckbox v-model="p.sel" hide-details density="compact" /></td>
+              <td class="font-weight-medium">{{ p.nombre }}</td>
+              <td>{{ p.codigo || '—' }}</td>
+              <td class="text-right">{{ p.veces_comprado }}</td>
+              <td class="text-right">${{ formatNum(p.ultimo_precio_neto) }}</td>
+              <td><VSelect v-model="p.color_id" :items="colores" item-title="nombre" item-value="id" density="compact" variant="outlined" hide-details /></td>
+              <td><VTextField v-model.number="p.margen" type="number" density="compact" variant="outlined" hide-details reverse /></td>
+              <td class="text-right font-weight-medium text-success">${{ formatNum(precioVentaRow(p)) }}</td>
+            </tr>
+          </tbody>
+        </VTable>
+        </div>
+      </div>
+
+      <div v-else-if="pcBuscado" class="text-center py-8 text-medium-emphasis">
+        <VIcon size="48" class="mb-2">mdi-check-circle</VIcon>
+        <div>No hay productos faltantes para ese proveedor (ya están todos, o no tiene líneas de compra cargadas).</div>
+      </div>
+      <div v-else class="text-center py-8 text-medium-emphasis">
+        Escribe un proveedor y presiona <strong>Cargar</strong> para ver los productos comprados que faltan crear.
+      </div>
+
+      <VAlert v-if="pcResultado" :type="pcResultado.errores?.length ? 'warning' : 'success'" variant="tonal" class="mt-3">
+        Creados: <strong>{{ pcResultado.creados }}</strong>.
+        <span v-if="pcResultado.errores?.length"> Con errores: {{ pcResultado.errores.length }} (revisa color/proveedor).</span>
+      </VAlert>
     </div>
 
     <!-- DIALOG AGREGAR A PRODUCTOS -->
@@ -995,6 +1085,87 @@ async function guardarProducto() {
     errorAgregar.value = e.response?.data?.message ?? 'Error al guardar el producto'
   } finally {
     guardandoProducto.value = false
+  }
+}
+
+// ── Tab: Productos por crear a lista de precios ────────────────────────────
+const pcProveedor   = ref('')
+const pcAnios       = ref(2)
+const pcLoading     = ref(false)
+const pcBuscado     = ref(false)
+const pcItems       = ref([])
+const pcProveedorId = ref(null)
+const pcColorId     = ref(null)
+const pcTipoId      = ref(null)
+const pcMargen      = ref(30)
+const pcCreando     = ref(false)
+const pcResultado   = ref(null)
+
+const pcSeleccionados = computed(() => pcItems.value.filter(p => p.sel))
+const todosSel = computed(() => pcItems.value.length > 0 && pcItems.value.every(p => p.sel))
+function toggleTodos(v) { pcItems.value.forEach(p => { p.sel = !!v }) }
+function precioVentaRow(p) { return Math.round((Number(p.ultimo_precio_neto) || 0) * (1 + (Number(p.margen) || 0) / 100)) }
+function aplicarDefaults() { pcItems.value.forEach(p => { p.color_id = pcColorId.value; p.margen = pcMargen.value }) }
+
+async function cargarCatalogos() {
+  if (proveedores.value.length) return
+  const [p, c, t, u] = await Promise.all([
+    axiosInstance.get('/api/proveedores'),
+    axiosInstance.get('/api/colores'),
+    axiosInstance.get('/api/tipos_producto'),
+    axiosInstance.get('/api/unidades'),
+  ])
+  proveedores.value = p.data; colores.value = c.data; tiposProducto.value = t.data; unidades.value = u.data
+}
+function initPorCrear() { cargarCatalogos() }
+
+function pcDesde() {
+  if (pcAnios.value >= 99) return '2015-01-01'
+  const d = new Date(); d.setFullYear(d.getFullYear() - pcAnios.value)
+  return d.toISOString().slice(0, 10)
+}
+
+async function cargarPorCrear() {
+  if (!pcProveedor.value || pcProveedor.value.length < 2) return
+  pcLoading.value = true; pcResultado.value = null
+  try {
+    await cargarCatalogos()
+    const { data } = await axiosInstance.get(`${API}/top-productos-proveedor`, {
+      params: { proveedor: pcProveedor.value, solo_faltantes: true, desde: pcDesde(), limit: 200 },
+    })
+    pcItems.value = (data.productos || []).map(p => ({ ...p, sel: false, color_id: pcColorId.value, margen: pcMargen.value }))
+    pcBuscado.value = true
+    // Pre-seleccionar el proveedor (FK) por coincidencia de nombre
+    const nf = pcProveedor.value.toLowerCase()
+    const match = proveedores.value.find(pr => nf.includes((pr.nombre || '').toLowerCase()) || (pr.nombre || '').toLowerCase().includes(nf.split(' ')[0]))
+    if (match) pcProveedorId.value = match.id
+  } catch (e) {
+    pcItems.value = []; pcBuscado.value = true
+  } finally {
+    pcLoading.value = false
+  }
+}
+
+async function crearSeleccionados() {
+  if (!pcSeleccionados.value.length) return
+  pcCreando.value = true; pcResultado.value = null
+  try {
+    const items = pcSeleccionados.value.map(p => ({
+      nombre:           p.nombre,
+      codigo_proveedor: p.codigo || '',
+      costo:            Number(p.ultimo_precio_neto) || 0,
+      margen:           Number(p.margen) || 0,
+      proveedor_id:     pcProveedorId.value,
+      color_id:         p.color_id || pcColorId.value,
+      tipo_producto_id: pcTipoId.value || null,
+    }))
+    const { data } = await axiosInstance.post('/api/productos/crear-lote', { items })
+    pcResultado.value = data
+    if (!data.errores?.length) pcItems.value = pcItems.value.filter(p => !p.sel)
+  } catch (e) {
+    pcResultado.value = { creados: 0, errores: [{ error: e.response?.data?.message || 'Error al crear' }] }
+  } finally {
+    pcCreando.value = false
   }
 }
 

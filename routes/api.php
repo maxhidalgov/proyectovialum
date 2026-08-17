@@ -147,6 +147,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/productos/{id}', [ProductoController::class, 'show']);
     Route::middleware(['permission:area_productos'])->group(function () {
         Route::post('/productos', [ProductoController::class, 'store']);
+        Route::post('/productos/crear-lote', [ProductoController::class, 'crearLote']);
         Route::put('/productos/{id}', [ProductoController::class, 'update']);
         Route::delete('/productos/{id}', [ProductoController::class, 'destroy']);
     });
@@ -190,6 +191,7 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('compras')->group(function () {
         Route::get('/estadisticas',                 [\App\Http\Controllers\CompraController::class, 'estadisticas']);
         Route::get('/buscar-producto',              [\App\Http\Controllers\CompraController::class, 'buscarProducto']);
+        Route::get('/top-productos-proveedor',      [\App\Http\Controllers\CompraController::class, 'topProductosProveedor']);
         Route::get('/alertas-precio',              [\App\Http\Controllers\CompraController::class, 'alertasPrecio']);
         Route::get('/sin-codigo',                  [\App\Http\Controllers\CompraController::class, 'sinCodigo']);
         Route::post('/matchear',                   [\App\Http\Controllers\CompraController::class, 'matchear']);
