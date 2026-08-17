@@ -189,13 +189,23 @@ class CompraController extends Controller
                 ->unique('nombre')->keyBy('nombre');
         }
 
-        $data = $rows->map(function ($r) use ($ultimos) {
+        // ¿Ya está en el sistema? = su código existe en producto_color_proveedor.codigo_proveedor
+        $codigos = $rows->pluck('codigo')->filter()->map(fn($c) => (string) $c)->unique()->all();
+        $enSistema = $codigos
+            ? DB::table('producto_color_proveedor')->whereIn('codigo_proveedor', $codigos)
+                ->pluck('codigo_proveedor')->map(fn($c) => (string) $c)->flip()
+            : collect();
+
+        $soloFaltantes = filter_var($request->query('solo_faltantes', false), FILTER_VALIDATE_BOOLEAN);
+
+        $data = $rows->map(function ($r) use ($ultimos, $enSistema) {
             $u    = $ultimos->get($r->nombre);
             $pu   = $u ? (float) $u->precio_unitario : null;
             $desc = $u ? (float) $u->descuento : 0;
             return [
                 'codigo'             => $r->codigo,
                 'nombre'             => $r->nombre,
+                'en_sistema'         => (bool) ($r->codigo && $enSistema->has((string) $r->codigo)),
                 'total_cantidad'     => (float) $r->total_cantidad,
                 'unidad'             => $u->unidad ?? null,
                 'veces_comprado'     => (int) $r->veces_comprado,
@@ -203,13 +213,18 @@ class CompraController extends Controller
                 'total_gastado'      => (float) $r->total_gastado,
                 'ultima_compra'      => $r->ultima_compra,
             ];
-        })->values();
+        });
+
+        if ($soloFaltantes) $data = $data->reject(fn($p) => $p['en_sistema']);
+        $data = $data->values();
 
         return response()->json([
             'proveedor'       => $proveedor ?: 'todos',
             'desde'           => $desde,
             'hasta'           => $hasta,
+            'solo_faltantes'  => $soloFaltantes,
             'total_productos' => $data->count(),
+            'faltan_crear'    => $data->reject(fn($p) => $p['en_sistema'])->count(),
             'productos'       => $data,
         ]);
     }

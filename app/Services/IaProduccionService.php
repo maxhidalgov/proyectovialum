@@ -471,13 +471,14 @@ PROMPT;
             ],
             [
                 'name'        => 'top_productos_proveedor',
-                'description' => 'Lista los productos MÁS COMPRADOS a un proveedor (ranking por cantidad total) en un rango de fechas (por defecto los últimos 2 años). Devuelve por producto: código, nombre, cantidad total comprada, veces comprado, último precio neto, total gastado y última compra. Úsalo cuando pidan un listado o ranking de productos comprados a un proveedor. IMPORTANTE: se basa en las líneas de las facturas de compra (compra_items); si un proveedor no tiene líneas cargadas, devolverá vacío — en ese caso avisa que hay que "cargar XMLs pendientes" en Compras.',
+                'description' => 'Lista los productos MÁS COMPRADOS a un proveedor (ranking por cantidad total) en un rango de fechas (por defecto los últimos 2 años). Por producto devuelve: código, nombre, si YA está en el sistema (en_sistema), cantidad total comprada, veces comprado, último precio neto, total gastado y última compra. También devuelve faltan_crear (cuántos NO están creados). Úsalo para rankings de compras por proveedor Y para detectar qué productos comprados aún faltan crear en el sistema. Si piden "los que me faltan crear/agregar a la lista de precios", pasa solo_faltantes=true. IMPORTANTE: se basa en las líneas de compra (compra_items); si un proveedor no tiene líneas, devuelve vacío (avisar de "cargar XMLs pendientes").',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => [
-                        'proveedor' => ['type' => 'string', 'description' => 'Nombre o RUT del proveedor'],
-                        'desde'     => ['type' => 'string', 'description' => 'Fecha inicial YYYY-MM-DD (opcional; por defecto hace 2 años)'],
-                        'hasta'     => ['type' => 'string', 'description' => 'Fecha final YYYY-MM-DD (opcional)'],
+                        'proveedor'      => ['type' => 'string', 'description' => 'Nombre o RUT del proveedor'],
+                        'desde'          => ['type' => 'string', 'description' => 'Fecha inicial YYYY-MM-DD (opcional; por defecto hace 2 años)'],
+                        'hasta'          => ['type' => 'string', 'description' => 'Fecha final YYYY-MM-DD (opcional)'],
+                        'solo_faltantes' => ['type' => 'boolean', 'description' => 'Si es true, devuelve SOLO los productos que aún NO están creados en el sistema (para saber cuáles cargar a la lista de precios)'],
                     ],
                     'required' => ['proveedor'],
                 ],
@@ -898,10 +899,11 @@ PROMPT;
     private function toolTopProductosProveedor(array $input): array
     {
         $req = new Request([
-            'proveedor' => $input['proveedor'] ?? null,
-            'desde'     => $input['desde'] ?? null,
-            'hasta'     => $input['hasta'] ?? null,
-            'limit'     => 40,
+            'proveedor'      => $input['proveedor'] ?? null,
+            'desde'          => $input['desde'] ?? null,
+            'hasta'          => $input['hasta'] ?? null,
+            'solo_faltantes' => $input['solo_faltantes'] ?? false,
+            'limit'          => 40,
         ]);
         $data = app(CompraController::class)->topProductosProveedor($req)->getData(true);
 
@@ -910,6 +912,7 @@ PROMPT;
             'proveedor'       => $data['proveedor'] ?? null,
             'periodo'         => ($data['desde'] ?? '?') . ' → ' . ($data['hasta'] ?? 'hoy'),
             'total_productos' => $data['total_productos'] ?? 0,
+            'faltan_crear'    => $data['faltan_crear'] ?? 0,
             'productos'       => $productos,
             'nota' => empty($productos)
                 ? 'Sin líneas de compra para este proveedor. Puede que sus facturas no tengan las líneas cargadas: correr "cargar XMLs pendientes" en el módulo Compras.'
