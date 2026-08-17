@@ -142,6 +142,23 @@ class CompraController extends Controller
     }
 
     /**
+     * Lista de proveedores tal como aparecen en las facturas de compra (nombre_emisor),
+     * con cuántas compras tiene cada uno. Para el autocompletado de "Por crear a lista".
+     */
+    public function proveedoresEmisores()
+    {
+        $rows = DB::table('compras')
+            ->whereNotNull('nombre_emisor')
+            ->where('nombre_emisor', '<>', '')
+            ->selectRaw('nombre_emisor, COUNT(*) as compras')
+            ->groupBy('nombre_emisor')
+            ->orderByDesc(DB::raw('COUNT(*)'))
+            ->get();
+
+        return response()->json($rows);
+    }
+
+    /**
      * Productos MÁS COMPRADOS a un proveedor (ranking por cantidad) en un rango de
      * fechas (default últimos 2 años). Devuelve código, nombre, cantidad total,
      * veces comprado, último precio neto, total gastado y última compra.

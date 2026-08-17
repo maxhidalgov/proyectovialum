@@ -192,6 +192,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/estadisticas',                 [\App\Http\Controllers\CompraController::class, 'estadisticas']);
         Route::get('/buscar-producto',              [\App\Http\Controllers\CompraController::class, 'buscarProducto']);
         Route::get('/top-productos-proveedor',      [\App\Http\Controllers\CompraController::class, 'topProductosProveedor']);
+        Route::get('/proveedores-emisores',         [\App\Http\Controllers\CompraController::class, 'proveedoresEmisores']);
         Route::get('/alertas-precio',              [\App\Http\Controllers\CompraController::class, 'alertasPrecio']);
         Route::get('/sin-codigo',                  [\App\Http\Controllers\CompraController::class, 'sinCodigo']);
         Route::post('/matchear',                   [\App\Http\Controllers\CompraController::class, 'matchear']);

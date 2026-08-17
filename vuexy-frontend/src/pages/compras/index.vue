@@ -456,9 +456,15 @@
 
       <VRow dense class="mb-3">
         <VCol cols="12" md="5">
-          <VTextField v-model="pcProveedor" label="Proveedor (nombre como aparece en las facturas)"
-                      prepend-inner-icon="mdi-magnify" density="compact" variant="outlined" hide-details
-                      @keydown.enter="cargarPorCrear" />
+          <VAutocomplete v-model="pcProveedor" :items="pcEmisores" item-title="nombre_emisor" item-value="nombre_emisor"
+                         label="Proveedor (como aparece en las facturas)" prepend-inner-icon="mdi-magnify"
+                         density="compact" variant="outlined" hide-details auto-select-first
+                         :no-data-text="pcEmisores.length ? 'Sin coincidencias' : 'Cargando…'"
+                         @update:model-value="cargarPorCrear">
+            <template #item="{ props: ip, item }">
+              <VListItem v-bind="ip" :title="item.raw.nombre_emisor" :subtitle="item.raw.compras + ' compras'" />
+            </template>
+          </VAutocomplete>
         </VCol>
         <VCol cols="8" md="3">
           <VSelect v-model="pcAnios" :items="[{title:'Últimos 2 años',value:2},{title:'Últimos 3 años',value:3},{title:'Todo el histórico',value:99}]"
@@ -1114,6 +1120,7 @@ async function guardarProducto() {
 
 // ── Tab: Productos por crear a lista de precios ────────────────────────────
 const pcProveedor   = ref('')
+const pcEmisores    = ref([])
 const pcAnios       = ref(2)
 const pcLoading     = ref(false)
 const pcBuscado     = ref(false)
@@ -1141,7 +1148,12 @@ async function cargarCatalogos() {
   ])
   proveedores.value = p.data; colores.value = c.data; tiposProducto.value = t.data; unidades.value = u.data
 }
-function initPorCrear() { cargarCatalogos() }
+async function initPorCrear() {
+  cargarCatalogos()
+  if (!pcEmisores.value.length) {
+    try { const { data } = await axiosInstance.get(`${API}/proveedores-emisores`); pcEmisores.value = data } catch {}
+  }
+}
 
 function pcDesde() {
   if (pcAnios.value >= 99) return '2015-01-01'
