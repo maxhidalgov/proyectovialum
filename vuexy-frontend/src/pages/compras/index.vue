@@ -227,6 +227,7 @@
                 <tr>
                   <th>Fecha</th>
                   <th>Proveedor</th>
+                  <th>Código</th>
                   <th>Folio</th>
                   <th>Cantidad</th>
                   <th>Unidad</th>
@@ -240,6 +241,7 @@
                 <tr v-for="(h, j) in prod.historial" :key="j">
                   <td>{{ formatFecha(h.fecha) }}</td>
                   <td>{{ h.proveedor }}</td>
+                  <td class="font-weight-medium">{{ h.codigo || '—' }}</td>
                   <td>
                     <a v-if="h.pdf_url" :href="h.pdf_url" target="_blank" class="text-primary font-weight-medium" style="text-decoration:none">
                       {{ h.folio }} <VIcon size="11">mdi-open-in-new</VIcon>
