@@ -499,6 +499,7 @@
               <th style="width:40px"><VCheckbox :model-value="todosSel" hide-details density="compact" @update:model-value="toggleTodos" /></th>
               <th>Producto</th>
               <th>Código</th>
+              <th class="text-right" style="white-space:nowrap">Cant. total</th>
               <th class="text-right" style="white-space:nowrap">Veces</th>
               <th class="text-right" style="white-space:nowrap">Últ. costo</th>
               <th style="width:160px">Color</th>
@@ -511,6 +512,7 @@
               <td><VCheckbox v-model="p.sel" hide-details density="compact" /></td>
               <td class="font-weight-medium">{{ p.nombre }}</td>
               <td>{{ p.codigo || '—' }}</td>
+              <td class="text-right font-weight-medium">{{ formatNum(p.total_cantidad) }}<span class="text-caption text-medium-emphasis"> {{ p.unidad || '' }}</span></td>
               <td class="text-right">{{ p.veces_comprado }}</td>
               <td class="text-right">${{ formatNum(p.ultimo_precio_neto) }}</td>
               <td><VSelect v-model="p.color_id" :items="colores" item-title="nombre" item-value="id" density="compact" variant="outlined" hide-details /></td>
