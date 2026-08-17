@@ -427,10 +427,32 @@
 
     <!-- TAB: Por crear a lista de precios -->
     <div v-if="tab === 'porcrear'">
-      <VAlert type="info" variant="tonal" density="compact" class="mb-4 text-body-2">
+      <VAlert type="info" variant="tonal" density="compact" class="mb-3 text-body-2">
         Detecta los productos más comprados que <strong>aún no están en el sistema</strong> y créalos en lote
-        (producto + código/costo + lista de precios). Elige proveedor, ajusta color y margen, selecciona y crea.
+        (producto + código/costo + lista de precios).
       </VAlert>
+
+      <VExpansionPanels class="mb-4">
+        <VExpansionPanel>
+          <VExpansionPanelTitle>
+            <VIcon start size="18" color="primary">mdi-help-circle-outline</VIcon>
+            ¿Cómo usar esta pantalla? (instrucciones)
+          </VExpansionPanelTitle>
+          <VExpansionPanelText class="text-body-2">
+            <ol class="pl-4" style="line-height:1.9">
+              <li>Escribe el <strong>proveedor</strong> (como aparece en las facturas) y elige el <strong>período</strong> → <strong>Cargar</strong>.</li>
+              <li>Aparecen los productos comprados a ese proveedor que <strong>aún NO están creados</strong>, ordenados por cantidad comprada, con código y último costo.</li>
+              <li>En <strong>"Valores por defecto del lote"</strong> fija: <strong>Proveedor a vincular</strong> (revisa que sea el correcto), <strong>Color</strong>, <strong>Tipo</strong> y <strong>Margen %</strong>. Toca <strong>Aplicar</strong> para bajarlos a todas las filas.</li>
+              <li>Ajusta <strong>color o margen por fila</strong> donde haga falta. El <strong>precio de venta se calcula solo</strong> = costo × (1 + margen%).</li>
+              <li>Marca los que quieras con el <strong>checkbox</strong> y presiona <strong>"Crear seleccionados"</strong>. Se crean de una: producto + código/costo + entrada en la <strong>lista de precios</strong>.</li>
+            </ol>
+            <VAlert type="warning" variant="tonal" density="compact" class="mt-2 text-caption mb-0">
+              Si un proveedor sale vacío, sus facturas no tienen las líneas cargadas → corre <strong>"cargar XMLs pendientes"</strong> (en la tab Facturas) y vuelve a intentar.
+              También puedes preguntarle al <strong>Asistente IA</strong>: <em>"¿qué productos comprados a X me faltan crear?"</em>
+            </VAlert>
+          </VExpansionPanelText>
+        </VExpansionPanel>
+      </VExpansionPanels>
 
       <VRow dense class="mb-3">
         <VCol cols="12" md="5">

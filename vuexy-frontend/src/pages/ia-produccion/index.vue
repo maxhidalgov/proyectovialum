@@ -237,6 +237,10 @@ const sugerencias = [
   'Pedro terminó el corte de la obra López',
   'Mañana van Pedro y Javier a medir donde Martínez',
   '¿Cuándo podemos entregar la cotización #81?',
+  'Productos más comprados a Haustek en los últimos 2 años',
+  '¿Qué productos comprados a Haustek me faltan crear en el sistema?',
+  '¿Cuánto le debo a Digosa?',
+  '¿Qué clientes me deben más?',
 ]
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
