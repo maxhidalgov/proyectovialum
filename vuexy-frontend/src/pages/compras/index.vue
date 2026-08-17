@@ -166,7 +166,7 @@
         <VCol cols="12" md="6">
           <VTextField
             v-model="busquedaProducto"
-            label="Buscar producto en facturas de compra..."
+            label="Buscar por nombre o código de producto..."
             prepend-inner-icon="mdi-magnify"
             clearable
             hide-details

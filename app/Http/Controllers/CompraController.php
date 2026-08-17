@@ -92,8 +92,12 @@ class CompraController extends Controller
         $items = CompraItem::with(['compra' => fn($r) => $r->select('id', 'folio', 'nombre_emisor', 'fecha_emision', 'pdf_url')])
             ->join('compras', 'compra_items.compra_id', '=', 'compras.id')
             ->where(function ($query) use ($palabras) {
+                // Cada palabra debe estar en el nombre O en el código del ítem
                 foreach ($palabras as $palabra) {
-                    $query->where('compra_items.nombre', 'like', "%$palabra%");
+                    $query->where(function ($sub) use ($palabra) {
+                        $sub->where('compra_items.nombre', 'like', "%$palabra%")
+                            ->orWhere('compra_items.codigo', 'like', "%$palabra%");
+                    });
                 }
             })
             ->orderByDesc('compras.fecha_emision')
