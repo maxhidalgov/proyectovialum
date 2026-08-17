@@ -170,6 +170,7 @@ Tu rol es:
 - Ayudar a planificar y estimar fechas de entrega basándote en la carga actual y el historial.
 - Funcionar como agenda: crear recordatorios y eventos cuando el usuario pida recordar, agendar o programar algo (llamadas, reuniones, pagos, seguimientos). También consultar qué hay agendado.
 - Responder consultas comerciales y financieras usando las tools: datos de clientes, cuentas por cobrar (deudas de clientes), cuentas por pagar (deudas a proveedores), compras y ventas/facturación.
+- Armar listados/rankings de productos comprados a un proveedor con la tool `top_productos_proveedor` (código, nombre, cantidad total, veces comprado, último precio, última compra). Ideal cuando piden "los productos más comprados a X en los últimos N años". Presenta el resultado como tabla ordenada.
 - Ser proactivo: si detectas un problema (entrega próxima sin avance, incidente abierto antiguo), mencionarlo.
 
 Sobre montos: son pesos chilenos (CLP). Formatéalos legibles (ej. $1.234.567). Si una consulta no devuelve datos, dilo claramente en vez de inventar.
@@ -469,6 +470,19 @@ PROMPT;
                 ],
             ],
             [
+                'name'        => 'top_productos_proveedor',
+                'description' => 'Lista los productos MÁS COMPRADOS a un proveedor (ranking por cantidad total) en un rango de fechas (por defecto los últimos 2 años). Devuelve por producto: código, nombre, cantidad total comprada, veces comprado, último precio neto, total gastado y última compra. Úsalo cuando pidan un listado o ranking de productos comprados a un proveedor. IMPORTANTE: se basa en las líneas de las facturas de compra (compra_items); si un proveedor no tiene líneas cargadas, devolverá vacío — en ese caso avisa que hay que "cargar XMLs pendientes" en Compras.',
+                'input_schema' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'proveedor' => ['type' => 'string', 'description' => 'Nombre o RUT del proveedor'],
+                        'desde'     => ['type' => 'string', 'description' => 'Fecha inicial YYYY-MM-DD (opcional; por defecto hace 2 años)'],
+                        'hasta'     => ['type' => 'string', 'description' => 'Fecha final YYYY-MM-DD (opcional)'],
+                    ],
+                    'required' => ['proveedor'],
+                ],
+            ],
+            [
                 'name'        => 'consultar_ventas',
                 'description' => 'Consulta el registro de ventas / facturación emitida (facturas y notas de crédito), opcionalmente por período o cliente. Úsalo para ver ventas, facturas emitidas y montos cobrados/pendientes.',
                 'input_schema' => [
@@ -503,6 +517,7 @@ PROMPT;
             'consultar_cuentas_por_cobrar' => $this->toolConsultarCxC($input),
             'consultar_cuentas_por_pagar'  => $this->toolConsultarCxP($input),
             'consultar_compras'          => $this->toolConsultarCompras($input),
+            'top_productos_proveedor'    => $this->toolTopProductosProveedor($input),
             'consultar_ventas'           => $this->toolConsultarVentas($input),
             default                      => ['error' => "Tool desconocida: {$tool}"],
         };
@@ -877,6 +892,28 @@ PROMPT;
                 'total'     => (float) ($c['total'] ?? 0),
                 'tipo_dte'  => $c['tipo_dte'] ?? null,
             ])->values(),
+        ];
+    }
+
+    private function toolTopProductosProveedor(array $input): array
+    {
+        $req = new Request([
+            'proveedor' => $input['proveedor'] ?? null,
+            'desde'     => $input['desde'] ?? null,
+            'hasta'     => $input['hasta'] ?? null,
+            'limit'     => 40,
+        ]);
+        $data = app(CompraController::class)->topProductosProveedor($req)->getData(true);
+
+        $productos = $data['productos'] ?? [];
+        return [
+            'proveedor'       => $data['proveedor'] ?? null,
+            'periodo'         => ($data['desde'] ?? '?') . ' → ' . ($data['hasta'] ?? 'hoy'),
+            'total_productos' => $data['total_productos'] ?? 0,
+            'productos'       => $productos,
+            'nota' => empty($productos)
+                ? 'Sin líneas de compra para este proveedor. Puede que sus facturas no tengan las líneas cargadas: correr "cargar XMLs pendientes" en el módulo Compras.'
+                : null,
         ];
     }
 

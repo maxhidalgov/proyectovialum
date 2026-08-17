@@ -141,6 +141,79 @@ class CompraController extends Controller
         return response()->json(['data' => array_values($agrupado)]);
     }
 
+    /**
+     * Productos MÁS COMPRADOS a un proveedor (ranking por cantidad) en un rango de
+     * fechas (default últimos 2 años). Devuelve código, nombre, cantidad total,
+     * veces comprado, último precio neto, total gastado y última compra.
+     * Lo usa la tool `top_productos_proveedor` del asistente IA.
+     */
+    public function topProductosProveedor(Request $request)
+    {
+        $proveedor = trim((string) $request->query('proveedor', ''));
+        $desde = $request->query('desde') ?: now()->subYears(2)->toDateString();
+        $hasta = $request->query('hasta');
+        $limit = min((int) $request->query('limit', 30), 100);
+
+        $base = DB::table('compra_items as ci')
+            ->join('compras as c', 'c.id', '=', 'ci.compra_id')
+            ->when($proveedor !== '', function ($q) use ($proveedor) {
+                $q->where(function ($s) use ($proveedor) {
+                    $s->where('c.nombre_emisor', 'like', "%$proveedor%")
+                      ->orWhere('c.rut_emisor', 'like', "%$proveedor%");
+                });
+            })
+            ->when($desde, fn($q) => $q->where('c.fecha_emision', '>=', $desde))
+            ->when($hasta, fn($q) => $q->where('c.fecha_emision', '<=', $hasta));
+
+        // Agregado por producto (nombre)
+        $rows = (clone $base)
+            ->selectRaw('ci.nombre,
+                MAX(ci.codigo) as codigo,
+                SUM(ci.cantidad) as total_cantidad,
+                COUNT(*) as veces_comprado,
+                SUM(ci.total_linea) as total_gastado,
+                MAX(c.fecha_emision) as ultima_compra')
+            ->groupBy('ci.nombre')
+            ->orderByDesc(DB::raw('SUM(ci.cantidad)'))
+            ->limit($limit)
+            ->get();
+
+        // Último precio neto por producto (línea más reciente dentro del filtro)
+        $nombres = $rows->pluck('nombre')->all();
+        $ultimos = collect();
+        if ($nombres) {
+            $ultimos = (clone $base)
+                ->whereIn('ci.nombre', $nombres)
+                ->orderByDesc('c.fecha_emision')->orderByDesc('ci.id')
+                ->get(['ci.nombre', 'ci.precio_unitario', 'ci.descuento', 'ci.unidad'])
+                ->unique('nombre')->keyBy('nombre');
+        }
+
+        $data = $rows->map(function ($r) use ($ultimos) {
+            $u    = $ultimos->get($r->nombre);
+            $pu   = $u ? (float) $u->precio_unitario : null;
+            $desc = $u ? (float) $u->descuento : 0;
+            return [
+                'codigo'             => $r->codigo,
+                'nombre'             => $r->nombre,
+                'total_cantidad'     => (float) $r->total_cantidad,
+                'unidad'             => $u->unidad ?? null,
+                'veces_comprado'     => (int) $r->veces_comprado,
+                'ultimo_precio_neto' => $pu !== null ? round($pu * (1 - $desc / 100)) : null,
+                'total_gastado'      => (float) $r->total_gastado,
+                'ultima_compra'      => $r->ultima_compra,
+            ];
+        })->values();
+
+        return response()->json([
+            'proveedor'       => $proveedor ?: 'todos',
+            'desde'           => $desde,
+            'hasta'           => $hasta,
+            'total_productos' => $data->count(),
+            'productos'       => $data,
+        ]);
+    }
+
     // -------------------------------------------------------------------------
     // POST /api/compras/sincronizar-folio?folio=2789420
     // Importa un documento específico de Bsale por número de folio.
