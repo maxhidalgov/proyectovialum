@@ -263,15 +263,13 @@
     <tr>
       <td style="width: 55%; border: none;"></td>
       <td style="width: 45%; border: none;">
+        @if($cantidadTotal > 0)
+          <div class="muted" style="font-size: 10px; margin-bottom: 6px; text-align: right;">{{ $cantidadTotal }} ventana(s) · {{ number_format($totalM2, 2, ',', '.') }} m²</div>
+        @endif
         <table class="tot">
-          @if($cantidadTotal > 0)
-            <tr><td class="k">Cantidad ventanas</td><td class="v">{{ $cantidadTotal }} ud.</td></tr>
-            <tr><td class="k">Total m²</td><td class="v">{{ number_format($totalM2, 2, ',', '.') }} m²</td></tr>
-          @endif
-          @if($totalVentanas > 0)
+          {{-- Subtotales solo si la cotización mezcla ventanas y productos (si no, serían iguales al Neto) --}}
+          @if($totalVentanas > 0 && $totalProductos > 0)
             <tr><td class="k">Subtotal Ventanas</td><td class="v">${{ number_format($totalVentanas, 0, ',', '.') }}</td></tr>
-          @endif
-          @if($totalProductos > 0)
             <tr><td class="k">Subtotal Productos</td><td class="v">${{ number_format($totalProductos, 0, ',', '.') }}</td></tr>
           @endif
           <tr><td class="k">Neto</td><td class="v">${{ number_format($subtotalNeto, 0, ',', '.') }}</td></tr>
