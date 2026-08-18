@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import api from '@/axiosInstance'
-import logoVialum from '@/assets/images/logo-vialum.png'
+import logoVialum from '@/assets/images/logo-vialum2.png'
 import MoneyField from './MoneyField.vue'
 
 // Vendedor = usuario logeado (desde localStorage, igual que el nav)
@@ -271,7 +271,7 @@ const PRINT_CSS = `
   body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #2b2f42; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .coti-paper { background: #fff; color: #2b2f42; font-size: 13px; line-height: 1.5; }
   .coti-head { display: flex; justify-content: space-between; gap: 24px; }
-  .coti-head img { height: 40px; display: block; }
+  .coti-head img { height: 56px; display: block; border-radius: 4px; margin-bottom: 8px; }
   .coti-sub { color: #1e4d8b; letter-spacing: .14em; font-size: 10px; font-weight: 700; margin: 3px 0 12px; }
   .coti-strong { font-weight: 700; margin: 0; }
   .coti-muted { color: #6b7180; font-size: 12px; margin: 0; }
@@ -385,8 +385,7 @@ function nuevaCotizacion() {
           <!-- Header -->
           <div class="d-flex flex-wrap justify-space-between gap-6 rounded pa-6 mb-6" style="background: rgba(var(--v-theme-on-surface), 0.04)">
             <div>
-              <img :src="logoVialum" alt="VIALUM" height="34" class="mb-1" style="display:block">
-              <div class="text-caption text-primary font-weight-medium mb-3" style="letter-spacing:.14em">VENTANAS PVC · ALUMINIO</div>
+              <img :src="logoVialum" alt="VIALUM" height="60" class="mb-3" style="display:block; border-radius:6px">
               <p class="text-high-emphasis font-weight-medium mb-0">HIDALGO E HIDALGO LIMITADA · RUT 76.096.031-4</p>
               <p class="text-medium-emphasis mb-0">Balmaceda 454, Los Ángeles</p>
               <p class="text-medium-emphasis mb-0">contacto@vialum.cl · +56 43 2 311859</p>
@@ -710,8 +709,7 @@ function nuevaCotizacion() {
           <div id="doc-print" class="coti-paper">
             <div class="coti-head">
               <div>
-                <img :src="logoVialum" alt="VIALUM" height="40" style="display:block">
-                <div class="coti-sub">VENTANAS PVC · ALUMINIO</div>
+                <img :src="logoVialum" alt="VIALUM" height="56" style="display:block; border-radius:6px; margin-bottom:8px">
                 <p class="coti-strong mb-0">HIDALGO E HIDALGO LIMITADA</p>
                 <p class="coti-muted mb-0">RUT 76.096.031-4 · Vidriería, aluminios y ferretería</p>
                 <p class="coti-muted mb-0">Balmaceda 454, Los Ángeles</p>

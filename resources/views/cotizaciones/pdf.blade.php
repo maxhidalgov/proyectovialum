@@ -103,98 +103,82 @@
       color: #aaa;
       text-align: center;
     }
+
+    /* ── Estilo carta (moderno) ── */
+    .muted { color: #6b7180; }
+    .hdr { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    .hdr td { border: none; vertical-align: top; padding: 0; }
+    .sub { color: #1B3A6B; font-size: 9px; font-weight: bold; letter-spacing: 2px; margin: 2px 0 8px; }
+    .coti-box { border: 1.5px solid #1B3A6B; border-collapse: collapse; }
+    .coti-box td { border: none; padding: 4px 14px; font-size: 11px; }
+    .coti-box td.t { color: #1B3A6B; font-weight: bold; letter-spacing: 2px; text-align: center; font-size: 13px; border-bottom: 1px solid #cdd8e6; padding: 7px; }
+    .coti-box td.k { color: #6b7180; }
+    .coti-box td.v { text-align: right; font-weight: bold; }
+    .rule { height: 3px; background: #1B3A6B; margin: 14px 0; font-size: 0; line-height: 0; }
+    .eyebrow { text-transform: uppercase; letter-spacing: 1px; font-size: 9px; color: #6b7180; font-weight: bold; margin-bottom: 3px; }
+    .intro { margin: 14px 0 4px; }
+    .cond-title { text-transform: uppercase; letter-spacing: 1px; font-size: 9px; color: #6b7180; font-weight: bold; margin: 24px 0 6px; }
+    .cond td { padding: 2px 0; font-size: 10px; color: #4a5060; vertical-align: top; }
+    .firma-line { border-top: 1px solid #9aa1b0; width: 220px; }
   </style>
 </head>
 <body>
 
 {{-- Footer fijo en todas las páginas --}}
 <div id="pdf-footer">
-  Cotización #{{ $cotizacion->id }} &nbsp;·&nbsp; {{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }} &nbsp;·&nbsp; Válida 5 días
+  Cotización #{{ $cotizacion->id }} &nbsp;·&nbsp; {{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }} &nbsp;·&nbsp; Válida 15 días
 </div>
 
-{{-- Barra de marca --}}
-<div class="brand-bar"></div>
+{{-- Header moderno: logo + empresa (izq) · caja COTIZACIÓN (der) --}}
+@php
+  $cli       = $cotizacion->cliente;
+  $cliNombre = optional($cli)->razon_social ?: trim((optional($cli)->first_name ?? '') . ' ' . (optional($cli)->last_name ?? '')) ?: 'Consumidor Final';
+  $rut       = optional($cli)->rut ?? optional($cli)->identification ?? null;
+  $telefono  = optional($cli)->phone ?? optional($cli)->telefono ?? null;
+  $correo    = optional($cli)->email ?? null;
+  $direccion = optional($cli)->address ?? optional($cli)->direccion ?? null;
+  $ciudad    = optional($cli)->ciudad ?? null;
+@endphp
 
-{{-- Header --}}
-<table class="header-table">
+<table class="hdr">
   <tr>
-    <td style="width: 55%;">
-      <h2 class="cotizacion-title">Cotización #{{ $cotizacion->id }}</h2>
-      <table style="border-collapse: collapse;">
-        <tr class="info-row">
-          <td class="info-label">Cliente:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }}</td>
-        </tr>
-        @if($cotizacion->cliente->rut ?? null)
-        <tr class="info-row">
-          <td class="info-label">RUT:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->cliente->rut }}</td>
-        </tr>
-        @endif
-        @php
-          $contacto  = trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? ''));
-          $telefono  = $cotizacion->cliente->phone ?? $cotizacion->cliente->telefono ?? null;
-          $correo    = $cotizacion->cliente->email ?? null;
-          $direccion = $cotizacion->cliente->address ?? $cotizacion->cliente->direccion ?? null;
-          $ciudad    = $cotizacion->cliente->ciudad ?? null;
-        @endphp
-        @if($telefono)
-        <tr class="info-row">
-          <td class="info-label">Teléfono:</td>
-          <td style="border:none; padding: 2px 0;">{{ $telefono }}</td>
-        </tr>
-        @endif
-        @if($correo)
-        <tr class="info-row">
-          <td class="info-label">Correo:</td>
-          <td style="border:none; padding: 2px 0;">{{ $correo }}</td>
-        </tr>
-        @endif
-        @if($direccion)
-        <tr class="info-row">
-          <td class="info-label">Dirección:</td>
-          <td style="border:none; padding: 2px 0;">{{ $direccion }}{{ $ciudad ? ', ' . $ciudad : '' }}</td>
-        </tr>
-        @endif
-        <tr class="info-row">
-          <td class="info-label">Fecha:</td>
-          <td style="border:none; padding: 2px 0;">
-            {{ \Carbon\Carbon::parse($cotizacion->fecha)->locale('es')->isoFormat('D [de] MMMM [de] YYYY') }}
-          </td>
-        </tr>
-        <tr class="info-row">
-          <td class="info-label">Estado:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->estado->nombre ?? '-' }}</td>
-        </tr>
-        @if($cotizacion->vendedor?->nombre)
-        <tr class="info-row">
-          <td class="info-label">Vendedor:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->vendedor->nombre }}</td>
-        </tr>
-        @endif
-        @if($cotizacion->observaciones)
-        <tr class="info-row">
-          <td class="info-label" style="vertical-align: top;">Observaciones:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->observaciones }}</td>
-        </tr>
-        @endif
-      </table>
-    </td>
-    <td style="width: 45%; text-align: right; vertical-align: top;">
+    <td style="width: 58%;">
       @if(!empty($logoBase64))
-        <img src="{{ $logoBase64 }}" alt="Logo Vialum" width="130" style="margin-bottom: 6px;" />
+        <img src="{{ $logoBase64 }}" alt="VIALUM" width="150" style="display: block; margin-bottom: 8px;" />
       @else
-        <h3 style="margin: 0; color: #1B3A6B;">VIALUM</h3>
+        <div style="font-size: 26px; font-weight: bold; color: #1B3A6B;">VIALUM</div>
+        <div class="sub">VENTANAS PVC · ALUMINIO</div>
       @endif
-      <div class="company-info">
-        <strong>Dirección:</strong> Balmaceda 454, Los Ángeles<br>
-        <strong>Teléfono:</strong> +432311859<br>
-        <strong>Correo:</strong> contacto@vialum.cl<br>
-        <strong>Web:</strong> www.vialum.cl
+      <div style="line-height: 1.6;">
+        <strong>HIDALGO E HIDALGO LIMITADA</strong><br>
+        <span class="muted">RUT 76.096.031-4 · Vidriería, aluminios y ferretería</span><br>
+        <span class="muted">Balmaceda 454, Los Ángeles</span><br>
+        <span class="muted">contacto@vialum.cl · +56 43 2 311859 · www.vialum.cl</span>
       </div>
+    </td>
+    <td style="width: 42%; vertical-align: top;">
+      <table class="coti-box">
+        <tr><td class="t" colspan="2">COTIZACIÓN</td></tr>
+        <tr><td class="k">N°</td><td class="v">#{{ $cotizacion->id }}</td></tr>
+        <tr><td class="k">Fecha</td><td class="v">{{ \Carbon\Carbon::parse($cotizacion->fecha)->locale('es')->isoFormat('DD-MM-YYYY') }}</td></tr>
+        <tr><td class="k">Validez</td><td class="v">15 días</td></tr>
+      </table>
     </td>
   </tr>
 </table>
+
+<div class="rule"></div>
+
+{{-- Cliente --}}
+<div class="eyebrow">Señor(es)</div>
+<div style="font-weight: bold; font-size: 13px;">{{ $cliNombre }}</div>
+@if($rut)<div class="muted">RUT {{ $rut }}</div>@endif
+@if($direccion)<div class="muted">{{ $direccion }}{{ $ciudad ? ', ' . $ciudad : '' }}</div>@endif
+@if($telefono)<div class="muted">{{ $telefono }}</div>@endif
+@if($correo)<div class="muted">{{ $correo }}</div>@endif
+@if($cotizacion->observaciones)<div style="margin-top: 5px;"><strong>Observaciones:</strong> {{ $cotizacion->observaciones }}</div>@endif
+
+<div class="intro">Junto con saludar, tenemos el agrado de presentar la siguiente cotización según su solicitud:</div>
 
 {{-- Ventanas --}}
 @foreach($cotizacion->ventanas as $index => $ventana)
@@ -447,6 +431,27 @@
     </tr>
   </table>
 </div>
+
+{{-- Condiciones comerciales --}}
+<div class="cond-title">Condiciones comerciales</div>
+<table class="cond" style="border-collapse: collapse;">
+  <tr><td style="padding-right: 6px;">·</td><td>Validez de la oferta: 15 días corridos.</td></tr>
+  <tr><td style="padding-right: 6px;">·</td><td>Valores en pesos chilenos, IVA incluido.</td></tr>
+  <tr><td style="padding-right: 6px;">·</td><td>Forma de pago y plazo de entrega: a convenir.</td></tr>
+  <tr><td style="padding-right: 6px;">·</td><td>Despacho e instalación se cotizan por separado si aplica.</td></tr>
+</table>
+
+{{-- Firma --}}
+<table style="width: 100%; border-collapse: collapse; margin-top: 40px; page-break-inside: avoid;">
+  <tr>
+    <td style="width: 58%; border: none;"></td>
+    <td style="width: 42%; border: none; text-align: center;">
+      <div class="firma-line"></div>
+      <div style="font-weight: bold; font-size: 11px; margin-top: 2px;">{{ $cotizacion->vendedor?->nombre ?? 'VIALUM' }}</div>
+      <div class="muted" style="font-size: 9px;">VIALUM · contacto@vialum.cl</div>
+    </td>
+  </tr>
+</table>
 
 <!-- <p class="nota">Precios netos, no incluyen IVA &nbsp;·&nbsp; Cotización válida por 30 días</p> -->
 
