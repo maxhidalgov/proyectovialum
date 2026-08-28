@@ -1008,14 +1008,17 @@
               <VCard variant="outlined" class="mb-4">
                 <VCardText class="pa-3">
                   <div class="d-flex justify-space-between align-start mb-1">
-                    <span class="text-body-2 font-weight-bold" style="max-width:220px">{{ movConciliando?.descripcion }}</span>
+                    <span class="text-body-2 font-weight-bold" style="max-width:220px">{{ campoGlosa(movConciliando?.glosa, 'Nombre Destinatario') || movConciliando?.descripcion }}</span>
                     <VChip size="x-small" :color="movConciliando?.tipo === 'C' ? 'success' : 'error'" variant="tonal" class="ml-1">
                       {{ movConciliando?.tipo === 'C' ? 'Crédito' : 'Débito' }}
                     </VChip>
                   </div>
-                  <div class="text-caption text-medium-emphasis">{{ movConciliando?.fecha_contable }}</div>
-                  <div v-if="movConciliando?.glosa" class="text-caption text-medium-emphasis mt-1">
-                    <VIcon size="11" class="mr-1">mdi-comment-text-outline</VIcon>{{ movConciliando.glosa }}
+                  <div class="text-caption text-medium-emphasis">{{ fechaDMY(movConciliando?.fecha_contable) }}</div>
+                  <div v-if="campoGlosa(movConciliando?.glosa, 'Rut Destinatario')" class="text-caption text-medium-emphasis">
+                    RUT {{ campoGlosa(movConciliando.glosa, 'Rut Destinatario') }}
+                  </div>
+                  <div v-if="extraerComentario(movConciliando?.glosa)" class="text-caption text-medium-emphasis mt-1" style="font-style:italic">
+                    <VIcon size="11" class="mr-1">mdi-comment-text-outline</VIcon>{{ extraerComentario(movConciliando.glosa) }}
                   </div>
                   <VDivider class="my-2" />
                   <div class="d-flex justify-space-between">
@@ -3133,6 +3136,18 @@ function extraerComentario(glosa) {
   return null
 }
 
+// Extrae un campo "Etiqueta: valor" de la glosa (ej. 'Nombre Destinatario', 'Rut Destinatario')
+function campoGlosa(glosa, clave) {
+  if (!glosa) return null
+  const low = clave.toLowerCase()
+  for (const p of glosa.split(/\s*·\s*/)) {
+    if (p.toLowerCase().startsWith(low + ':')) {
+      return p.split(':').slice(1).join(':').trim()
+    }
+  }
+  return null
+}
+
 // Celda descripción: "descripcion • comentario_banco_o_categoria"
 function descCelda(desc, glosa, categoria) {
   const base = desc || descLimpia(glosa || '')
@@ -3166,6 +3181,13 @@ function glosaCorta(glosa) {
 function formatFecha(str) {
   if (!str) return ''
   return str.slice(0, 10)
+}
+
+// Fecha en DD/MM/AAAA
+function fechaDMY(str) {
+  if (!str) return ''
+  const [y, m, d] = str.slice(0, 10).split('-')
+  return (d && m && y) ? `${d}/${m}/${y}` : str.slice(0, 10)
 }
 
 // ── Reglas ───────────────────────────────────────────────────────────────────
