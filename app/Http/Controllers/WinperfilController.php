@@ -432,10 +432,27 @@ class WinperfilController extends Controller
             $estados = EstadoCotizacion::all()->keyBy(fn($e) => strtolower($e->nombre));
             $accion  = $this->upsertPresupuesto($pres, $serie, $this->buildEstadoMap($estados));
 
+            // Cotización recién importada (para el modal de confirmación en el front)
+            $cot = \App\Models\Cotizacion::with('detalles')
+                ->where('winperfil_serie', $serie)
+                ->where('winperfil_numero', (string) ($numfactura ?? $numero))
+                ->latest('id')->first();
+            $ventanas = $cot ? $cot->detalles->where('tipo_item', 'winperfil') : collect();
+
             return response()->json([
                 'ok'     => true,
                 'accion' => $accion, // created | updated
                 'numero' => $numero,
+                'cotizacion' => $cot ? [
+                    'id'                   => $cot->id,
+                    'total'                => (float) $cot->total,        // neto
+                    'estado_cotizacion_id' => $cot->estado_cotizacion_id,
+                    'material'             => $cot->material,
+                    'eett'                 => $cot->eett,
+                    'n_ventanas'           => $ventanas->count(),
+                    'neto_ventanas'        => (float) $ventanas->sum('total'),
+                    'precio_lock'          => (bool) $cot->winperfil_precio_lock,
+                ] : null,
             ]);
         } catch (\Throwable $e) {
             Log::error('Winperfil importarUno', ['serie' => $serie, 'numero' => $numero, 'error' => $e->getMessage()]);

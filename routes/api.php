@@ -134,6 +134,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/cotizaciones/{id}/duplicar', [CotizacionController::class, 'duplicar']);
     Route::patch('/cotizaciones/{id}/estado', [CotizacionController::class, 'cambiarEstado']);
     Route::patch('/cotizaciones/{id}/ajustar-precio', [CotizacionController::class, 'ajustarPrecioWinperfil']);
+    Route::post('/cotizaciones/{id}/confirmar-import-winperfil', [CotizacionController::class, 'confirmarImportWinperfil']);
     Route::patch('/cotizaciones/{id}/desbloquear-precio', [\App\Http\Controllers\WinperfilController::class, 'desbloquearPrecio']);
     Route::post('/cotizaciones/{id}/imagenes', [CotizacionController::class, 'subirImagenes']);
     Route::get('/estados-cotizacion', [EstadoCotizacionController::class, 'index']);

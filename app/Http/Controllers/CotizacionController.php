@@ -905,43 +905,17 @@ public function store(Request $request)
         if ($lineas->isEmpty()) {
             return response()->json(['message' => 'La cotización no tiene ventanas Winperfil para ajustar.'], 422);
         }
-
-        $netoActual = (float) $lineas->sum('total');
-        if ($netoActual <= 0) {
+        if ((float) $lineas->sum('total') <= 0) {
             return response()->json(['message' => 'Las ventanas no tienen precio base para distribuir el ajuste.'], 422);
         }
 
         // Convención unificada: cotizaciones.total se guarda en NETO. Si el usuario
         // ingresa un bruto, le quitamos el IVA (19%) para obtener el neto a distribuir.
         $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / 1.19) : (float) $data['total'];
-        $factor    = $nuevoNeto / $netoActual;
 
         \DB::beginTransaction();
         try {
-            // Ajuste proporcional por línea. La última línea absorbe el redondeo
-            // para que la suma cuadre exactamente con el nuevo neto.
-            $acumulado = 0;
-            $ultimoIdx = $lineas->count() - 1;
-
-            foreach ($lineas as $idx => $linea) {
-                if ($idx === $ultimoIdx) {
-                    $nuevoTotalLinea = round($nuevoNeto) - $acumulado;
-                } else {
-                    $nuevoTotalLinea = round((float) $linea->total * $factor);
-                    $acumulado += $nuevoTotalLinea;
-                }
-                $cantidad = max((float) $linea->cantidad, 1);
-                $linea->update([
-                    'total'           => $nuevoTotalLinea,
-                    'precio_unitario' => round($nuevoTotalLinea / $cantidad),
-                ]);
-            }
-
-            $cotizacion->update([
-                'total'                 => round($nuevoNeto), // NETO
-                'winperfil_precio_lock' => true,
-            ]);
-
+            $this->prorratearWinperfilNeto($cotizacion, $nuevoNeto);
             \DB::commit();
         } catch (\Throwable $e) {
             \DB::rollBack();
@@ -956,6 +930,81 @@ public function store(Request $request)
             'total'      => $cotizacion->total,
             'cotizacion' => $cotizacion,
         ]);
+    }
+
+    /**
+     * Distribuye un NETO objetivo proporcionalmente entre las ventanas Winperfil de la
+     * cotización (la última línea absorbe el redondeo para cuadrar la suma), actualiza
+     * cotizaciones.total y bloquea el precio ante futuras sincronizaciones.
+     */
+    private function prorratearWinperfilNeto(Cotizacion $cotizacion, float $nuevoNeto): void
+    {
+        $lineas = $cotizacion->detalles->where('tipo_item', 'winperfil')->values();
+        $netoActual = (float) $lineas->sum('total');
+        if ($lineas->isEmpty() || $netoActual <= 0) return;
+
+        $factor    = $nuevoNeto / $netoActual;
+        $acumulado = 0;
+        $ultimoIdx = $lineas->count() - 1;
+
+        foreach ($lineas as $idx => $linea) {
+            if ($idx === $ultimoIdx) {
+                $nuevoTotalLinea = round($nuevoNeto) - $acumulado;
+            } else {
+                $nuevoTotalLinea = round((float) $linea->total * $factor);
+                $acumulado += $nuevoTotalLinea;
+            }
+            $cantidad = max((float) $linea->cantidad, 1);
+            $linea->update([
+                'total'           => $nuevoTotalLinea,
+                'precio_unitario' => round($nuevoTotalLinea / $cantidad),
+            ]);
+        }
+
+        $cotizacion->update([
+            'total'                 => round($nuevoNeto), // NETO
+            'winperfil_precio_lock' => true,
+        ]);
+    }
+
+    /**
+     * Confirma la importación de una cotización Winperfil desde el modal: setea
+     * estado, material (color) y EETT (Operaciones), y prorratea el total (neto/bruto)
+     * a todas las ventanas si se ajustó el monto.
+     */
+    public function confirmarImportWinperfil(Request $request, $id)
+    {
+        $data = $request->validate([
+            'estado_cotizacion_id' => 'nullable|integer|exists:estados_cotizacion,id',
+            'material'             => 'nullable|string|max:40',
+            'eett'                 => 'nullable|string|max:120',
+            'total'                => 'nullable|numeric|min:0',
+            'tipo'                 => 'nullable|in:neto,bruto',
+        ]);
+
+        $cotizacion = Cotizacion::with('detalles')->findOrFail($id);
+
+        $upd = [];
+        if (!empty($data['estado_cotizacion_id'])) $upd['estado_cotizacion_id'] = $data['estado_cotizacion_id'];
+        if (array_key_exists('material', $data))    $upd['material'] = $data['material'];
+        if (array_key_exists('eett', $data))        $upd['eett']     = $data['eett'];
+
+        \DB::beginTransaction();
+        try {
+            if ($upd) $cotizacion->update($upd);
+
+            if (isset($data['total']) && $data['total'] > 0 && !empty($data['tipo'])) {
+                $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / 1.19) : (float) $data['total'];
+                $this->prorratearWinperfilNeto($cotizacion, $nuevoNeto);
+            }
+            \DB::commit();
+        } catch (\Throwable $e) {
+            \DB::rollBack();
+            return response()->json(['message' => 'Error al confirmar la importación: ' . $e->getMessage()], 500);
+        }
+
+        $cotizacion->load('detalles');
+        return response()->json(['ok' => true, 'total' => $cotizacion->total, 'cotizacion' => $cotizacion]);
     }
 
     public function subirImagenes(Request $request, $id)

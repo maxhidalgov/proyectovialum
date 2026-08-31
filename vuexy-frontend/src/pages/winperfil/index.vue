@@ -425,12 +425,58 @@
         </VCard>
       </VWindowItem>
     </VWindow>
+
+    <!-- ── Modal: confirmar datos al importar de Winperfil ──────────────────── -->
+    <VDialog v-model="importModal.show" max-width="520" persistent>
+      <VCard>
+        <VCardItem>
+          <VCardTitle>Confirmar cotización importada</VCardTitle>
+          <VCardSubtitle>N° {{ importModal.numero }} · {{ importModal.n_ventanas }} ventana(s)</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VRow dense>
+            <VCol cols="12" sm="6">
+              <VSelect v-model="importModal.estado_cotizacion_id" :items="estadosCotizacion" item-title="nombre" item-value="id"
+                       label="Estado" density="compact" variant="outlined" hide-details />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <VSelect v-model="importModal.material" :items="materialesModal" label="Color / Material"
+                       density="compact" variant="outlined" hide-details />
+            </VCol>
+            <VCol cols="12">
+              <VTextField v-model="importModal.eett" label="EETT (especificaciones)" density="compact" variant="outlined" hide-details />
+            </VCol>
+          </VRow>
+
+          <VDivider class="my-4" />
+          <div class="text-caption text-medium-emphasis mb-2">
+            Editá el total y se <strong>prorratea a las {{ importModal.n_ventanas }} ventanas</strong> para que cuadre.
+          </div>
+          <VRow dense>
+            <VCol cols="6">
+              <div class="text-caption text-medium-emphasis mb-1">Total Neto</div>
+              <MoneyField :model-value="importModal.neto" variant="outlined" @update:model-value="onNeto" />
+            </VCol>
+            <VCol cols="6">
+              <div class="text-caption text-medium-emphasis mb-1">Total Bruto (c/IVA)</div>
+              <MoneyField :model-value="importModal.bruto" variant="outlined" @update:model-value="onBruto" />
+            </VCol>
+          </VRow>
+        </VCardText>
+        <VCardActions class="pa-4 pt-0">
+          <VBtn variant="text" color="secondary" @click="cerrarImportModal">Dejar como está</VBtn>
+          <VSpacer />
+          <VBtn color="primary" :loading="importModal.loading" @click="confirmarImport">Confirmar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import axios from '@/axiosInstance'
+import MoneyField from '@/components/documentos/MoneyField.vue'
 
 // ── Estado de conexión ─────────────────────────────────────────────────────────
 const conexion = ref({ ok: null, mensaje: '' })
@@ -472,6 +518,39 @@ const loadingWin       = ref(false)
 const presupuestosWin  = ref([])
 const syncingId        = ref(null)
 
+// ── Modal de confirmación al importar de Winperfil ──────────────────────────
+const estadosCotizacion = [
+  { id: 1, nombre: 'Evaluación' }, { id: 2, nombre: 'Aprobada' }, { id: 3, nombre: 'Rechazada' },
+  { id: 4, nombre: 'Anulada' }, { id: 5, nombre: 'Enviada' }, { id: 6, nombre: 'Facturada' },
+  { id: 7, nombre: 'En Producción' }, { id: 8, nombre: 'Entregada' },
+]
+const materialesModal = ['PVC', 'Aluminio', 'Otros']
+const importModal = ref({ show: false, loading: false, id: null, numero: null, estado_cotizacion_id: 1, material: 'PVC', eett: '', neto: 0, bruto: 0, n_ventanas: 0 })
+
+function onNeto(v)  { importModal.value.neto  = Number(v) || 0; importModal.value.bruto = Math.round(importModal.value.neto * 1.19) }
+function onBruto(v) { importModal.value.bruto = Number(v) || 0; importModal.value.neto  = Math.round(importModal.value.bruto / 1.19) }
+function cerrarImportModal() { importModal.value.show = false }
+
+async function confirmarImport() {
+  const m = importModal.value
+  m.loading = true
+  try {
+    await axios.post(`/api/cotizaciones/${m.id}/confirmar-import-winperfil`, {
+      estado_cotizacion_id: m.estado_cotizacion_id || undefined,
+      material: m.material || undefined,
+      eett:     m.eett || undefined,
+      total:    m.neto || undefined,
+      tipo:     'neto',
+    })
+    m.show = false
+    await cargarSync()
+  } catch (e) {
+    conexion.value = { ok: false, mensaje: e.response?.data?.message || 'No se pudo confirmar la importación' }
+  } finally {
+    m.loading = false
+  }
+}
+
 const headersWin = [
   { title: 'Nº',         key: 'PRESUPUESTO_NUMERO', sortable: true  },
   { title: 'Fecha',      key: 'FECHAFACTURA',        sortable: true  },
@@ -512,7 +591,7 @@ async function syncUno(item) {
     // Importa SOLO esta oferta específica:
     //  - numero (PRESUPUESTO_NUMERO): con el que Winperfil devuelve TODAS las ofertas del presupuesto.
     //  - numfactura (NUMFACTURA): identifica cuál de esas ofertas/versiones importar.
-    await axios.post('/api/winperfil/importar-uno', {
+    const { data } = await axios.post('/api/winperfil/importar-uno', {
       serie: item.PRESUPUESTO_SERIE || filtros.value.serie,
       numero: item.PRESUPUESTO_NUMERO,
       numfactura: item.NUMFACTURA,
@@ -520,6 +599,23 @@ async function syncUno(item) {
     // Refrescar estado sync
     await cargarPresupuestos()
     await cargarSync()
+
+    // Abrir modal de confirmación (estado, color/EETT, total prorrateado)
+    const c = data?.cotizacion
+    if (c?.id) {
+      const neto = Math.round(c.total || c.neto_ventanas || 0)
+      importModal.value = {
+        show: true, loading: false,
+        id: c.id,
+        numero: item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO,
+        estado_cotizacion_id: c.estado_cotizacion_id || 1,
+        material: c.material || 'PVC',
+        eett: c.eett || '',
+        neto,
+        bruto: Math.round(neto * 1.19),
+        n_ventanas: c.n_ventanas || 0,
+      }
+    }
   } catch (e) {
     console.error(e)
     conexion.value = { ok: false, mensaje: e.response?.data?.error || 'No se pudo importar el presupuesto' }
