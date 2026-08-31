@@ -1121,18 +1121,41 @@ public function getAprobadas()
         ->orderBy('created_at', 'desc')
         ->get();
 
-        // Enriquecer con cobros reales (venta_movimiento) en una sola query
+        // Enriquecer con cobros reales. Mismo criterio que Cuentas por Cobrar:
+        // venta_movimiento + Transbank + cobro manual + NC. Antes solo contaba
+        // venta_movimiento, por lo que una factura conciliada por Transbank salía en $0.
         $ventaIds = $cotizaciones->flatMap(fn($c) => $c->documentosFacturacion->pluck('id'));
-        $cobros = \Illuminate\Support\Facades\DB::table('venta_movimiento')
-            ->whereIn('venta_id', $ventaIds)
-            ->groupBy('venta_id')
-            ->selectRaw('venta_id, SUM(monto) as monto_cobrado')
-            ->pluck('monto_cobrado', 'venta_id');
 
-        $cotizaciones = $cotizaciones->map(function($cotizacion) use ($cobros) {
+        $cobrosVM = \Illuminate\Support\Facades\DB::table('venta_movimiento')
+            ->whereIn('venta_id', $ventaIds)
+            ->groupBy('venta_id')->selectRaw('venta_id, SUM(monto) m')->pluck('m', 'venta_id');
+
+        $cobrosTBK = \Illuminate\Support\Facades\DB::table('transbank_factura as tf')
+            ->join('transbank_transacciones as tt', 'tt.id', '=', 'tf.transaccion_id')
+            ->whereIn('tf.documento_id', $ventaIds)
+            ->groupBy('tf.documento_id')->selectRaw('tf.documento_id, SUM(tt.monto_original) m')->pluck('m', 'tf.documento_id');
+
+        // NC aplicada manualmente a la factura
+        $cobrosNCf = \Illuminate\Support\Facades\DB::table('venta_nc_aplicacion')
+            ->whereIn('factura_id', $ventaIds)
+            ->groupBy('factura_id')->selectRaw('factura_id, SUM(monto) m')->pluck('m', 'factura_id');
+
+        // NC de Bsale que referencia la factura y aún no tiene venta_nc_aplicacion
+        $cobrosNCref = \Illuminate\Support\Facades\DB::table('documentos_facturacion as nc')
+            ->whereIn('nc.nc_referencia_df_id', $ventaIds)
+            ->where('nc.tipo_documento_bsale_id', 2)
+            ->whereRaw('NOT EXISTS (SELECT 1 FROM venta_nc_aplicacion v WHERE v.nc_id = nc.id)')
+            ->groupBy('nc.nc_referencia_df_id')->selectRaw('nc.nc_referencia_df_id did, SUM(nc.monto) m')->pluck('m', 'did');
+
+        $cotizaciones = $cotizaciones->map(function($cotizacion) use ($cobrosVM, $cobrosTBK, $cobrosNCf, $cobrosNCref) {
             // Adjuntar datos de cobro a cada documento
-            $cotizacion->documentosFacturacion->each(function($doc) use ($cobros) {
-                $doc->monto_cobrado = (float)($cobros[$doc->id] ?? 0);
+            $cotizacion->documentosFacturacion->each(function($doc) use ($cobrosVM, $cobrosTBK, $cobrosNCf, $cobrosNCref) {
+                $cobrado = (float)($cobrosVM[$doc->id] ?? 0)
+                         + (float)($cobrosTBK[$doc->id] ?? 0)
+                         + (float)($doc->monto_cobrado_manual ?? 0)
+                         + (float)($cobrosNCf[$doc->id] ?? 0)
+                         + (float)($cobrosNCref[$doc->id] ?? 0);
+                $doc->monto_cobrado = min((float)$doc->monto, $cobrado); // no exceder el monto de la factura
                 $doc->pendiente     = max(0, $doc->monto - $doc->monto_cobrado);
             });
 
