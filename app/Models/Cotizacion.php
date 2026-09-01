@@ -20,6 +20,7 @@ class Cotizacion extends Model
         'id_documento_bsale',
         'fecha_documento_bsale',
         'estado_facturacion',
+        'facturacion_cerrada',
         'url_pdf_bsale',
         'token_bsale',
         'adjunto_winperfil',
@@ -55,6 +56,7 @@ class Cotizacion extends Model
         'postventa'             => 'boolean',
         'es_manual'             => 'boolean',
         'oculto_operaciones'    => 'boolean',
+        'facturacion_cerrada'   => 'boolean',
     ];
 
     public function cliente()

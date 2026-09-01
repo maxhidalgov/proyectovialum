@@ -167,6 +167,18 @@
                 <v-list-item @click="verDetalleCompleto(item)">
                   <v-list-item-title>Ver detalle</v-list-item-title>
                 </v-list-item>
+                <v-list-item @click="abrirDialogVincular(item)">
+                  <template #prepend><v-icon size="18">mdi-link-variant</v-icon></template>
+                  <v-list-item-title>Vincular boleta/documento…</v-list-item-title>
+                </v-list-item>
+                <v-list-item v-if="!item.facturacion_cerrada" @click="cerrarFacturacion(item, true)">
+                  <template #prepend><v-icon size="18" color="success">mdi-check-circle-outline</v-icon></template>
+                  <v-list-item-title>Cerrar operación (marcar cobrada)</v-list-item-title>
+                </v-list-item>
+                <v-list-item v-else @click="cerrarFacturacion(item, false)">
+                  <template #prepend><v-icon size="18" color="warning">mdi-lock-open-variant-outline</v-icon></template>
+                  <v-list-item-title>Reabrir operación</v-list-item-title>
+                </v-list-item>
                 <v-divider />
                 <v-list-item class="text-error" @click="eliminarCotizacion(item)">
                   <v-list-item-title>Eliminar</v-list-item-title>
@@ -886,10 +898,26 @@ async function desasignarCobro(pivotId) {
 // ── Vincular doc Bsale huérfano ──────────────────────────────────────
 async function abrirDialogVincular(item) {
   cotizVinculando.value = item
-  buscarHuerfano.value  = ''
+  // Prellenar con el RUT (o nombre) del cliente para encontrar rápido sus boletas
+  const rut    = item.cliente?.identification || item.cliente_facturacion?.identification
+  const nombre = item.cliente?.razon_social
+    || `${item.cliente?.first_name || ''} ${item.cliente?.last_name || ''}`.trim()
+  buscarHuerfano.value  = rut || nombre || ''
   huerfanos.value       = []
   dialogVincular.value  = true
   await cargarHuerfanos()
+}
+
+// ── Cerrar / reabrir operación (marca cobrada; ej. pagada por boletas) ──
+async function cerrarFacturacion(item, cerrada) {
+  if (cerrada && !confirm(`¿Marcar la operación de "${item.cliente?.nombre || item.cliente?.razon_social || 'este cliente'}" como cobrada/cerrada?`)) return
+  try {
+    await api.post(`/api/cotizaciones/${item.id}/cerrar-facturacion`, { cerrada })
+    mostrarSnack(cerrada ? 'Operación cerrada' : 'Operación reabierta')
+    await cargarCotizaciones()
+  } catch (e) {
+    mostrarSnack(e.response?.data?.message || 'No se pudo actualizar', 'error')
+  }
 }
 
 async function cargarHuerfanos() {

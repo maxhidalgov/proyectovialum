@@ -1007,6 +1007,17 @@ public function store(Request $request)
         return response()->json(['ok' => true, 'total' => $cotizacion->total, 'cotizacion' => $cotizacion]);
     }
 
+    /** Cerrar / reabrir manualmente la facturación (ej. cobrado por boletas). */
+    public function cerrarFacturacion(Request $request, $id)
+    {
+        $data = $request->validate(['cerrada' => 'required|boolean']);
+        $cotizacion = Cotizacion::findOrFail($id);
+        $cotizacion->facturacion_cerrada = $data['cerrada'];
+        $cotizacion->save();
+
+        return response()->json(['ok' => true, 'facturacion_cerrada' => (bool) $data['cerrada']]);
+    }
+
     public function subirImagenes(Request $request, $id)
     {
         $cotizacion = Cotizacion::findOrFail($id);
@@ -1178,6 +1189,12 @@ public function getAprobadas()
             if ($totalEmitido > 0 && $totalCobrado >= $totalEmitido) {
                 $cotizacion->estado_facturacion = 'pagada';
             }
+
+            // Cierre manual (ej. pagado con boletas, que se cuadran en el módulo Boletas)
+            if ($cotizacion->getRawOriginal('facturacion_cerrada')) {
+                $cotizacion->estado_facturacion = 'pagada';
+            }
+            $cotizacion->facturacion_cerrada = (bool) $cotizacion->getRawOriginal('facturacion_cerrada');
             
             // Mapear cliente para compatibilidad
             if ($cotizacion->cliente) {
