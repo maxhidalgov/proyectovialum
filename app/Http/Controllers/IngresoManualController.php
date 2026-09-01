@@ -315,7 +315,44 @@ class IngresoManualController extends Controller
             $q->where('m.fecha_contable', '<=', $request->hasta);
         }
 
-        return response()->json(['movimientos' => $q->orderByDesc('m.fecha_contable')->limit(80)->get()]);
+        // Priorizar los movimientos cuyo saldo esté más cerca de lo que falta por conciliar
+        if ($request->filled('cerca_de')) {
+            $target = (float) $request->cerca_de;
+            $q->orderByRaw('ABS((m.monto - COALESCE(vm.t,0) - COALESCE(im.t,0)) - ?) asc', [$target]);
+        } else {
+            $q->orderByDesc('m.fecha_contable');
+        }
+
+        return response()->json(['movimientos' => $q->limit(80)->get()]);
+    }
+
+    // ── Conciliaciones (movimientos) ya vinculadas a un ingreso ────────────────
+    public function conciliacionesDeIngreso(int $id)
+    {
+        $ing = IngresoManual::findOrFail($id);
+
+        $asignados = DB::table('ingreso_movimiento as im')
+            ->join('movimientos_bancarios as m', 'm.id', '=', 'im.movimiento_id')
+            ->where('im.ingreso_id', $id)
+            ->select(
+                'im.id as pivot_id', 'im.monto as monto_asignado',
+                'm.id as movimiento_id', 'm.fecha_contable', 'm.descripcion', 'm.monto as movimiento_monto'
+            )
+            ->orderByDesc('m.fecha_contable')
+            ->get();
+
+        $asignado = (float) $asignados->sum('monto_asignado');
+
+        return response()->json([
+            'ingreso' => [
+                'id'          => $ing->id,
+                'descripcion' => $ing->descripcion,
+                'monto'       => (float) $ing->monto,
+                'asignado'    => $asignado,
+                'pendiente'   => (float) $ing->monto - $asignado,
+            ],
+            'asignados' => $asignados,
+        ]);
     }
 
     // ── Crear ingreso manual desde transacción Transbank ──────────────────────

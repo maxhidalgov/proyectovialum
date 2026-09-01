@@ -104,7 +104,8 @@
         <!-- Movimiento bancario vinculado -->
         <template #item.movimientos_count="{ item }">
           <div class="d-flex align-center justify-center gap-1">
-            <VChip v-if="item.movimientos_count > 0" size="x-small" color="success" variant="tonal">
+            <VChip v-if="item.movimientos_count > 0" size="x-small" color="success" variant="tonal"
+              class="cursor-pointer" @click="abrirConciliar(item)">
               <VIcon start size="11">mdi-bank-check</VIcon>{{ item.movimientos_count }}
             </VChip>
             <span v-else class="text-caption text-medium-emphasis">—</span>
@@ -199,39 +200,73 @@
         <VCardText class="pa-4">
           <VAlert color="teal" variant="tonal" density="compact" class="mb-3 text-caption">
             <strong>{{ dialogConc.item.descripcion || 'Ingreso' }}</strong> · Total {{ clp(dialogConc.item.monto) }} ·
-            Pendiente <strong>{{ clp(dialogConc.item.pendiente) }}</strong>.
-            Se asignará el menor entre el saldo del ingreso y el saldo del movimiento.
+            Conciliado {{ clp(dialogConc.item.asignado) }} · Pendiente <strong>{{ clp(dialogConc.item.pendiente) }}</strong>
           </VAlert>
 
-          <VTextField v-model="dialogConc.buscar" placeholder="Buscar por descripción del movimiento..."
-            density="compact" variant="outlined" hide-details clearable
-            prepend-inner-icon="mdi-magnify" class="mb-3" @update:modelValue="debounceMov" />
-
-          <div v-if="dialogConc.loading" class="text-center py-4"><VProgressCircular indeterminate size="24" /></div>
-          <template v-else>
-            <p v-if="!dialogConc.movimientos.length" class="text-caption text-medium-emphasis text-center py-4">
-              No hay movimientos crédito con saldo por asignar.
-            </p>
-            <div v-else style="overflow-x:auto">
+          <!-- Conciliaciones ya realizadas -->
+          <template v-if="dialogConc.asignados.length">
+            <p class="text-overline text-medium-emphasis mb-2">Conciliaciones realizadas</p>
+            <div style="overflow-x:auto" class="mb-4">
               <VTable density="compact">
-                <thead>
-                  <tr><th>Fecha</th><th>Descripción</th><th class="text-right">Saldo</th><th class="text-right">Monto</th><th></th></tr>
-                </thead>
                 <tbody>
-                  <tr v-for="m in dialogConc.movimientos" :key="m.id">
-                    <td class="text-caption text-no-wrap">{{ (m.fecha_contable || '').slice(0,10) }}</td>
-                    <td class="text-caption">{{ m.descripcion }}</td>
-                    <td class="text-right font-weight-bold text-success">{{ clp(m.saldo) }}</td>
-                    <td class="text-right text-caption">{{ clp(m.monto) }}</td>
-                    <td class="text-right" style="width:100px">
-                      <VBtn size="x-small" color="teal" variant="flat"
-                        :loading="dialogConc.saving === m.id" @click="vincularMovimiento(m)">Vincular</VBtn>
+                  <tr v-for="a in dialogConc.asignados" :key="a.pivot_id">
+                    <td class="text-caption text-no-wrap">{{ (a.fecha_contable || '').slice(0,10) }}</td>
+                    <td class="text-caption">{{ a.descripcion }}</td>
+                    <td class="text-right font-weight-bold text-success">{{ clp(a.monto_asignado) }}</td>
+                    <td class="text-right" style="width:44px">
+                      <VBtn icon size="x-small" variant="text" color="error"
+                        :loading="dialogConc.unlinking === a.pivot_id" @click="desvincularMovimiento(a)">
+                        <VIcon size="15">mdi-close</VIcon>
+                      </VBtn>
                     </td>
                   </tr>
                 </tbody>
               </VTable>
             </div>
           </template>
+
+          <!-- Conciliar el saldo pendiente -->
+          <template v-if="dialogConc.item.pendiente > 0.5">
+            <VDivider v-if="dialogConc.asignados.length" class="mb-3" />
+            <p class="text-overline text-medium-emphasis mb-1">Conciliar saldo pendiente</p>
+            <p class="text-caption text-medium-emphasis mb-2">
+              Se asigna el menor entre el saldo del ingreso y el del movimiento. Ordenados por cercanía a {{ clp(dialogConc.item.pendiente) }}.
+            </p>
+            <VTextField v-model="dialogConc.buscar" placeholder="Buscar por descripción del movimiento..."
+              density="compact" variant="outlined" hide-details clearable
+              prepend-inner-icon="mdi-magnify" class="mb-3" @update:modelValue="debounceMov" />
+
+            <div v-if="dialogConc.loading" class="text-center py-4"><VProgressCircular indeterminate size="24" /></div>
+            <template v-else>
+              <p v-if="!dialogConc.movimientos.length" class="text-caption text-medium-emphasis text-center py-4">
+                No hay movimientos crédito con saldo por asignar.
+              </p>
+              <div v-else style="overflow-x:auto">
+                <VTable density="compact">
+                  <thead>
+                    <tr><th>Fecha</th><th>Descripción</th><th class="text-right">Saldo</th><th class="text-right">Monto</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="m in dialogConc.movimientos" :key="m.id"
+                      :class="{ 'bg-teal-lighten-5': Math.abs(Number(m.saldo) - Number(dialogConc.item.pendiente)) < 1 }">
+                      <td class="text-caption text-no-wrap">{{ (m.fecha_contable || '').slice(0,10) }}</td>
+                      <td class="text-caption">{{ m.descripcion }}</td>
+                      <td class="text-right font-weight-bold text-success">{{ clp(m.saldo) }}</td>
+                      <td class="text-right text-caption">{{ clp(m.monto) }}</td>
+                      <td class="text-right" style="width:100px">
+                        <VBtn size="x-small" color="teal" variant="flat"
+                          :loading="dialogConc.saving === m.id" @click="vincularMovimiento(m)">Vincular</VBtn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </VTable>
+              </div>
+            </template>
+          </template>
+          <VAlert v-else color="success" variant="tonal" density="compact" class="text-caption">
+            <VIcon size="15" class="mr-1">mdi-check-circle-outline</VIcon>
+            Este ingreso está completamente conciliado.
+          </VAlert>
         </VCardText>
         <VDivider />
         <VCardActions class="pa-3">
@@ -375,17 +410,32 @@ function debounce() {
 }
 
 // ── Conciliar ingreso ↔ movimiento bancario ─────────────────────────────────────
-const dialogConc = ref({ show: false, loading: false, saving: null, item: null, buscar: '', movimientos: [] })
+const dialogConc = ref({ show: false, loading: false, saving: null, unlinking: null, item: null, buscar: '', movimientos: [], asignados: [] })
 
 function abrirConciliar(item) {
-  dialogConc.value = { show: true, loading: true, saving: null, item, buscar: '', movimientos: [] }
-  cargarMovimientos()
+  dialogConc.value = {
+    show: true, loading: true, saving: null, unlinking: null,
+    item: { ...item, asignado: Number(item.asignado || 0), pendiente: Number(item.pendiente ?? item.monto) },
+    buscar: '', movimientos: [], asignados: [],
+  }
+  refrescarConciliaciones().then(cargarMovimientos)
+}
+// Trae las conciliaciones ya hechas + saldos actualizados del ingreso
+async function refrescarConciliaciones() {
+  try {
+    const { data } = await axios.get(`/api/ingresos-manuales/${dialogConc.value.item.id}/conciliaciones`)
+    dialogConc.value.asignados = data.asignados ?? []
+    dialogConc.value.item = { ...dialogConc.value.item, ...data.ingreso }
+  } catch (e) {
+    console.error(e)
+  }
 }
 async function cargarMovimientos() {
+  if (dialogConc.value.item.pendiente <= 0.5) { dialogConc.value.movimientos = []; dialogConc.value.loading = false; return }
   dialogConc.value.loading = true
   try {
     const { data } = await axios.get('/api/conciliacion/movimientos-credito-disponibles', {
-      params: { buscar: dialogConc.value.buscar || undefined },
+      params: { buscar: dialogConc.value.buscar || undefined, cerca_de: dialogConc.value.item.pendiente },
     })
     dialogConc.value.movimientos = data.movimientos ?? []
   } catch (e) {
@@ -405,12 +455,26 @@ async function vincularMovimiento(m) {
     await axios.post(`/api/conciliacion/movimientos/${m.id}/vincular-nota-venta`, {
       ingreso_id: dialogConc.value.item.id,
     })
-    dialogConc.value.show = false
+    await refrescarConciliaciones()
+    await cargarMovimientos()
     await cargar()
   } catch (e) {
     alert(e.response?.data?.message || 'No se pudo vincular')
   } finally {
     dialogConc.value.saving = null
+  }
+}
+async function desvincularMovimiento(a) {
+  dialogConc.value.unlinking = a.pivot_id
+  try {
+    await axios.delete(`/api/conciliacion/movimientos/${a.movimiento_id}/ingresos/${a.pivot_id}`)
+    await refrescarConciliaciones()
+    await cargarMovimientos()
+    await cargar()
+  } catch (e) {
+    alert(e.response?.data?.message || 'No se pudo desvincular')
+  } finally {
+    dialogConc.value.unlinking = null
   }
 }
 

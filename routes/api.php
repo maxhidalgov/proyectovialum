@@ -320,6 +320,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/ingresos-manuales',        [\App\Http\Controllers\IngresoManualController::class, 'store']);
     Route::put('/ingresos-manuales/{id}',    [\App\Http\Controllers\IngresoManualController::class, 'update']);
     Route::delete('/ingresos-manuales/{id}', [\App\Http\Controllers\IngresoManualController::class, 'destroy']);
+    Route::get('/ingresos-manuales/{id}/conciliaciones', [\App\Http\Controllers\IngresoManualController::class, 'conciliacionesDeIngreso']);
 
     // Empleados
     Route::prefix('empleados')->group(function () {
