@@ -375,11 +375,12 @@ class OperacionesController extends Controller
                 $conc   = $concPorDoc[$d->id] ?? 0;
                 $pendiente = (float) $d->monto - $conc;
                 if ($pagado && $pendiente > 0.5) {
-                    $fp = $d->forma_pago ? ' · ' . $d->forma_pago : ($d->nro_comprobante_transbank ? ' · Tarjeta' : '');
+                    $fp = $this->formaPagoLegible($d->forma_pago)
+                        ?: ($d->nro_comprobante_transbank ? 'Tarjeta' : null);
                     $abonos->push([
                         'fecha'    => substr((string) $d->fecha_emision, 0, 10),
                         'monto'    => $pendiente,
-                        'fuente'   => 'Pagado al emitir' . $fp . ' (por conciliar)',
+                        'fuente'   => 'Pagado al emitir' . ($fp ? ' · ' . $fp : ''),
                         'tipo'     => 'preconciliacion',
                         'editable' => false,
                     ]);
@@ -389,6 +390,23 @@ class OperacionesController extends Controller
 
         $todos = $abonos->concat($notas)->sortBy('fecha')->values();
         return response()->json(['es_manual' => false, 'abonos' => $todos]);
+    }
+
+    /** Normaliza el código de forma de pago a un texto legible y corto. */
+    private function formaPagoLegible(?string $fp): ?string
+    {
+        if (!$fp) return null;
+        $k = strtolower(trim($fp));
+        return match (true) {
+            str_contains($k, 'credito')      => 'Tarjeta crédito',
+            str_contains($k, 'debito')       => 'Tarjeta débito',
+            str_contains($k, 'tarjeta')      => 'Tarjeta',
+            str_contains($k, 'transfer')     => 'Transferencia',
+            str_contains($k, 'efectivo')     => 'Efectivo',
+            str_contains($k, 'cheque')       => 'Cheque',
+            str_contains($k, 'transbank')    => 'Transbank',
+            default                          => ucfirst(str_replace('_', ' ', $k)),
+        };
     }
 
     /** Crear una "nota de venta" (ingreso manual sin documento SII) vinculada a la cotización. */

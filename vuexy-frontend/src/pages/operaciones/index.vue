@@ -707,12 +707,18 @@
           <div v-if="dialogAbonos.loading" class="text-center py-4"><v-progress-circular indeterminate size="24" /></div>
           <template v-else>
             <div v-if="!dialogAbonos.abonos.length" class="text-center text-medium-emphasis py-3">Sin abonos registrados.</div>
-            <v-table v-else density="compact" class="mb-2">
+            <v-table v-else density="compact" class="mb-2 abonos-table" style="width:100%">
               <tbody>
                 <tr v-for="(a, i) in dialogAbonos.abonos" :key="a.id ?? i">
-                  <td class="text-no-wrap">{{ fmtFechaCorta(a.fecha) }}</td>
-                  <td><v-chip size="x-small" variant="tonal" :color="a.tipo === 'preconciliacion' ? 'orange' : a.tipo === 'nota_venta' ? 'warning' : a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">{{ a.fuente }}</v-chip></td>
-                  <td class="text-right font-weight-medium">{{ fmt(a.monto) }}</td>
+                  <td class="text-no-wrap" style="vertical-align:top">{{ fmtFechaCorta(a.fecha) }}</td>
+                  <td>
+                    <v-chip size="x-small" variant="tonal" label class="abono-chip"
+                      :color="a.tipo === 'preconciliacion' ? 'orange' : a.tipo === 'nota_venta' ? 'warning' : a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">
+                      {{ a.fuente }}
+                    </v-chip>
+                    <span v-if="a.tipo === 'preconciliacion'" class="text-caption text-medium-emphasis d-block">por conciliar</span>
+                  </td>
+                  <td class="text-right font-weight-medium text-no-wrap" style="vertical-align:top">{{ fmt(a.monto) }}</td>
                   <td class="text-right" style="width:36px">
                     <v-btn v-if="a.editable" icon size="x-small" variant="text" color="error" @click="borrarAbono(a)"><v-icon size="14">mdi-close</v-icon></v-btn>
                   </td>
@@ -1478,6 +1484,9 @@ function fmtFechaCorta(iso) {
 .tablero-table tbody tr:hover { background: rgba(var(--v-theme-primary), 0.06); }
 .tablero-table tbody tr.row-vencida { background: rgba(var(--v-theme-error), 0.06); }
 /* Botón "quitar del tablero": sutil, solo visible al pasar el mouse sobre la fila */
+/* Chips del modal de abonos: que envuelvan en varias líneas en vez de desbordar */
+.abonos-table .abono-chip { height: auto; white-space: normal; }
+.abonos-table .abono-chip :deep(.v-chip__content) { white-space: normal; line-height: 1.25; padding-block: 2px; }
 .tablero-table tbody .quitar-btn { opacity: 0; transition: opacity .15s; }
 .tablero-table tbody tr:hover .quitar-btn { opacity: .55; }
 .tablero-table tbody .quitar-btn:hover { opacity: 1; }
