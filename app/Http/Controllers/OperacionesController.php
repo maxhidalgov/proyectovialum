@@ -20,10 +20,12 @@ class OperacionesController extends Controller
     // Cotizaciones aprobadas/en producción/entregadas con datos de operaciones
     public function index()
     {
+        $incluirOcultos = filter_var(request('incluir_ocultos', false), FILTER_VALIDATE_BOOLEAN);
         $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'estado', 'ventanas', 'detalles', 'historialEstados'])
             ->whereHas('estado', fn($q) => $q->whereNotIn('nombre', [
                 'Evaluación', 'Rechazada', 'Anulada',
             ]))
+            ->when(!$incluirOcultos, fn($q) => $q->where(fn($w) => $w->where('oculto_operaciones', false)->orWhereNull('oculto_operaciones')))
             ->latest()
             ->get();
 
@@ -133,6 +135,7 @@ class OperacionesController extends Controller
                 'estado_obra'        => $c->estado_obra,
                 'postventa'          => (bool) $c->postventa,
                 'eett'               => $c->eett,
+                'oculto_operaciones' => (bool) $c->oculto_operaciones,
                 'cant_ventanas'      => (int) $cantVentanas,
                 'm2'                 => round($m2, 2),
                 // Métricas de tiempo (T0 = medición)
@@ -168,9 +171,14 @@ class OperacionesController extends Controller
             'lead_days'          => $leadDays,
         ];
 
+        $ocultosCount = Cotizacion::whereHas('estado', fn($q) => $q->whereNotIn('nombre', [
+                'Evaluación', 'Rechazada', 'Anulada',
+            ]))->where('oculto_operaciones', true)->count();
+
         return response()->json([
-            'cotizaciones' => $items,
-            'stats'        => $stats,
+            'cotizaciones'  => $items,
+            'stats'         => $stats,
+            'ocultos_count' => $ocultosCount,
         ]);
     }
 
@@ -187,6 +195,7 @@ class OperacionesController extends Controller
             'estado_obra'       => 'sometimes|nullable|string|max:60',
             'postventa'         => 'sometimes|boolean',
             'eett'              => 'sometimes|nullable|string|max:120',
+            'oculto_operaciones'=> 'sometimes|boolean',
             // Proyectos manuales (editables solo en filas manuales)
             'nombre_manual'     => 'sometimes|nullable|string|max:150',
             'total'             => 'sometimes|numeric|min:0',
@@ -200,7 +209,7 @@ class OperacionesController extends Controller
 
         $campos = [
             'pedido_proveedor', 'estado_produccion', 'fecha_entrega', 'notas_operaciones',
-            'material', 'estado_obra', 'postventa', 'eett',
+            'material', 'estado_obra', 'postventa', 'eett', 'oculto_operaciones',
         ];
         // Campos manuales solo se aceptan si el proyecto es manual
         if ($cotizacion->es_manual) {

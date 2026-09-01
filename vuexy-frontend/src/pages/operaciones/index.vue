@@ -129,6 +129,17 @@
             <v-icon start size="14">{{ verTerminados ? 'mdi-eye' : 'mdi-eye-off-outline' }}</v-icon>
             {{ verTerminados ? 'Ocultar terminados' : `Ver terminados (${terminadosCount})` }}
           </v-chip>
+          <v-chip
+            v-if="ocultosCount > 0 || verOcultos"
+            size="small"
+            :color="verOcultos ? 'primary' : undefined"
+            :variant="verOcultos ? 'flat' : 'outlined'"
+            class="cursor-pointer ms-2"
+            @click="toggleVerOcultos"
+          >
+            <v-icon start size="14">mdi-eye-off-outline</v-icon>
+            {{ verOcultos ? 'Volver al tablero' : `Ver ocultos (${ocultosCount})` }}
+          </v-chip>
         </v-col>
       </v-row>
     </v-card>
@@ -199,6 +210,15 @@
                         <v-icon v-if="estaVencida(item)" color="error" size="13" title="Entrega vencida">mdi-calendar-alert</v-icon>
                         <v-icon v-if="sinMoverMucho(item)" color="warning" size="13" title="Sin avanzar hace días">mdi-clock-alert</v-icon>
                       </template>
+                      <v-spacer />
+                      <v-btn v-if="!verOcultos" icon size="x-small" variant="text" color="grey" class="quitar-btn"
+                        title="Quitar del tablero" @click="quitarDelTablero(item)">
+                        <v-icon size="14">mdi-eye-off-outline</v-icon>
+                      </v-btn>
+                      <v-btn v-else icon size="x-small" variant="text" color="success"
+                        title="Restaurar al tablero" @click="restaurarAlTablero(item)">
+                        <v-icon size="14">mdi-restore</v-icon>
+                      </v-btn>
                     </div>
                   </td>
                   <!-- Tipo / material -->
@@ -812,6 +832,10 @@ const filtros = ref({ busqueda: '', estado: null, estadoProd: null, vendedor: nu
 // Ver los proyectos terminados (instalados + pagados + sin postventa). Por defecto ocultos.
 const verTerminados = ref(false)
 
+// Ver los proyectos quitados del tablero (oculto_operaciones). Por defecto no se muestran.
+const verOcultos = ref(false)
+const ocultosCount = ref(0)
+
 // Un proyecto está "terminado" (sale del tablero activo) si: Instalada + saldo≤0 + sin postventa.
 // Si está instalado pero aún debe, o tiene postventa pendiente, sigue siendo activo.
 function esTerminado(c) {
@@ -829,7 +853,13 @@ function limpiarFiltros() {
 
 const cotizacionesFiltradas = computed(() => {
   return cotizaciones.value.filter(c => {
-    if (!verTerminados.value && esTerminado(c)) return false
+    // Modo "Ver ocultos": muestra SOLO los quitados del tablero
+    if (verOcultos.value) {
+      if (!c.oculto_operaciones) return false
+    } else {
+      if (c.oculto_operaciones) return false
+      if (!verTerminados.value && esTerminado(c)) return false
+    }
     if (filtros.value.busqueda && !c.cliente?.toLowerCase().includes(filtros.value.busqueda.toLowerCase())) return false
     if (filtros.value.estado && c.estado !== filtros.value.estado) return false
     if (filtros.value.estadoProd) {
@@ -998,15 +1028,32 @@ function tarjetasPorEstado(estado) {
 async function cargar() {
   cargando.value = true
   try {
-    const { data } = await api.get('/api/operaciones')
+    const { data } = await api.get('/api/operaciones', { params: { incluir_ocultos: verOcultos.value ? 1 : 0 } })
     cotizaciones.value = data.cotizaciones
     stats.value        = data.stats
+    ocultosCount.value = data.ocultos_count ?? 0
   } catch {
     mostrarSnack('Error al cargar operaciones', 'error')
   } finally {
     cargando.value = false
   }
 }
+
+// Quitar del tablero (ocultar, reversible — NO borra la cotización)
+async function quitarDelTablero(item) {
+  if (!confirm(`¿Quitar "${item.cliente}" del tablero de Operaciones?\n(No borra la cotización; la puedes restaurar desde "Ver ocultos".)`)) return
+  try {
+    await api.patch(`/api/operaciones/${item.id}`, { oculto_operaciones: true })
+    await cargar()
+  } catch { mostrarSnack('No se pudo quitar del tablero', 'error') }
+}
+async function restaurarAlTablero(item) {
+  try {
+    await api.patch(`/api/operaciones/${item.id}`, { oculto_operaciones: false })
+    await cargar()
+  } catch { mostrarSnack('No se pudo restaurar', 'error') }
+}
+function toggleVerOcultos() { verOcultos.value = !verOcultos.value; cargar() }
 
 onMounted(cargar)
 
@@ -1332,6 +1379,10 @@ function fmtFechaCorta(iso) {
 .tablero-table tbody tr:nth-child(even) { background: rgba(var(--v-theme-on-surface), 0.018); }
 .tablero-table tbody tr:hover { background: rgba(var(--v-theme-primary), 0.06); }
 .tablero-table tbody tr.row-vencida { background: rgba(var(--v-theme-error), 0.06); }
+/* Botón "quitar del tablero": sutil, solo visible al pasar el mouse sobre la fila */
+.tablero-table tbody .quitar-btn { opacity: 0; transition: opacity .15s; }
+.tablero-table tbody tr:hover .quitar-btn { opacity: .55; }
+.tablero-table tbody .quitar-btn:hover { opacity: 1; }
 /* Primera columna (Elemento) fija al hacer scroll horizontal */
 .tablero-table th:first-child,
 .tablero-table td:first-child {
