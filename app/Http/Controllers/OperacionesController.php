@@ -338,29 +338,52 @@ class OperacionesController extends Controller
             return response()->json(['es_manual' => true, 'abonos' => $todos]);
         }
 
-        // No manual: reunir abonos reales de los documentos de la cotización
-        $docIds = DB::table('documentos_facturacion')
+        // No manual: reunir abonos de los documentos de la cotización
+        $docs = DB::table('documentos_facturacion')
             ->where('cotizacion_id', $id)->where('estado', 'emitido')
-            ->whereNotIn('tipo_documento_bsale_id', [2])->pluck('id');
+            ->whereNotIn('tipo_documento_bsale_id', [2])
+            ->get(['id', 'monto', 'forma_pago', 'nro_comprobante_transbank', 'monto_cobrado_manual', 'cobrado_manual_nota', 'fecha_emision']);
+        $docIds = $docs->pluck('id');
 
         $abonos = collect();
+        $concPorDoc = [];   // conciliado real acumulado por documento
         if ($docIds->isNotEmpty()) {
             foreach (DB::table('venta_movimiento as vm')
                 ->join('movimientos_bancarios as mb', 'mb.id', '=', 'vm.movimiento_id')
                 ->whereIn('vm.venta_id', $docIds)
-                ->get(['vm.monto', 'mb.fecha_contable']) as $r) {
+                ->get(['vm.venta_id', 'vm.monto', 'mb.fecha_contable']) as $r) {
                 $abonos->push(['fecha' => substr((string) $r->fecha_contable, 0, 10), 'monto' => (float) $r->monto, 'fuente' => 'Transferencia', 'tipo' => 'auto', 'editable' => false]);
+                $concPorDoc[$r->venta_id] = ($concPorDoc[$r->venta_id] ?? 0) + (float) $r->monto;
             }
             foreach (DB::table('transbank_factura as tf')
                 ->join('transbank_transacciones as tt', 'tt.id', '=', 'tf.transaccion_id')
                 ->whereIn('tf.documento_id', $docIds)
-                ->get(['tt.monto_original', 'tt.fecha_movimiento']) as $r) {
+                ->get(['tf.documento_id', 'tt.monto_original', 'tt.fecha_movimiento']) as $r) {
                 $abonos->push(['fecha' => substr((string) $r->fecha_movimiento, 0, 10), 'monto' => (float) $r->monto_original, 'fuente' => 'Tarjeta / Transbank', 'tipo' => 'auto', 'editable' => false]);
+                $concPorDoc[$r->documento_id] = ($concPorDoc[$r->documento_id] ?? 0) + (float) $r->monto_original;
             }
-            foreach (DB::table('documentos_facturacion')
-                ->whereIn('id', $docIds)->where('monto_cobrado_manual', '>', 0)
-                ->get(['monto_cobrado_manual', 'cobrado_manual_nota', 'fecha_emision']) as $r) {
-                $abonos->push(['fecha' => substr((string) $r->fecha_emision, 0, 10), 'monto' => (float) $r->monto_cobrado_manual, 'fuente' => $r->cobrado_manual_nota ?: 'Cobro manual', 'tipo' => 'auto', 'editable' => false]);
+            foreach ($docs->where('monto_cobrado_manual', '>', 0) as $d) {
+                $abonos->push(['fecha' => substr((string) $d->fecha_emision, 0, 10), 'monto' => (float) $d->monto_cobrado_manual, 'fuente' => $d->cobrado_manual_nota ?: 'Cobro manual', 'tipo' => 'auto', 'editable' => false]);
+                $concPorDoc[$d->id] = ($concPorDoc[$d->id] ?? 0) + (float) $d->monto_cobrado_manual;
+            }
+
+            // Preconciliación: documento emitido con forma de pago conocida cuyo monto
+            // aún no está (todo) cuadrado con el banco. Cuenta como abono en Operaciones,
+            // marcado como "por conciliar" para que se distinga de un cobro ya cuadrado.
+            foreach ($docs as $d) {
+                $pagado = !empty($d->forma_pago) || !empty($d->nro_comprobante_transbank);
+                $conc   = $concPorDoc[$d->id] ?? 0;
+                $pendiente = (float) $d->monto - $conc;
+                if ($pagado && $pendiente > 0.5) {
+                    $fp = $d->forma_pago ? ' · ' . $d->forma_pago : ($d->nro_comprobante_transbank ? ' · Tarjeta' : '');
+                    $abonos->push([
+                        'fecha'    => substr((string) $d->fecha_emision, 0, 10),
+                        'monto'    => $pendiente,
+                        'fuente'   => 'Pagado al emitir' . $fp . ' (por conciliar)',
+                        'tipo'     => 'preconciliacion',
+                        'editable' => false,
+                    ]);
+                }
             }
         }
 

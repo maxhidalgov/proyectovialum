@@ -3,9 +3,14 @@
 
     <!-- Header -->
     <div class="d-flex align-center justify-space-between mb-4">
-      <div>
-        <h2 class="text-h5 font-weight-bold">Panel de Operaciones</h2>
-        <p class="text-caption text-grey mt-1">Cotizaciones aprobadas y seguimiento de producción</p>
+      <div class="d-flex align-center" style="gap:8px">
+        <div>
+          <h2 class="text-h5 font-weight-bold">Panel de Operaciones</h2>
+          <p class="text-caption text-grey mt-1">Cotizaciones aprobadas y seguimiento de producción</p>
+        </div>
+        <v-btn icon variant="text" size="small" title="¿Cómo funcionan los abonos?" @click="dialogAyuda = true">
+          <v-icon>mdi-help-circle-outline</v-icon>
+        </v-btn>
       </div>
       <div class="d-flex align-center" style="gap:12px">
         <v-btn color="primary" variant="flat" size="small" class="text-none" prepend-icon="mdi-plus" @click="abrirCrearManual">
@@ -630,6 +635,64 @@
       </v-card>
     </v-dialog>
 
+    <!-- Ayuda: abonos, preconciliación, nota de venta, conciliación -->
+    <v-dialog v-model="dialogAyuda" max-width="640" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="primary">mdi-help-circle-outline</v-icon>
+          Cómo se calcula el Abono
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4 text-body-2">
+          <p class="mb-3">
+            El <strong>Abono</strong> de un proyecto puede venir de tres formas. Facturar (emitir el documento)
+            <strong>no</strong> es lo mismo que cobrar (conciliar con el banco).
+          </p>
+
+          <div class="mb-3">
+            <v-chip size="x-small" color="orange" variant="tonal" class="mb-1">Pagado al emitir (por conciliar)</v-chip>
+            <p class="text-medium-emphasis mb-0">
+              <strong>Preconciliación.</strong> Emitiste una boleta/factura y ya sabes la forma de pago
+              (efectivo, tarjeta, transferencia). Se cuenta como abono al toque en Operaciones, aunque el
+              dinero todavía no se cuadre con la cartola. El chip <em>"Falta conciliar"</em> marca eso:
+              contado como abono, pendiente de cuadrar con el banco.
+            </p>
+          </div>
+
+          <div class="mb-3">
+            <v-chip size="x-small" color="warning" variant="tonal" class="mb-1">Nota de venta</v-chip>
+            <p class="text-medium-emphasis mb-0">
+              Recibiste un pago (ej. transferencia) pero <strong>todavía no hay documento</strong>. Es un
+              respaldo manual que registras tú (aparece también en <strong>Ingresos Manuales</strong>).
+              Cuenta como abono. <strong>Bórrala</strong> cuando emitas la boleta/factura real, o el ingreso
+              quedaría duplicado.
+            </p>
+          </div>
+
+          <div class="mb-3">
+            <v-chip size="x-small" color="info" variant="tonal" class="mb-1">Transferencia</v-chip>
+            <v-chip size="x-small" color="primary" variant="tonal" class="mb-1 ml-1">Tarjeta / Transbank</v-chip>
+            <p class="text-medium-emphasis mb-0">
+              <strong>Conciliación real.</strong> El pago ya se cuadró con el banco: transferencias/facturas
+              1 a 1, y tarjeta contra la liquidación de Transbank. Las boletas se concilian por
+              <strong>resumen mensual</strong> (mes + forma de pago) en el módulo Boletas, no una por una.
+            </p>
+          </div>
+
+          <v-alert color="primary" variant="tonal" density="compact" class="text-caption mt-2">
+            En <strong>Operaciones</strong> el abono incluye la preconciliación y las notas de venta (para ver
+            "ya pagó" apenas se vende). En <strong>Facturación / Cuentas por Cobrar</strong> el cobrado solo
+            sube con la conciliación real.
+          </v-alert>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogAyuda = false">Entendido</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Detalle de abonos -->
     <v-dialog v-model="dialogAbonos.show" max-width="520">
       <v-card v-if="dialogAbonos.item">
@@ -648,7 +711,7 @@
               <tbody>
                 <tr v-for="(a, i) in dialogAbonos.abonos" :key="a.id ?? i">
                   <td class="text-no-wrap">{{ fmtFechaCorta(a.fecha) }}</td>
-                  <td><v-chip size="x-small" variant="tonal" :color="a.tipo === 'nota_venta' ? 'warning' : a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">{{ a.fuente }}</v-chip></td>
+                  <td><v-chip size="x-small" variant="tonal" :color="a.tipo === 'preconciliacion' ? 'orange' : a.tipo === 'nota_venta' ? 'warning' : a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">{{ a.fuente }}</v-chip></td>
                   <td class="text-right font-weight-medium">{{ fmt(a.monto) }}</td>
                   <td class="text-right" style="width:36px">
                     <v-btn v-if="a.editable" icon size="x-small" variant="text" color="error" @click="borrarAbono(a)"><v-icon size="14">mdi-close</v-icon></v-btn>
@@ -1130,6 +1193,7 @@ async function borrarManual(item) {
 }
 
 // ── Detalle de abonos ────────────────────────────────────────────
+const dialogAyuda   = ref(false)
 const dialogAbonos  = ref({ show: false, loading: false, saving: false, item: null, abonos: [] })
 const nuevoAbono    = ref({ fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' })
 const nuevaNota     = ref({ fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' })
