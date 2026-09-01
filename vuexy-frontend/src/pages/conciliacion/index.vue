@@ -1383,7 +1383,12 @@
                               {{ n.cliente_nombre || 'Cotización #' + n.cotizacion_id }}
                               <span v-if="n.descripcion" class="text-medium-emphasis"><br>{{ n.descripcion }}</span>
                             </td>
-                            <td class="text-right font-weight-bold">{{ formatMonto(n.monto) }}</td>
+                            <td class="text-right font-weight-bold">
+                              {{ formatMonto(n.pendiente) }}
+                              <div v-if="Number(n.asignado) > 0" class="text-caption text-medium-emphasis font-weight-regular">
+                                pendiente de {{ formatMonto(n.monto) }}
+                              </div>
+                            </td>
                             <td class="text-right" style="width:110px">
                               <VBtn size="x-small" color="warning" variant="flat"
                                 :loading="loadingVincularNota === n.id"

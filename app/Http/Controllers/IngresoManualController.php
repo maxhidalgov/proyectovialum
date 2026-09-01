@@ -34,13 +34,15 @@ class IngresoManualController extends Controller
     {
         $q = DB::table('ingresos_manuales as i')
             ->leftJoin(
-                DB::raw('(SELECT ingreso_id, COUNT(*) as cnt FROM ingreso_movimiento GROUP BY ingreso_id) as im'),
+                DB::raw('(SELECT ingreso_id, COUNT(*) as cnt, SUM(monto) as asignado FROM ingreso_movimiento GROUP BY ingreso_id) as im'),
                 'i.id', '=', 'im.ingreso_id'
             )
             ->select(
                 'i.id', 'i.fecha', 'i.descripcion', 'i.monto',
-                'i.categoria', 'i.notas', 'i.created_at',
-                DB::raw('COALESCE(im.cnt, 0) as movimientos_count')
+                'i.categoria', 'i.notas', 'i.created_at', 'i.cotizacion_id',
+                DB::raw('COALESCE(im.cnt, 0) as movimientos_count'),
+                DB::raw('COALESCE(im.asignado, 0) as asignado'),
+                DB::raw('(i.monto - COALESCE(im.asignado, 0)) as pendiente')
             )
             ->orderByDesc('i.fecha')
             ->orderByDesc('i.id');
@@ -212,20 +214,24 @@ class IngresoManualController extends Controller
     }
 
     // ── Notas de venta pendientes de conciliar ────────────────────────────────
-    // Ingresos manuales vinculados a una cotización (creados desde Operaciones) que
-    // aún NO están asignados a ningún movimiento bancario.
+    // Ingresos manuales vinculados a una cotización (creados desde Operaciones) con
+    // saldo aún SIN asignar a movimientos bancarios. Una nota puede cubrirse con varias
+    // transferencias (varios movimientos), por eso sigue pendiente mientras quede saldo.
     public function notasVentaPendientes(Request $request)
     {
         $q = DB::table('ingresos_manuales as i')
             ->leftJoin('cotizaciones as c', 'c.id', '=', 'i.cotizacion_id')
             ->leftJoin('clientes as cl', 'cl.id', '=', 'c.cliente_id')
+            ->leftJoin(
+                DB::raw('(SELECT ingreso_id, SUM(monto) asignado FROM ingreso_movimiento GROUP BY ingreso_id) as im'),
+                'im.ingreso_id', '=', 'i.id'
+            )
             ->whereNotNull('i.cotizacion_id')
-            ->whereNotExists(function ($sub) {
-                $sub->select(DB::raw(1))->from('ingreso_movimiento as im')
-                    ->whereColumn('im.ingreso_id', 'i.id');
-            })
+            ->whereRaw('i.monto - COALESCE(im.asignado, 0) > 0.5')
             ->select(
                 'i.id', 'i.fecha', 'i.monto', 'i.descripcion', 'i.cotizacion_id',
+                DB::raw('COALESCE(im.asignado, 0) as asignado'),
+                DB::raw('(i.monto - COALESCE(im.asignado, 0)) as pendiente'),
                 DB::raw("COALESCE(cl.razon_social, TRIM(CONCAT(COALESCE(cl.first_name,''),' ',COALESCE(cl.last_name,'')))) as cliente_nombre")
             )
             ->orderByDesc('i.fecha')
@@ -253,13 +259,20 @@ class IngresoManualController extends Controller
             return response()->json(['message' => 'La nota de venta ya está vinculada a este movimiento'], 422);
         }
 
-        // Monto a asignar = lo que falta por asignar del movimiento, acotado al monto de la nota
-        $asignado = DB::table('venta_movimiento')->where('movimiento_id', $movimientoId)->sum('monto')
-                  + DB::table('ingreso_movimiento')->where('movimiento_id', $movimientoId)->sum('monto');
-        $saldo    = (float) $mov->monto - (float) $asignado;
-        $monto    = min((float) $ingreso->monto, max(0, $saldo));
+        // Saldo por asignar DEL MOVIMIENTO
+        $asignadoMov = DB::table('venta_movimiento')->where('movimiento_id', $movimientoId)->sum('monto')
+                     + DB::table('ingreso_movimiento')->where('movimiento_id', $movimientoId)->sum('monto');
+        $saldoMov = (float) $mov->monto - (float) $asignadoMov;
+        // Saldo por asignar DE LA NOTA (puede cubrirse con varias transferencias)
+        $asignadoNota = DB::table('ingreso_movimiento')->where('ingreso_id', $ingreso->id)->sum('monto');
+        $saldoNota    = (float) $ingreso->monto - (float) $asignadoNota;
+
+        $monto = min(max(0, $saldoNota), max(0, $saldoMov));
         if ($monto <= 0) {
-            return response()->json(['message' => 'El movimiento ya está completamente asignado'], 422);
+            $msg = $saldoNota <= 0
+                ? 'La nota de venta ya está completamente conciliada'
+                : 'El movimiento ya está completamente asignado';
+            return response()->json(['message' => $msg], 422);
         }
 
         DB::table('ingreso_movimiento')->insert([
@@ -273,6 +286,36 @@ class IngresoManualController extends Controller
         $this->recalcularConciliado($movimientoId);
 
         return response()->json(['success' => true, 'monto_asignado' => $monto]);
+    }
+
+    // ── Movimientos crédito con saldo por asignar (para conciliar un ingreso) ──
+    // Perspectiva inversa: desde un ingreso/nota de venta, elegir el movimiento.
+    public function movimientosCreditoDisponibles(Request $request)
+    {
+        $vm = DB::raw('(SELECT movimiento_id, SUM(monto) t FROM venta_movimiento GROUP BY movimiento_id) as vm');
+        $im = DB::raw('(SELECT movimiento_id, SUM(monto) t FROM ingreso_movimiento GROUP BY movimiento_id) as im');
+
+        $q = DB::table('movimientos_bancarios as m')
+            ->leftJoin($vm, 'vm.movimiento_id', '=', 'm.id')
+            ->leftJoin($im, 'im.movimiento_id', '=', 'm.id')
+            ->where('m.tipo', 'C')
+            ->whereRaw('m.monto - COALESCE(vm.t,0) - COALESCE(im.t,0) > 0.5')
+            ->select(
+                'm.id', 'm.fecha_contable', 'm.descripcion', 'm.monto', 'm.cuenta',
+                DB::raw('(m.monto - COALESCE(vm.t,0) - COALESCE(im.t,0)) as saldo')
+            );
+
+        if ($request->filled('buscar')) {
+            $q->where('m.descripcion', 'like', '%' . $request->buscar . '%');
+        }
+        if ($request->filled('desde')) {
+            $q->where('m.fecha_contable', '>=', $request->desde);
+        }
+        if ($request->filled('hasta')) {
+            $q->where('m.fecha_contable', '<=', $request->hasta);
+        }
+
+        return response()->json(['movimientos' => $q->orderByDesc('m.fecha_contable')->limit(80)->get()]);
     }
 
     // ── Crear ingreso manual desde transacción Transbank ──────────────────────

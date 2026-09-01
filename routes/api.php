@@ -310,6 +310,8 @@ Route::middleware('auth:api')->group(function () {
         // Vincular una nota de venta existente (creada en Operaciones) a un movimiento
         Route::get('/notas-venta-pendientes',                 [\App\Http\Controllers\IngresoManualController::class, 'notasVentaPendientes']);
         Route::post('/movimientos/{id}/vincular-nota-venta',  [\App\Http\Controllers\IngresoManualController::class, 'vincularExistentePorMovimiento']);
+        // Movimientos crédito disponibles (para conciliar un ingreso desde su perspectiva)
+        Route::get('/movimientos-credito-disponibles',        [\App\Http\Controllers\IngresoManualController::class, 'movimientosCreditoDisponibles']);
     });
 
     // Ingresos manuales (para EERR y módulo)
