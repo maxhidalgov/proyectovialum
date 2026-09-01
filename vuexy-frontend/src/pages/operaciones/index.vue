@@ -648,7 +648,7 @@
               <tbody>
                 <tr v-for="(a, i) in dialogAbonos.abonos" :key="a.id ?? i">
                   <td class="text-no-wrap">{{ fmtFechaCorta(a.fecha) }}</td>
-                  <td><v-chip size="x-small" variant="tonal" :color="a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">{{ a.fuente }}</v-chip></td>
+                  <td><v-chip size="x-small" variant="tonal" :color="a.tipo === 'nota_venta' ? 'warning' : a.fuente === 'Tarjeta / Transbank' ? 'primary' : a.fuente === 'Transferencia' ? 'info' : 'secondary'">{{ a.fuente }}</v-chip></td>
                   <td class="text-right font-weight-medium">{{ fmt(a.monto) }}</td>
                   <td class="text-right" style="width:36px">
                     <v-btn v-if="a.editable" icon size="x-small" variant="text" color="error" @click="borrarAbono(a)"><v-icon size="14">mdi-close</v-icon></v-btn>
@@ -668,9 +668,23 @@
                 <v-btn color="primary" size="small" :disabled="!nuevoAbono.monto" :loading="dialogAbonos.saving" @click="agregarAbono">Agregar</v-btn>
               </div>
             </template>
-            <div v-else class="text-caption text-medium-emphasis mt-1">
-              Abonos automáticos desde las facturas/conciliación (solo lectura).
-            </div>
+            <template v-else>
+              <div class="text-caption text-medium-emphasis mt-1 mb-2">
+                Abonos automáticos desde las facturas/conciliación (solo lectura).
+              </div>
+              <v-divider class="my-2" />
+              <div class="text-caption font-weight-bold mb-1">Agregar nota de venta</div>
+              <div class="text-caption text-medium-emphasis mb-2">
+                Respaldo de pago (ej. transferencia) sin factura/boleta todavía. Se registra en
+                <strong>Ingresos Manuales</strong>. Bórrala cuando emitas el documento real.
+              </div>
+              <div class="d-flex align-center flex-wrap" style="gap:8px">
+                <v-text-field v-model="nuevaNota.fecha" type="date" density="compact" variant="outlined" hide-details style="max-width:150px" />
+                <v-text-field v-model.number="nuevaNota.monto" type="number" min="0" prefix="$" placeholder="Monto" density="compact" variant="outlined" hide-details style="max-width:130px" />
+                <v-text-field v-model="nuevaNota.nota" placeholder="Descripción (opcional)" density="compact" variant="outlined" hide-details style="min-width:120px;flex:1" />
+                <v-btn color="warning" size="small" :disabled="!nuevaNota.monto" :loading="dialogAbonos.saving" @click="agregarNotaVenta">Agregar</v-btn>
+              </div>
+            </template>
           </template>
         </v-card-text>
         <v-divider />
@@ -1116,13 +1130,15 @@ async function borrarManual(item) {
 }
 
 // ── Detalle de abonos ────────────────────────────────────────────
-const dialogAbonos = ref({ show: false, loading: false, saving: false, item: null, abonos: [] })
-const nuevoAbono   = ref({ fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' })
-const sumaAbonos   = computed(() => dialogAbonos.value.abonos.reduce((s, a) => s + Number(a.monto || 0), 0))
+const dialogAbonos  = ref({ show: false, loading: false, saving: false, item: null, abonos: [] })
+const nuevoAbono    = ref({ fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' })
+const nuevaNota     = ref({ fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' })
+const sumaAbonos    = computed(() => dialogAbonos.value.abonos.reduce((s, a) => s + Number(a.monto || 0), 0))
 
 async function abrirAbonos(item) {
   dialogAbonos.value = { show: true, loading: true, saving: false, item, abonos: [] }
   nuevoAbono.value = { fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' }
+  nuevaNota.value  = { fecha: new Date().toISOString().slice(0, 10), monto: null, nota: '' }
   try {
     const { data } = await api.get(`/api/operaciones/${item.id}/abonos`)
     dialogAbonos.value.abonos = data.abonos || []
@@ -1151,13 +1167,31 @@ async function agregarAbono() {
     dialogAbonos.value.saving = false
   }
 }
-async function borrarAbono(a) {
+async function agregarNotaVenta() {
+  const n = nuevaNota.value
+  if (!n.monto) return
+  dialogAbonos.value.saving = true
   try {
-    await api.delete(`/api/operaciones/abonos/${a.id}`)
+    await api.post(`/api/operaciones/${dialogAbonos.value.item.id}/nota-venta`, { fecha: n.fecha, monto: Number(n.monto), nota: n.nota || undefined })
+    nuevaNota.value = { fecha: n.fecha, monto: null, nota: '' }
     await recargarAbonos()
     await cargar()
   } catch {
-    mostrarSnack('Error al borrar el abono', 'error')
+    mostrarSnack('Error al agregar la nota de venta', 'error')
+  } finally {
+    dialogAbonos.value.saving = false
+  }
+}
+async function borrarAbono(a) {
+  const url = a.tipo === 'nota_venta'
+    ? `/api/operaciones/nota-venta/${a.id}`
+    : `/api/operaciones/abonos/${a.id}`
+  try {
+    await api.delete(url)
+    await recargarAbonos()
+    await cargar()
+  } catch {
+    mostrarSnack('Error al borrar el registro', 'error')
   }
 }
 

@@ -432,6 +432,8 @@ Route::middleware('auth:api')->group(function () {
     Route::delete('/operaciones/historial/{id}', [OperacionesController::class, 'destroyHistorial']);
     Route::post('/operaciones/{id}/abonos', [OperacionesController::class, 'storeAbono']);
     Route::delete('/operaciones/abonos/{abonoId}', [OperacionesController::class, 'destroyAbono']);
+    Route::post('/operaciones/{id}/nota-venta', [OperacionesController::class, 'storeNotaVenta']);
+    Route::delete('/operaciones/nota-venta/{ingresoId}', [OperacionesController::class, 'destroyNotaVenta']);
 
     // Taller (vista de fabricación con etapas)
     Route::get('/taller', [\App\Http\Controllers\ProduccionController::class, 'taller']);

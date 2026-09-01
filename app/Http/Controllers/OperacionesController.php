@@ -74,7 +74,15 @@ class OperacionesController extends Controller
             ->selectRaw('cotizacion_id, SUM(monto) as total')
             ->pluck('total', 'cotizacion_id');
 
-        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc, $abonosManual) {
+        // Notas de venta (ingresos_manuales vinculados a la cotización): respaldos de
+        // pago (transferencias) registrados mientras no se emite factura/boleta.
+        $notasVenta = DB::table('ingresos_manuales')
+            ->whereIn('cotizacion_id', $cotizacionIds)
+            ->groupBy('cotizacion_id')
+            ->selectRaw('cotizacion_id, SUM(monto) as total')
+            ->pluck('total', 'cotizacion_id');
+
+        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc, $abonosManual, $notasVenta) {
             $esManual = (bool) $c->es_manual;
 
             // Manual: total ya es BRUTO (lo que paga el cliente); abono = suma de sus
@@ -89,6 +97,8 @@ class OperacionesController extends Controller
                 $totalAbonado = (float) ($cobrados[$c->id] ?? 0);
                 $faltaCon     = (float) ($faltaConc[$c->id] ?? 0);
             }
+            // Notas de venta (respaldos manuales) suman como abono en ambos casos.
+            $totalAbonado += (float) ($notasVenta[$c->id] ?? 0);
 
             // Cant/M²: manual → campos propios; cotización → ventanas/detalles.
             if ($esManual) {
@@ -295,6 +305,22 @@ class OperacionesController extends Controller
     {
         $cot = Cotizacion::findOrFail($id);
 
+        // Notas de venta (ingresos_manuales vinculados): respaldos manuales de pago,
+        // presentes tanto en proyectos manuales como en cotizaciones reales.
+        $notas = DB::table('ingresos_manuales')
+            ->where('cotizacion_id', $id)
+            ->orderBy('fecha')
+            ->get(['id', 'fecha', 'monto', 'descripcion'])
+            ->map(fn ($n) => [
+                'id'       => $n->id,
+                'fecha'    => substr((string) $n->fecha, 0, 10),
+                'monto'    => (float) $n->monto,
+                'fuente'   => 'Nota de venta',
+                'tipo'     => 'nota_venta',
+                'nota'     => $n->descripcion,
+                'editable' => true,
+            ]);
+
         if ($cot->es_manual) {
             $abonos = DB::table('proyecto_abonos')
                 ->where('cotizacion_id', $id)
@@ -302,12 +328,14 @@ class OperacionesController extends Controller
                 ->get(['id', 'fecha', 'monto', 'nota'])
                 ->map(fn ($a) => [
                     'id'     => $a->id,
-                    'fecha'  => $a->fecha,
+                    'fecha'  => substr((string) $a->fecha, 0, 10),
                     'monto'  => (float) $a->monto,
                     'fuente' => $a->nota ?: 'Abono',
+                    'tipo'     => 'proyecto_abono',
                     'editable' => true,
                 ]);
-            return response()->json(['es_manual' => true, 'abonos' => $abonos->values()]);
+            $todos = $abonos->concat($notas)->sortBy('fecha')->values();
+            return response()->json(['es_manual' => true, 'abonos' => $todos]);
         }
 
         // No manual: reunir abonos reales de los documentos de la cotización
@@ -321,22 +349,62 @@ class OperacionesController extends Controller
                 ->join('movimientos_bancarios as mb', 'mb.id', '=', 'vm.movimiento_id')
                 ->whereIn('vm.venta_id', $docIds)
                 ->get(['vm.monto', 'mb.fecha_contable']) as $r) {
-                $abonos->push(['fecha' => substr((string) $r->fecha_contable, 0, 10), 'monto' => (float) $r->monto, 'fuente' => 'Transferencia', 'editable' => false]);
+                $abonos->push(['fecha' => substr((string) $r->fecha_contable, 0, 10), 'monto' => (float) $r->monto, 'fuente' => 'Transferencia', 'tipo' => 'auto', 'editable' => false]);
             }
             foreach (DB::table('transbank_factura as tf')
                 ->join('transbank_transacciones as tt', 'tt.id', '=', 'tf.transaccion_id')
                 ->whereIn('tf.documento_id', $docIds)
                 ->get(['tt.monto_original', 'tt.fecha_movimiento']) as $r) {
-                $abonos->push(['fecha' => substr((string) $r->fecha_movimiento, 0, 10), 'monto' => (float) $r->monto_original, 'fuente' => 'Tarjeta / Transbank', 'editable' => false]);
+                $abonos->push(['fecha' => substr((string) $r->fecha_movimiento, 0, 10), 'monto' => (float) $r->monto_original, 'fuente' => 'Tarjeta / Transbank', 'tipo' => 'auto', 'editable' => false]);
             }
             foreach (DB::table('documentos_facturacion')
                 ->whereIn('id', $docIds)->where('monto_cobrado_manual', '>', 0)
                 ->get(['monto_cobrado_manual', 'cobrado_manual_nota', 'fecha_emision']) as $r) {
-                $abonos->push(['fecha' => substr((string) $r->fecha_emision, 0, 10), 'monto' => (float) $r->monto_cobrado_manual, 'fuente' => $r->cobrado_manual_nota ?: 'Cobro manual', 'editable' => false]);
+                $abonos->push(['fecha' => substr((string) $r->fecha_emision, 0, 10), 'monto' => (float) $r->monto_cobrado_manual, 'fuente' => $r->cobrado_manual_nota ?: 'Cobro manual', 'tipo' => 'auto', 'editable' => false]);
             }
         }
 
-        return response()->json(['es_manual' => false, 'abonos' => $abonos->sortBy('fecha')->values()]);
+        $todos = $abonos->concat($notas)->sortBy('fecha')->values();
+        return response()->json(['es_manual' => false, 'abonos' => $todos]);
+    }
+
+    /** Crear una "nota de venta" (ingreso manual sin documento SII) vinculada a la cotización. */
+    public function storeNotaVenta(Request $request, $id)
+    {
+        $data = $request->validate([
+            'fecha' => 'required|date',
+            'monto' => 'required|numeric|min:1',
+            'nota'  => 'nullable|string|max:255',
+        ]);
+
+        $cot = Cotizacion::findOrFail($id);
+
+        $ingreso = \App\Models\IngresoManual::create([
+            'cotizacion_id' => $cot->id,
+            'fecha'         => $data['fecha'],
+            'monto'         => $data['monto'],
+            'descripcion'   => $data['nota'] ?: ('Abono cotización #' . $cot->id),
+            'categoria'     => 'Nota de venta',
+            'notas'         => 'Respaldo de pago sin documento (Operaciones)',
+        ]);
+
+        return response()->json(['success' => true, 'id' => $ingreso->id]);
+    }
+
+    /** Borrar una nota de venta (ingreso manual). */
+    public function destroyNotaVenta($ingresoId)
+    {
+        $ingreso = \App\Models\IngresoManual::findOrFail($ingresoId);
+        // Desvincular movimientos conciliados si los hubiera (normalmente ninguno)
+        $movIds = DB::table('ingreso_movimiento')->where('ingreso_id', $ingresoId)->pluck('movimiento_id');
+        $ingreso->delete();
+        foreach ($movIds as $movId) {
+            $monto = DB::table('movimientos_bancarios')->where('id', $movId)->value('monto');
+            $asig  = DB::table('venta_movimiento')->where('movimiento_id', $movId)->sum('monto')
+                   + DB::table('ingreso_movimiento')->where('movimiento_id', $movId)->sum('monto');
+            DB::table('movimientos_bancarios')->where('id', $movId)->update(['conciliado' => $asig >= $monto]);
+        }
+        return response()->json(['success' => true]);
     }
 
     /** Agregar un abono manual (solo proyectos manuales). */
