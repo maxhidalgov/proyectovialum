@@ -173,11 +173,11 @@
                 </v-list-item>
                 <v-list-item v-if="!item.facturacion_cerrada" @click="cerrarFacturacion(item, true)">
                   <template #prepend><v-icon size="18" color="success">mdi-check-circle-outline</v-icon></template>
-                  <v-list-item-title>Cerrar operación (marcar cobrada)</v-list-item-title>
+                  <v-list-item-title>Cerrar proceso (ya conciliado)</v-list-item-title>
                 </v-list-item>
                 <v-list-item v-else @click="cerrarFacturacion(item, false)">
                   <template #prepend><v-icon size="18" color="warning">mdi-lock-open-variant-outline</v-icon></template>
-                  <v-list-item-title>Reabrir operación</v-list-item-title>
+                  <v-list-item-title>Reabrir proceso</v-list-item-title>
                 </v-list-item>
                 <v-divider />
                 <v-list-item class="text-error" @click="eliminarCotizacion(item)">
@@ -908,12 +908,12 @@ async function abrirDialogVincular(item) {
   await cargarHuerfanos()
 }
 
-// ── Cerrar / reabrir operación (marca cobrada; ej. pagada por boletas) ──
+// ── Cerrar / reabrir el proceso completo (facturado + conciliado con banco) ──
 async function cerrarFacturacion(item, cerrada) {
-  if (cerrada && !confirm(`¿Marcar la operación de "${item.cliente?.nombre || item.cliente?.razon_social || 'este cliente'}" como cobrada/cerrada?`)) return
+  if (cerrada && !confirm(`¿Cerrar el proceso de "${item.cliente?.nombre || item.cliente?.razon_social || 'este cliente'}"?\nUsa esto cuando el pago ya esté conciliado con el banco (o en el módulo Boletas).`)) return
   try {
     await api.post(`/api/cotizaciones/${item.id}/cerrar-facturacion`, { cerrada })
-    mostrarSnack(cerrada ? 'Operación cerrada' : 'Operación reabierta')
+    mostrarSnack(cerrada ? 'Proceso cerrado' : 'Proceso reabierto')
     await cargarCotizaciones()
   } catch (e) {
     mostrarSnack(e.response?.data?.message || 'No se pudo actualizar', 'error')

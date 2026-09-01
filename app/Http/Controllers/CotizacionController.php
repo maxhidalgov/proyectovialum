@@ -1185,7 +1185,14 @@ public function getAprobadas()
                 default => 'aprobada'
             };
 
-            // Si todo lo emitido está cobrado → dinámicamente 'pagada'
+            // FACTURADO (emisión) ≠ COBRADO (conciliación). Si los documentos emitidos
+            // cubren el total (bruto) → 'facturada', aunque el cobro aún no se concilie.
+            $totalBruto = round((float) $cotizacion->total * 1.19);
+            if ($totalBruto > 0 && $totalEmitido >= $totalBruto - 1) {
+                $cotizacion->estado_facturacion = 'facturada';
+            }
+
+            // Si todo lo emitido está cobrado (conciliación real) → dinámicamente 'pagada'
             if ($totalEmitido > 0 && $totalCobrado >= $totalEmitido) {
                 $cotizacion->estado_facturacion = 'pagada';
             }
