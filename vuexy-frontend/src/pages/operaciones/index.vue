@@ -322,22 +322,28 @@
                     <span v-else>{{ fmt(item.total) }}</span>
                   </td>
                   <td class="text-right">
-                    <div class="text-caption cursor-pointer d-inline-flex align-center"
-                      :class="item.total_abonado > 0 ? 'text-success' : 'text-medium-emphasis'"
-                      title="Ver / editar abonos" @click="abrirAbonos(item)">
-                      {{ fmt(item.total_abonado) }}
-                      <v-icon size="12" class="ml-1">mdi-format-list-bulleted</v-icon>
+                    <div class="d-inline-flex align-center justify-end" style="gap:4px">
+                      <div class="text-caption cursor-pointer d-inline-flex align-center"
+                        :class="item.total_abonado > 0 ? 'text-success' : 'text-medium-emphasis'"
+                        title="Ver / editar abonos" @click="abrirAbonos(item)">
+                        {{ fmt(item.total_abonado) }}
+                        <v-icon size="12" class="ml-1">mdi-format-list-bulleted</v-icon>
+                      </div>
+                      <!-- Preconciliación: pagado al emitir, sin cuadrar con el banco -->
+                      <v-tooltip v-if="!item.es_manual && item.falta_conciliar > 0" location="top"
+                        :text="`Falta conciliar con el banco: ${fmt(item.falta_conciliar)} pagado al emitir. Se pone en verde al conciliar.`">
+                        <template #activator="{ props }">
+                          <v-icon v-bind="props" size="15" color="warning" class="cursor-pointer" @click="abrirAbonos(item)">mdi-bank-outline</v-icon>
+                        </template>
+                      </v-tooltip>
+                      <!-- Nota de venta: pago registrado sin documento emitido -->
+                      <v-tooltip v-if="item.notas_venta > 0" location="top"
+                        :text="`Falta crear el documento (boleta/factura): ${fmt(item.notas_venta)} registrado como nota de venta.`">
+                        <template #activator="{ props }">
+                          <v-icon v-bind="props" size="15" color="deep-orange" class="cursor-pointer" @click="abrirAbonos(item)">mdi-file-alert-outline</v-icon>
+                        </template>
+                      </v-tooltip>
                     </div>
-                    <v-tooltip v-if="!item.es_manual && item.falta_conciliar > 0" location="top"
-                      :text="`Pagado al emitir (${fmt(item.falta_conciliar)}) pero aún sin conciliar en el banco. Al conciliar se pone en verde.`">
-                      <template #activator="{ props }">
-                        <div>
-                          <v-chip v-bind="props" size="x-small" color="warning" variant="tonal" class="cursor-pointer mt-1" to="/facturacion">
-                            <v-icon start size="11">mdi-alert-circle-outline</v-icon>Falta conciliar
-                          </v-chip>
-                        </div>
-                      </template>
-                    </v-tooltip>
                   </td>
                   <td class="text-right">
                     <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">{{ fmt(item.saldo) }}</v-chip>
@@ -650,9 +656,11 @@
           </p>
 
           <div class="mb-3">
+            <v-icon size="15" color="warning" class="mr-1">mdi-bank-outline</v-icon>
             <v-chip size="x-small" color="orange" variant="tonal" class="mb-1">Pagado al emitir (por conciliar)</v-chip>
             <p class="text-medium-emphasis mb-0">
-              <strong>Preconciliación.</strong> Emitiste una boleta/factura y ya sabes la forma de pago
+              <strong>Preconciliación.</strong> El ícono <v-icon size="14" color="warning">mdi-bank-outline</v-icon> marca esto:
+              emitiste una boleta/factura y ya sabes la forma de pago
               (efectivo, tarjeta, transferencia). Se cuenta como abono al toque en Operaciones, aunque el
               dinero todavía no se cuadre con la cartola. El chip <em>"Falta conciliar"</em> marca eso:
               contado como abono, pendiente de cuadrar con el banco.
@@ -660,9 +668,11 @@
           </div>
 
           <div class="mb-3">
+            <v-icon size="15" color="deep-orange" class="mr-1">mdi-file-alert-outline</v-icon>
             <v-chip size="x-small" color="warning" variant="tonal" class="mb-1">Nota de venta</v-chip>
             <p class="text-medium-emphasis mb-0">
-              Recibiste un pago (ej. transferencia) pero <strong>todavía no hay documento</strong>. Es un
+              El ícono <v-icon size="14" color="deep-orange">mdi-file-alert-outline</v-icon> (falta crear documento):
+              recibiste un pago (ej. transferencia) pero <strong>todavía no hay documento</strong>. Es un
               respaldo manual que registras tú (aparece también en <strong>Ingresos Manuales</strong>).
               Cuenta como abono. <strong>Bórrala</strong> cuando emitas la boleta/factura real, o el ingreso
               quedaría duplicado.

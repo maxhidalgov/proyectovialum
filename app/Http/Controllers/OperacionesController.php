@@ -136,6 +136,7 @@ class OperacionesController extends Controller
                 'total_abonado'      => $totalAbonado,
                 'saldo'              => $totalBruto - $totalAbonado,
                 'falta_conciliar'    => $faltaCon,
+                'notas_venta'        => (float) ($notasVenta[$c->id] ?? 0),
                 'pedido_proveedor'   => (bool) $c->pedido_proveedor,
                 'estado_produccion'  => $c->estado_produccion,
                 'fecha_entrega'      => $c->fecha_entrega,
