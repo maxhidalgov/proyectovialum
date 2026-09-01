@@ -307,6 +307,9 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/movimientos/{id}/ingresos',              [\App\Http\Controllers\IngresoManualController::class, 'indexPorMovimiento']);
         Route::post('/movimientos/{id}/ingresos',             [\App\Http\Controllers\IngresoManualController::class, 'storePorMovimiento']);
         Route::delete('/movimientos/{id}/ingresos/{pivotId}', [\App\Http\Controllers\IngresoManualController::class, 'destroyPorMovimiento']);
+        // Vincular una nota de venta existente (creada en Operaciones) a un movimiento
+        Route::get('/notas-venta-pendientes',                 [\App\Http\Controllers\IngresoManualController::class, 'notasVentaPendientes']);
+        Route::post('/movimientos/{id}/vincular-nota-venta',  [\App\Http\Controllers\IngresoManualController::class, 'vincularExistentePorMovimiento']);
     });
 
     // Ingresos manuales (para EERR y módulo)

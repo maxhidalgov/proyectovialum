@@ -1295,6 +1295,7 @@
                   </VTab>
                   <VTab value="ingreso_manual">
                     <VIcon size="16" class="mr-1">mdi-receipt-text-plus</VIcon>Ingreso sin doc SII
+                    <VChip v-if="notasVentaPendientes.length" size="x-small" color="warning" variant="flat" class="ml-2">{{ notasVentaPendientes.length }}</VChip>
                   </VTab>
                 </VTabs>
 
@@ -1368,6 +1369,37 @@
 
                 <!-- Sub-tab: Ingreso sin documento SII -->
                 <div v-else-if="concTab === 'ingreso_manual'">
+                  <!-- Notas de venta pendientes (creadas en Operaciones) -->
+                  <template v-if="notasVentaPendientes.length">
+                    <p class="text-overline text-medium-emphasis mb-2">
+                      Notas de venta pendientes (registradas en Operaciones)
+                    </p>
+                    <VCard variant="tonal" color="warning" class="mb-2 pa-2">
+                      <VTable density="compact" class="bg-transparent">
+                        <tbody>
+                          <tr v-for="n in notasVentaPendientes" :key="n.id">
+                            <td class="text-caption text-no-wrap">{{ formatFecha(n.fecha) }}</td>
+                            <td class="text-caption">
+                              {{ n.cliente_nombre || 'Cotización #' + n.cotizacion_id }}
+                              <span v-if="n.descripcion" class="text-medium-emphasis"><br>{{ n.descripcion }}</span>
+                            </td>
+                            <td class="text-right font-weight-bold">{{ formatMonto(n.monto) }}</td>
+                            <td class="text-right" style="width:110px">
+                              <VBtn size="x-small" color="warning" variant="flat"
+                                :loading="loadingVincularNota === n.id"
+                                :disabled="concSaldoPorAsignar <= 0"
+                                @click="vincularNotaVenta(n)">Vincular</VBtn>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </VTable>
+                    </VCard>
+                    <p class="text-caption text-medium-emphasis mb-4">
+                      Vincular concilia el pago sin crear un ingreso nuevo. ¿No corresponde a ninguna? Regístralo abajo.
+                    </p>
+                    <VDivider class="mb-4" />
+                  </template>
+
                   <VAlert color="teal" variant="tonal" density="compact" class="mb-4 text-caption">
                     <VIcon size="15" class="mr-1">mdi-information-outline</VIcon>
                     Este ingreso no tiene boleta ni factura del SII. Quedará registrado como
@@ -2335,6 +2367,8 @@ const concSueldosDisponibles = ref([])
 const concVentasAsignadas   = ref([])
 const concVentasDisponibles = ref([])
 const concIngresosAsignados = ref([])
+const notasVentaPendientes   = ref([])
+const loadingVincularNota    = ref(null)
 const concBoletasAsignadas   = ref([])
 const concBoletasDisponibles = ref([])
 const loadingConciliar       = ref(false)
@@ -2449,14 +2483,16 @@ async function cargarEstadoConciliar() {
   try {
     if (movConciliando.value.tipo === 'C') {
       // ── Crédito: cargar ventas + boletas + ingresos asignados ──
-      const [resVentas, resIngresos, resBoletas] = await Promise.all([
+      const [resVentas, resIngresos, resBoletas, resNotas] = await Promise.all([
         axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/ventas`),
         axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/ingresos`),
         axios.get(`/api/conciliacion/movimientos/${movConciliando.value.id}/boletas`),
+        axios.get(`/api/conciliacion/notas-venta-pendientes`),
       ])
       concVentasAsignadas.value   = resVentas.data.asignados
       concIngresosAsignados.value = resIngresos.data.asignados
       concBoletasAsignadas.value  = resBoletas.data.asignados
+      notasVentaPendientes.value  = resNotas.data.pendientes || []
       const totalAsignado = concVentasAsignadas.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
                           + concIngresosAsignados.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
                           + concBoletasAsignadas.value.reduce((s, a) => s + parseFloat(a.monto_asignado), 0)
@@ -2766,6 +2802,22 @@ async function desasignarIngreso(pivotId) {
     console.error(e)
   } finally {
     loadingDesasignar.value = null
+  }
+}
+
+// Vincular una nota de venta EXISTENTE (creada en Operaciones) al movimiento
+async function vincularNotaVenta(nota) {
+  if (!movConciliando.value) return
+  loadingVincularNota.value = nota.id
+  try {
+    await axios.post(`/api/conciliacion/movimientos/${movConciliando.value.id}/vincular-nota-venta`, {
+      ingreso_id: nota.id,
+    })
+    await cargarEstadoConciliar()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingVincularNota.value = null
   }
 }
 
