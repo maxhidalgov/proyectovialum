@@ -40,6 +40,7 @@ class Cotizacion extends Model
         'estado_obra',
         'postventa',
         'eett',
+        'oculto_operaciones',
         // Proyectos manuales (Fase 2)
         'es_manual',
         'nombre_manual',
@@ -53,6 +54,7 @@ class Cotizacion extends Model
         'winperfil_precio_lock' => 'boolean',
         'postventa'             => 'boolean',
         'es_manual'             => 'boolean',
+        'oculto_operaciones'    => 'boolean',
     ];
 
     public function cliente()
