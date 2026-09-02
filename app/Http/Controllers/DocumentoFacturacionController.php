@@ -29,8 +29,10 @@ class DocumentoFacturacionController extends Controller
                       ->orWhere('c.razon_social', 'like', "%{$b}%");
                 });
             })
+            ->when($request->desde, fn ($q, $d) => $q->whereDate('df.fecha_emision', '>=', $d))
+            ->when($request->hasta, fn ($q, $d) => $q->whereDate('df.fecha_emision', '<=', $d))
             ->orderByDesc('df.fecha_emision')
-            ->limit(100)
+            ->limit(300)
             ->select([
                 'df.id',
                 'df.tipo',
@@ -41,6 +43,7 @@ class DocumentoFacturacionController extends Controller
                 'df.numero_documento_bsale',
                 'df.url_pdf_bsale',
                 'df.fecha_emision',
+                'df.forma_pago',
                 'df.nro_comprobante_transbank',
                 'df.bsale_cliente_rut',
                 'df.bsale_cliente_nombre',

@@ -580,17 +580,25 @@
             Documentos emitidos directamente en Bsale (sin cotización asignada). Al vincular, el porcentaje se calculará automáticamente respecto al total de la cotización.
           </p>
 
-          <v-text-field
-            v-model="buscarHuerfano"
-            placeholder="Buscar por N° doc, tipo, N° comprobante..."
-            density="compact"
-            variant="outlined"
-            prepend-inner-icon="mdi-magnify"
-            hide-details
-            class="mb-4"
-            clearable
-            @update:modelValue="cargarHuerfanos"
-          />
+          <div class="d-flex flex-wrap align-center mb-4" style="gap:8px">
+            <v-text-field
+              v-model="buscarHuerfano"
+              placeholder="Buscar por N° doc, tipo, N° comprobante..."
+              density="compact"
+              variant="outlined"
+              prepend-inner-icon="mdi-magnify"
+              hide-details
+              clearable
+              style="flex:1;min-width:220px"
+              @update:modelValue="cargarHuerfanos"
+            />
+            <v-text-field v-model="huerfanoDesde" type="date" label="Desde" density="compact"
+              variant="outlined" hide-details style="max-width:160px" clearable
+              @update:modelValue="cargarHuerfanos" />
+            <v-text-field v-model="huerfanoHasta" type="date" label="Hasta" density="compact"
+              variant="outlined" hide-details style="max-width:160px" clearable
+              @update:modelValue="cargarHuerfanos" />
+          </div>
 
           <div v-if="loadingHuerfanos" class="text-center py-8">
             <v-progress-circular indeterminate size="32" color="info" />
@@ -602,21 +610,30 @@
                 <th>Cliente</th>
                 <th>RUT</th>
                 <th>Tipo</th>
+                <th>Pago</th>
                 <th>N° Bsale</th>
-                <th>Monto</th>
+                <th class="cursor-pointer user-select-none" @click="ordenarHuerfanos('monto')">
+                  Monto <v-icon size="12">{{ iconoOrden('monto') }}</v-icon>
+                </th>
                 <th>% sobre cot.</th>
-                <th>Fecha</th>
+                <th class="cursor-pointer user-select-none" @click="ordenarHuerfanos('fecha_emision')">
+                  Fecha <v-icon size="12">{{ iconoOrden('fecha_emision') }}</v-icon>
+                </th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="doc in huerfanos" :key="doc.id">
+              <tr v-for="doc in huerfanosOrdenados" :key="doc.id">
                 <td class="text-caption" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                   {{ doc.cliente_nombre_local || doc.bsale_cliente_nombre || '-' }}
                 </td>
                 <td class="text-caption text-medium-emphasis">{{ doc.bsale_cliente_rut || '-' }}</td>
                 <td>
                   <v-chip size="x-small" variant="tonal" color="info" class="text-capitalize">{{ doc.tipo }}</v-chip>
+                </td>
+                <td>
+                  <v-chip v-if="formaPagoLabel(doc)" size="x-small" variant="tonal" color="secondary">{{ formaPagoLabel(doc) }}</v-chip>
+                  <span v-else class="text-caption text-disabled">-</span>
                 </td>
                 <td class="text-caption">{{ doc.numero_documento_bsale || '-' }}</td>
                 <td class="text-caption font-weight-bold text-success">{{ clp(doc.monto) }}</td>
@@ -638,7 +655,7 @@
                 </td>
               </tr>
               <tr v-if="!huerfanos.length">
-                <td colspan="8" class="text-center text-caption text-medium-emphasis py-8">
+                <td colspan="9" class="text-center text-caption text-medium-emphasis py-8">
                   <v-icon size="32" color="grey" class="d-block mx-auto mb-2">mdi-receipt-text-check-outline</v-icon>
                   No hay documentos Bsale sin cotización asignada
                 </td>
@@ -693,8 +710,43 @@ const dialogVincular   = ref(false)
 const cotizVinculando  = ref(null)
 const huerfanos        = ref([])
 const buscarHuerfano   = ref('')
+const huerfanoDesde    = ref('')
+const huerfanoHasta    = ref('')
 const loadingHuerfanos = ref(false)
 const loadingVincular  = ref({})
+const ordenHuerfano    = ref({ campo: 'fecha_emision', dir: 'desc' })
+
+const huerfanosOrdenados = computed(() => {
+  const { campo, dir } = ordenHuerfano.value
+  const mult = dir === 'asc' ? 1 : -1
+  return [...huerfanos.value].sort((a, b) => {
+    let va = a[campo], vb = b[campo]
+    if (campo === 'monto') { va = Number(va) || 0; vb = Number(vb) || 0 }
+    else { va = String(va || ''); vb = String(vb || '') }
+    return va < vb ? -1 * mult : va > vb ? 1 * mult : 0
+  })
+})
+function ordenarHuerfanos(campo) {
+  const o = ordenHuerfano.value
+  if (o.campo === campo) o.dir = o.dir === 'asc' ? 'desc' : 'asc'
+  else { o.campo = campo; o.dir = 'desc' }
+}
+function iconoOrden(campo) {
+  if (ordenHuerfano.value.campo !== campo) return 'mdi-unfold-more-horizontal'
+  return ordenHuerfano.value.dir === 'asc' ? 'mdi-menu-up' : 'mdi-menu-down'
+}
+// Forma de pago legible (misma lógica que el backend de Operaciones)
+function formaPagoLabel(doc) {
+  const fp = (doc.forma_pago || '').toLowerCase()
+  if (fp.includes('credito')) return 'Tarjeta crédito'
+  if (fp.includes('debito'))  return 'Tarjeta débito'
+  if (fp.includes('tarjeta')) return 'Tarjeta'
+  if (fp.includes('transfer')) return 'Transferencia'
+  if (fp.includes('efectivo')) return 'Efectivo'
+  if (fp.includes('cheque'))   return 'Cheque'
+  if (doc.nro_comprobante_transbank) return 'Tarjeta'
+  return fp ? fp.charAt(0).toUpperCase() + fp.slice(1) : ''
+}
 
 // ── Headers ──────────────────────────────────────────────────────────
 const headers = [
@@ -898,11 +950,11 @@ async function desasignarCobro(pivotId) {
 // ── Vincular doc Bsale huérfano ──────────────────────────────────────
 async function abrirDialogVincular(item) {
   cotizVinculando.value = item
-  // Prellenar con el RUT (o nombre) del cliente para encontrar rápido sus boletas
-  const rut    = item.cliente?.identification || item.cliente_facturacion?.identification
-  const nombre = item.cliente?.razon_social
-    || `${item.cliente?.first_name || ''} ${item.cliente?.last_name || ''}`.trim()
-  buscarHuerfano.value  = rut || nombre || ''
+  // Sin prellenar búsqueda: las boletas a "Consumidor Final" no tienen cliente y el
+  // filtro por nombre/RUT las escondería. Se buscan por fecha / monto / N° doc.
+  buscarHuerfano.value  = ''
+  huerfanoDesde.value   = ''
+  huerfanoHasta.value   = ''
   huerfanos.value       = []
   dialogVincular.value  = true
   await cargarHuerfanos()
@@ -924,7 +976,11 @@ async function cargarHuerfanos() {
   loadingHuerfanos.value = true
   try {
     const { data } = await api.get('/api/documentos-facturacion/huerfanos', {
-      params: { buscar: buscarHuerfano.value || undefined },
+      params: {
+        buscar: buscarHuerfano.value || undefined,
+        desde:  huerfanoDesde.value || undefined,
+        hasta:  huerfanoHasta.value || undefined,
+      },
     })
     huerfanos.value = data
   } catch (e) {
