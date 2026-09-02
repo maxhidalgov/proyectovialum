@@ -67,6 +67,35 @@ class OperacionesController extends Controller
             }
         }
 
+        // Documentos REPARTIDOS entre varias cotizaciones (1 factura ↔ N cotizaciones):
+        // cada cotización aporta su porción (share) y su conciliación proporcional.
+        $pivotDocRows = DB::table('documento_cotizacion as dc')
+            ->join('documentos_facturacion as df', 'df.id', '=', 'dc.documento_facturacion_id')
+            ->leftJoin(DB::raw('(SELECT venta_id, SUM(monto) m FROM venta_movimiento GROUP BY venta_id) vm'), 'vm.venta_id', '=', 'df.id')
+            ->leftJoin(DB::raw('(SELECT tf.documento_id, SUM(tt.monto_original) m
+                                 FROM transbank_factura tf
+                                 JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
+                                 GROUP BY tf.documento_id) tbk'), 'tbk.documento_id', '=', 'df.id')
+            ->whereIn('dc.cotizacion_id', $cotizacionIds)
+            ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [2])
+            ->selectRaw('dc.cotizacion_id, dc.monto as share, df.monto as doc_monto,
+                (df.forma_pago IS NOT NULL OR (df.nro_comprobante_transbank IS NOT NULL AND df.nro_comprobante_transbank <> "")) as pagado_emision,
+                (COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as doc_conc')
+            ->get();
+        foreach ($pivotDocRows as $r) {
+            $cid      = $r->cotizacion_id;
+            $paid     = (int) $r->pagado_emision === 1;
+            $share    = (float) $r->share;
+            $docMonto = (float) $r->doc_monto;
+            $ratio    = $docMonto > 0 ? $share / $docMonto : 0;
+            $conc     = round((float) $r->doc_conc * $ratio);
+            $cobrados[$cid] = ($cobrados[$cid] ?? 0) + ($paid ? max($share, $conc) : $conc);
+            if ($paid && $conc < $share) {
+                $faltaConc[$cid] = ($faltaConc[$cid] ?? 0) + ($share - $conc);
+            }
+        }
+
         // Abonos manuales (proyecto_abonos) por cotización → suma
         $abonosManual = DB::table('proyecto_abonos')
             ->whereIn('cotizacion_id', $cotizacionIds)
@@ -386,6 +415,45 @@ class OperacionesController extends Controller
                         'editable' => false,
                     ]);
                 }
+            }
+        }
+
+        // Documentos REPARTIDOS (1 factura ↔ N cotizaciones): la porción de esta cotización.
+        $pivotDocs = DB::table('documento_cotizacion as dc')
+            ->join('documentos_facturacion as df', 'df.id', '=', 'dc.documento_facturacion_id')
+            ->leftJoin(DB::raw('(SELECT venta_id, SUM(monto) m FROM venta_movimiento GROUP BY venta_id) vm'), 'vm.venta_id', '=', 'df.id')
+            ->leftJoin(DB::raw('(SELECT tf.documento_id, SUM(tt.monto_original) m
+                                 FROM transbank_factura tf
+                                 JOIN transbank_transacciones tt ON tt.id = tf.transaccion_id
+                                 GROUP BY tf.documento_id) tbk'), 'tbk.documento_id', '=', 'df.id')
+            ->where('dc.cotizacion_id', $id)
+            ->where('df.estado', 'emitido')
+            ->whereNotIn('df.tipo_documento_bsale_id', [2])
+            ->selectRaw('dc.monto as share, df.monto as doc_monto, df.numero_documento_bsale, df.fecha_emision,
+                df.forma_pago, df.nro_comprobante_transbank,
+                (COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as doc_conc')
+            ->get();
+        foreach ($pivotDocs as $r) {
+            $share    = (float) $r->share;
+            $docMonto = (float) $r->doc_monto;
+            $ratio    = $docMonto > 0 ? $share / $docMonto : 0;
+            $concShare = round((float) $r->doc_conc * $ratio);
+            $fecha    = substr((string) $r->fecha_emision, 0, 10);
+            $refDoc   = $r->numero_documento_bsale ? ' (factura #' . $r->numero_documento_bsale . ')' : '';
+            if ($concShare > 0.5) {
+                $abonos->push(['fecha' => $fecha, 'monto' => $concShare, 'fuente' => 'Conciliado' . $refDoc, 'tipo' => 'auto', 'editable' => false]);
+            }
+            $pagado = !empty($r->forma_pago) || !empty($r->nro_comprobante_transbank);
+            $pendiente = $share - $concShare;
+            if ($pagado && $pendiente > 0.5) {
+                $fp = $this->formaPagoLegible($r->forma_pago) ?: ($r->nro_comprobante_transbank ? 'Tarjeta' : null);
+                $abonos->push([
+                    'fecha'    => $fecha,
+                    'monto'    => $pendiente,
+                    'fuente'   => 'Pagado al emitir' . ($fp ? ' · ' . $fp : '') . $refDoc,
+                    'tipo'     => 'preconciliacion',
+                    'editable' => false,
+                ]);
             }
         }
 

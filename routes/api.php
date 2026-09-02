@@ -252,6 +252,8 @@ Route::middleware('auth:api')->group(function () {
     Route::patch('/documentos-facturacion/{id}/vincular', [DocumentoFacturacionController::class, 'vincular']);
     Route::patch('/documentos-facturacion/{id}/anular', [DocumentoFacturacionController::class, 'anular']);
     Route::get('/documentos-facturacion/huerfanos', [DocumentoFacturacionController::class, 'huerfanos']);
+    Route::post('/documentos-facturacion/{id}/repartir', [DocumentoFacturacionController::class, 'repartir']);
+    Route::delete('/documentos-facturacion/{id}/repartir', [DocumentoFacturacionController::class, 'desrepartir']);
     Route::delete('/documentos-facturacion/{id}', [DocumentoFacturacionController::class, 'destroy']);
 
     // Venta Express (POS): emite boleta/factura directo a Bsale

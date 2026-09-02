@@ -1137,6 +1137,20 @@ public function getAprobadas()
         // venta_movimiento, por lo que una factura conciliada por Transbank salía en $0.
         $ventaIds = $cotizaciones->flatMap(fn($c) => $c->documentosFacturacion->pluck('id'));
 
+        // Reparto de un documento entre varias cotizaciones (1 factura ↔ N cotizaciones).
+        // El pivot manda: estos documentos no están en la relación (cotizacion_id nulo).
+        $cotIds = $cotizaciones->pluck('id');
+        $pivotRows = \Illuminate\Support\Facades\DB::table('documento_cotizacion as dc')
+            ->join('documentos_facturacion as df', 'df.id', '=', 'dc.documento_facturacion_id')
+            ->whereIn('dc.cotizacion_id', $cotIds)
+            ->get([
+                'dc.cotizacion_id', 'dc.monto as share',
+                'df.id as doc_id', 'df.monto as doc_monto', 'df.estado', 'df.tipo_documento_bsale_id',
+                'df.numero_documento_bsale', 'df.fecha_emision', 'df.monto_cobrado_manual', 'df.tipo',
+            ]);
+        $pivotPorCot = $pivotRows->groupBy('cotizacion_id');
+        $ventaIds    = $ventaIds->concat($pivotRows->pluck('doc_id'))->unique()->values();
+
         $cobrosVM = \Illuminate\Support\Facades\DB::table('venta_movimiento')
             ->whereIn('venta_id', $ventaIds)
             ->groupBy('venta_id')->selectRaw('venta_id, SUM(monto) m')->pluck('m', 'venta_id');
@@ -1158,7 +1172,7 @@ public function getAprobadas()
             ->whereRaw('NOT EXISTS (SELECT 1 FROM venta_nc_aplicacion v WHERE v.nc_id = nc.id)')
             ->groupBy('nc.nc_referencia_df_id')->selectRaw('nc.nc_referencia_df_id did, SUM(nc.monto) m')->pluck('m', 'did');
 
-        $cotizaciones = $cotizaciones->map(function($cotizacion) use ($cobrosVM, $cobrosTBK, $cobrosNCf, $cobrosNCref) {
+        $cotizaciones = $cotizaciones->map(function($cotizacion) use ($cobrosVM, $cobrosTBK, $cobrosNCf, $cobrosNCref, $pivotPorCot) {
             // Adjuntar datos de cobro a cada documento
             $cotizacion->documentosFacturacion->each(function($doc) use ($cobrosVM, $cobrosTBK, $cobrosNCf, $cobrosNCref) {
                 $cobrado = (float)($cobrosVM[$doc->id] ?? 0)
@@ -1174,6 +1188,34 @@ public function getAprobadas()
             $docsEmitidos = $cotizacion->documentosFacturacion->where('estado', 'emitido');
             $totalEmitido = $docsEmitidos->sum('monto');
             $totalCobrado = $docsEmitidos->sum('monto_cobrado');
+
+            // Documentos REPARTIDOS (1 factura ↔ N cotizaciones): sumar solo la porción
+            // asignada a esta cotización, y su cobro proporcional.
+            $repartidos = [];
+            foreach ($pivotPorCot->get($cotizacion->id, collect()) as $p) {
+                if ($p->estado !== 'emitido' || (int) $p->tipo_documento_bsale_id === 2) continue;
+                $docCobradoFull = min((float) $p->doc_monto,
+                    (float)($cobrosVM[$p->doc_id] ?? 0) + (float)($cobrosTBK[$p->doc_id] ?? 0)
+                    + (float)($p->monto_cobrado_manual ?? 0)
+                    + (float)($cobrosNCf[$p->doc_id] ?? 0) + (float)($cobrosNCref[$p->doc_id] ?? 0));
+                $ratio        = (float) $p->doc_monto > 0 ? (float) $p->share / (float) $p->doc_monto : 0;
+                $shareCobrado = round($docCobradoFull * $ratio);
+                $totalEmitido += (float) $p->share;
+                $totalCobrado += $shareCobrado;
+                $repartidos[] = [
+                    'id'            => $p->doc_id,
+                    'numero_documento_bsale' => $p->numero_documento_bsale,
+                    'tipo'          => $p->tipo,
+                    'tipo_documento_bsale_id' => (int) $p->tipo_documento_bsale_id,
+                    'monto'         => (float) $p->share,
+                    'monto_cobrado' => $shareCobrado,
+                    'fecha_emision' => $p->fecha_emision,
+                    'repartida'     => true,
+                    'doc_monto'     => (float) $p->doc_monto,
+                ];
+            }
+            $cotizacion->documentos_repartidos = $repartidos;
+
             $cotizacion->total_emitido   = $totalEmitido;
             $cotizacion->total_cobrado   = $totalCobrado;
             $cotizacion->saldo_por_cobrar = max(0, $totalEmitido - $totalCobrado);

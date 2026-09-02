@@ -19,6 +19,11 @@ class DocumentoFacturacionController extends Controller
             ->leftJoin('clientes as c', 'c.id', '=', 'df.cliente_id')
             ->whereNull('df.cotizacion_id')
             ->where('df.estado', 'emitido')
+            // Excluir los que ya están repartidos entre varias cotizaciones
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))->from('documento_cotizacion as dc')
+                    ->whereColumn('dc.documento_facturacion_id', 'df.id');
+            })
             ->when($request->buscar, function ($q, $b) {
                 $q->where(function ($w) use ($b) {
                     $w->where('df.numero_documento_bsale', 'like', "%{$b}%")
@@ -86,6 +91,65 @@ class DocumentoFacturacionController extends Controller
         ]);
 
         return response()->json($doc->fresh());
+    }
+
+    /**
+     * Reparte UN documento (una factura) entre VARIAS cotizaciones.
+     * Cada asignación lleva la porción (bruto) del documento que corresponde a esa
+     * cotización. El pivot documento_cotizacion pasa a ser la fuente de verdad y el
+     * cotizacion_id directo del documento se anula (para no contar doble en las
+     * vistas 1:1). Ver también los consumidores del pivot en Facturación/Operaciones.
+     */
+    public function repartir(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'asignaciones'                 => 'required|array|min:1',
+            'asignaciones.*.cotizacion_id' => 'required|integer|exists:cotizaciones,id',
+            'asignaciones.*.monto'         => 'required|numeric|min:0',
+        ]);
+
+        $doc = DocumentoFacturacion::findOrFail($id);
+
+        // Validar que la suma no exceda el monto del documento (con tolerancia de $1)
+        $suma = collect($data['asignaciones'])->sum(fn ($a) => (float) $a['monto']);
+        if ($suma <= 0) {
+            return response()->json(['message' => 'La suma de los montos debe ser mayor a 0'], 422);
+        }
+        if ($suma > (float) $doc->monto + 1) {
+            return response()->json(['message' => 'La suma asignada ($' . number_format($suma, 0, ',', '.') . ') supera el monto del documento ($' . number_format($doc->monto, 0, ',', '.') . ')'], 422);
+        }
+
+        // Evitar cotizaciones repetidas
+        $ids = collect($data['asignaciones'])->pluck('cotizacion_id');
+        if ($ids->count() !== $ids->unique()->count()) {
+            return response()->json(['message' => 'Hay cotizaciones repetidas en el reparto'], 422);
+        }
+
+        DB::transaction(function () use ($doc, $data) {
+            DB::table('documento_cotizacion')->where('documento_facturacion_id', $doc->id)->delete();
+            $now = now();
+            foreach ($data['asignaciones'] as $a) {
+                if ((float) $a['monto'] <= 0) continue;
+                DB::table('documento_cotizacion')->insert([
+                    'documento_facturacion_id' => $doc->id,
+                    'cotizacion_id'            => $a['cotizacion_id'],
+                    'monto'                    => (float) $a['monto'],
+                    'created_at'               => $now,
+                    'updated_at'               => $now,
+                ]);
+            }
+            // El pivot manda: quitar el enlace 1:1 para no duplicar en vistas legacy
+            $doc->update(['cotizacion_id' => null]);
+        });
+
+        return response()->json(['ok' => true, 'asignadas' => $ids->count()]);
+    }
+
+    /** Deshace el reparto (vuelve a dejar el documento como huérfano). */
+    public function desrepartir(int $id)
+    {
+        DB::table('documento_cotizacion')->where('documento_facturacion_id', $id)->delete();
+        return response()->json(['ok' => true]);
     }
 
     /**

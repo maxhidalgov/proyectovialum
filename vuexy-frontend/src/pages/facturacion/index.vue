@@ -135,7 +135,7 @@
 
         <!-- Facturado y cobrado (dos barras) -->
         <template #item.cobrado="{ item }">
-          <div v-if="item.documentos_facturacion?.some(d => d.estado === 'emitido')" style="min-width: 100px">
+          <div v-if="tieneFacturado(item)" style="min-width: 100px">
             <div class="d-flex justify-space-between text-caption mb-1">
               <span class="text-info">Fact: {{ pctEmitido(item) }}%</span>
               <span v-if="soloBoletas(item)" class="text-info" title="El cobro de boletas se concilia en el módulo Boletas">🧾 Boleta</span>
@@ -249,7 +249,7 @@
                   <v-col cols="12" md="5">
                     <p class="text-caption font-weight-medium mb-2">Historial de facturación y cobro</p>
 
-                    <div v-if="item.documentos_facturacion?.length">
+                    <div v-if="item.documentos_facturacion?.length || item.documentos_repartidos?.length">
                       <div
                         v-for="doc in item.documentos_facturacion"
                         :key="doc.id"
@@ -336,8 +336,37 @@
                         <div v-else-if="doc.estado === 'anulado'" class="text-caption text-disabled">Anulado en Bsale (no cuenta como facturado)</div>
                       </div>
 
-                      <!-- Vincular doc Bsale huérfano -->
-                      <div class="mt-2 d-flex justify-end">
+                      <!-- Documentos repartidos: 1 factura ↔ varias cotizaciones -->
+                      <div
+                        v-for="doc in item.documentos_repartidos"
+                        :key="'r' + doc.id"
+                        class="mb-3 pa-3 rounded"
+                        style="border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity))"
+                      >
+                        <div class="d-flex align-center justify-space-between mb-1">
+                          <div class="d-flex align-center gap-1">
+                            <v-icon size="14" color="info">mdi-call-split</v-icon>
+                            <span class="text-body-2 font-weight-medium text-capitalize">{{ doc.tipo }}</span>
+                            <v-chip size="x-small" color="info" variant="tonal" class="ml-1">repartida</v-chip>
+                          </div>
+                          <v-btn size="x-small" variant="text" color="error" class="text-none" @click.stop="desrepartirDoc(doc, item)">Deshacer</v-btn>
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          <span class="font-weight-medium text-body-2">{{ clp(doc.monto) }}</span> de esta cotización
+                          <span class="ml-1">· factura total {{ clp(doc.doc_monto) }}</span>
+                          <span v-if="doc.numero_documento_bsale" class="ml-1">· Doc #{{ doc.numero_documento_bsale }}</span>
+                          <span v-if="doc.fecha_emision" class="ml-1">· {{ doc.fecha_emision }}</span>
+                        </div>
+                        <div v-if="!esBoleta(doc)" class="text-caption mt-1 text-success">Cobrado (parte): {{ clp(doc.monto_cobrado || 0) }}</div>
+                        <div v-else class="text-caption text-info mt-1">Boleta — cobro por resumen mensual</div>
+                      </div>
+
+                      <!-- Vincular / repartir doc Bsale -->
+                      <div class="mt-2 d-flex justify-end gap-2">
+                        <v-btn size="x-small" color="secondary" variant="tonal" @click.stop="abrirRepartir(item)">
+                          <v-icon size="12" start>mdi-call-split</v-icon>
+                          Repartir factura entre proyectos
+                        </v-btn>
                         <v-btn size="x-small" color="info" variant="tonal" @click.stop="abrirDialogVincular(item)">
                           <v-icon size="12" start>mdi-link-variant-plus</v-icon>
                           Vincular doc Bsale
@@ -386,6 +415,10 @@
                         <v-btn size="small" color="info" variant="tonal" @click.stop="abrirDialogVincular(item)">
                           <v-icon size="14" start>mdi-link-variant-plus</v-icon>
                           Vincular doc Bsale
+                        </v-btn>
+                        <v-btn size="small" color="secondary" variant="tonal" @click.stop="abrirRepartir(item)">
+                          <v-icon size="14" start>mdi-call-split</v-icon>
+                          Repartir factura entre proyectos
                         </v-btn>
                       </div>
                     </div>
@@ -666,6 +699,102 @@
       </v-card>
     </v-dialog>
 
+    <!-- ── Repartir 1 factura entre varias cotizaciones ─────────────────── -->
+    <v-dialog v-model="dialogRepartir" max-width="820" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4 pb-2">
+          <v-icon start color="secondary">mdi-call-split</v-icon>
+          Repartir factura entre proyectos
+          <v-spacer />
+          <v-btn icon variant="text" @click="dialogRepartir = false"><v-icon>mdi-close</v-icon></v-btn>
+        </v-card-title>
+        <v-card-subtitle class="px-4 pb-2 text-wrap">
+          Una sola factura (emitida en Bsale) que cubre varias cotizaciones. Elige la factura y reparte su monto entre los proyectos.
+        </v-card-subtitle>
+        <v-divider />
+
+        <v-card-text class="pa-4">
+          <!-- Paso 1: elegir la factura -->
+          <p class="text-overline text-medium-emphasis mb-1">1. Factura (documento Bsale sin cotización)</p>
+          <div v-if="repartirDoc" class="d-flex align-center gap-2 mb-3 pa-2 rounded" style="border:1px solid rgba(var(--v-border-color),var(--v-border-opacity))">
+            <v-icon color="success" size="16">mdi-check-circle</v-icon>
+            <span class="text-body-2 font-weight-medium text-capitalize">{{ repartirDoc.tipo }}</span>
+            <span class="text-caption">· Doc #{{ repartirDoc.numero_documento_bsale }} · {{ fmtFecha(repartirDoc.fecha_emision) }}</span>
+            <span class="text-body-2 font-weight-bold text-success ml-auto">{{ clp(repartirDoc.monto) }}</span>
+            <v-btn size="x-small" variant="text" @click="repartirDoc = null">Cambiar</v-btn>
+          </div>
+          <template v-else>
+            <div class="d-flex flex-wrap align-center mb-2" style="gap:8px">
+              <v-text-field v-model="repartirBuscarDoc" placeholder="Buscar factura por N° doc / cliente / RUT..."
+                density="compact" variant="outlined" hide-details clearable prepend-inner-icon="mdi-magnify"
+                style="flex:1;min-width:220px" @update:modelValue="cargarRepartirDocs" />
+              <v-text-field v-model="repartirDesde" type="date" label="Desde" density="compact" variant="outlined" hide-details style="max-width:150px" clearable @update:modelValue="cargarRepartirDocs" />
+              <v-text-field v-model="repartirHasta" type="date" label="Hasta" density="compact" variant="outlined" hide-details style="max-width:150px" clearable @update:modelValue="cargarRepartirDocs" />
+            </div>
+            <div style="max-height:200px;overflow-y:auto">
+              <v-table density="compact">
+                <tbody>
+                  <tr v-for="d in repartirDocs" :key="d.id" class="cursor-pointer" @click="seleccionarDocReparto(d)">
+                    <td class="text-caption">{{ d.cliente_nombre_local || d.bsale_cliente_nombre || 'Consumidor Final' }}</td>
+                    <td><v-chip size="x-small" variant="tonal" color="info" class="text-capitalize">{{ d.tipo }}</v-chip></td>
+                    <td class="text-caption">#{{ d.numero_documento_bsale }}</td>
+                    <td class="text-caption">{{ fmtFecha(d.fecha_emision) }}</td>
+                    <td class="text-right text-caption font-weight-bold text-success">{{ clp(d.monto) }}</td>
+                  </tr>
+                  <tr v-if="!repartirDocs.length"><td colspan="5" class="text-center text-caption text-medium-emphasis py-4">Sin documentos sin asignar</td></tr>
+                </tbody>
+              </v-table>
+            </div>
+          </template>
+
+          <!-- Paso 2: proyectos y montos -->
+          <p class="text-overline text-medium-emphasis mb-1 mt-3">2. Proyectos y montos</p>
+          <v-autocomplete
+            :items="cotizacionesParaRepartir" item-title="titulo" item-value="id" return-object
+            placeholder="Agregar otra cotización..." density="compact" variant="outlined" hide-details
+            class="mb-2" @update:modelValue="agregarCotReparto" :model-value="null" />
+          <v-table density="compact">
+            <thead>
+              <tr><th>Proyecto</th><th class="text-right">Total (bruto)</th><th class="text-right" style="width:150px">Monto asignado</th><th style="width:36px"></th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, idx) in repartirCots" :key="r.cotizacion.id">
+                <td class="text-caption">#{{ r.cotizacion.id }} · {{ nombreCliente(r.cotizacion) }}</td>
+                <td class="text-right text-caption text-medium-emphasis">{{ clp(Math.round((r.cotizacion.total || 0) * 1.19)) }}</td>
+                <td class="text-right">
+                  <v-text-field v-model.number="r.monto" type="number" min="0" density="compact" variant="outlined" hide-details prefix="$" style="max-width:150px" />
+                </td>
+                <td>
+                  <v-btn icon size="x-small" variant="text" color="error" @click="quitarCotReparto(idx)"><v-icon size="14">mdi-close</v-icon></v-btn>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+
+          <div class="d-flex justify-space-between align-center mt-3 pa-2 rounded" :class="repartoOk ? 'bg-success-lighten-5' : 'bg-warning-lighten-5'">
+            <span class="text-caption">
+              Asignado: <strong>{{ clp(sumaReparto) }}</strong>
+              <span v-if="repartirDoc"> / factura {{ clp(repartirDoc.monto) }}</span>
+              <span v-if="repartirDoc && Math.abs(sumaReparto - repartirDoc.monto) > 1" class="text-warning ml-1">
+                ({{ sumaReparto > repartirDoc.monto ? 'excede' : 'falta' }} {{ clp(Math.abs(sumaReparto - repartirDoc.monto)) }})
+              </span>
+            </span>
+            <v-btn size="small" variant="text" color="secondary" :disabled="!repartirDoc" @click="repartirProporcional">Repartir proporcional</v-btn>
+          </div>
+
+          <v-alert v-if="errorRepartir" color="error" variant="tonal" density="compact" class="mt-3 text-caption">{{ errorRepartir }}</v-alert>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogRepartir = false">Cancelar</v-btn>
+          <v-btn color="secondary" :loading="savingRepartir" :disabled="!repartirDoc || repartirCots.length < 1 || sumaReparto <= 0" @click="confirmarReparto">
+            Repartir entre {{ repartirCots.length }} proyecto(s)
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar -->
     <v-snackbar v-model="snack.show" :color="snack.color" location="top right" :timeout="4000">
       {{ snack.text }}
@@ -804,9 +933,12 @@ function stats(estado) {
 
 // ── Helpers de cobro por cotización ─────────────────────────────────
 function totalEmitido(item) {
+  // El backend ya suma documentos propios + porción repartida (1 factura ↔ N cot.)
+  if (item.total_emitido != null) return Number(item.total_emitido)
   return item.documentos_facturacion?.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto), 0) || 0
 }
 function totalCobrado(item) {
+  if (item.total_cobrado != null) return Number(item.total_cobrado)
   return item.documentos_facturacion?.filter(d => d.estado === 'emitido').reduce((s, d) => s + Number(d.monto_cobrado || 0), 0) || 0
 }
 function pctEmitido(item) {
@@ -1007,6 +1139,110 @@ async function vincularDoc(doc) {
   }
 }
 
+// ── Repartir 1 factura entre varias cotizaciones ──────────────────────
+const dialogRepartir    = ref(false)
+const repartirDoc       = ref(null)
+const repartirBuscarDoc = ref('')
+const repartirDesde     = ref('')
+const repartirHasta     = ref('')
+const repartirDocs      = ref([])
+const repartirCots      = ref([])   // [{ cotizacion, monto }]
+const savingRepartir    = ref(false)
+const errorRepartir     = ref(null)
+
+const sumaReparto = computed(() => repartirCots.value.reduce((s, r) => s + (Number(r.monto) || 0), 0))
+const repartoOk = computed(() => repartirDoc.value && Math.abs(sumaReparto.value - Number(repartirDoc.value.monto)) <= 1)
+const nombreCliente = (c) => c?.cliente?.razon_social
+  || `${c?.cliente?.first_name || ''} ${c?.cliente?.last_name || ''}`.trim()
+  || `Cot #${c?.id}`
+// Cotizaciones disponibles para agregar (no las ya incluidas)
+const cotizacionesParaRepartir = computed(() => {
+  const usados = new Set(repartirCots.value.map(r => r.cotizacion.id))
+  return cotizacionesAprobadas.value
+    .filter(c => !usados.has(c.id))
+    .map(c => ({ ...c, titulo: `#${c.id} · ${nombreCliente(c)} · ${clp(Math.round((c.total || 0) * 1.19))}` }))
+})
+
+function abrirRepartir(item) {
+  repartirDoc.value       = null
+  repartirBuscarDoc.value = ''
+  repartirDesde.value     = ''
+  repartirHasta.value     = ''
+  repartirDocs.value      = []
+  repartirCots.value      = [{ cotizacion: item, monto: 0 }]
+  errorRepartir.value     = null
+  dialogRepartir.value    = true
+  cargarRepartirDocs()
+}
+async function cargarRepartirDocs() {
+  try {
+    const { data } = await api.get('/api/documentos-facturacion/huerfanos', {
+      params: { buscar: repartirBuscarDoc.value || undefined, desde: repartirDesde.value || undefined, hasta: repartirHasta.value || undefined },
+    })
+    repartirDocs.value = data
+  } catch (e) { console.error(e) }
+}
+function seleccionarDocReparto(d) {
+  repartirDoc.value = d
+  repartirProporcional()
+}
+function agregarCotReparto(cot) {
+  if (!cot) return
+  if (!repartirCots.value.some(r => r.cotizacion.id === cot.id)) {
+    repartirCots.value.push({ cotizacion: cot, monto: 0 })
+    repartirProporcional()
+  }
+}
+function quitarCotReparto(idx) {
+  repartirCots.value.splice(idx, 1)
+  repartirProporcional()
+}
+// Reparte el monto de la factura proporcional al total (bruto) de cada cotización
+function repartirProporcional() {
+  if (!repartirDoc.value || !repartirCots.value.length) return
+  const total = Number(repartirDoc.value.monto)
+  const brutos = repartirCots.value.map(r => Math.round((r.cotizacion.total || 0) * 1.19))
+  const sumaBrutos = brutos.reduce((s, b) => s + b, 0)
+  let acumulado = 0
+  repartirCots.value.forEach((r, i) => {
+    if (i === repartirCots.value.length - 1) {
+      r.monto = Math.max(0, total - acumulado)   // el último absorbe el redondeo
+    } else {
+      const parte = sumaBrutos > 0 ? Math.round(total * (brutos[i] / sumaBrutos)) : Math.round(total / repartirCots.value.length)
+      r.monto = parte
+      acumulado += parte
+    }
+  })
+}
+async function confirmarReparto() {
+  errorRepartir.value = null
+  savingRepartir.value = true
+  try {
+    await api.post(`/api/documentos-facturacion/${repartirDoc.value.id}/repartir`, {
+      asignaciones: repartirCots.value
+        .filter(r => Number(r.monto) > 0)
+        .map(r => ({ cotizacion_id: r.cotizacion.id, monto: Number(r.monto) })),
+    })
+    dialogRepartir.value = false
+    mostrarSnack('Factura repartida entre los proyectos')
+    await cargarCotizaciones()
+  } catch (e) {
+    errorRepartir.value = e.response?.data?.message || 'No se pudo repartir la factura'
+  } finally {
+    savingRepartir.value = false
+  }
+}
+async function desrepartirDoc(doc, item) {
+  if (!confirm('¿Deshacer el reparto de esta factura? Volverá a quedar sin asignar.')) return
+  try {
+    await api.delete(`/api/documentos-facturacion/${doc.id}/repartir`)
+    mostrarSnack('Reparto deshecho')
+    await cargarCotizaciones()
+  } catch (e) {
+    mostrarSnack(e.response?.data?.message || 'No se pudo deshacer', 'error')
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 const clp = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(n) || 0)
 const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-CL') : '-'
@@ -1018,8 +1254,15 @@ const esBoleta = (doc) => Number(doc?.tipo_documento_bsale_id) === 1
 
 // Cotización cuyos documentos emitidos son todos boletas → el cobro no se cuadra aquí
 function soloBoletas(item) {
-  const emitidos = item.documentos_facturacion?.filter(d => d.estado === 'emitido') || []
+  const emitidos = [
+    ...(item.documentos_facturacion?.filter(d => d.estado === 'emitido') || []),
+    ...(item.documentos_repartidos || []),
+  ]
   return emitidos.length > 0 && emitidos.every(esBoleta)
+}
+// ¿Tiene algo facturado (documento propio emitido o porción de una factura repartida)?
+function tieneFacturado(item) {
+  return item.documentos_facturacion?.some(d => d.estado === 'emitido') || (item.documentos_repartidos?.length > 0)
 }
 
 function mostrarSnack(text, color = 'success') {
