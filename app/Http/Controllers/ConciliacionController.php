@@ -480,6 +480,14 @@ class ConciliacionController extends Controller
         // Ventas (documentos_facturacion) con saldo pendiente — excluye boletas
         // Las boletas se concilian por su propio módulo (boleta_periodo_movimiento)
         // y nunca via venta_movimiento para evitar doble conteo con los grupos BOL-*
+        // Cobrado real de una factura = pagos bancarios + Transbank + Notas de Crédito
+        // (aplicadas y por FolioRef) + saldo Chipax. Mismo criterio que Cuentas por Cobrar
+        // y que las facturas disponibles del modal. Sin esto, una factura pagada con NC
+        // (sin transferencia) salía como pendiente y se sugería para conciliar (bug PLAZA).
+        $cobradoExprSug = "LEAST(df.monto, GREATEST("
+            . "COALESCE(vm.cobrado,0) + COALESCE(tb.cobrado_transbank,0) + COALESCE(df.monto_cobrado_manual,0) + COALESCE(vnca.cobrado_nc,0) + COALESCE(ncref.cobrado_nc_ref,0), "
+            . "CASE WHEN df.chipax_monto_por_cobrar IS NOT NULL THEN df.monto - df.chipax_monto_por_cobrar ELSE 0 END))";
+
         $ventasPendientes = DB::table('documentos_facturacion as df')
             ->leftJoin('cotizaciones as cot', 'cot.id', '=', 'df.cotizacion_id')
             ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
@@ -488,12 +496,32 @@ class ConciliacionController extends Controller
                 DB::raw('(SELECT venta_id, SUM(monto) as cobrado FROM venta_movimiento GROUP BY venta_id) as vm'),
                 'vm.venta_id', '=', 'df.id'
             )
+            ->leftJoin(
+                DB::raw('(SELECT tvf.documento_id, SUM(tt.monto_original) as cobrado_transbank
+                          FROM transbank_factura tvf
+                          JOIN transbank_transacciones tt ON tt.id = tvf.transaccion_id
+                          GROUP BY tvf.documento_id) as tb'),
+                'tb.documento_id', '=', 'df.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT factura_id, SUM(monto) as cobrado_nc FROM venta_nc_aplicacion GROUP BY factura_id) as vnca'),
+                'vnca.factura_id', '=', 'df.id'
+            )
+            ->leftJoin(
+                DB::raw('(SELECT nc_ref.nc_referencia_df_id AS doc_id, SUM(nc_ref.monto) AS cobrado_nc_ref
+                          FROM documentos_facturacion nc_ref
+                          WHERE nc_ref.tipo_documento_bsale_id = 2
+                            AND nc_ref.nc_referencia_df_id IS NOT NULL
+                            AND NOT EXISTS (SELECT 1 FROM venta_nc_aplicacion vnca2 WHERE vnca2.nc_id = nc_ref.id)
+                          GROUP BY nc_ref.nc_referencia_df_id) as ncref'),
+                'ncref.doc_id', '=', 'df.id'
+            )
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [1, 2]) // boletas (1) y NCs (2) nunca via venta_movimiento
             ->selectRaw("
                 df.id, df.tipo, df.monto, df.fecha_emision, df.numero_documento_bsale,
                 df.bsale_cliente_rut, df.bsale_cliente_nombre, df.cotizacion_id,
-                df.monto - COALESCE(vm.cobrado, 0) as saldo_pendiente,
+                df.monto - $cobradoExprSug as saldo_pendiente,
                 COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre) as nombre_cliente,
                 COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut_cliente
             ")
