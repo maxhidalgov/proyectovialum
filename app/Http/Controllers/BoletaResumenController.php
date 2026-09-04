@@ -132,9 +132,17 @@ class BoletaResumenController extends Controller
                 'm.monto',
                 DB::raw('m.monto - COALESCE(brm.asignado, 0) - COALESCE(vm.asignado, 0) as saldo_por_asignar')
             )
-            ->when($buscar, fn($q) => $q->where('m.descripcion', 'like', "%$buscar%"))
+            ->when($buscar, fn($q) => $q->where(function ($w) use ($buscar) {
+                $w->where('m.descripcion', 'like', "%$buscar%")->orWhere('m.glosa', 'like', "%$buscar%");
+            }))
+            ->when($request->desde, fn($q, $d) => $q->whereDate('m.fecha_contable', '>=', $d))
+            ->when($request->hasta, fn($q, $d) => $q->whereDate('m.fecha_contable', '<=', $d))
+            ->when($request->monto, function ($q, $mm) {
+                $num = (int) preg_replace('/[^0-9]/', '', (string) $mm);
+                if ($num > 0) $q->where('m.monto', $num);
+            })
             ->orderByRaw('ABS(m.monto - COALESCE(brm.asignado, 0) - COALESCE(vm.asignado, 0) - ?) ASC', [$saldo])
-            ->paginate(30);
+            ->paginate(50);
 
         return response()->json($movs);
     }
