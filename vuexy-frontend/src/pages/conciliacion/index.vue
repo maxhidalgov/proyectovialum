@@ -2969,9 +2969,11 @@ watch(movimientos, () => { seleccionados.value = [] })
 
 // ── Crear gasto rápido desde conciliación ────────────────────────────────────
 
+// Mantener sincronizada con la lista de gastos-generales/index.vue
 const categoriasGasto = [
   'Arriendo', 'Servicios básicos', 'Comisión bancaria', 'Publicidad',
   'Mantención', 'Transporte y combustible', 'Seguros', 'Honorarios',
+  'Remuneraciones', 'Leyes sociales (Previred)',
   'Gastos de oficina', 'Otro',
 ]
 
@@ -2989,7 +2991,7 @@ function abrirCrearGasto(mov) {
     fecha:            mov.fecha_contable?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     descripcion:      mov.descripcion ?? '',
     monto:            saldo,
-    categoria:        '',
+    categoria:        categoriasGasto.includes(mov.categoria) ? mov.categoria : '',
     proveedor:        '',
     numero_documento: '',
   }
@@ -3001,11 +3003,14 @@ function abrirCrearGastoMultiple() {
   if (!movs.length) return
   movParaGastoLista.value = movs
   gastoRapidoError.value  = null
+  // Prellenar categoría si todos los seleccionados comparten la misma (y es válida)
+  const catsUnicas = [...new Set(movs.map(m => m.categoria).filter(Boolean))]
+  const catComun = catsUnicas.length === 1 && categoriasGasto.includes(catsUnicas[0]) ? catsUnicas[0] : ''
   gastoRapidoForm.value = {
     fecha:            movs[0].fecha_contable?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     descripcion:      '',
     monto:            sumaSeleccionados.value,
-    categoria:        '',
+    categoria:        catComun,
     proveedor:        '',
     numero_documento: '',
   }
