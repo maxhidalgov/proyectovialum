@@ -325,6 +325,7 @@ const categorias = [
   'Honorarios',
   'Remuneraciones',
   'Leyes sociales (Previred)',
+  'Impuestos',
   'Gastos de oficina',
   'Otro',
 ]
