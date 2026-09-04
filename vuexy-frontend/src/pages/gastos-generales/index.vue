@@ -323,6 +323,8 @@ const categorias = [
   'Transporte y combustible',
   'Seguros',
   'Honorarios',
+  'Remuneraciones',
+  'Leyes sociales (Previred)',
   'Gastos de oficina',
   'Otro',
 ]
