@@ -203,6 +203,14 @@ class BancochilePortalController extends Controller
                     if ($fechaHora && !$existente->fecha_hora_mov) {
                         $updates['fecha_hora_mov'] = $fechaHora;
                     }
+                    // Refrescar descripción/glosa (datos derivados del banco): corrige
+                    // los nombres que antes quedaban recortados. No toca la categoría.
+                    if ($existente->descripcion !== $descripcion) {
+                        $updates['descripcion'] = $descripcion;
+                    }
+                    if ($existente->glosa !== $glosa) {
+                        $updates['glosa'] = $glosa;
+                    }
                     if ($updates) {
                         $existente->update($updates);
                     }
@@ -251,17 +259,35 @@ class BancochilePortalController extends Controller
      */
     private function construirDescripcion(array $m, string $tipo): string
     {
-        $raw = $m['descripcion'] ?? '';
+        $raw = trim($m['descripcion'] ?? '');
 
         if ($tipo === 'C') {
             $glosaMap = $this->parsearGlosaMap($m['detalleGlosa'] ?? []);
             $nombreOrigen = $glosaMap['nombre origen'] ?? null;
             if ($nombreOrigen) {
-                return 'Nombre Origen: ' . $nombreOrigen;
+                // OJO: el "Nombre Origen" del detalleGlosa (TEF) suele venir recortado por
+                // el banco (~22 chars), mientras que la descripción del banco trae el nombre
+                // COMPLETO (ej. "Traspaso De: Servicios E Inversiones M Dv Limitada").
+                // Preferir el nombre más completo de los dos.
+                $nombreEnRaw = $this->nombreDesdeDescripcion($raw);
+                if ($nombreEnRaw && mb_strlen($nombreEnRaw) >= mb_strlen(trim($nombreOrigen))) {
+                    return $raw; // la descripción del banco ya trae el nombre completo
+                }
+                return 'Nombre Origen: ' . trim($nombreOrigen);
             }
         }
 
         return $raw;
+    }
+
+    /** Extrae el nombre que sigue a "... De: <nombre>" en la descripción del banco. */
+    private function nombreDesdeDescripcion(string $raw): ?string
+    {
+        if (preg_match('/\bde:\s*(.+)$/iu', $raw, $mm)) {
+            $n = trim($mm[1]);
+            return $n !== '' ? $n : null;
+        }
+        return null;
     }
 
     private function parsearGlosaMap(array $detalleGlosa): array
