@@ -64,11 +64,17 @@ class EERRController extends Controller
             ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(neto) as total")
             ->groupBy('cat')->get()->keyBy('cat');
 
-        // Gastos (excluye impuesto y previred que van en otras secciones)
+        // Gastos operacionales: excluye impuestos (IVA, de traslado, NO es gasto) y
+        // personal (previred + remuneraciones), que van en otras secciones. La
+        // clasificación es por chipax_tipo (Chipax) O por categoría (gastos manuales).
         $gasMap = DB::table('gastos')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
             ->where(function ($q) {
                 $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']);
+            })
+            ->where(function ($q) {
+                $q->whereNull('categoria')
+                  ->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Remuneraciones']);
             })
             ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(monto) as total")
             ->groupBy('cat')->get()->keyBy('cat');
@@ -79,14 +85,22 @@ class EERRController extends Controller
             ->selectRaw('tipo as cat, COUNT(*) as n, SUM(monto) as total')
             ->groupBy('tipo')->get()->keyBy('cat');
 
-        // Previred
+        // Previred (chipax_tipo o categoría manual)
         $previredRow = DB::table('gastos')
             ->whereBetween('fecha', [$desdeStr, $hastaStr])
-            ->where('chipax_tipo', 'previred')
+            ->where(function ($q) {
+                $q->where('chipax_tipo', 'previred')->orWhere('categoria', 'Leyes sociales (Previred)');
+            })
+            ->selectRaw('COUNT(*) as n, SUM(monto) as total')->first();
+
+        // Remuneraciones registradas como gasto manual (categoría Remuneraciones)
+        $remuGastosRow = DB::table('gastos')
+            ->whereBetween('fecha', [$desdeStr, $hastaStr])
+            ->where('categoria', 'Remuneraciones')
             ->selectRaw('COUNT(*) as n, SUM(monto) as total')->first();
 
         // ── Construir secciones jerárquicas ───────────────────────────
-        $secciones = $this->buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow);
+        $secciones = $this->buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow);
 
         // ── Totales por sección para resultados ───────────────────────
         $secTotales = collect($secciones)->keyBy('key')
@@ -141,7 +155,7 @@ class EERRController extends Controller
 
     // ── Construye el árbol Sección → Grupo → Líneas ───────────────────────────
 
-    private function buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow): array
+    private function buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow = null): array
     {
         // Helper: extrae {label, cantidad, total} de un mapa
         $l = function (string $label, $map, string $key) {
@@ -223,6 +237,9 @@ class EERRController extends Controller
             $remuMap->get('finiquito')? ['label' => 'Finiquitos',         'cantidad' => (int)$remuMap->get('finiquito')->n,'total' => (float)$remuMap->get('finiquito')->total]: null,
             $previredRow && $previredRow->total > 0
                 ? ['label' => 'Previred — cotizaciones', 'cantidad' => (int)$previredRow->n, 'total' => (float)$previredRow->total]
+                : null,
+            $remuGastosRow && $remuGastosRow->total > 0
+                ? ['label' => 'Remuneraciones (gastos)', 'cantidad' => (int)$remuGastosRow->n, 'total' => (float)$remuGastosRow->total]
                 : null,
             $l('Almuerzos',              $cmpMap, 'Almuerzos'),
             $l('Sueldos Administrativos', $cmpMap, 'Sueldos Administrativos'),
@@ -359,13 +376,14 @@ class EERRController extends Controller
         $gastos = DB::table('gastos')
             ->where('fecha', '>=', $inicio)
             ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
+            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)']); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
 
         $previred = DB::table('gastos')
             ->where('fecha', '>=', $inicio)
-            ->where('chipax_tipo', 'previred')
+            ->where(function ($q) { $q->where('chipax_tipo', 'previred')->orWhere('categoria', 'Leyes sociales (Previred)'); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -459,13 +477,14 @@ class EERRController extends Controller
         $gastos = DB::table('gastos')
             ->whereBetween('fecha', [$inicio, $fin])
             ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
+            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)']); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
 
         $previred = DB::table('gastos')
             ->whereBetween('fecha', [$inicio, $fin])
-            ->where('chipax_tipo', 'previred')
+            ->where(function ($q) { $q->where('chipax_tipo', 'previred')->orWhere('categoria', 'Leyes sociales (Previred)'); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
