@@ -8,7 +8,7 @@
           <h2 class="text-h5 font-weight-bold">Panel de Operaciones</h2>
           <p class="text-caption text-grey mt-1">Cotizaciones aprobadas y seguimiento de producción</p>
         </div>
-        <v-btn icon variant="text" size="small" title="¿Cómo funcionan los abonos?" @click="dialogAyuda = true">
+        <v-btn icon variant="text" size="small" title="¿Cómo se calculan Facturado, Abono y Deuda?" @click="dialogAyuda = true">
           <v-icon>mdi-help-circle-outline</v-icon>
         </v-btn>
       </div>
@@ -658,7 +658,7 @@
       <v-card>
         <v-card-title class="d-flex align-center gap-2 pa-4">
           <v-icon color="primary">mdi-help-circle-outline</v-icon>
-          Cómo se calcula el Abono
+          Facturado, Abono y Deuda
         </v-card-title>
         <v-divider />
         <v-card-text class="pa-4 text-body-2">
