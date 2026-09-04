@@ -172,61 +172,69 @@
     </VDialog>
 
     <!-- ── Dialog Conciliar ────────────────────────────────────────────── -->
-    <VDialog v-model="dialogConciliar" max-width="600">
+    <VDialog v-model="dialogConciliar" max-width="720">
       <VCard>
         <VCardTitle class="pa-4">
           Conciliar boletas {{ conciliarTarget?.periodo }} / {{ labelFormaPago(conciliarTarget?.forma_pago) }}
         </VCardTitle>
         <VDivider />
         <VCardText>
-          <p class="mb-4">
-            Monto a conciliar: <strong>{{ fmt(conciliarTarget?.monto_total) }}</strong>
-          </p>
+          <!-- Resumen de montos -->
+          <div class="d-flex flex-wrap justify-space-between mb-3" style="gap:8px">
+            <span class="text-caption">Total: <strong>{{ fmt(conciliarTarget?.monto_total) }}</strong></span>
+            <span class="text-caption">Ya conciliado: <strong class="text-success">{{ fmt(montoYaConciliado) }}</strong></span>
+            <span class="text-caption">Por conciliar: <strong class="text-warning">{{ fmt(saldoResumen) }}</strong></span>
+          </div>
 
-          <!-- Buscador de movimientos -->
-          <VTextField
-            v-model="busquedaMov"
-            label="Buscar movimiento (descripción o monto)"
-            prepend-inner-icon="mdi-magnify"
-            density="compact"
-            class="mb-3"
-            @input="buscarMovimientos"
-          />
+          <!-- Movimientos ya vinculados -->
+          <template v-if="conciliarTarget?.movimientos?.length">
+            <p class="text-overline text-medium-emphasis mb-1">Movimientos vinculados</p>
+            <VList density="compact" border rounded class="mb-4">
+              <VListItem v-for="mv in conciliarTarget.movimientos" :key="mv.id">
+                <VListItemTitle class="text-body-2">{{ (mv.fecha || '').slice(0,10) }} — {{ mv.descripcion }}</VListItemTitle>
+                <VListItemSubtitle class="text-success">{{ fmt(mv.monto) }}</VListItemSubtitle>
+                <template #append>
+                  <VBtn icon size="x-small" variant="text" color="error" @click="desvincularMov(mv.id)"><VIcon size="16">mdi-close</VIcon></VBtn>
+                </template>
+              </VListItem>
+            </VList>
+          </template>
 
-          <VList v-if="movimientosBuscados.length" density="compact" border rounded style="max-height:250px;overflow-y:auto">
-            <VListItem
-              v-for="m in movimientosBuscados"
-              :key="m.id"
-              :class="{ 'bg-primary-subtle': movSeleccionado?.id === m.id }"
-              @click="movSeleccionado = m"
-              style="cursor:pointer"
-            >
-              <VListItemTitle class="text-body-2">
-                {{ m.fecha_contable }} — {{ m.descripcion }}
-              </VListItemTitle>
-              <VListItemSubtitle>{{ fmt(m.monto) }}</VListItemSubtitle>
-            </VListItem>
-          </VList>
+          <!-- Ingresos del banco disponibles (multi-selección) -->
+          <div class="d-flex align-center justify-space-between mb-1">
+            <p class="text-overline text-medium-emphasis mb-0">Ingresos disponibles (selecciona los que correspondan)</p>
+            <span v-if="sumaSeleccion > 0" class="text-caption">
+              Seleccionado: <strong :class="Math.abs(sumaSeleccion - saldoResumen) < 1 ? 'text-success' : ''">{{ fmt(sumaSeleccion) }}</strong>
+            </span>
+          </div>
+          <VTextField v-model="busquedaMov" placeholder="Buscar por descripción..." prepend-inner-icon="mdi-magnify"
+            density="compact" hide-details clearable class="mb-2" @update:modelValue="cargarDisponibles" />
 
-          <VTextField
-            v-if="movSeleccionado"
-            v-model.number="montoConciliar"
-            label="Monto a asignar"
-            type="number"
-            density="compact"
-            class="mt-3"
-          />
+          <div v-if="loadingDisp" class="text-center py-4"><VProgressCircular indeterminate size="24" /></div>
+          <template v-else>
+            <p v-if="!movDisponibles.length" class="text-caption text-medium-emphasis text-center py-4">
+              No hay ingresos crédito con saldo por asignar.
+            </p>
+            <VList v-else density="compact" border rounded style="max-height:300px;overflow-y:auto">
+              <VListItem v-for="m in movDisponibles" :key="m.id" @click="toggleMov(m)" style="cursor:pointer"
+                :class="{ 'bg-primary-lighten-5': seleccionados.has(m.id) }">
+                <template #prepend>
+                  <VCheckboxBtn :model-value="seleccionados.has(m.id)" @click.stop="toggleMov(m)" />
+                </template>
+                <VListItemTitle class="text-body-2">{{ (m.fecha_contable || '').slice(0,10) }} — {{ m.descripcion }}</VListItemTitle>
+                <VListItemSubtitle>
+                  Saldo <strong class="text-success">{{ fmt(m.saldo_por_asignar) }}</strong>
+                  <span v-if="Math.abs(Number(m.saldo_por_asignar) - saldoResumen) < 1" class="text-success"> · calza exacto</span>
+                </VListItemSubtitle>
+              </VListItem>
+            </VList>
+          </template>
         </VCardText>
         <VCardActions class="pa-4">
           <VSpacer />
-          <VBtn variant="text" @click="dialogConciliar = false">Cancelar</VBtn>
-          <VBtn
-            color="primary"
-            :disabled="!movSeleccionado || !montoConciliar"
-            :loading="guardando"
-            @click="guardarConciliacion"
-          >
-            Vincular
+          <VBtn variant="text" @click="dialogConciliar = false">Cerrar</VBtn>
+          <VBtn color="primary" :disabled="!seleccionados.size" :loading="guardando" @click="guardarConciliacion">
+            Vincular {{ seleccionados.size || '' }} ingreso(s)
           </VBtn>
         </VCardActions>
       </VCard>
@@ -235,7 +243,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from '@/axiosInstance'
 
 const loading      = ref(false)
@@ -254,9 +262,22 @@ const detalle        = ref(null)
 const dialogConciliar   = ref(false)
 const conciliarTarget   = ref(null)
 const busquedaMov       = ref('')
-const movimientosBuscados = ref([])
-const movSeleccionado   = ref(null)
-const montoConciliar    = ref(0)
+const movDisponibles    = ref([])
+const seleccionados     = ref(new Set())
+const loadingDisp       = ref(false)
+
+// Monto ya conciliado del resumen (suma de movimientos vinculados)
+const montoYaConciliado = computed(() =>
+  (conciliarTarget.value?.movimientos || []).reduce((s, m) => s + Number(m.monto || 0), 0)
+)
+const saldoResumen = computed(() =>
+  Math.max(0, Number(conciliarTarget.value?.monto_total || 0) - montoYaConciliado.value)
+)
+const sumaSeleccion = computed(() =>
+  movDisponibles.value
+    .filter(m => seleccionados.value.has(m.id))
+    .reduce((s, m) => s + Number(m.saldo_por_asignar || 0), 0)
+)
 
 // ── Cargar resúmenes ──────────────────────────────────────────────────────
 
@@ -321,41 +342,73 @@ async function abrirDetalle(r) {
 function abrirConciliar(r) {
   conciliarTarget.value = r
   busquedaMov.value     = ''
-  movimientosBuscados.value = []
-  movSeleccionado.value = null
-  montoConciliar.value  = r.monto_total
+  movDisponibles.value  = []
+  seleccionados.value   = new Set()
   dialogConciliar.value = true
+  cargarDisponibles()
 }
 
 let buscarTimer = null
-function buscarMovimientos() {
+function cargarDisponibles() {
   clearTimeout(buscarTimer)
   buscarTimer = setTimeout(async () => {
-    if (!busquedaMov.value || busquedaMov.value.length < 2) return
-    const { data } = await axios.get('/api/movimientos', {
-      params: {
-        buscar: busquedaMov.value,
-        tipo: 'C',
-        limit: 20,
-        conciliado: 0,
-      },
-    })
-    movimientosBuscados.value = data.data ?? data
-  }, 350)
+    if (!conciliarTarget.value) return
+    loadingDisp.value = true
+    try {
+      const { data } = await axios.get(
+        `/api/boletas/resumenes/${conciliarTarget.value.id}/movimientos-disponibles`,
+        { params: { buscar: busquedaMov.value || undefined } }
+      )
+      movDisponibles.value = data.data ?? data
+    } finally {
+      loadingDisp.value = false
+    }
+  }, 250)
+}
+
+function toggleMov(m) {
+  const s = new Set(seleccionados.value)
+  s.has(m.id) ? s.delete(m.id) : s.add(m.id)
+  seleccionados.value = s
+}
+
+// Refresca el resumen activo (movimientos vinculados) desde la lista recargada
+function refrescarTarget() {
+  const id = conciliarTarget.value?.id
+  const actualizado = resumenes.value.find(r => r.id === id)
+  if (actualizado) conciliarTarget.value = actualizado
 }
 
 async function guardarConciliacion() {
   guardando.value = true
   try {
-    await axios.post(`/api/boletas/resumenes/${conciliarTarget.value.id}/conciliar`, {
-      movimiento_id: movSeleccionado.value.id,
-      monto: montoConciliar.value,
-    })
-    dialogConciliar.value = false
+    // Asigna cada ingreso seleccionado, acotando al saldo restante del resumen
+    let restante = saldoResumen.value
+    const elegidos = movDisponibles.value.filter(m => seleccionados.value.has(m.id))
+    for (const m of elegidos) {
+      if (restante <= 0) break
+      const monto = Math.min(Number(m.saldo_por_asignar || 0), restante)
+      if (monto <= 0) continue
+      await axios.post(`/api/boletas/resumenes/${conciliarTarget.value.id}/conciliar`, {
+        movimiento_id: m.id,
+        monto,
+      })
+      restante -= monto
+    }
     await cargar()
+    refrescarTarget()
+    seleccionados.value = new Set()
+    await cargarDisponibles()
   } finally {
     guardando.value = false
   }
+}
+
+async function desvincularMov(pivotId) {
+  await axios.delete(`/api/boletas/resumenes/movimiento/${pivotId}`)
+  await cargar()
+  refrescarTarget()
+  await cargarDisponibles()
 }
 
 // ── Desvincular ───────────────────────────────────────────────────────────
