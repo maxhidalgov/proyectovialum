@@ -1152,14 +1152,14 @@ const headers = [
 // ── Computed ──────────────────────────────────────────────────────────────────
 
 // Saldo real de la NC para el modal Aplicar.
-// Prioridad:
-//  1. saldo_nc_aplicar del backend (monto - ya_aplicado, ignora Chipax)
-//  2. |pendiente| si es > 0 (NC sin fallback Chipax)
-//  3. |monto| como último recurso (NC "cobrada" solo por Chipax, sin aplicación explícita)
+// El backend (saldo_nc_aplicar) ya es la fuente de verdad: monto − aplicado, y 0 cuando
+// la NC está consumida por su factura de referencia (FolioRef). Se respeta tal cual,
+// incluido el 0 (para no "resucitar" con el fallback una NC ya usada). Los fallbacks
+// solo aplican si el backend no envió el campo (datos antiguos).
 const saldoNcParaAplicar = computed(() => {
   const nc = ncActivo.value
   if (!nc) return 0
-  if (nc.saldo_nc_aplicar != null && nc.saldo_nc_aplicar > 0) return nc.saldo_nc_aplicar
+  if (nc.saldo_nc_aplicar != null) return nc.saldo_nc_aplicar
   const pendienteAbs = Math.abs(nc.pendiente || 0)
   if (pendienteAbs > 0) return pendienteAbs
   return Math.abs(nc.monto || 0)

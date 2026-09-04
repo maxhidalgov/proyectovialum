@@ -273,10 +273,15 @@ class CuentasPorCobrarController extends Controller
                               ELSE   df.monto - COALESCE(ec.monto_cobrado_efectivo,0)
                          END as pendiente'),
                 DB::raw('(df.tipo_documento_bsale_id = 2) as es_nc'),
-                // Saldo real de la NC para aplicar: monto bruto menos lo ya aplicado via venta_nc_aplicacion
-                // Ignora el fallback Chipax, que puede mostrar la NC como "cobrada" sin haberla aplicado explícitamente
+                // Saldo real de la NC para aplicar a OTRAS facturas: monto bruto menos lo ya
+                // aplicado via venta_nc_aplicacion. Si la NC ya está vinculada a una factura por
+                // FolioRef (nc_referencia_df_id) y todavía no se aplicó manualmente, se considera
+                // CONSUMIDA por esa factura → saldo 0 (para aplicarla a otra hay que desvincular).
+                // Mismo criterio que el cálculo de cobrado, evita usar el crédito dos veces.
                 DB::raw('CASE WHEN df.tipo_documento_bsale_id = 2
-                              THEN df.monto - COALESCE(ncap.monto_nc_aplicado, 0)
+                              THEN (CASE WHEN df.nc_referencia_df_id IS NOT NULL AND COALESCE(ncap.monto_nc_aplicado,0) = 0
+                                         THEN 0
+                                         ELSE df.monto - COALESCE(ncap.monto_nc_aplicado, 0) END)
                               ELSE NULL END as saldo_nc_aplicar')
             )
             ->when($desde, fn($q) => $q->where('df.fecha_emision', '>=', $desde))

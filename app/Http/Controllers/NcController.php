@@ -112,6 +112,15 @@ class NcController extends Controller
         // Validar que la NC tenga saldo suficiente
         $aplicado = (float) DB::table('compra_nc_aplicacion')->where('nc_id', $ncId)->sum('monto');
         $cobrado  = (float) DB::table('compra_movimiento')->where('compra_id', $ncId)->sum('monto');
+
+        // Si ya está vinculada a una factura (nc_referencia_id) y sin aplicación manual,
+        // está consumida por esa factura → no aplicar a otra sin desvincular primero.
+        if ($nc->nc_referencia_id && $aplicado == 0.0) {
+            return response()->json([
+                'message' => "Esta NC ya está vinculada a la factura #{$nc->nc_referencia_id}. Desvincúlala primero si quieres aplicarla a otra factura.",
+            ], 422);
+        }
+
         $disponible = (float) $nc->total - $aplicado - $cobrado;
 
         if ($monto > $disponible + 0.01) {
@@ -285,6 +294,16 @@ class NcController extends Controller
         $monto    = (float) $request->input('monto');
         $aplicado = (float) DB::table('venta_nc_aplicacion')->where('nc_id', $ncId)->sum('monto');
         $cobrado  = (float) DB::table('venta_movimiento')->where('venta_id', $ncId)->sum('monto');
+
+        // Si la NC ya está vinculada a una factura por FolioRef y aún no se aplicó manual,
+        // está consumida por esa factura: no se puede aplicar a otra sin desvincular primero
+        // (evita usar el mismo crédito dos veces).
+        if ($nc->nc_referencia_df_id && $aplicado == 0.0) {
+            return response()->json([
+                'message' => "Esta NC ya está vinculada a la factura #{$nc->nc_referencia_df_id} (crédito por FolioRef). Desvincúlala primero si quieres aplicarla a otra factura.",
+            ], 422);
+        }
+
         $disponible = (float) $nc->monto - $aplicado - $cobrado;
 
         if ($monto > $disponible + 0.01) {
