@@ -187,6 +187,7 @@
                   <th class="text-right">Total</th>
                   <th class="text-right">Abono</th>
                   <th class="text-right">Deuda</th>
+                  <th class="text-right">Facturado</th>
                 </tr>
               </thead>
               <tbody>
@@ -348,6 +349,10 @@
                   <td class="text-right">
                     <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">{{ fmt(item.saldo) }}</v-chip>
                   </td>
+                  <td class="text-right text-info">
+                    <span v-if="item.facturado != null">{{ fmt(item.facturado) }}</span>
+                    <span v-else class="text-medium-emphasis">—</span>
+                  </td>
                 </tr>
               </tbody>
               <tfoot>
@@ -356,6 +361,7 @@
                   <td class="text-right">{{ fmt(g.totalBruto) }}</td>
                   <td class="text-right text-success">{{ fmt(g.totalAbono) }}</td>
                   <td class="text-right" :class="g.totalDeuda > 0 ? 'text-warning' : 'text-success'">{{ fmt(g.totalDeuda) }}</td>
+                  <td class="text-right text-info">{{ fmt(g.totalFacturado) }}</td>
                 </tr>
               </tfoot>
             </table>
@@ -415,6 +421,12 @@
             <v-chip size="small" :color="item.saldo <= 0 ? 'success' : 'warning'" variant="tonal">
               {{ fmt(item.saldo) }}
             </v-chip>
+          </template>
+
+          <!-- Facturado -->
+          <template #item.facturado="{ item }">
+            <span v-if="item.facturado != null" class="text-info text-body-2">{{ fmt(item.facturado) }}</span>
+            <span v-else class="text-medium-emphasis">—</span>
           </template>
 
           <!-- Pedido proveedor -->
@@ -651,19 +663,28 @@
         <v-divider />
         <v-card-text class="pa-4 text-body-2">
           <p class="mb-3">
-            El <strong>Abono</strong> de un proyecto puede venir de tres formas. Facturar (emitir el documento)
-            <strong>no</strong> es lo mismo que cobrar (conciliar con el banco).
+            <strong>Facturar</strong> (emitir el documento) <strong>no</strong> es lo mismo que
+            <strong>cobrar</strong> (recibir la plata). Por eso hay una columna <strong>Facturado</strong>
+            separada del <strong>Abono</strong>.
           </p>
+
+          <div class="mb-3">
+            <v-chip size="x-small" color="info" variant="tonal" class="mb-1">Facturado</v-chip>
+            <p class="text-medium-emphasis mb-0">
+              Suma de los documentos emitidos (boletas y facturas) vinculados a esta cotización, cubran o no
+              su pago. Una <strong>factura</strong> es a crédito: aparece en <strong>Facturado</strong>, pero
+              <strong>no</strong> en Abono hasta que se cobre.
+            </p>
+          </div>
 
           <div class="mb-3">
             <v-icon size="15" color="warning" class="mr-1">mdi-bank-outline</v-icon>
             <v-chip size="x-small" color="orange" variant="tonal" class="mb-1">Pagado al emitir (por conciliar)</v-chip>
             <p class="text-medium-emphasis mb-0">
-              <strong>Preconciliación.</strong> El ícono <v-icon size="14" color="warning">mdi-bank-outline</v-icon> marca esto:
-              emitiste una boleta/factura y ya sabes la forma de pago
-              (efectivo, tarjeta, transferencia). Se cuenta como abono al toque en Operaciones, aunque el
-              dinero todavía no se cuadre con la cartola. El chip <em>"Falta conciliar"</em> marca eso:
-              contado como abono, pendiente de cuadrar con el banco.
+              <strong>Preconciliación.</strong> Solo en <strong>boletas</strong> (pago inmediato en mostrador):
+              al emitir ya sabes la forma de pago, así que cuenta como abono al toque aunque el dinero todavía
+              no se cuadre con la cartola. El ícono <v-icon size="14" color="warning">mdi-bank-outline</v-icon> /
+              <em>"Falta conciliar"</em> marca eso: contado como abono, pendiente de cuadrar con el banco.
             </p>
           </div>
 
@@ -690,9 +711,9 @@
           </div>
 
           <v-alert color="primary" variant="tonal" density="compact" class="text-caption mt-2">
-            En <strong>Operaciones</strong> el abono incluye la preconciliación y las notas de venta (para ver
-            "ya pagó" apenas se vende). En <strong>Facturación / Cuentas por Cobrar</strong> el cobrado solo
-            sube con la conciliación real.
+            El <strong>Abono</strong> incluye: conciliación real + notas de venta + preconciliación de
+            <strong>boletas</strong> (pago inmediato). Las <strong>facturas</strong> a crédito suman en
+            <strong>Facturado</strong> y recién pasan a Abono cuando se cobran. La <strong>Deuda</strong> = Total − Abono.
           </v-alert>
         </v-card-text>
         <v-divider />
@@ -1025,6 +1046,7 @@ const headers = [
   { title: 'Total',        value: 'total',             width: 100 },
   { title: 'Abonado',      value: 'total_abonado',     width: 100 },
   { title: 'Saldo',        value: 'saldo',             width: 95  },
+  { title: 'Facturado',    value: 'facturado',         width: 100 },
   { title: 'Pedido Prov.', value: 'pedido_proveedor',  width: 70  },
   { title: 'Estado Prod.', value: 'estado_produccion', width: 180 },
   { title: 'Entrega',      value: 'fecha_entrega',     width: 130 },
@@ -1077,6 +1099,7 @@ const gruposTablero = computed(() => {
         totalBruto:  items.reduce((s, i) => s + Number(i.total || 0), 0),
         totalAbono:  items.reduce((s, i) => s + Number(i.total_abonado || 0), 0),
         totalDeuda:  items.reduce((s, i) => s + Number(i.saldo || 0), 0),
+        totalFacturado: items.reduce((s, i) => s + Number(i.facturado || 0), 0),
       }
     })
 })

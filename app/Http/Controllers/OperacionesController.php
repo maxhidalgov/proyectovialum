@@ -50,18 +50,25 @@ class OperacionesController extends Controller
             ->whereIn('df.cotizacion_id', $cotizacionIds)
             ->selectRaw('df.cotizacion_id,
                 df.monto,
+                df.tipo_documento_bsale_id,
                 (df.forma_pago IS NOT NULL OR (df.nro_comprobante_transbank IS NOT NULL AND df.nro_comprobante_transbank <> "")) as pagado_emision,
                 (COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as conciliado')
             ->get();
 
         $cobrados  = [];
         $faltaConc = [];
+        $facturado = [];   // monto emitido en documentos (boletas + facturas), sea o no cobrado
         foreach ($docRows as $r) {
             $cid   = $r->cotizacion_id;
-            $paid  = (int) $r->pagado_emision === 1;
             $monto = (float) $r->monto;
             $conc  = (float) $r->conciliado;
-            $cobrados[$cid] = ($cobrados[$cid] ?? 0) + ($paid ? max($monto, $conc) : $conc);
+            $esBoleta = (int) $r->tipo_documento_bsale_id === 1;
+            // La preconciliación (pagado al emitir) cuenta como ABONO solo en BOLETAS
+            // (pago inmediato en mostrador). En FACTURAS, emitir ≠ cobrar (crédito):
+            // el monto cuenta como FACTURADO y el abono llega al conciliar.
+            $paid  = (int) $r->pagado_emision === 1 && $esBoleta;
+            $facturado[$cid] = ($facturado[$cid] ?? 0) + $monto;
+            $cobrados[$cid]  = ($cobrados[$cid] ?? 0) + ($paid ? max($monto, $conc) : $conc);
             if ($paid && $conc < $monto) {
                 $faltaConc[$cid] = ($faltaConc[$cid] ?? 0) + ($monto - $conc);
             }
@@ -79,18 +86,20 @@ class OperacionesController extends Controller
             ->whereIn('dc.cotizacion_id', $cotizacionIds)
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [2])
-            ->selectRaw('dc.cotizacion_id, dc.monto as share, df.monto as doc_monto,
+            ->selectRaw('dc.cotizacion_id, dc.monto as share, df.monto as doc_monto, df.tipo_documento_bsale_id,
                 (df.forma_pago IS NOT NULL OR (df.nro_comprobante_transbank IS NOT NULL AND df.nro_comprobante_transbank <> "")) as pagado_emision,
                 (COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as doc_conc')
             ->get();
         foreach ($pivotDocRows as $r) {
             $cid      = $r->cotizacion_id;
-            $paid     = (int) $r->pagado_emision === 1;
+            $esBoleta = (int) $r->tipo_documento_bsale_id === 1;
+            $paid     = (int) $r->pagado_emision === 1 && $esBoleta;
             $share    = (float) $r->share;
             $docMonto = (float) $r->doc_monto;
             $ratio    = $docMonto > 0 ? $share / $docMonto : 0;
             $conc     = round((float) $r->doc_conc * $ratio);
-            $cobrados[$cid] = ($cobrados[$cid] ?? 0) + ($paid ? max($share, $conc) : $conc);
+            $facturado[$cid] = ($facturado[$cid] ?? 0) + $share;
+            $cobrados[$cid]  = ($cobrados[$cid] ?? 0) + ($paid ? max($share, $conc) : $conc);
             if ($paid && $conc < $share) {
                 $faltaConc[$cid] = ($faltaConc[$cid] ?? 0) + ($share - $conc);
             }
@@ -111,7 +120,7 @@ class OperacionesController extends Controller
             ->selectRaw('cotizacion_id, SUM(monto) as total')
             ->pluck('total', 'cotizacion_id');
 
-        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc, $abonosManual, $notasVenta) {
+        $items = $cotizaciones->map(function ($c) use ($cobrados, $faltaConc, $abonosManual, $notasVenta, $facturado) {
             $esManual = (bool) $c->es_manual;
 
             // Manual: total ya es BRUTO (lo que paga el cliente); abono = suma de sus
@@ -164,6 +173,7 @@ class OperacionesController extends Controller
                 'total'              => $totalBruto,
                 'total_abonado'      => $totalAbonado,
                 'saldo'              => $totalBruto - $totalAbonado,
+                'facturado'          => $esManual ? null : (float) ($facturado[$c->id] ?? 0),
                 'falta_conciliar'    => $faltaCon,
                 'notas_venta'        => (float) ($notasVenta[$c->id] ?? 0),
                 'pedido_proveedor'   => (bool) $c->pedido_proveedor,
@@ -372,7 +382,7 @@ class OperacionesController extends Controller
         $docs = DB::table('documentos_facturacion')
             ->where('cotizacion_id', $id)->where('estado', 'emitido')
             ->whereNotIn('tipo_documento_bsale_id', [2])
-            ->get(['id', 'monto', 'forma_pago', 'nro_comprobante_transbank', 'monto_cobrado_manual', 'cobrado_manual_nota', 'fecha_emision']);
+            ->get(['id', 'monto', 'tipo_documento_bsale_id', 'forma_pago', 'nro_comprobante_transbank', 'monto_cobrado_manual', 'cobrado_manual_nota', 'fecha_emision']);
         $docIds = $docs->pluck('id');
 
         $abonos = collect();
@@ -401,7 +411,8 @@ class OperacionesController extends Controller
             // aún no está (todo) cuadrado con el banco. Cuenta como abono en Operaciones,
             // marcado como "por conciliar" para que se distinga de un cobro ya cuadrado.
             foreach ($docs as $d) {
-                $pagado = !empty($d->forma_pago) || !empty($d->nro_comprobante_transbank);
+                $esBoleta = (int) $d->tipo_documento_bsale_id === 1;
+                $pagado = $esBoleta && (!empty($d->forma_pago) || !empty($d->nro_comprobante_transbank));
                 $conc   = $concPorDoc[$d->id] ?? 0;
                 $pendiente = (float) $d->monto - $conc;
                 if ($pagado && $pendiente > 0.5) {
@@ -430,7 +441,7 @@ class OperacionesController extends Controller
             ->where('df.estado', 'emitido')
             ->whereNotIn('df.tipo_documento_bsale_id', [2])
             ->selectRaw('dc.monto as share, df.monto as doc_monto, df.numero_documento_bsale, df.fecha_emision,
-                df.forma_pago, df.nro_comprobante_transbank,
+                df.tipo_documento_bsale_id, df.forma_pago, df.nro_comprobante_transbank,
                 (COALESCE(vm.m,0) + COALESCE(tbk.m,0) + COALESCE(df.monto_cobrado_manual,0)) as doc_conc')
             ->get();
         foreach ($pivotDocs as $r) {
@@ -443,7 +454,8 @@ class OperacionesController extends Controller
             if ($concShare > 0.5) {
                 $abonos->push(['fecha' => $fecha, 'monto' => $concShare, 'fuente' => 'Conciliado' . $refDoc, 'tipo' => 'auto', 'editable' => false]);
             }
-            $pagado = !empty($r->forma_pago) || !empty($r->nro_comprobante_transbank);
+            $esBoleta = (int) $r->tipo_documento_bsale_id === 1;
+            $pagado = $esBoleta && (!empty($r->forma_pago) || !empty($r->nro_comprobante_transbank));
             $pendiente = $share - $concShare;
             if ($pagado && $pendiente > 0.5) {
                 $fp = $this->formaPagoLegible($r->forma_pago) ?: ($r->nro_comprobante_transbank ? 'Tarjeta' : null);
