@@ -246,6 +246,7 @@ class EERRController extends Controller
             'Bencina',
             'Transporte/Encomiendas',
             'Repuestos/Arreglos',
+            'Leasing',
             'Gastos Generales',
             'Luz',
             'Gastos de Investigación y Desarrollo',
@@ -289,6 +290,7 @@ class EERRController extends Controller
             $l('Bencina',                    $cmpMap, 'Bencina'),
             $l('Transporte / Encomiendas',   $cmpMap, 'Transporte/Encomiendas'),
             $l('Repuestos / Arreglos',       $cmpMap, 'Repuestos/Arreglos'),
+            $l('Leasing / Vehículos',        $cmpMap, 'Leasing'),
         ]);
         $gGen = $grupo('Gastos Generales', array_merge(
             [
