@@ -153,14 +153,89 @@ class EERRController extends Controller
         ]);
     }
 
+    // ── Detalle de una línea del EERR (los documentos que la componen) ────────
+    // params: origen (compra|gasto|remuneracion|previred|ingreso_manual), filtro
+    // (categoría/tipo), desde, hasta.
+    public function detalle(Request $request)
+    {
+        $origen = $request->get('origen');
+        $filtro = $request->get('filtro');
+        $desde  = $request->get('desde');
+        $hasta  = $request->get('hasta');
+        $esSinCat = in_array($filtro, ['Sin categoría', null, ''], true);
+
+        $items = collect();
+
+        if ($origen === 'compra') {
+            $items = DB::table('compras')
+                ->whereBetween('fecha_emision', [$desde, $hasta])
+                ->where(function ($q) { $q->whereNull('tipo_dte')->orWhere('tipo_dte', '!=', 61); })
+                ->when($esSinCat, fn($q) => $q->whereNull('categoria'))
+                ->when(!$esSinCat, fn($q) => $q->where('categoria', $filtro))
+                ->orderBy('fecha_emision')
+                ->get([
+                    DB::raw('fecha_emision as fecha'),
+                    DB::raw('folio'),
+                    DB::raw('nombre_emisor as nombre'),
+                    DB::raw('COALESCE(neto,0) as monto'),
+                ]);
+        } elseif ($origen === 'gasto') {
+            $items = DB::table('gastos')
+                ->whereBetween('fecha', [$desde, $hasta])
+                ->when($esSinCat, fn($q) => $q->whereNull('categoria'))
+                ->when(!$esSinCat, fn($q) => $q->where('categoria', $filtro))
+                ->orderBy('fecha')
+                ->get([
+                    'fecha',
+                    DB::raw('NULL as folio'),
+                    DB::raw('descripcion as nombre'),
+                    DB::raw('monto'),
+                ]);
+        } elseif ($origen === 'previred') {
+            $items = DB::table('gastos')
+                ->whereBetween('fecha', [$desde, $hasta])
+                ->where(function ($q) {
+                    $q->where('chipax_tipo', 'previred')->orWhere('categoria', 'Leyes sociales (Previred)');
+                })
+                ->orderBy('fecha')
+                ->get(['fecha', DB::raw('NULL as folio'), DB::raw('descripcion as nombre'), DB::raw('monto')]);
+        } elseif ($origen === 'remuneracion') {
+            $items = DB::table('pagos_empleado as pe')
+                ->leftJoin('empleados as e', 'e.id', '=', 'pe.empleado_id')
+                ->whereBetween('pe.periodo', [$desde, $hasta])
+                ->where('pe.tipo', $filtro)
+                ->orderBy('pe.periodo')
+                ->get([
+                    DB::raw('pe.periodo as fecha'),
+                    DB::raw('NULL as folio'),
+                    DB::raw("COALESCE(e.nombre, CONCAT('Empleado #', pe.empleado_id)) as nombre"),
+                    DB::raw('pe.monto as monto'),
+                ]);
+        } elseif ($origen === 'ingreso_manual') {
+            $items = DB::table('ingresos_manuales')
+                ->whereBetween('fecha', [$desde, $hasta])
+                ->when($esSinCat, fn($q) => $q->whereNull('categoria'))
+                ->when(!$esSinCat, fn($q) => $q->where('categoria', $filtro))
+                ->orderBy('fecha')
+                ->get(['fecha', DB::raw('NULL as folio'), DB::raw('descripcion as nombre'), DB::raw('monto')]);
+        }
+
+        return response()->json([
+            'items' => $items,
+            'total' => (float) $items->sum('monto'),
+        ]);
+    }
+
     // ── Construye el árbol Sección → Grupo → Líneas ───────────────────────────
 
     private function buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow = null): array
     {
         // Helper: extrae {label, cantidad, total} de un mapa
+        // Todas las llamadas a $l usan $cmpMap → el detalle viene de la tabla compras.
         $l = function (string $label, $map, string $key) {
             $r = $map->get($key);
-            return ['label' => $label, 'cantidad' => $r ? (int)$r->n : 0, 'total' => $r ? (float)$r->total : 0.0];
+            return ['label' => $label, 'cantidad' => $r ? (int)$r->n : 0, 'total' => $r ? (float)$r->total : 0.0,
+                    'origen' => 'compra', 'filtro' => $key];
         };
 
         // Categorías de compras ya asignadas a secciones (para catch-all al final)
@@ -185,12 +260,12 @@ class EERRController extends Controller
 
         // Líneas dinámicas del módulo Gastos (todas sus categorías)
         $gastosLineas = $gasMap->map(fn($r) =>
-            ['label' => $r->cat, 'cantidad' => (int)$r->n, 'total' => (float)$r->total]
+            ['label' => $r->cat, 'cantidad' => (int)$r->n, 'total' => (float)$r->total, 'origen' => 'gasto', 'filtro' => $r->cat]
         )->sortByDesc('total')->values()->all();
 
         // Compras sin categoría o de categorías no clasificadas → van a Gastos Generales
         $sinClasificar = $cmpMap->filter(fn($r, $k) => !in_array($k, $cmpClaims))
-            ->map(fn($r) => ['label' => $r->cat . ' *', 'cantidad' => (int)$r->n, 'total' => (float)$r->total])
+            ->map(fn($r) => ['label' => $r->cat . ' *', 'cantidad' => (int)$r->n, 'total' => (float)$r->total, 'origen' => 'compra', 'filtro' => $r->cat])
             ->sortByDesc('total')->values()->all();
 
         // Construir grupos con totales calculados
@@ -232,14 +307,14 @@ class EERRController extends Controller
 
         // ── 3. REMUNERACIONES ─────────────────────────────────────────
         $remuLineas = array_filter([
-            $remuMap->get('sueldo')   ? ['label' => 'Sueldos líquidos',   'cantidad' => (int)$remuMap->get('sueldo')->n,   'total' => (float)$remuMap->get('sueldo')->total]   : null,
-            $remuMap->get('bono')     ? ['label' => 'Bonos',              'cantidad' => (int)$remuMap->get('bono')->n,     'total' => (float)$remuMap->get('bono')->total]     : null,
-            $remuMap->get('finiquito')? ['label' => 'Finiquitos',         'cantidad' => (int)$remuMap->get('finiquito')->n,'total' => (float)$remuMap->get('finiquito')->total]: null,
+            $remuMap->get('sueldo')   ? ['label' => 'Sueldos líquidos',   'cantidad' => (int)$remuMap->get('sueldo')->n,   'total' => (float)$remuMap->get('sueldo')->total,   'origen' => 'remuneracion', 'filtro' => 'sueldo']   : null,
+            $remuMap->get('bono')     ? ['label' => 'Bonos',              'cantidad' => (int)$remuMap->get('bono')->n,     'total' => (float)$remuMap->get('bono')->total,     'origen' => 'remuneracion', 'filtro' => 'bono']     : null,
+            $remuMap->get('finiquito')? ['label' => 'Finiquitos',         'cantidad' => (int)$remuMap->get('finiquito')->n,'total' => (float)$remuMap->get('finiquito')->total,'origen' => 'remuneracion', 'filtro' => 'finiquito']: null,
             $previredRow && $previredRow->total > 0
-                ? ['label' => 'Previred — cotizaciones', 'cantidad' => (int)$previredRow->n, 'total' => (float)$previredRow->total]
+                ? ['label' => 'Previred — cotizaciones', 'cantidad' => (int)$previredRow->n, 'total' => (float)$previredRow->total, 'origen' => 'previred', 'filtro' => 'previred']
                 : null,
             $remuGastosRow && $remuGastosRow->total > 0
-                ? ['label' => 'Remuneraciones (gastos)', 'cantidad' => (int)$remuGastosRow->n, 'total' => (float)$remuGastosRow->total]
+                ? ['label' => 'Remuneraciones (gastos)', 'cantidad' => (int)$remuGastosRow->n, 'total' => (float)$remuGastosRow->total, 'origen' => 'gasto', 'filtro' => 'Remuneraciones']
                 : null,
             $l('Almuerzos',              $cmpMap, 'Almuerzos'),
             $l('Sueldos Administrativos', $cmpMap, 'Sueldos Administrativos'),

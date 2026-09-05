@@ -151,8 +151,11 @@
               </div>
               <div v-if="data.ingresos.manuales_total > 0">
                 <div v-for="cat in data.ingresos.manuales_por_categoria" :key="cat.categoria"
-                  class="eerr-row px-4 py-1 d-flex justify-space-between">
-                  <span class="text-caption text-medium-emphasis pl-8">↳ {{ cat.categoria }} ({{ cat.cantidad }})</span>
+                  class="eerr-row eerr-clickable px-4 py-1 d-flex justify-space-between"
+                  @click="abrirDetalle({ label: cat.categoria, origen: 'ingreso_manual', filtro: cat.categoria })">
+                  <span class="text-caption text-medium-emphasis pl-8">↳ {{ cat.categoria }} ({{ cat.cantidad }})
+                    <VIcon size="11" class="ml-1">mdi-magnify</VIcon>
+                  </span>
                   <span class="text-caption text-medium-emphasis">{{ clp(cat.total) }}</span>
                 </div>
               </div>
@@ -187,9 +190,12 @@
                         <span class="text-caption font-weight-medium text-medium-emphasis pl-2">{{ grupo.titulo }}</span>
                       </div>
                       <div v-for="linea in grupo.lineas" :key="linea.label"
-                           class="eerr-row px-4 py-1 d-flex justify-space-between">
+                           class="eerr-row px-4 py-1 d-flex justify-space-between"
+                           :class="{ 'eerr-clickable': linea.origen }"
+                           @click="linea.origen && abrirDetalle(linea)">
                         <span class="text-caption" :class="grupo.titulo ? 'pl-8' : 'pl-4'">
                           {{ linea.label }} <span class="text-medium-emphasis">({{ linea.cantidad }})</span>
+                          <VIcon v-if="linea.origen" size="11" class="text-medium-emphasis ml-1">mdi-magnify</VIcon>
                         </span>
                         <span class="text-caption">{{ clp(linea.total) }}</span>
                       </div>
@@ -267,6 +273,40 @@
         </VCard>
       </VCol>
     </VRow>
+
+    <!-- Detalle de una línea del EERR -->
+    <VDialog v-model="dialogDetalle.show" max-width="720" scrollable>
+      <VCard>
+        <VCardTitle class="d-flex align-center pa-4">
+          {{ dialogDetalle.label }}
+          <VSpacer />
+          <span class="text-body-2 font-weight-bold">{{ clp(dialogDetalle.total) }}</span>
+        </VCardTitle>
+        <VDivider />
+        <VCardText class="pa-0">
+          <div v-if="dialogDetalle.loading" class="text-center py-8"><VProgressCircular indeterminate /></div>
+          <template v-else>
+            <p v-if="!dialogDetalle.items.length" class="text-center text-medium-emphasis py-8">Sin documentos en el período.</p>
+            <VTable v-else density="compact">
+              <thead><tr><th>Fecha</th><th v-if="tieneFolio">Folio</th><th>Detalle</th><th class="text-right">Monto</th></tr></thead>
+              <tbody>
+                <tr v-for="(it, i) in dialogDetalle.items" :key="i">
+                  <td class="text-caption text-no-wrap">{{ (it.fecha || '').slice(0,10) }}</td>
+                  <td v-if="tieneFolio" class="text-caption">{{ it.folio || '—' }}</td>
+                  <td class="text-caption">{{ it.nombre || '—' }}</td>
+                  <td class="text-right text-caption font-weight-medium">{{ clp(it.monto) }}</td>
+                </tr>
+              </tbody>
+            </VTable>
+          </template>
+        </VCardText>
+        <VDivider />
+        <VCardActions class="pa-3">
+          <VSpacer />
+          <VBtn variant="text" @click="dialogDetalle.show = false">Cerrar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -279,6 +319,31 @@ import api from '@/axiosInstance'
 const loading = ref(false)
 const data    = ref(null)
 const modo    = ref('mensual')   // 'mensual' | 'anual'
+
+// ── Detalle de línea (drill-down) ────────────────────────────────
+const dialogDetalle = ref({ show: false, loading: false, label: '', items: [], total: 0 })
+const tieneFolio = computed(() => dialogDetalle.value.items.some(i => i.folio))
+
+async function abrirDetalle(linea) {
+  if (!linea?.origen) return
+  dialogDetalle.value = { show: true, loading: true, label: linea.label, items: [], total: 0 }
+  try {
+    const { data: d } = await api.get('/api/eerr/detalle', {
+      params: {
+        origen: linea.origen,
+        filtro: linea.filtro,
+        desde:  data.value?.periodo?.desde,
+        hasta:  data.value?.periodo?.hasta,
+      },
+    })
+    dialogDetalle.value.items = d.items || []
+    dialogDetalle.value.total = d.total || 0
+  } catch {
+    dialogDetalle.value.items = []
+  } finally {
+    dialogDetalle.value.loading = false
+  }
+}
 
 const _hoy   = new Date()
 const mesSel = ref(_hoy.getMonth() + 1)   // 1-12
@@ -414,6 +479,8 @@ onMounted(cargar)
   display: flex;
   align-items: center;
 }
+.eerr-clickable { cursor: pointer; }
+.eerr-clickable:hover { background: rgba(var(--v-theme-primary), 0.06); }
 .eerr-grupo-titulo {
   background: rgba(var(--v-border-color), 0.04);
   border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
