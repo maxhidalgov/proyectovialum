@@ -2973,7 +2973,7 @@ watch(movimientos, () => { seleccionados.value = [] })
 const categoriasGasto = [
   'Arriendo', 'Servicios básicos', 'Comisión bancaria', 'Publicidad',
   'Mantención', 'Transporte y combustible', 'Seguros', 'Honorarios',
-  'Remuneraciones', 'Leyes sociales (Previred)', 'Impuestos',
+  'Remuneraciones', 'Leyes sociales (Previred)', 'Impuestos', 'Dividendo hipotecario',
   'Gastos de oficina', 'Otro',
 ]
 
