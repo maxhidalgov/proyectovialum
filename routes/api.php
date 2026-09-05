@@ -349,6 +349,7 @@ Route::middleware('auth:api')->group(function () {
     // Estado de Resultados
     Route::get('/eerr', [\App\Http\Controllers\EERRController::class, 'index']);
     Route::get('/eerr/detalle', [\App\Http\Controllers\EERRController::class, 'detalle']);
+    Route::get('/eerr/anual-mensual', [\App\Http\Controllers\EERRController::class, 'anualMensual']);
 
     // Sync ventas desde Bsale → documentos_facturacion
     Route::post('/ventas/sincronizar',            [\App\Http\Controllers\BsaleVentaSyncController::class, 'sincronizar']);

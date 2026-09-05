@@ -228,6 +228,127 @@ class EERRController extends Controller
         ]);
     }
 
+    // ── Vista mes a mes del año (matriz: filas × 12 meses + total) ────────────
+    public function anualMensual(Request $request)
+    {
+        $anio = (int) ($request->get('anio', now()->year));
+
+        $ingresos  = array_fill(1, 12, 0.0);
+        $resultado = array_fill(1, 12, 0.0);
+        $secTot    = [];   // [secKey][mes] = total
+        $secTitulos = [];
+        $lineas    = [];   // [secKey][label] = ['label','origen','filtro','valores'=>[mes=>v]]
+
+        for ($m = 1; $m <= 12; $m++) {
+            $desde = Carbon::create($anio, $m, 1)->startOfMonth();
+            $hasta = $desde->copy()->endOfMonth();
+            $ds = $desde->toDateString();
+            $hs = $hasta->toDateString();
+
+            [$cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow] = $this->datosPeriodo($ds, $hs);
+
+            ['neto' => $vNeto] = $this->ventasDB($ds, $hs);
+            $ingMan   = (float) DB::table('ingresos_manuales')->whereBetween('fecha', [$ds, $hs])->sum('monto');
+            $totalIng = $vNeto + $ingMan;
+            $ingresos[$m] = $totalIng;
+
+            $secciones = $this->buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow);
+
+            $egresos = 0.0;
+            foreach ($secciones as $sec) {
+                $secTitulos[$sec['key']]   = $sec['titulo'];
+                $secTot[$sec['key']][$m]   = (float) $sec['total'];
+                $egresos += (float) $sec['total'];
+                foreach ($sec['grupos'] as $g) {
+                    foreach ($g['lineas'] as $ln) {
+                        $k = $ln['label'];
+                        if (!isset($lineas[$sec['key']][$k])) {
+                            $lineas[$sec['key']][$k] = [
+                                'label'   => $ln['label'],
+                                'origen'  => $ln['origen'] ?? null,
+                                'filtro'  => $ln['filtro'] ?? null,
+                                'valores' => array_fill(1, 12, 0.0),
+                            ];
+                        }
+                        $lineas[$sec['key']][$k]['valores'][$m] += (float) $ln['total'];
+                    }
+                }
+            }
+            $resultado[$m] = $totalIng - $egresos;
+        }
+
+        // Ensamblar filas en orden fijo de secciones
+        $orden = ['costo_ventas', 'gastos_operacionales', 'remuneraciones', 'financiero'];
+        $rows  = [];
+        $rows[] = ['nivel' => 0, 'tipo' => 'ingreso', 'label' => 'Venta Total', 'valores' => $ingresos, 'total' => array_sum($ingresos)];
+
+        foreach ($orden as $sk) {
+            if (!isset($secTitulos[$sk])) continue;
+            $vals = array_fill(1, 12, 0.0);
+            foreach (($secTot[$sk] ?? []) as $mm => $vv) $vals[$mm] = $vv;
+            $rows[] = ['nivel' => 0, 'tipo' => 'seccion', 'label' => $secTitulos[$sk], 'valores' => $vals, 'total' => array_sum($vals)];
+
+            $lns = collect($lineas[$sk] ?? [])
+                ->map(function ($l) { $l['total'] = array_sum($l['valores']); return $l; })
+                ->sortByDesc('total')->values();
+            foreach ($lns as $l) {
+                $rows[] = ['nivel' => 1, 'tipo' => 'linea', 'label' => $l['label'],
+                           'valores' => $l['valores'], 'total' => $l['total'],
+                           'origen' => $l['origen'], 'filtro' => $l['filtro']];
+            }
+        }
+
+        $rows[] = ['nivel' => 0, 'tipo' => 'resultado', 'label' => 'Resultado Operacional', 'valores' => $resultado, 'total' => array_sum($resultado)];
+
+        $margen = array_fill(1, 12, 0.0);
+        for ($m = 1; $m <= 12; $m++) {
+            $margen[$m] = $ingresos[$m] > 0 ? round($resultado[$m] / $ingresos[$m] * 100, 1) : 0;
+        }
+        $margenTotal = array_sum($ingresos) > 0 ? round(array_sum($resultado) / array_sum($ingresos) * 100, 1) : 0;
+
+        return response()->json([
+            'anio'   => $anio,
+            'meses'  => ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+            'rows'   => $rows,
+            'margen' => ['valores' => $margen, 'total' => $margenTotal],
+        ]);
+    }
+
+    // Mapas de compras/gastos/remuneraciones de un período (reusado por index y anualMensual)
+    private function datosPeriodo(string $desdeStr, string $hastaStr): array
+    {
+        $cmpMap = DB::table('compras')
+            ->whereBetween('fecha_emision', [$desdeStr, $hastaStr])
+            ->where(function ($q) { $q->whereNull('tipo_dte')->orWhere('tipo_dte', '!=', 61); })
+            ->where(function ($q) { $q->whereNull('categoria')->orWhere('categoria', '<>', 'Compra de activos'); })
+            ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(neto) as total")
+            ->groupBy('cat')->get()->keyBy('cat');
+
+        $gasMap = DB::table('gastos')
+            ->whereBetween('fecha', [$desdeStr, $hastaStr])
+            ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
+            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Remuneraciones', 'Dividendo hipotecario', 'Compra de activos']); })
+            ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(monto) as total")
+            ->groupBy('cat')->get()->keyBy('cat');
+
+        $remuMap = DB::table('pagos_empleado')
+            ->whereBetween('periodo', [$desdeStr, $hastaStr])
+            ->selectRaw('tipo as cat, COUNT(*) as n, SUM(monto) as total')
+            ->groupBy('tipo')->get()->keyBy('cat');
+
+        $previredRow = DB::table('gastos')
+            ->whereBetween('fecha', [$desdeStr, $hastaStr])
+            ->where(function ($q) { $q->where('chipax_tipo', 'previred')->orWhere('categoria', 'Leyes sociales (Previred)'); })
+            ->selectRaw('COUNT(*) as n, SUM(monto) as total')->first();
+
+        $remuGastosRow = DB::table('gastos')
+            ->whereBetween('fecha', [$desdeStr, $hastaStr])
+            ->where('categoria', 'Remuneraciones')
+            ->selectRaw('COUNT(*) as n, SUM(monto) as total')->first();
+
+        return [$cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow];
+    }
+
     // ── Construye el árbol Sección → Grupo → Líneas ───────────────────────────
 
     private function buildSecciones($cmpMap, $gasMap, $remuMap, $previredRow, $remuGastosRow = null): array

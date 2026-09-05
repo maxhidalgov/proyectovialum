@@ -11,7 +11,11 @@
         <VBtnToggle v-model="modo" density="compact" variant="outlined" color="primary" mandatory divided>
           <VBtn value="mensual" size="small">Mensual</VBtn>
           <VBtn value="anual"   size="small">Anual</VBtn>
+          <VBtn value="matriz"  size="small">Mes a mes</VBtn>
         </VBtnToggle>
+        <VBtn v-if="modo === 'matriz'" color="success" variant="tonal" size="small" prepend-icon="mdi-download" @click="descargarMatrizCsv">
+          Descargar
+        </VBtn>
 
         <!-- Selector de mes (modo mensual) -->
         <template v-if="modo === 'mensual'">
@@ -52,7 +56,7 @@
     </VRow>
 
     <!-- Tarjetas resumen -->
-    <VRow class="mb-5">
+    <VRow v-if="modo !== 'matriz'" class="mb-5">
       <template v-if="loading">
         <VCol v-for="n in 4" :key="n" cols="6" sm="3">
           <VCard variant="outlined" class="pa-3">
@@ -105,7 +109,37 @@
       </template>
     </VRow>
 
-    <VRow>
+    <!-- ── VISTA MES A MES (matriz anual) ─────────────────────────── -->
+    <VCard v-if="modo === 'matriz'">
+      <VCardText class="pa-0">
+        <div v-if="loading" class="text-center py-10"><VProgressCircular indeterminate size="32" /></div>
+        <div v-else-if="matriz" style="overflow-x:auto">
+          <table class="matriz-eerr">
+            <thead>
+              <tr>
+                <th class="text-left sticky-col">Resultado Operacional {{ matriz.anio }}</th>
+                <th v-for="(mes, i) in matriz.meses" :key="i" class="text-right">{{ mes }}</th>
+                <th class="text-right total-col">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, ri) in matriz.rows" :key="ri" :class="filaClase(r)">
+                <td class="text-left sticky-col" :style="r.nivel === 1 ? 'padding-left:24px' : ''">{{ r.label }}</td>
+                <td v-for="(mes, i) in matriz.meses" :key="i" class="text-right">{{ celda(r, r.valores[i + 1]) }}</td>
+                <td class="text-right total-col">{{ celda(r, r.total) }}</td>
+              </tr>
+              <tr class="fila-margen">
+                <td class="text-left sticky-col">Margen %</td>
+                <td v-for="(mes, i) in matriz.meses" :key="i" class="text-right">{{ matriz.margen.valores[i + 1] }}%</td>
+                <td class="text-right total-col">{{ matriz.margen.total }}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </VCardText>
+    </VCard>
+
+    <VRow v-if="modo !== 'matriz'">
       <!-- Tabla EERR estructurada -->
       <VCol cols="12" md="6">
         <VCard>
@@ -318,7 +352,8 @@ import api from '@/axiosInstance'
 // ── Estado ───────────────────────────────────────────────────────
 const loading = ref(false)
 const data    = ref(null)
-const modo    = ref('mensual')   // 'mensual' | 'anual'
+const matriz  = ref(null)        // vista mes a mes (12 columnas)
+const modo    = ref('mensual')   // 'mensual' | 'anual' | 'matriz'
 
 // ── Detalle de línea (drill-down) ────────────────────────────────
 const dialogDetalle = ref({ show: false, loading: false, label: '', items: [], total: 0 })
@@ -442,13 +477,19 @@ const chartOptions = computed(() => {
 // ── Carga ─────────────────────────────────────────────────────────
 async function cargar() {
   loading.value = true
-  data.value    = null
   try {
-    const params = modo.value === 'anual'
-      ? { modo: 'anual', anio: anioSel.value }
-      : { modo: 'mensual', mes: mesSel.value, anio: anioSel.value }
-    const { data: res } = await api.get('/api/eerr', { params })
-    data.value = res
+    if (modo.value === 'matriz') {
+      matriz.value = null
+      const { data: res } = await api.get('/api/eerr/anual-mensual', { params: { anio: anioSel.value } })
+      matriz.value = res
+    } else {
+      data.value = null
+      const params = modo.value === 'anual'
+        ? { modo: 'anual', anio: anioSel.value }
+        : { modo: 'mensual', mes: mesSel.value, anio: anioSel.value }
+      const { data: res } = await api.get('/api/eerr', { params })
+      data.value = res
+    }
   } catch (e) {
     console.error(e)
   } finally {
@@ -456,8 +497,49 @@ async function cargar() {
   }
 }
 
+// Descargar la matriz mes a mes como CSV (se abre en Excel)
+function descargarMatrizCsv() {
+  if (!matriz.value) return
+  const meses = matriz.value.meses
+  const head = ['', ...meses, 'Total']
+  const esResultado = r => r.tipo === 'ingreso' || r.tipo === 'resultado'
+  const signo = r => (r.tipo === 'seccion' || r.tipo === 'linea') ? -1 : 1
+  const filas = matriz.value.rows.map(r => {
+    const s = signo(r)
+    const label = (r.nivel === 1 ? '   ' : '') + r.label
+    const vals = meses.map((_, i) => Math.round(s * (r.valores[i + 1] || 0)))
+    return [label, ...vals, Math.round(s * r.total)]
+  })
+  const mg = matriz.value.margen
+  const filaMargen = ['Margen %', ...meses.map((_, i) => (mg.valores[i + 1] ?? 0) + '%'), mg.total + '%']
+  const rows = [head, ...filas, filaMargen]
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `EERR_${matriz.value.anio}_mes_a_mes.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 const clp = n => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(n) || 0)
+
+// Matriz mes a mes: egresos (sección/línea) se muestran en negativo; 0 → "-"
+function celda(r, val) {
+  const s = (r.tipo === 'seccion' || r.tipo === 'linea') ? -1 : 1
+  const n = Math.round(s * (Number(val) || 0))
+  return n === 0 ? '-' : n.toLocaleString('es-CL')
+}
+function filaClase(r) {
+  return {
+    'fila-ingreso':   r.tipo === 'ingreso',
+    'fila-seccion':   r.tipo === 'seccion',
+    'fila-linea':     r.tipo === 'linea',
+    'fila-resultado': r.tipo === 'resultado',
+  }
+}
 
 function labelTipoDoc(tipo) {
   return { anticipo: 'Anticipo', saldo: 'Saldo', total: 'Factura total' }[tipo] ?? tipo
@@ -481,6 +563,38 @@ onMounted(cargar)
 }
 .eerr-clickable { cursor: pointer; }
 .eerr-clickable:hover { background: rgba(var(--v-theme-primary), 0.06); }
+
+/* Matriz mes a mes */
+.matriz-eerr {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.matriz-eerr th, .matriz-eerr td {
+  border: 1px solid rgba(var(--v-border-color), 0.12);
+  padding: 4px 10px;
+}
+.matriz-eerr thead th {
+  background: rgba(var(--v-theme-primary), 0.10);
+  font-weight: 700;
+  position: sticky; top: 0; z-index: 2;
+}
+.matriz-eerr .sticky-col {
+  position: sticky; left: 0; z-index: 1;
+  background: rgb(var(--v-theme-surface));
+  min-width: 230px;
+}
+.matriz-eerr thead .sticky-col { z-index: 3; background: rgba(var(--v-theme-primary), 0.10); }
+.matriz-eerr .total-col { background: rgba(var(--v-theme-success), 0.08); font-weight: 600; }
+.matriz-eerr .fila-ingreso td { background: rgba(var(--v-theme-success), 0.10); font-weight: 700; }
+.matriz-eerr .fila-ingreso td.sticky-col { background: rgba(var(--v-theme-success), 0.14); }
+.matriz-eerr .fila-seccion td { font-weight: 700; }
+.matriz-eerr .fila-linea td { color: rgba(var(--v-theme-on-surface), 0.75); }
+.matriz-eerr .fila-linea td.sticky-col { font-weight: 400; }
+.matriz-eerr .fila-resultado td { background: rgba(var(--v-theme-primary), 0.12); font-weight: 800; border-top: 2px solid rgba(var(--v-theme-primary), 0.4); }
+.matriz-eerr .fila-margen td { font-style: italic; color: rgba(var(--v-theme-on-surface), 0.6); }
 .eerr-grupo-titulo {
   background: rgba(var(--v-border-color), 0.04);
   border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
