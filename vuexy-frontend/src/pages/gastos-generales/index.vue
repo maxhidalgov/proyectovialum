@@ -327,6 +327,8 @@ const categorias = [
   'Leyes sociales (Previred)',
   'Impuestos',
   'Dividendo hipotecario',
+  'Leasing',
+  'Compra de activos',
   'Gastos de oficina',
   'Otro',
 ]

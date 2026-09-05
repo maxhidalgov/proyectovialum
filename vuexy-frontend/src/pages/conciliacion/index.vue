@@ -2974,6 +2974,7 @@ const categoriasGasto = [
   'Arriendo', 'Servicios básicos', 'Comisión bancaria', 'Publicidad',
   'Mantención', 'Transporte y combustible', 'Seguros', 'Honorarios',
   'Remuneraciones', 'Leyes sociales (Previred)', 'Impuestos', 'Dividendo hipotecario',
+  'Leasing', 'Compra de activos',
   'Gastos de oficina', 'Otro',
 ]
 

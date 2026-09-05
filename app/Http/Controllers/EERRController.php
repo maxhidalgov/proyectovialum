@@ -61,6 +61,8 @@ class EERRController extends Controller
         $cmpMap = DB::table('compras')
             ->whereBetween('fecha_emision', [$desdeStr, $hastaStr])
             ->where(function ($q) { $q->whereNull('tipo_dte')->orWhere('tipo_dte', '!=', 61); })
+            // "Compra de activos" (ej. pie de un leasing/vehículo) es inversión, no gasto → fuera del EERR
+            ->where(function ($q) { $q->whereNull('categoria')->orWhere('categoria', '<>', 'Compra de activos'); })
             ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(neto) as total")
             ->groupBy('cat')->get()->keyBy('cat');
 
@@ -74,7 +76,7 @@ class EERRController extends Controller
             })
             ->where(function ($q) {
                 $q->whereNull('categoria')
-                  ->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Remuneraciones', 'Dividendo hipotecario']);
+                  ->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Remuneraciones', 'Dividendo hipotecario', 'Compra de activos']);
             })
             ->selectRaw("COALESCE(categoria,'Sin categoría') as cat, COUNT(*) as n, SUM(monto) as total")
             ->groupBy('cat')->get()->keyBy('cat');
@@ -446,6 +448,7 @@ class EERRController extends Controller
 
         $compras = DB::table('compras')
             ->where('fecha_emision', '>=', $inicio)
+            ->where(function ($q) { $q->whereNull('categoria')->orWhere('categoria', '<>', 'Compra de activos'); })
             ->selectRaw("DATE_FORMAT(fecha_emision, '%Y-%m') as mes, SUM(neto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -453,7 +456,7 @@ class EERRController extends Controller
         $gastos = DB::table('gastos')
             ->where('fecha', '>=', $inicio)
             ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
-            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Dividendo hipotecario']); })
+            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Dividendo hipotecario', 'Compra de activos']); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -547,6 +550,7 @@ class EERRController extends Controller
 
         $compras = DB::table('compras')
             ->whereBetween('fecha_emision', [$inicio, $fin])
+            ->where(function ($q) { $q->whereNull('categoria')->orWhere('categoria', '<>', 'Compra de activos'); })
             ->selectRaw("DATE_FORMAT(fecha_emision, '%Y-%m') as mes, SUM(neto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
@@ -554,7 +558,7 @@ class EERRController extends Controller
         $gastos = DB::table('gastos')
             ->whereBetween('fecha', [$inicio, $fin])
             ->where(function ($q) { $q->whereNull('chipax_tipo')->orWhereNotIn('chipax_tipo', ['impuesto', 'previred']); })
-            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Dividendo hipotecario']); })
+            ->where(function ($q) { $q->whereNull('categoria')->orWhereNotIn('categoria', ['Impuestos', 'Leyes sociales (Previred)', 'Dividendo hipotecario', 'Compra de activos']); })
             ->selectRaw("DATE_FORMAT(fecha, '%Y-%m') as mes, SUM(monto) as total")
             ->groupBy('mes')
             ->pluck('total', 'mes');
