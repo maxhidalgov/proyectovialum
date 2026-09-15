@@ -48,6 +48,52 @@ class TransbankController extends Controller
         ]);
     }
 
+    // ── POST /api/transbank/saldar-comisiones ─────────────────────────────────
+    // Las facturas de Transbank (comisión + servicios + arriendo) NO se pagan por
+    // transferencia: se descuentan del abono (Abono = Venta − Comisión − Servicios
+    // − Arriendo). Por eso nunca calzan con un movimiento bancario y quedan colgadas
+    // en Cuentas por Pagar. Esta acción las marca "pagadas por descuento Transbank"
+    // (pago trazable, sin movimiento) para el período indicado.
+    // NO afecta el EERR: el gasto ya está contado por la factura (categoría Comisiones).
+    private const RUT_TRANSBANK = '96689310';
+
+    public function saldarComisiones(Request $request)
+    {
+        $periodo = $request->get('periodo'); // YYYY-MM
+        if (!preg_match('/^\d{4}-\d{2}$/', (string) $periodo)) {
+            return response()->json(['message' => 'Período inválido (use YYYY-MM)'], 422);
+        }
+        $desde = Carbon::createFromFormat('Y-m', $periodo)->startOfMonth()->toDateString();
+        $hasta = Carbon::createFromFormat('Y-m', $periodo)->endOfMonth()->toDateString();
+
+        // Facturas y NC de Transbank del período aún no saldadas
+        $base = DB::table('compras')
+            ->where('rut_emisor', 'like', '%' . self::RUT_TRANSBANK . '%')
+            ->whereBetween('fecha_emision', [$desde, $hasta])
+            ->where('pagado_historico', false);
+
+        $docs  = (clone $base)->get(['id', 'tipo_dte', 'total']);
+        if ($docs->isEmpty()) {
+            return response()->json(['ok' => true, 'saldadas' => 0, 'total' => 0, 'mensaje' => 'No hay facturas de Transbank pendientes en ' . $periodo]);
+        }
+
+        (clone $base)->update([
+            'pagado_historico'      => true,
+            'fecha_pago_historico'  => $hasta,
+            'nota_historico'        => 'Saldado por descuento de abono Transbank ' . $periodo,
+            'updated_at'            => now(),
+        ]);
+
+        $totalFacturas = (float) $docs->sum('total'); // incluye NC (negativas) → neto
+
+        return response()->json([
+            'ok'       => true,
+            'periodo'  => $periodo,
+            'saldadas' => $docs->count(),
+            'total'    => $totalFacturas,
+        ]);
+    }
+
     // ── GET /api/transbank/resumen-sii?periodo=YYYY-MM ───────────────────────
     // Agrupa por periodo SII (fecha de venta, no de abono) y tipo de tarjeta.
     // Permite ver cuánto se vendió con tarjeta en cada mes contable,

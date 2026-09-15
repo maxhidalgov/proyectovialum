@@ -662,10 +662,19 @@
             <span class="text-body-2 font-weight-bold text-error">-{{ fmt(resumenMes.comisiones) }}</span>
           </VCardTitle>
           <VDivider />
-          <VCardText class="text-caption text-medium-emphasis pa-3">
-            La comisión ya está incluida en los archivos .dat y se descuenta del total abonado.
-            Para el Estado de Resultados, vincúlala como gasto en el módulo de Conciliación
-            (el débito "Comisión Transbank" que aparece en la cartola bancaria).
+          <VCardText class="pa-3">
+            <p class="text-caption text-medium-emphasis mb-3">
+              El abono es <strong>Venta − Comisión − Servicios − Arriendo</strong>: todo eso te lo descuenta
+              Transbank del depósito y es justo lo que te factura (DTE 33). Esas facturas <strong>no se pagan
+              por transferencia</strong>, así que quedan colgadas en Cuentas por Pagar. El gasto ya está
+              contado por la factura (categoría "Comisiones Pagadas" → va al EERR); <strong>no</strong> hay que
+              volver a registrarlo como gasto.
+            </p>
+            <VBtn color="primary" variant="tonal" size="small" prepend-icon="mdi-check-decagram"
+              :loading="saldando" @click="saldarComisiones">
+              Saldar facturas Transbank del mes (sacarlas de Cuentas por Pagar)
+            </VBtn>
+            <p v-if="saldarMsg" class="text-caption mt-2" :class="saldarMsgColor">{{ saldarMsg }}</p>
           </VCardText>
         </VCard>
 
@@ -1203,6 +1212,27 @@ const loadingArchivos  = ref(false)
 const loadingDepositos = ref(false)
 const loadingMatch     = ref(false)
 const loadingSii       = ref(false)
+const saldando         = ref(false)
+const saldarMsg        = ref('')
+const saldarMsgColor   = ref('text-success')
+
+async function saldarComisiones() {
+  if (!confirm(`¿Marcar las facturas de Transbank de ${periodo.value} como pagadas (por descuento de abono)?\nSaldrán de Cuentas por Pagar. No afecta el EERR.`)) return
+  saldando.value = true
+  saldarMsg.value = ''
+  try {
+    const { data } = await axios.post('/api/transbank/saldar-comisiones', { periodo: periodo.value })
+    saldarMsgColor.value = 'text-success'
+    saldarMsg.value = data.saldadas > 0
+      ? `✓ ${data.saldadas} factura(s) saldada(s) por ${fmt(Math.abs(data.total))}. Ya no aparecen en Cuentas por Pagar.`
+      : (data.mensaje || 'No había facturas pendientes en el período.')
+  } catch (e) {
+    saldarMsgColor.value = 'text-error'
+    saldarMsg.value = e.response?.data?.message || 'No se pudo saldar'
+  } finally {
+    saldando.value = false
+  }
+}
 const eliminando       = ref(null)
 
 const detalleExpandido = ref(null)

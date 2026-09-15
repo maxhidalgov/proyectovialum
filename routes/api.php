@@ -521,6 +521,7 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('transbank')->group(function () {
         Route::get('/',                [\App\Http\Controllers\TransbankController::class, 'index']);
         Route::post('/subir',          [\App\Http\Controllers\TransbankController::class, 'subir']);
+        Route::post('/saldar-comisiones', [\App\Http\Controllers\TransbankController::class, 'saldarComisiones']);
         Route::delete('/{id}',         [\App\Http\Controllers\TransbankController::class, 'destroy']);
         Route::get('/{id}/abonos',     [\App\Http\Controllers\TransbankController::class, 'abonos']);
         Route::get('/depositos',       [\App\Http\Controllers\TransbankController::class, 'depositos']);
