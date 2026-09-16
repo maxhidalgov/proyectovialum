@@ -1018,6 +1018,78 @@ public function store(Request $request)
         return response()->json(['ok' => true, 'facturacion_cerrada' => (bool) $data['cerrada']]);
     }
 
+    /**
+     * Enviar la cotización al cliente (WhatsApp por ahora; correo cuando haya SMTP).
+     * Registra el envío, deja la cotización en estado "Enviada" y crea un recordatorio
+     * de seguimiento para recontactar.
+     */
+    public function enviar(Request $request, $id)
+    {
+        $data = $request->validate([
+            'via'      => 'required|in:whatsapp,email',
+            'telefono' => 'nullable|string|max:30',
+            'mensaje'  => 'nullable|string|max:2000',
+        ]);
+
+        $cot = Cotizacion::with(['cliente', 'estado'])->findOrFail($id);
+        $nombre  = $cot->cliente?->razon_social
+            ?: trim(($cot->cliente?->first_name ?? '') . ' ' . ($cot->cliente?->last_name ?? ''));
+        $pdfUrl  = url("/cotizaciones/{$cot->id}/pdf");
+        $mensaje = $data['mensaje'] ?: (
+            ($nombre ? "Hola {$nombre}," : 'Hola,') .
+            "\n\nTe comparto la cotización #{$cot->id} de Vialum. Puedes verla y descargarla acá:\n{$pdfUrl}\n\nCualquier duda quedo atento. ¡Saludos!"
+        );
+
+        if ($data['via'] === 'email') {
+            return response()->json(['message' => 'El envío por correo estará disponible al configurar el SMTP. Usa WhatsApp por ahora.'], 422);
+        }
+
+        // WhatsApp
+        $tel = $data['telefono'] ?: ($cot->cliente?->telefono ?? $cot->cliente?->phone ?? null);
+        if (!$tel) {
+            return response()->json(['message' => 'El cliente no tiene teléfono. Ingresa uno para enviar por WhatsApp.'], 422);
+        }
+        $digitos = preg_replace('/\D+/', '', $tel);
+        if (strlen($digitos) === 9 && str_starts_with($digitos, '9')) {
+            $digitos = '56' . $digitos; // celular chileno sin código de país
+        }
+        $waUrl = 'https://wa.me/' . $digitos . '?text=' . rawurlencode($mensaje);
+
+        $this->registrarEnvioCotizacion($cot, 'whatsapp', $tel);
+
+        return response()->json(['ok' => true, 'wa_url' => $waUrl, 'enviado_at' => $cot->enviado_at?->toDateTimeString()]);
+    }
+
+    private function registrarEnvioCotizacion(Cotizacion $cot, string $via, string $dest): void
+    {
+        $upd = ['enviado_at' => now(), 'enviado_via' => $via, 'enviado_a' => $dest];
+
+        // Pasar a "Enviada" salvo que ya esté cerrada (Aprobada/Rechazada/Anulada/Facturada)
+        $estadoActual = $cot->estado?->nombre;
+        if (!in_array($estadoActual, ['Aprobada', 'Rechazada', 'Anulada', 'Facturada'], true)) {
+            $enviadaId = \App\Models\EstadoCotizacion::where('nombre', 'Enviada')->value('id');
+            if ($enviadaId) $upd['estado_cotizacion_id'] = $enviadaId;
+        }
+        $cot->update($upd);
+
+        // Recordatorio de seguimiento (recontactar en 3 días)
+        $nombre = $cot->cliente?->razon_social
+            ?: trim(($cot->cliente?->first_name ?? '') . ' ' . ($cot->cliente?->last_name ?? ''));
+        $viaTxt = $via === 'email' ? 'correo' : 'WhatsApp';
+        \DB::table('recordatorios')->insert([
+            'titulo'        => 'Seguimiento cotización #' . $cot->id . ($nombre ? " · {$nombre}" : ''),
+            'descripcion'   => "Recontactar. Cotización enviada por {$viaTxt} el " . now()->format('d-m-Y') . '.',
+            'fecha'         => now()->addDays(3)->toDateString(),
+            'tipo'          => 'seguimiento',
+            'estado'        => 'pendiente',
+            'cotizacion_id' => $cot->id,
+            'cliente_id'    => $cot->cliente_id,
+            'origen'        => 'app',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+    }
+
     public function subirImagenes(Request $request, $id)
     {
         $cotizacion = Cotizacion::findOrFail($id);

@@ -135,6 +135,11 @@
           <v-btn icon @click="descargarPDF(item.id)" title="Descargar Cotización PDF" :loading="pdfCargando === item.id">
             <v-icon>mdi-file-pdf-box</v-icon>
           </v-btn>
+          <v-btn icon color="green" @click="abrirEnviar(item)"
+            :title="item.enviado_at ? ('Enviada el ' + (item.enviado_at || '').slice(0,10) + ' — reenviar') : 'Enviar cotización por WhatsApp'">
+            <v-badge v-if="item.enviado_at" dot color="success"><v-icon>mdi-whatsapp</v-icon></v-badge>
+            <v-icon v-else>mdi-whatsapp</v-icon>
+          </v-btn>
           <v-btn icon color="orange" @click="descargarOT(item.id)" title="Descargar Orden de Trabajo">
             <v-icon>mdi-file-document-outline</v-icon>
           </v-btn>
@@ -155,6 +160,34 @@
         </template>
       </v-data-table>
     </v-card>
+
+    <!-- Enviar cotización (WhatsApp) -->
+    <v-dialog v-model="dialogEnviar.show" max-width="520">
+      <v-card v-if="dialogEnviar.item">
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="green">mdi-whatsapp</v-icon>
+          Enviar cotización #{{ dialogEnviar.item.id }}
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <v-text-field v-model="dialogEnviar.telefono" label="Teléfono (WhatsApp)" placeholder="Ej: 9 1234 5678"
+            density="compact" variant="outlined" prepend-inner-icon="mdi-phone" class="mb-3" />
+          <v-textarea v-model="dialogEnviar.mensaje" label="Mensaje" rows="6" density="compact" variant="outlined" auto-grow />
+          <p class="text-caption text-medium-emphasis mt-1">
+            Se abrirá WhatsApp con el mensaje y el link al PDF. La cotización queda como <strong>Enviada</strong> y se crea un recordatorio de seguimiento en 3 días.
+          </p>
+          <v-alert v-if="dialogEnviar.error" color="error" variant="tonal" density="compact" class="mt-2 text-caption">{{ dialogEnviar.error }}</v-alert>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="dialogEnviar.show = false">Cancelar</v-btn>
+          <v-btn color="green" :loading="dialogEnviar.enviando" @click="enviarCotizacion">
+            <v-icon start>mdi-whatsapp</v-icon>Enviar por WhatsApp
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </template>
   
   <script setup>
@@ -315,7 +348,40 @@ const descargarPDF = async (cotizacionId) => {
     pdfCargando.value = null
   }
 }
-  
+
+// ── Enviar cotización (WhatsApp) ──────────────────────────────────
+const dialogEnviar = ref({ show: false, enviando: false, item: null, telefono: '', mensaje: '', error: null })
+
+function abrirEnviar(item) {
+  const nombre = item.cliente?.razon_social
+    || `${item.cliente?.first_name || ''} ${item.cliente?.last_name || ''}`.trim()
+  const tel = item.cliente?.telefono || item.cliente?.phone || ''
+  const pdfUrl = `${window.location.origin}/cotizaciones/${item.id}/pdf`
+  const mensaje = `${nombre ? 'Hola ' + nombre + ',' : 'Hola,'}\n\nTe comparto la cotización #${item.id} de Vialum. Puedes verla y descargarla acá:\n${pdfUrl}\n\nCualquier duda quedo atento. ¡Saludos!`
+  dialogEnviar.value = { show: true, enviando: false, item, telefono: tel, mensaje, error: null }
+}
+
+async function enviarCotizacion() {
+  const d = dialogEnviar.value
+  d.enviando = true
+  d.error = null
+  try {
+    const { data } = await api.post(`/api/cotizaciones/${d.item.id}/enviar`, {
+      via: 'whatsapp',
+      telefono: d.telefono || undefined,
+      mensaje: d.mensaje || undefined,
+    })
+    if (data.wa_url) window.open(data.wa_url, '_blank')
+    // Reflejar el envío en la fila
+    d.item.enviado_at = data.enviado_at || new Date().toISOString()
+    d.show = false
+  } catch (e) {
+    d.error = e.response?.data?.message || 'No se pudo enviar'
+  } finally {
+    d.enviando = false
+  }
+}
+
   onMounted(async () => {
     try {
       const res = await api.get('/api/cotizaciones')
