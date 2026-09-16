@@ -42,6 +42,7 @@ const allMenuItems = [
     permission: 'area_ventas',
     children: [
       { title: 'Cotizar proyecto',to: { name: 'cotizador' },     icon: { icon: 'mdi-calculator' },              permission: 'area_ventas' },
+      { title: 'Winperfil',       to: { name: 'winperfil' },     icon: { icon: 'mdi-window-maximize' },         permission: 'area_ventas' },
       { title: 'Cotizaciones',    to: { name: 'cotizaciones' },  icon: { icon: 'tabler-file' },                 permission: 'area_ventas' },
       { title: 'Venta Express',   to: { name: 'venta-express' }, icon: { icon: 'mdi-flash' },                   permission: 'area_ventas' },
       { title: 'Cotización rápida', to: { name: 'cotizacion-rapida' }, icon: { icon: 'mdi-note-plus-outline' }, permission: 'area_ventas' },
@@ -72,7 +73,6 @@ const allMenuItems = [
       { title: 'Producción',         to: { name: 'produccion' },     icon: { icon: 'mdi-scissors-cutting' },permission: 'area_produccion' },
       { title: 'Órdenes de Compra',  to: { name: 'ordenes-compra' }, icon: { icon: 'mdi-cart-arrow-down' }, permission: 'area_produccion' },
       { title: 'Calendario',         to: { name: 'calendario' },     icon: { icon: 'mdi-calendar-month' },  permission: 'area_produccion' },
-      { title: 'Winperfil',          to: { name: 'winperfil' },      icon: { icon: 'mdi-window-maximize' }, permission: 'area_produccion' },
     ],
   },
 
