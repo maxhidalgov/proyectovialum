@@ -85,7 +85,7 @@
             {{ item.dias_desde_envio === 0 ? 'Hoy' : item.dias_desde_envio + ' d' }}
           </VChip>
           <div class="text-caption text-medium-emphasis mt-1">
-            <VIcon size="12" :icon="item.enviado_via === 'email' ? 'mdi-email-outline' : 'mdi-whatsapp'" />
+            <VIcon size="12" :icon="iconoVia(item.enviado_via)" />
             {{ fecha(item.enviado_at) }}
           </div>
         </template>
@@ -124,7 +124,7 @@
             <VTooltip text="Ver PDF" location="top">
               <template #activator="{ props }">
                 <VBtn v-bind="props" icon size="small" variant="text"
-                  :href="pdfUrl(item.id)" target="_blank">
+                  :href="pdfUrl(item)" target="_blank">
                   <VIcon icon="mdi-file-pdf-box" />
                 </VBtn>
               </template>
@@ -182,8 +182,13 @@ function tooltipSemaforo(item) {
   if (d <= 7) return `Sin respuesta hace ${d} días — hacer seguimiento`
   return `Sin respuesta hace ${d} días — urgente`
 }
-function pdfUrl(id) {
-  return `${window.location.origin}/cotizaciones/${id}/pdf`
+function pdfUrl(item) {
+  return `${window.location.origin}/p/cotizacion/${item.public_token || ''}`
+}
+function iconoVia(via) {
+  if (via === 'email') return 'mdi-email-outline'
+  if (via === 'presencial') return 'mdi-handshake-outline'
+  return 'mdi-whatsapp'
 }
 
 async function cargar() {

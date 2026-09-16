@@ -5,7 +5,9 @@ use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\ImportacionController;
 use Illuminate\Support\Facades\File;
 
-Route::get('/cotizaciones/{id}/pdf', [CotizacionController::class, 'generarPDF']);
+// PDF público por TOKEN (no por ID) — el link que se comparte con el cliente.
+// El ID secuencial /cotizaciones/{id}/pdf se retiró: permitía ver cotizaciones ajenas.
+Route::get('/p/cotizacion/{token}', [CotizacionController::class, 'generarPDFPublico']);
 Route::get('/boleta/{id}/pdf', [\App\Http\Controllers\BsaleController::class, 'boletaPdfLocal']);
 
 

@@ -179,7 +179,11 @@
           <v-alert v-if="dialogEnviar.error" color="error" variant="tonal" density="compact" class="mt-2 text-caption">{{ dialogEnviar.error }}</v-alert>
         </v-card-text>
         <v-divider />
-        <v-card-actions class="pa-3">
+        <v-card-actions class="pa-3 flex-wrap gap-1">
+          <v-btn variant="text" size="small" :disabled="dialogEnviar.enviando"
+            :loading="dialogEnviar.presencial" @click="marcarEntregaPresencial">
+            <v-icon start>mdi-handshake-outline</v-icon>Entregada en persona
+          </v-btn>
           <v-spacer />
           <v-btn variant="text" @click="dialogEnviar.show = false">Cancelar</v-btn>
           <v-btn color="green" :loading="dialogEnviar.enviando" @click="enviarCotizacion">
@@ -330,15 +334,41 @@ const descargarPDF = async (cotizacionId) => {
 }
 
 // ── Enviar cotización (WhatsApp) ──────────────────────────────────
-const dialogEnviar = ref({ show: false, enviando: false, item: null, telefono: '', mensaje: '', error: null })
+const dialogEnviar = ref({ show: false, enviando: false, presencial: false, item: null, telefono: '', mensaje: '', error: null })
 
-function abrirEnviar(item) {
+async function abrirEnviar(item) {
   const nombre = item.cliente?.razon_social
     || `${item.cliente?.first_name || ''} ${item.cliente?.last_name || ''}`.trim()
   const tel = item.cliente?.telefono || item.cliente?.phone || ''
-  const pdfUrl = `${window.location.origin}/cotizaciones/${item.id}/pdf`
-  const mensaje = `${nombre ? 'Hola ' + nombre + ',' : 'Hola,'}\n\nTe comparto la cotización #${item.id} de Vialum. Puedes verla y descargarla acá:\n${pdfUrl}\n\nCualquier duda quedo atento. ¡Saludos!`
-  dialogEnviar.value = { show: true, enviando: false, item, telefono: tel, mensaje, error: null }
+  // Link público por TOKEN (no expone el ID). Usa el token de la fila o lo pide al backend.
+  let pdfUrl = item.public_token
+    ? `${window.location.origin}/p/cotizacion/${item.public_token}`
+    : ''
+  if (!pdfUrl) {
+    try {
+      const { data } = await api.get(`/api/cotizaciones/${item.id}/public-link`)
+      pdfUrl = data.url
+      item.public_token = data.token
+    } catch (e) { /* el backend regenerará el link al enviar */ }
+  }
+  const linkTxt = pdfUrl ? `\n\nTe comparto la cotización #${item.id} de Vialum. Puedes verla y descargarla acá:\n${pdfUrl}` : `\n\nTe comparto la cotización #${item.id} de Vialum.`
+  const mensaje = `${nombre ? 'Hola ' + nombre + ',' : 'Hola,'}${linkTxt}\n\nCualquier duda quedo atento. ¡Saludos!`
+  dialogEnviar.value = { show: true, enviando: false, presencial: false, item, telefono: tel, mensaje, error: null }
+}
+
+async function marcarEntregaPresencial() {
+  const d = dialogEnviar.value
+  d.presencial = true
+  d.error = null
+  try {
+    const { data } = await api.post(`/api/cotizaciones/${d.item.id}/enviar`, { via: 'presencial' })
+    d.item.enviado_at = data.enviado_at || new Date().toISOString()
+    d.show = false
+  } catch (e) {
+    d.error = e.response?.data?.message || 'No se pudo marcar la entrega'
+  } finally {
+    d.presencial = false
+  }
 }
 
 async function enviarCotizacion() {

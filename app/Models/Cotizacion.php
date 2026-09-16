@@ -3,10 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Cotizacion extends Model
 {
     protected $table = 'cotizaciones';
+
+    /** Devuelve el token público, generándolo y guardándolo si aún no existe. */
+    public function publicToken(): string
+    {
+        if (empty($this->public_token)) {
+            $this->public_token = Str::random(40);
+            $this->save();
+        }
+
+        return $this->public_token;
+    }
     protected $fillable = [
         'cliente_id',
         'cliente_facturacion_id',
@@ -23,6 +35,7 @@ class Cotizacion extends Model
         'facturacion_cerrada',
         'url_pdf_bsale',
         'token_bsale',
+        'public_token',
         'adjunto_winperfil',
         'pedido_proveedor',
         'estado_produccion',
@@ -129,6 +142,13 @@ class Cotizacion extends Model
      */
     protected static function booted(): void
     {
+        // Token público no adivinable para compartir el PDF (link de WhatsApp/correo)
+        static::creating(function (Cotizacion $cot) {
+            if (empty($cot->public_token)) {
+                $cot->public_token = Str::random(40);
+            }
+        });
+
         static::updated(function (Cotizacion $c) {
             if ($c->wasChanged('estado_produccion')) {
                 $c->historialEstados()->create([

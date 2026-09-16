@@ -1027,7 +1027,7 @@ public function store(Request $request)
     public function enviar(Request $request, $id)
     {
         $data = $request->validate([
-            'via'      => 'required|in:whatsapp,email',
+            'via'      => 'required|in:whatsapp,email,presencial',
             'telefono' => 'nullable|string|max:30',
             'mensaje'  => 'nullable|string|max:2000',
         ]);
@@ -1035,7 +1035,16 @@ public function store(Request $request)
         $cot = Cotizacion::with(['cliente', 'estado'])->findOrFail($id);
         $nombre  = $cot->cliente?->razon_social
             ?: trim(($cot->cliente?->first_name ?? '') . ' ' . ($cot->cliente?->last_name ?? ''));
-        $pdfUrl  = url("/cotizaciones/{$cot->id}/pdf");
+
+        // Entrega en persona: solo marca el estado + recordatorio, sin link ni mensaje.
+        if ($data['via'] === 'presencial') {
+            $this->registrarEnvioCotizacion($cot, 'presencial', 'En persona');
+
+            return response()->json(['ok' => true, 'enviado_at' => $cot->enviado_at?->toDateTimeString()]);
+        }
+
+        // Link con token no adivinable (no expone IDs secuenciales)
+        $pdfUrl  = url("/p/cotizacion/{$cot->publicToken()}");
         $mensaje = $data['mensaje'] ?: (
             ($nombre ? "Hola {$nombre}," : 'Hola,') .
             "\n\nTe comparto la cotización #{$cot->id} de Vialum. Puedes verla y descargarla acá:\n{$pdfUrl}\n\nCualquier duda quedo atento. ¡Saludos!"
@@ -1076,10 +1085,17 @@ public function store(Request $request)
         // Recordatorio de seguimiento (recontactar en 3 días)
         $nombre = $cot->cliente?->razon_social
             ?: trim(($cot->cliente?->first_name ?? '') . ' ' . ($cot->cliente?->last_name ?? ''));
-        $viaTxt = $via === 'email' ? 'correo' : 'WhatsApp';
+        $viaTxt = match ($via) {
+            'email'      => 'correo',
+            'presencial' => 'en persona',
+            default      => 'WhatsApp',
+        };
+        $entregaTxt = $via === 'presencial'
+            ? "Cotización entregada en persona el " . now()->format('d-m-Y') . '.'
+            : "Cotización enviada por {$viaTxt} el " . now()->format('d-m-Y') . '.';
         \DB::table('recordatorios')->insert([
             'titulo'        => 'Seguimiento cotización #' . $cot->id . ($nombre ? " · {$nombre}" : ''),
-            'descripcion'   => "Recontactar. Cotización enviada por {$viaTxt} el " . now()->format('d-m-Y') . '.',
+            'descripcion'   => "Recontactar. {$entregaTxt}",
             'fecha'         => now()->addDays(3)->toDateString(),
             'tipo'          => 'seguimiento',
             'estado'        => 'pendiente',
@@ -1126,6 +1142,7 @@ public function store(Request $request)
 
             return [
                 'id'                  => $c->id,
+                'public_token'        => $c->public_token,
                 'cliente'             => $nombre ?: 'Sin cliente',
                 'cliente_telefono'    => $c->cliente?->telefono ?? $c->cliente?->phone ?? null,
                 'vendedor'            => $c->vendedor?->name ?? null,
@@ -1157,6 +1174,28 @@ public function store(Request $request)
         ];
 
         return response()->json(['cotizaciones' => $items, 'metricas' => $metricas]);
+    }
+
+    /**
+     * PDF público por TOKEN (no por ID secuencial), para compartir con el
+     * cliente sin exponer cotizaciones ajenas cambiando el número en la URL.
+     */
+    public function generarPDFPublico(Request $request, $token)
+    {
+        $cot = Cotizacion::where('public_token', $token)->firstOrFail();
+
+        return $this->generarPDF($cot->id, $request);
+    }
+
+    /** Devuelve el link público (con token) para compartir la cotización. */
+    public function publicLink($id)
+    {
+        $cot = Cotizacion::findOrFail($id);
+
+        return response()->json([
+            'token' => $cot->publicToken(),
+            'url'   => url("/p/cotizacion/{$cot->publicToken()}"),
+        ]);
     }
 
     public function subirImagenes(Request $request, $id)
