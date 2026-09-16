@@ -44,6 +44,7 @@ const allMenuItems = [
       { title: 'Cotizar proyecto',to: { name: 'cotizador' },     icon: { icon: 'mdi-calculator' },              permission: 'area_ventas' },
       { title: 'Winperfil',       to: { name: 'winperfil' },     icon: { icon: 'mdi-window-maximize' },         permission: 'area_ventas' },
       { title: 'Cotizaciones',    to: { name: 'cotizaciones' },  icon: { icon: 'tabler-file' },                 permission: 'area_ventas' },
+      { title: 'Seguimiento',     to: { name: 'seguimiento' },   icon: { icon: 'mdi-radar' },                   permission: 'area_ventas' },
       { title: 'Venta Express',   to: { name: 'venta-express' }, icon: { icon: 'mdi-flash' },                   permission: 'area_ventas' },
       { title: 'Cotización rápida', to: { name: 'cotizacion-rapida' }, icon: { icon: 'mdi-note-plus-outline' }, permission: 'area_ventas' },
       { title: 'Facturación',     to: { name: 'facturacion' },   icon: { icon: 'mdi-file-document-multiple' },  permission: 'area_ventas' },

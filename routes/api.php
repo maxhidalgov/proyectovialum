@@ -119,6 +119,7 @@ Route::middleware('auth:api')->group(function () {
 
     // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
+    Route::get('/cotizaciones/seguimiento', [CotizacionController::class, 'seguimiento']);
     Route::post('/cotizaciones/{id}/cerrar-facturacion', [CotizacionController::class, 'cerrarFacturacion']);
     Route::post('/cotizaciones/{id}/enviar', [CotizacionController::class, 'enviar']);
     Route::post('/cotizaciones/parse-winperfil', [CotizacionController::class, 'parseWinperfil']);

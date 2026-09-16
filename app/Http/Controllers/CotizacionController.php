@@ -859,7 +859,8 @@ public function store(Request $request)
         $estadoActual = $cotizacion->estado->nombre;
 
         $transicionesPermitidas = [
-            'Evaluación'    => ['Aprobada', 'Rechazada'],
+            'Evaluación'    => ['Aprobada', 'Rechazada', 'Enviada'],
+            'Enviada'       => ['Aprobada', 'Rechazada', 'Evaluación'],
             'Aprobada'      => ['En Producción', 'Rechazada'],
             'En Producción' => ['Entregada'],
             'Entregada'     => ['Facturada'],
@@ -1088,6 +1089,74 @@ public function store(Request $request)
             'created_at'    => now(),
             'updated_at'    => now(),
         ]);
+    }
+
+    /**
+     * Tablero de seguimiento: cotizaciones enviadas pendientes de respuesta.
+     * Semáforo por días desde el envío + métricas de conversión.
+     */
+    public function seguimiento(Request $request)
+    {
+        $enviadaId = \App\Models\EstadoCotizacion::where('nombre', 'Enviada')->value('id');
+
+        $cots = Cotizacion::with(['cliente', 'vendedor', 'estado'])
+            ->when($enviadaId, fn ($q) => $q->where('estado_cotizacion_id', $enviadaId))
+            ->whereNotNull('enviado_at')
+            ->orderBy('enviado_at', 'asc')
+            ->get();
+
+        // Próximos recordatorios de seguimiento pendientes (una sola consulta)
+        $recordatorios = \DB::table('recordatorios')
+            ->select('cotizacion_id', \DB::raw('MIN(fecha) as fecha'))
+            ->whereIn('cotizacion_id', $cots->pluck('id'))
+            ->where('tipo', 'seguimiento')
+            ->where('estado', 'pendiente')
+            ->groupBy('cotizacion_id')
+            ->pluck('fecha', 'cotizacion_id');
+
+        $hoy = now()->startOfDay();
+
+        $items = $cots->map(function ($c) use ($recordatorios, $hoy) {
+            $enviado = $c->enviado_at ? \Carbon\Carbon::parse($c->enviado_at) : null;
+            $dias = $enviado ? $enviado->copy()->startOfDay()->diffInDays($hoy) : null;
+            $semaforo = $dias === null ? 'gris' : ($dias < 3 ? 'verde' : ($dias <= 7 ? 'amarillo' : 'rojo'));
+
+            $nombre = $c->cliente?->razon_social
+                ?: trim(($c->cliente?->first_name ?? '') . ' ' . ($c->cliente?->last_name ?? ''));
+
+            return [
+                'id'                  => $c->id,
+                'cliente'             => $nombre ?: 'Sin cliente',
+                'cliente_telefono'    => $c->cliente?->telefono ?? $c->cliente?->phone ?? null,
+                'vendedor'            => $c->vendedor?->name ?? null,
+                'total'               => (float) $c->total,
+                'total_bruto'         => round(((float) $c->total) * 1.19),
+                'estado'              => $c->estado?->nombre,
+                'enviado_at'          => $enviado?->toDateTimeString(),
+                'enviado_via'         => $c->enviado_via,
+                'dias_desde_envio'    => $dias,
+                'semaforo'            => $semaforo,
+                'proximo_recordatorio'=> $recordatorios[$c->id] ?? null,
+            ];
+        })->values();
+
+        // ── Métricas de conversión (sobre cotizaciones que alguna vez se enviaron) ──
+        $baseEnviadas = Cotizacion::whereNotNull('enviado_at');
+        $totalEnviadas = (clone $baseEnviadas)->count();
+        $aprobadas = (clone $baseEnviadas)->whereHas('estado', fn ($q) => $q->where('nombre', 'Aprobada'))->count();
+        $rechazadas = (clone $baseEnviadas)->whereHas('estado', fn ($q) => $q->where('nombre', 'Rechazada'))->count();
+        $conRespuesta = $aprobadas + $rechazadas;
+
+        $metricas = [
+            'pendientes'      => $items->count(),
+            'sin_respuesta_7d'=> $items->where('dias_desde_envio', '>', 7)->count(),
+            'total_enviadas'  => $totalEnviadas,
+            'aprobadas'       => $aprobadas,
+            'rechazadas'      => $rechazadas,
+            'tasa_conversion' => $conRespuesta > 0 ? round($aprobadas * 100 / $conRespuesta, 1) : null,
+        ];
+
+        return response()->json(['cotizaciones' => $items, 'metricas' => $metricas]);
     }
 
     public function subirImagenes(Request $request, $id)
