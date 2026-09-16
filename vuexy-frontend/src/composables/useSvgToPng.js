@@ -33,6 +33,47 @@ export async function svgDataUriToPng(svgDataUri, targetWidth = 320) {
   return _svgViaCanvgBasic(svgDataUri, targetWidth)
 }
 
+/**
+ * Garantiza que las ventanas Winperfil de una cotización tengan su PNG
+ * pre-renderizado y guardado en la BD, para que el PDF (link público,
+ * WhatsApp o descarga) muestre las imágenes sin depender de que alguien
+ * haya abierto antes la vista de la cotización.
+ *
+ * Genera solo los que faltan (tienen SVG pero no PNG) y ESPERA a que se
+ * guarden antes de resolver — clave para el envío por WhatsApp, donde el
+ * link se comparte con el cliente inmediatamente.
+ *
+ * @returns {Promise<number>} cantidad de gráficos generados
+ */
+export async function asegurarGraficosCotizacion(api, cotizacionId) {
+  try {
+    const { data: cot } = await api.get(`/api/cotizaciones/${cotizacionId}`)
+    const detalles = cot.detalles || []
+    const sinPng = detalles.filter(
+      d => d.tipo_item === 'winperfil' && d.winperfil_grafico && !d.winperfil_grafico_png,
+    )
+    if (!sinPng.length) return 0
+
+    const graficos = {}
+    for (const det of sinPng) {
+      try {
+        graficos[det.id] = await svgDataUriToPng(det.winperfil_grafico.trim())
+      } catch (e) {
+        console.warn('[asegurarGraficos] canvg error detalle', det.id, e)
+      }
+    }
+
+    const keys = Object.keys(graficos)
+    if (keys.length) {
+      await api.post(`/api/cotizaciones/${cotizacionId}/guardar-graficos-png`, { graficos })
+    }
+    return keys.length
+  } catch (e) {
+    console.warn('[asegurarGraficos] error', e)
+    return 0
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers de decodificación compartidos
 // ─────────────────────────────────────────────────────────────────────────────

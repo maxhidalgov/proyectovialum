@@ -477,6 +477,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import axios from '@/axiosInstance'
 import MoneyField from '@/components/documentos/MoneyField.vue'
+import { asegurarGraficosCotizacion } from '@/composables/useSvgToPng'
 
 // ── Estado de conexión ─────────────────────────────────────────────────────────
 const conexion = ref({ ok: null, mensaje: '' })
@@ -542,6 +543,9 @@ async function confirmarImport() {
       total:    m.neto || undefined,
       tipo:     'neto',
     })
+    // Pre-renderizar y guardar los PNG de las ventanas para que el PDF muestre
+    // las imágenes aunque nadie abra antes la vista de la cotización.
+    await asegurarGraficosCotizacion(axios, m.id)
     m.show = false
     await cargarSync()
   } catch (e) {

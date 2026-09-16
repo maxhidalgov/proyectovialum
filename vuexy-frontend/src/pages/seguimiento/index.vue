@@ -143,6 +143,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import api from '@/axiosInstance'
+import { asegurarGraficosCotizacion } from '@/composables/useSvgToPng'
 
 const loading = ref(false)
 const accionId = ref(null)
@@ -217,6 +218,7 @@ async function marcarEstado(item, estado) {
 async function reenviar(item) {
   accionId.value = item.id
   try {
+    await asegurarGraficosCotizacion(api, item.id)
     const { data } = await api.post(`/api/cotizaciones/${item.id}/enviar`, { via: 'whatsapp' })
     if (data.wa_url) window.open(data.wa_url, '_blank')
     notify(`Reenviada la cotización #${item.id}`)

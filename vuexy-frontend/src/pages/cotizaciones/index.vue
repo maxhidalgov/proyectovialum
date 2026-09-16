@@ -194,7 +194,7 @@
   import { ref, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import api from '@/axiosInstance'
-  import { svgDataUriToPng } from '@/composables/useSvgToPng'
+  import { asegurarGraficosCotizacion } from '@/composables/useSvgToPng'
 
   const router = useRouter()
   const cotizaciones   = ref([])
@@ -308,30 +308,10 @@ const pdfCargando = ref(null) // ID de la cotización cuyo PDF está generándos
 const descargarPDF = async (cotizacionId) => {
   pdfCargando.value = cotizacionId
   try {
-    // 1. Intentar GET simple primero (usa PNGs guardados en BD si la cotización fue vista antes)
-    const { data: cot } = await api.get(`/api/cotizaciones/${cotizacionId}`)
-    const detalles = cot.detalles || []
+    // 1. Garantizar los PNGs de las ventanas Winperfil (genera y GUARDA los que falten)
+    await asegurarGraficosCotizacion(api, cotizacionId)
 
-    // 2. Ver si faltan PNGs (cotización nunca fue abierta en cotizacion-ver)
-    const sinPng = detalles.filter(d => d.tipo_item === 'winperfil' && d.winperfil_grafico && !d.winperfil_grafico_png)
-
-    if (sinPng.length > 0) {
-      // Convertir los que faltan y guardar en BD
-      const graficos = {}
-      for (const det of sinPng) {
-        try {
-          graficos[det.id] = await svgDataUriToPng(det.winperfil_grafico.trim())
-        } catch (e) {
-          console.warn('canvg error detalle', det.id, e)
-        }
-      }
-      if (Object.keys(graficos).length) {
-        // Guardar en BD para futuras veces
-        api.post(`/api/cotizaciones/${cotizacionId}/guardar-graficos-png`, { graficos }).catch(() => {})
-      }
-    }
-
-    // 3. Descargar PDF (el server usa los PNGs de la BD)
+    // 2. Descargar PDF (el server usa los PNGs de la BD)
     const response = await api.get(`/api/cotizaciones/${cotizacionId}/pdf`, { responseType: 'blob' })
     const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
     const link = document.createElement('a')
@@ -366,6 +346,8 @@ async function enviarCotizacion() {
   d.enviando = true
   d.error = null
   try {
+    // Garantizar que el PDF público que se comparte tenga las imágenes Winperfil
+    await asegurarGraficosCotizacion(api, d.item.id)
     const { data } = await api.post(`/api/cotizaciones/${d.item.id}/enviar`, {
       via: 'whatsapp',
       telefono: d.telefono || undefined,

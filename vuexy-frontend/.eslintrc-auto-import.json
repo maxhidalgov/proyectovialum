@@ -360,6 +360,7 @@
     "watchTriggerable": true,
     "watchWithFilter": true,
     "whenever": true,
-    "svgDataUriToPng": true
+    "svgDataUriToPng": true,
+    "asegurarGraficosCotizacion": true
   }
 }
