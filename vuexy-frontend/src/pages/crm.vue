@@ -247,6 +247,7 @@ const filtroEstado   = ref(null)  // click en stat card
 
 const columnas = [
   { estado: 'Evaluación',    color: 'grey',   hex: '#757575' },
+  { estado: 'Enviada',       color: 'orange', hex: '#FB8C00' },
   { estado: 'Aprobada',      color: 'green',  hex: '#43A047' },
   { estado: 'En Producción', color: 'blue',   hex: '#1E88E5' },
   { estado: 'Entregada',     color: 'purple', hex: '#8E24AA' },
@@ -261,6 +262,7 @@ const columnasFiltradas = computed(() =>
 
 const transicionesMap = {
   'Evaluación':    ['Aprobada', 'Rechazada'],
+  'Enviada':       ['Aprobada', 'Rechazada'],
   'Aprobada':      ['En Producción', 'Rechazada'],
   'En Producción': ['Entregada'],
   'Entregada':     ['Facturada'],
