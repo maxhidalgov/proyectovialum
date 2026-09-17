@@ -36,6 +36,9 @@ class Cotizacion extends Model
         'url_pdf_bsale',
         'token_bsale',
         'public_token',
+        'enviado_at',
+        'enviado_via',
+        'enviado_a',
         'adjunto_winperfil',
         'pedido_proveedor',
         'estado_produccion',
@@ -70,6 +73,7 @@ class Cotizacion extends Model
         'es_manual'             => 'boolean',
         'oculto_operaciones'    => 'boolean',
         'facturacion_cerrada'   => 'boolean',
+        'enviado_at'            => 'datetime',
     ];
 
     public function cliente()
