@@ -117,6 +117,12 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/inventario/recepciones/{compra}',          [\App\Http\Controllers\InventarioController::class, 'recepcionDetalle']);
     Route::post('/inventario/recepciones/{compra}/recibir', [\App\Http\Controllers\InventarioController::class, 'recibir']);
 
+    // Agente recepcionista de leads (WhatsApp / simulador)
+    Route::post('/agente-leads/iniciar',       [\App\Http\Controllers\AgenteLeadsController::class, 'iniciar']);
+    Route::post('/agente-leads/mensaje',        [\App\Http\Controllers\AgenteLeadsController::class, 'mensaje']);
+    Route::get('/agente-leads/leads',           [\App\Http\Controllers\AgenteLeadsController::class, 'leads']);
+    Route::patch('/agente-leads/leads/{id}',    [\App\Http\Controllers\AgenteLeadsController::class, 'actualizarLead']);
+
     // Rutas específicas ANTES del apiResource para evitar conflicto con {id}
     Route::get('/cotizaciones/aprobadas', [CotizacionController::class, 'getAprobadas']);
     Route::get('/cotizaciones/seguimiento', [CotizacionController::class, 'seguimiento']);

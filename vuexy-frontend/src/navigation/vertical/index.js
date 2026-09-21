@@ -59,8 +59,9 @@ const allMenuItems = [
     icon: { icon: 'mdi-account-multiple' },
     permission: 'area_clientes',
     children: [
-      { title: 'Clientes', to: { name: 'clientes' }, icon: { icon: 'mdi-account-multiple' }, permission: 'area_clientes' },
-      { title: 'CRM',      to: { name: 'crm' },      icon: { icon: 'mdi-view-kanban' },      permission: 'area_clientes' },
+      { title: 'Clientes',        to: { name: 'clientes' },     icon: { icon: 'mdi-account-multiple' }, permission: 'area_clientes' },
+      { title: 'CRM',             to: { name: 'crm' },          icon: { icon: 'mdi-view-kanban' },      permission: 'area_clientes' },
+      { title: 'Agente de Leads', to: { name: 'agente-leads' }, icon: { icon: 'mdi-robot-happy' },      permission: 'area_clientes' },
     ],
   },
 
