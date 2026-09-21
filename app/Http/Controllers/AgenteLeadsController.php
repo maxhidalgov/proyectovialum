@@ -24,7 +24,7 @@ class AgenteLeadsController extends Controller
 
         return response()->json([
             'conversacion_id' => $conv->id,
-            'saludo'          => '¡Hola! 👋 Bienvenido/a a Vialum, fabricamos ventanas y puertas de PVC y aluminio a medida. ¿En qué te puedo ayudar?',
+            'saludo'          => '¡Hola! 👋 Bienvenido/a a Vialum. Fabricamos a medida ventanas y puertas de PVC y aluminio, shower de baño en vidrio templado y divisiones de oficina. ¿En qué le puedo ayudar?',
         ]);
     }
 
