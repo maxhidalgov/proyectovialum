@@ -40,10 +40,12 @@
 
           <VDivider />
           <div class="pa-2 d-flex gap-2">
-            <VTextField v-model="entrada" placeholder="Escribe como si fueras el cliente…"
+            <VTextField v-model="entrada"
+              :placeholder="conversacionId ? 'Escribe como si fueras el cliente…' : 'Conectando…'"
               density="compact" variant="outlined" hide-details autofocus
-              :disabled="pensando" @keyup.enter="enviar" />
-            <VBtn color="primary" icon="mdi-send" :loading="pensando" :disabled="!entrada.trim()" @click="enviar" />
+              :disabled="pensando || !conversacionId" @keyup.enter="enviar" />
+            <VBtn color="primary" icon="mdi-send" :loading="pensando"
+              :disabled="!entrada.trim() || !conversacionId" @click="enviar" />
           </div>
         </VCard>
       </VCol>
@@ -141,6 +143,11 @@ async function reiniciar() {
 async function enviar() {
   const texto = entrada.value.trim()
   if (!texto || pensando.value) return
+  // Asegurar que la conversación esté iniciada (evita conversacion_id null en carrera)
+  if (!conversacionId.value) {
+    await reiniciar()
+    if (!conversacionId.value) { notify('No se pudo iniciar la conversación', 'error'); return }
+  }
   entrada.value = ''
   mensajes.value.push({ rol: 'user', texto })
   scrollBottom()
