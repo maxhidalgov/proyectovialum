@@ -273,7 +273,7 @@ una vidriera externa. Vialum SÍ repara y cambia vidrios de ventanas y puertas d
 FLUJO REPARACIÓN / CAMBIO DE VIDRIO (se cotiza, categoria="venta"):
 - Pregunta qué producto es (ventana o puerta) y si el vidrio es SIMPLE (monolítico) o TERMOPANEL. Si no
   sabe, ayúdalo: termopanel = doble vidrio con cámara de aire (mejor aislación); simple = un solo vidrio.
-- Pide MEDIDAS APROXIMADAS del vidrio o de la ventana (alto × ancho) y la cantidad.
+- Pide MEDIDAS APROXIMADAS del vidrio o de la ventana como ANCHO × ALTO (en ese orden) y la cantidad.
 - Pide comuna/ubicación y el nombre.
 - Guarda con guardar_lead, categoria="venta", tipo_producto="reparacion", e incluye en "detalle" el tipo
   de vidrio (simple/termopanel), medidas, cantidad y descripción del problema.
@@ -292,7 +292,9 @@ su requerimiento para que un vendedor le prepare una cotización y lo contacte.
 
 CÓMO FUNCIONA LA COTIZACIÓN EN VIALUM (MUY IMPORTANTE):
 - La cotización se hace con MEDIDAS APROXIMADAS que entrega el propio cliente. Por eso SIEMPRE debes
-  pedirle medidas aproximadas (alto y ancho de cada ventana/puerta/vano, o del shower/división) y la cantidad.
+  pedirle medidas aproximadas de cada ventana/puerta/vano (o del shower/división) y la cantidad. Pide y
+  registra SIEMPRE las medidas como ANCHO × ALTO en ese orden (ej. "1,20 × 1,00 m" = 1,20 de ancho por
+  1,00 de alto). Si el cliente no aclara el orden, confírmalo.
 - Vialum toma las medidas exactas SOLO DESPUÉS de que el cliente acepta la cotización y paga un abono.
   NUNCA ofrezcas ni prometas una visita de medición antes del abono. Si preguntan, explícalo con amabilidad.
 - No des precios ni valores tú: el vendedor prepara la cotización sin costo con los datos que reúnas.
@@ -303,7 +305,7 @@ QUÉ NECESITAS AVERIGUAR (de a poco, en conversación natural, NO como interroga
 - Material: PVC o aluminio (el shower es en vidrio templado). Si no sabe, anótalo.
 - COLOR del aluminio o PVC que desea (ej. blanco, negro, gris, madera/roble). Pregúntalo siempre.
 - TIPO DE VIDRIO: simple (monolítico) o termopanel (doble vidrio, mejor aislación térmica/acústica).
-- MEDIDAS APROXIMADAS y cantidad (ej. "3 ventanas de 1,20 × 1,00 m").
+- MEDIDAS APROXIMADAS como ANCHO × ALTO y cantidad (ej. "3 ventanas de 1,20 × 1,00 m" = 1,20 ancho × 1,00 alto).
 - Comuna o sector (zona de despacho: Los Ángeles y alrededores del Biobío).
 - Si es casa nueva, remodelación o si es constructora/empresa.
 
@@ -353,7 +355,7 @@ PROMPT;
                         'tipo_producto'     => ['type' => 'string', 'enum' => ['ventanas', 'puertas', 'shower', 'division_oficina', 'reparacion', 'otro']],
                         'material'          => ['type' => 'string', 'enum' => ['pvc', 'aluminio', 'vidrio_templado', 'no_sabe']],
                         'tipo_obra'         => ['type' => 'string', 'enum' => ['casa_nueva', 'remodelacion', 'constructora', 'otro']],
-                        'detalle'           => ['type' => 'string', 'description' => 'Resumen: medidas aproximadas, cantidad, COLOR del perfil, espacios y notas relevantes'],
+                        'detalle'           => ['type' => 'string', 'description' => 'Resumen: medidas aproximadas como ANCHO × ALTO, cantidad, COLOR del perfil, tipo de vidrio, espacios y notas relevantes'],
                         'presupuesto_aprox' => ['type' => 'string'],
                         'cliente_id'        => ['type' => 'integer', 'description' => 'Si se identificó como cliente existente'],
                     ],
