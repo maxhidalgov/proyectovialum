@@ -57,6 +57,7 @@ class AgenteLeadsController extends Controller
     {
         $leads = Lead::orderByDesc('id')->limit(100)->get()->map(fn ($l) => [
             'id'            => $l->id,
+            'categoria'     => $l->categoria,
             'nombre'        => $l->nombre,
             'telefono'      => $l->telefono,
             'email'         => $l->email,

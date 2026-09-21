@@ -66,10 +66,16 @@
             <div v-if="!leads.length" class="text-center text-medium-emphasis pa-8">
               Aún no hay leads. Prueba una conversación en el simulador.
             </div>
-            <VCard v-for="l in leads" :key="l.id" variant="outlined" class="mb-2">
+            <VCard v-for="l in leads" :key="l.id" variant="outlined" class="mb-2"
+              :style="l.categoria === 'postventa' ? 'border-left: 3px solid #FB8C00;' : ''">
               <VCardText class="py-2">
                 <div class="d-flex align-center justify-space-between mb-1">
-                  <span class="font-weight-bold">{{ l.nombre || 'Sin nombre' }}</span>
+                  <div class="d-flex align-center gap-2">
+                    <span class="font-weight-bold">{{ l.nombre || 'Sin nombre' }}</span>
+                    <VChip v-if="l.categoria === 'postventa'" size="x-small" color="warning" variant="flat" prepend-icon="mdi-wrench">
+                      Postventa
+                    </VChip>
+                  </div>
                   <VChip size="x-small" :color="colorEstado(l.estado)" variant="tonal">{{ l.estado }}</VChip>
                 </div>
                 <div class="d-flex flex-wrap gap-1 mb-1">

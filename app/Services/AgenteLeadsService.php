@@ -180,6 +180,7 @@ class AgenteLeadsService
             $lead = Lead::updateOrCreate(
                 ['conversacion_id' => $conv->id],
                 [
+                    'categoria'         => $input['categoria']         ?? 'venta',
                     'nombre'            => $input['nombre']            ?? $conv->nombre_contacto,
                     'telefono'          => $input['telefono']          ?? ($conv->canal === 'whatsapp' ? $conv->identificador : null),
                     'email'             => $input['email']             ?? null,
@@ -208,13 +209,14 @@ class AgenteLeadsService
                 $lead->comuna,
             ])->filter()->implode(' · ');
 
+            $esPostventa = $lead->categoria === 'postventa';
             DB::table('recordatorios')->insert([
-                'titulo'      => '🟢 Nuevo lead: ' . ($lead->nombre ?: 'sin nombre'),
+                'titulo'      => ($esPostventa ? '🔧 Postventa: ' : '🟢 Nuevo lead: ') . ($lead->nombre ?: 'sin nombre'),
                 'descripcion' => trim(($resumen ? $resumen . '. ' : '') .
                                  'Tel: ' . ($lead->telefono ?: 's/n') . '. ' .
-                                 ($lead->detalle ? 'Pide: ' . $lead->detalle : '')),
+                                 ($lead->detalle ? ($esPostventa ? 'Problema: ' : 'Pide: ') . $lead->detalle : '')),
                 'fecha'       => now()->toDateString(),
-                'tipo'        => 'tarea',
+                'tipo'        => $esPostventa ? 'llamada' : 'tarea',
                 'estado'      => 'pendiente',
                 'cliente_id'  => $lead->cliente_id,
                 'origen'      => 'ia',
@@ -228,6 +230,7 @@ class AgenteLeadsService
                 'ok'   => true,
                 'lead' => [
                     'id'            => $lead->id,
+                    'categoria'     => $lead->categoria,
                     'nombre'        => $lead->nombre,
                     'telefono'      => $lead->telefono,
                     'comuna'        => $lead->comuna,
@@ -256,8 +259,22 @@ fabrica e instala a medida:
 
 Atiendes a personas que escriben por primera vez consultando, normalmente por WhatsApp.
 
-TU OBJETIVO: dar una buena primera atención, CALIFICAR al interesado y capturar sus datos y su
-requerimiento para que un vendedor le prepare una cotización y lo contacte.
+LO PRIMERO: distingue si el contacto es una VENTA nueva o una POSTVENTA.
+- VENTA: quiere cotizar, comprar o consultar por un producto nuevo.
+- POSTVENTA: tiene un PROBLEMA con algo YA instalado (filtración/se pasa el agua, no cierra, vidrio
+  trizado, garantía, reparación, reclamo, mantención). NO trates esto como una venta.
+
+FLUJO POSTVENTA (cuando detectes un problema con algo ya instalado):
+- Muestra empatía y disposición a ayudar (sin prometer soluciones ni plazos concretos).
+- Confirma si el producto lo instaló Vialum.
+- Identifica al cliente: pide su nombre y/o teléfono e intenta ubicarlo con buscar_cliente.
+- Pide una descripción clara del problema (qué falla, hace cuánto, en qué producto/ubicación).
+- NO pidas color ni medidas ni ofrezcas cotización. Esto no es una venta.
+- Llama a guardar_lead con categoria="postventa" y el problema en "detalle".
+- Cierra diciendo que el equipo de postventa / servicio técnico lo contactará para revisar el caso.
+
+TU OBJETIVO EN VENTA: dar una buena primera atención, CALIFICAR al interesado y capturar sus datos y
+su requerimiento para que un vendedor le prepare una cotización y lo contacte.
 
 CÓMO FUNCIONA LA COTIZACIÓN EN VIALUM (MUY IMPORTANTE):
 - La cotización se hace con MEDIDAS APROXIMADAS que entrega el propio cliente. Por eso SIEMPRE debes
@@ -309,10 +326,11 @@ PROMPT;
             ],
             [
                 'name'         => 'guardar_lead',
-                'description'  => 'Registra o actualiza el lead con los datos calificados y avisa al vendedor. Llamar cuando tengas al menos nombre, qué necesita y comuna.',
+                'description'  => 'Registra o actualiza el contacto y avisa al equipo. Para VENTA: llamar cuando tengas al menos nombre, qué necesita y comuna. Para POSTVENTA: llamar cuando tengas nombre y la descripción del problema.',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => [
+                        'categoria'         => ['type' => 'string', 'enum' => ['venta', 'postventa'], 'description' => 'venta = consulta/cotización nueva; postventa = problema, garantía o reparación de algo ya instalado'],
                         'nombre'            => ['type' => 'string'],
                         'telefono'          => ['type' => 'string'],
                         'email'             => ['type' => 'string'],
