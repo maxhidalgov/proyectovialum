@@ -2193,8 +2193,9 @@ const guardarCotizacion = async (express = false) => {
     
     const tieneVentanas = cotizacion.ventanas.length > 0
     const tieneProductos = cotizacion.productos && cotizacion.productos.length > 0
-    
-    if (!tieneVentanas && !tieneProductos) {
+    const tieneItemsLibres = cotizacion.itemsLibres && cotizacion.itemsLibres.length > 0
+
+    if (!tieneVentanas && !tieneProductos && !tieneItemsLibres) {
       alert('Debes agregar al menos una ventana o un producto a la cotización')
       return
     }
