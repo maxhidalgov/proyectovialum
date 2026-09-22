@@ -4,459 +4,392 @@
   <meta charset="UTF-8">
   <title>Cotización #{{ $cotizacion->id }}</title>
   <style>
-    @page { margin: 14mm 14mm 22mm 14mm; }
+    @page { margin: 16mm 15mm 20mm 15mm; }
 
-    body { font-family: sans-serif; font-size: 11px; color: #222; margin: 0; }
+    body { font-family: sans-serif; font-size: 11.5px; color: #2b2f36; margin: 0; line-height: 1.5; font-variant-numeric: tabular-nums; }
 
-    /* ── Barra de marca ── */
-    .brand-bar {
-      background-color: #1B3A6B;
-      height: 7px;
-      margin-bottom: 14px;
+    table { border-collapse: collapse; }
+    .r { text-align: right; }
+    .c { text-align: center; }
+    .muted { color: #8a9099; }
+    .nowrap { white-space: nowrap; }
+
+    /* ── Encabezado ─────────────────────────────────────────── */
+    .header td { vertical-align: top; padding: 0; border: none; }
+    .brand-name { font-size: 25px; font-weight: bold; color: #1B3A6B; letter-spacing: 1px; line-height: 1; }
+    .brand-tag  { font-size: 8px; font-weight: bold; letter-spacing: 3px; color: #6b7580; margin-top: 3px; }
+    .company { margin-top: 13px; font-size: 10px; color: #8a9099; line-height: 1.55; }
+    .company .legal { font-weight: bold; color: #4a5560; font-size: 11px; }
+
+    /* Recuadro COTIZACIÓN */
+    .quote-box { width: 188px; border: 1px solid #c9d4e2; }
+    .quote-box .qb-title {
+      text-align: center; color: #1B3A6B; font-weight: bold;
+      letter-spacing: 2px; font-size: 12px; padding: 5px 0 4px;
+      border-bottom: 1px solid #e7ecf2;
     }
+    .quote-box .qb-row td { padding: 4px 11px; font-size: 10.5px; border: none; }
+    .quote-box .qb-row td:first-child { color: #8a9099; }
+    .quote-box .qb-row td:last-child { text-align: right; font-weight: bold; color: #2b2f36; }
 
-    /* ── Header ── */
-    .header-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-    .header-table td { border: none; vertical-align: top; padding: 0; }
-    .cotizacion-title { margin: 0 0 10px 0; font-size: 20px; color: #1B3A6B; }
-    .info-row td { border: none; padding: 2px 0; }
-    .info-label { font-weight: bold; color: #333; padding-right: 6px; white-space: nowrap; }
-    .company-info { font-size: 10px; color: #444; line-height: 1.7; text-align: right; }
-    .company-info strong { color: #222; }
+    .rule { border: none; border-top: 2px solid #1B3A6B; margin: 14px 0 14px; }
 
-    /* ── Tarjeta de ventana ── */
-    .ventana-card {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 18px;
-      border: 1px solid #ddd;
-    }
-    .ventana-card td { border: none; vertical-align: middle; padding: 10px; }
-    .ventana-img-cell { width: 50%; text-align: center; background-color: #fafafa; border-right: 1px solid #ddd; }
+    /* ── Cliente / intro ────────────────────────────────────── */
+    .eyebrow { font-size: 8.5px; font-weight: bold; letter-spacing: 2px; color: #9aa1ab; text-transform: uppercase; }
+    .client-name { font-size: 13.5px; font-weight: bold; color: #1B3A6B; margin-top: 2px; }
+    .client-meta { font-size: 10.5px; color: #5a616b; line-height: 1.6; margin-top: 2px; }
+    .intro { margin: 14px 0 10px; font-size: 11.5px; color: #3a3f47; }
 
-    /* ── Tabla de detalles ── */
-    .detail-table { width: 100%; border-collapse: collapse; }
-    .detail-header {
-      background-color: #1B3A6B;
-      color: #fff;
-      padding: 8px 10px;
-      font-size: 13px;
-      font-weight: bold;
-      text-align: left;
-    }
-    .detail-table tr td {
-      border-bottom: 1px solid #eee;
-      padding: 5px 8px;
-      font-size: 11px;
-    }
-    .detail-table tr td:first-child {
-      font-weight: bold;
-      color: #555;
-      background-color: #f5f5f5;
-      width: 42%;
-      border-right: 1px solid #eee;
-    }
-    .detail-table tr:last-child td { border-bottom: none; }
-
-    /* ── Sección adicionales ── */
+    /* ── Secciones (ventanas / winperfil) ───────────────────── */
     .section-title {
-      color: #1B3A6B;
-      font-size: 13px;
-      font-weight: bold;
-      border-bottom: 2px solid #1B3A6B;
-      padding-bottom: 4px;
-      margin: 24px 0 10px 0;
+      color: #1B3A6B; font-size: 9.5px; font-weight: bold; letter-spacing: 1px;
+      text-transform: uppercase; border-bottom: 1px solid #dfe4ea;
+      padding-bottom: 5px; margin: 16px 0 9px;
     }
-    .products-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .products-table th {
-      background-color: #1B3A6B;
-      color: #fff;
-      padding: 7px 8px;
-      font-weight: bold;
+    .section-title.sub { color: #7c838d; }
+    .card { width: 100%; margin-bottom: 9px; border: 1px solid #dfe4ea; page-break-inside: avoid; }
+    .card td { border: none; vertical-align: middle; }
+    .card-img { width: 44%; background: #fbfcfe; border-right: 1px solid #dfe4ea; text-align: center; padding: 6px; }
+    .card-head { background: #1B3A6B; color: #fff; padding: 9px 11px; font-size: 11px; font-weight: bold; letter-spacing: 0.3px; }
+    .attr { width: 100%; }
+    .attr td { padding: 5px 9px; font-size: 10.5px; border-bottom: 1px solid #eef1f5; }
+    .attr td:first-child { color: #7c838d; width: 40%; }
+    .attr td:last-child { color: #2b2f36; font-weight: bold; }
+    .attr tr.ssub td { color: #1B3A6B; border-top: 1px solid #dfe4ea; border-bottom: none; padding-top: 5px; }
+    .attr tr.ssub td:last-child { font-size: 12.5px; }
+    .obs { font-size: 9.5px; color: #6b7280; font-style: italic; margin: -4px 0 12px; padding-left: 2px; }
+
+    /* ── Tabla de productos ─────────────────────────────────── */
+    .items { width: 100%; }
+    .items thead th {
+      background: #eef2f7; color: #5a6472; font-size: 8.5px; font-weight: bold;
+      letter-spacing: 1px; text-transform: uppercase; padding: 8px 10px;
+      border-top: 2px solid #1B3A6B; border-bottom: 1px solid #d5deea;
     }
-    .products-table td { border: 1px solid #ddd; padding: 6px 8px; }
-    .products-table tbody tr:nth-child(even) td { background-color: #fafafa; }
+    .items tbody td { padding: 9px 10px; border-bottom: 1px solid #e7ebf0; vertical-align: top; }
+    .item-name { font-weight: bold; color: #2b2f36; font-size: 11px; }
+    .item-sub { font-size: 9.5px; color: #8a9099; margin-top: 2px; }
 
-    /* ── Totales ── */
-    .totals-section { page-break-inside: avoid; margin-top: 20px; }
-    .totals-wrapper { width: 100%; border-collapse: collapse; }
-    .totals-wrapper td { border: none; padding: 0; }
-    .totals-inner { width: 100%; border-collapse: collapse; }
-    .totals-inner td { padding: 5px 10px; border-top: 1px solid #ddd; font-size: 11px; }
-    .totals-inner td:first-child { text-align: right; }
-    .totals-inner td:last-child { text-align: right; white-space: nowrap; }
-    .total-final { background-color: #1B3A6B; color: #fff; font-size: 14px; font-weight: bold; }
-    .total-final td { border-top: none !important; padding: 8px 10px; }
+    /* ── Resumen económico ──────────────────────────────────── */
+    .summary { width: 100%; page-break-inside: avoid; margin-top: 16px; }
+    .summary > td { border: none; padding: 0; vertical-align: top; }
+    .sum-inner { width: 100%; }
+    .sum-inner td { padding: 6px 12px; font-size: 11.5px; }
+    .sum-inner td:first-child { color: #6b7280; }
+    .sum-inner td:last-child { text-align: right; font-weight: bold; color: #2b2f36; }
+    .proj-summary { font-size: 9.5px; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase; color: #7c838d; text-align: right; padding: 0 12px 7px; }
+    .sum-line td { border-top: 1px solid #dfe4ea; }
+    .total-band td {
+      background: #1B3A6B; color: #fff; padding: 11px 12px; border: none;
+    }
+    .total-band td:first-child { font-size: 13px; font-weight: bold; letter-spacing: 2px; color: #fff; }
+    .total-band td:last-child { font-size: 17.5px; font-weight: bold; text-align: right; color: #fff; }
 
-    /* ── Pie de nota ── */
-    .nota { font-size: 9px; color: #aaa; text-align: center; margin-top: 16px; }
+    /* ── Condiciones + firma ────────────────────────────────── */
+    .bottom { width: 100%; margin-top: 18px; page-break-inside: avoid; }
+    .bottom td { border: none; vertical-align: top; padding: 0; }
+    .cond-title { font-size: 9.5px; font-weight: bold; letter-spacing: 1px; color: #9aa1ab; text-transform: uppercase; margin-bottom: 7px; }
+    .cond { font-size: 11px; color: #55606b; line-height: 1.95; }
+    .sign { text-align: right; vertical-align: bottom; }
+    .sign-label { font-size: 9px; font-weight: bold; letter-spacing: 1px; color: #9aa1ab; text-transform: uppercase; margin-bottom: 3px; }
+    .sign-name { font-weight: bold; color: #2b2f36; font-size: 12.5px; }
+    .sign-sub { font-size: 10px; color: #6b7280; margin-top: 1px; }
 
-    /* ── Footer fijo ── */
+    /* ── Footer fijo ────────────────────────────────────────── */
     #pdf-footer {
-      position: fixed;
-      bottom: -14mm;
-      left: 0;
-      right: 0;
-      border-top: 1px solid #ddd;
-      padding-top: 4px;
-      font-size: 9px;
-      color: #aaa;
-      text-align: center;
+      position: fixed; bottom: -12mm; left: 0; right: 0;
+      border-top: 1px solid #e7ebf0; padding-top: 5px;
+      font-size: 9px; color: #8a9099; text-align: center; letter-spacing: 0.4px;
     }
   </style>
 </head>
 <body>
 
-{{-- Footer fijo en todas las páginas --}}
+@php
+  $limpiar   = fn($s) => trim(preg_replace('/^\s*Nuevo\s*[íi]tem\s*/iu', '', (string) $s));
+  $validez   = 15;
+  $clienteNom = $cotizacion->cliente->razon_social
+      ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '—';
+  $clienteRut = $cotizacion->cliente->rut ?? $cotizacion->cliente->identification ?? null;
+  $clienteMail = $cotizacion->cliente->email ?? null;
+  $clienteDir  = $cotizacion->cliente->address ?? $cotizacion->cliente->direccion ?? null;
+  $clienteCiu  = $cotizacion->cliente->ciudad ?? null;
+  $responsable = $cotizacion->vendedor->name ?? $cotizacion->vendedor->nombre ?? 'Administrador';
+@endphp
+
+{{-- Footer fijo --}}
 <div id="pdf-footer">
-  Cotización #{{ $cotizacion->id }} &nbsp;·&nbsp; {{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }} &nbsp;·&nbsp; Válida 5 días
+  www.vialum.cl · contacto@vialum.cl · Los Ángeles
 </div>
 
-{{-- Barra de marca --}}
-<div class="brand-bar"></div>
-
-{{-- Header --}}
-<table class="header-table">
+{{-- ── Encabezado ─────────────────────────────────────────── --}}
+<table class="header" style="width:100%;">
   <tr>
-    <td style="width: 55%;">
-      <h2 class="cotizacion-title">Cotización #{{ $cotizacion->id }}</h2>
-      <table style="border-collapse: collapse;">
-        <tr class="info-row">
-          <td class="info-label">Cliente:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->cliente->razon_social ?: trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? '')) ?: '-' }}</td>
-        </tr>
-        @if($cotizacion->cliente->rut ?? null)
-        <tr class="info-row">
-          <td class="info-label">RUT:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->cliente->rut }}</td>
-        </tr>
-        @endif
-        @php
-          $contacto  = trim(($cotizacion->cliente->first_name ?? '') . ' ' . ($cotizacion->cliente->last_name ?? ''));
-          $telefono  = $cotizacion->cliente->phone ?? $cotizacion->cliente->telefono ?? null;
-          $correo    = $cotizacion->cliente->email ?? null;
-          $direccion = $cotizacion->cliente->address ?? $cotizacion->cliente->direccion ?? null;
-          $ciudad    = $cotizacion->cliente->ciudad ?? null;
-        @endphp
-        @if($telefono)
-        <tr class="info-row">
-          <td class="info-label">Teléfono:</td>
-          <td style="border:none; padding: 2px 0;">{{ $telefono }}</td>
-        </tr>
-        @endif
-        @if($correo)
-        <tr class="info-row">
-          <td class="info-label">Correo:</td>
-          <td style="border:none; padding: 2px 0;">{{ $correo }}</td>
-        </tr>
-        @endif
-        @if($direccion)
-        <tr class="info-row">
-          <td class="info-label">Dirección:</td>
-          <td style="border:none; padding: 2px 0;">{{ $direccion }}{{ $ciudad ? ', ' . $ciudad : '' }}</td>
-        </tr>
-        @endif
-        <tr class="info-row">
-          <td class="info-label">Fecha:</td>
-          <td style="border:none; padding: 2px 0;">
-            {{ \Carbon\Carbon::parse($cotizacion->fecha)->locale('es')->isoFormat('D [de] MMMM [de] YYYY') }}
-          </td>
-        </tr>
-        <tr class="info-row">
-          <td class="info-label">Estado:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->estado->nombre ?? '-' }}</td>
-        </tr>
-        @if($cotizacion->vendedor?->nombre)
-        <tr class="info-row">
-          <td class="info-label">Vendedor:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->vendedor->nombre }}</td>
-        </tr>
-        @endif
-        @if($cotizacion->observaciones)
-        <tr class="info-row">
-          <td class="info-label" style="vertical-align: top;">Observaciones:</td>
-          <td style="border:none; padding: 2px 0;">{{ $cotizacion->observaciones }}</td>
-        </tr>
-        @endif
-      </table>
-    </td>
-    <td style="width: 45%; text-align: right; vertical-align: top;">
+    <td style="width:58%;">
       @if(!empty($logoBase64))
-        <img src="{{ $logoBase64 }}" alt="Logo Vialum" width="130" style="margin-bottom: 6px;" />
+        <img src="{{ $logoBase64 }}" alt="VIALUM" style="width:155px; height:auto;">
       @else
-        <h3 style="margin: 0; color: #1B3A6B;">VIALUM</h3>
+        <div class="brand-name">VIALUM</div>
+        <div class="brand-tag">VENTANAS PVC · ALUMINIO</div>
       @endif
-      <div class="company-info">
-        <strong>Dirección:</strong> Balmaceda 454, Los Ángeles<br>
-        <strong>Teléfono:</strong> +432311859<br>
-        <strong>Correo:</strong> contacto@vialum.cl<br>
-        <strong>Web:</strong> www.vialum.cl
+      <div class="company">
+        <span class="legal">HIDALGO E HIDALGO LIMITADA</span><br>
+        RUT 76.096.031-4 · Vidriería, aluminios y ferretería<br>
+        Balmaceda 454, Los Ángeles<br>
+        contacto@vialum.cl · +56 43 2 311859
       </div>
+    </td>
+    <td style="width:42%;">
+      <table class="quote-box" align="right">
+        <tr><td colspan="2" class="qb-title">COTIZACIÓN</td></tr>
+        <tr class="qb-row"><td>N°</td><td>{{ $cotizacion->id }}</td></tr>
+        <tr class="qb-row"><td>Fecha</td><td>{{ \Carbon\Carbon::parse($cotizacion->fecha)->format('d/m/Y') }}</td></tr>
+        <tr class="qb-row"><td>Validez</td><td>{{ $validez }} días</td></tr>
+      </table>
     </td>
   </tr>
 </table>
 
-{{-- Ventanas --}}
-@foreach($cotizacion->ventanas as $index => $ventana)
-  <table class="ventana-card">
-    <tr>
-      {{-- Imagen --}}
-      <td class="ventana-img-cell">
-        @if($ventana->imagen && isset($imagenesBase64[$ventana->id]))
-          <img
-            src="{{ $imagenesBase64[$ventana->id] }}"
-            width="300"
-            style="display: block; margin: 0 auto;"
-            alt="Vista ventana"
-          />
-        @elseif($ventana->imagen)
-          <p style="color: #bbb; font-size: 10px;">Imagen no disponible</p>
-        @else
-          <p style="color: #bbb;">Sin imagen</p>
-        @endif
-      </td>
+<hr class="rule">
 
-      {{-- Detalles --}}
-      <td style="width: 50%; vertical-align: top; padding: 0;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <th colspan="2" style="background-color: #1B3A6B; color: #fff; font-size: 13px; font-weight: bold; padding: 8px 10px; text-align: left;">
-              V{{ $index + 1 }} &mdash; {{ $ventana->tipoVentana->nombre ?? 'N/A' }}
-            </th>
-          </tr>
-          @php $labelStyle = 'font-weight: bold; color: #555; background-color: #f5f5f5; border: 1px solid #eee; padding: 5px 8px; width: 42%;'; $valStyle = 'border: 1px solid #eee; padding: 5px 8px;'; @endphp
-          <tr><th style="{{ $labelStyle }}">Color</th><td style="{{ $valStyle }}">{{ $ventana->color->nombre ?? 'N/A' }}</td></tr>
-          <tr>
-            <th style="{{ $labelStyle }}">Vidrio</th>
-            <td style="{{ $valStyle }}">
-              {{ $ventana->productoVidrioProveedor->producto->nombre ?? 'N/A' }}
-            </td>
-          </tr>
-          <tr><th style="{{ $labelStyle }}">Ancho</th><td style="{{ $valStyle }}">{{ $ventana->ancho }} mm</td></tr>
-          <tr><th style="{{ $labelStyle }}">Alto</th><td style="{{ $valStyle }}">{{ $ventana->alto }} mm</td></tr>
-          <tr><th style="{{ $labelStyle }}">Cantidad</th><td style="{{ $valStyle }}">{{ $ventana->cantidad }}</td></tr>
-          @if($ventana->tipo_ventana_id === 55)
-            <tr>
-              <th style="{{ $labelStyle }}">Herraje</th>
-              <td style="{{ $valStyle }}">{{ !empty($ventana->config['manillon']) ? 'Manillón' : 'Pestillo' }}</td>
-            </tr>
-          @endif
-          <tr>
-            <th style="{{ $labelStyle }}">Valor Neto</th>
-            <td style="{{ $valStyle }}">${{ number_format($ventana->cantidad > 0 ? round($ventana->precio / $ventana->cantidad) : $ventana->precio, 0, ',', '.') }}</td>
-          </tr>
-          <tr>
-            <th style="{{ $labelStyle }}">Total Neto</th>
-            <td style="{{ $valStyle }}"><strong>${{ number_format($ventana->precio, 0, ',', '.') }}</strong></td>
-          </tr>
-          @if(in_array($ventana->tipo_ventana_id, [59, 60]) && !empty($detallesConstructor[$ventana->id]))
-            @php $det = $detallesConstructor[$ventana->id]; @endphp
-            <tr>
-              <th style="{{ $labelStyle }}">Detalle</th>
-              <td style="{{ $valStyle }}; font-size: 10px; line-height: 1.6;">
-                @if(!empty($det['perfiles']))
-                  <strong>Perfiles:</strong> {{ implode(', ', $det['perfiles']) }}<br>
-                @endif
-                @if(!empty($det['junquillos']))
-                  <strong>Junquillo:</strong> {{ implode(', ', $det['junquillos']) }}<br>
-                @endif
-                @if(!empty($det['vidrios_templados']))
-                  <strong>Cristal:</strong> {{ implode(', ', $det['vidrios_templados']) }}<br>
-                @endif
-                @if(!empty($det['tiradores']))
-                  <strong>Tirador:</strong> {{ implode(', ', $det['tiradores']) }}
-                @endif
-              </td>
-            </tr>
-          @endif
-        </table>
-      </td>
-    </tr>
-  </table>
-@endforeach
+{{-- ── Cliente ────────────────────────────────────────────── --}}
+<div class="section-title" style="margin-top:4px;">Cliente</div>
+<div class="client-name">{{ $clienteNom }}</div>
+<div class="client-meta">
+  @if($clienteRut) RUT {{ $clienteRut }}<br> @endif
+  @if($clienteDir) {{ $clienteDir }}{{ $clienteCiu ? ', ' . $clienteCiu : '' }}<br> @endif
+  @if($clienteMail) {{ $clienteMail }} @endif
+</div>
 
-{{-- ── Ventanas WINPERFIL ─────────────────────────────────────────────── --}}
+<div class="intro">De acuerdo con lo solicitado, presentamos nuestra propuesta comercial:</div>
+
+@if($cotizacion->observaciones)
+  <div style="font-size:9.5px; color:#6b7280; margin-bottom:10px;">
+    <strong>Observaciones:</strong> {{ $cotizacion->observaciones }}
+  </div>
+@endif
+
+{{-- ── Ventanas (cotizador) ───────────────────────────────── --}}
+@if($cotizacion->ventanas->count() > 0)
+  <div class="section-title">Ventanas</div>
+  @foreach($cotizacion->ventanas as $index => $ventana)
+    <table class="card">
+      <tr>
+        <td class="card-img">
+          @if($ventana->imagen && isset($imagenesBase64[$ventana->id]))
+            <img src="{{ $imagenesBase64[$ventana->id] }}" style="max-width:270px; max-height:220px; width:auto; height:auto;" alt="Ventana V{{ $index + 1 }}">
+          @else
+            <span class="muted" style="font-size:9px;">Sin imagen</span>
+          @endif
+        </td>
+        <td style="width:60%; vertical-align:top; padding:0;">
+          <div class="card-head">V{{ $index + 1 }} · {{ mb_strtoupper($ventana->tipoVentana->nombre ?? 'VENTANA') }}</div>
+          <table class="attr">
+            <tr><td>Color</td><td>{{ $ventana->color->nombre ?? 'N/A' }}</td></tr>
+            <tr><td>Vidrio</td><td>{{ $ventana->productoVidrioProveedor->producto->nombre ?? 'N/A' }}</td></tr>
+            <tr><td>Medidas (an × al)</td><td>{{ number_format($ventana->ancho,0,',','.') }} × {{ number_format($ventana->alto,0,',','.') }} mm</td></tr>
+            <tr><td>Cantidad</td><td>{{ $ventana->cantidad }} ud.</td></tr>
+            <tr><td>Superficie</td><td>{{ number_format(($ventana->ancho/1000)*($ventana->alto/1000)*$ventana->cantidad, 2, ',', '.') }} m²</td></tr>
+            @if($ventana->tipo_ventana_id === 55)
+              <tr><td>Herraje</td><td>{{ !empty($ventana->config['manillon']) ? 'Manillón' : 'Pestillo' }}</td></tr>
+            @endif
+            <tr><td>Valor unitario</td><td>${{ number_format($ventana->cantidad > 0 ? round($ventana->precio / $ventana->cantidad) : $ventana->precio, 0, ',', '.') }}</td></tr>
+            <tr class="ssub"><td>Subtotal</td><td>${{ number_format($ventana->precio, 0, ',', '.') }}</td></tr>
+            @if(in_array($ventana->tipo_ventana_id, [59, 60]) && !empty($detallesConstructor[$ventana->id]))
+              @php $det = $detallesConstructor[$ventana->id]; @endphp
+              <tr>
+                <td>Detalle</td>
+                <td style="font-weight:normal; color:#5a616b; font-size:9px; line-height:1.6;">
+                  @if(!empty($det['perfiles']))<strong>Perfiles:</strong> {{ implode(', ', $det['perfiles']) }}<br>@endif
+                  @if(!empty($det['junquillos']))<strong>Junquillo:</strong> {{ implode(', ', $det['junquillos']) }}<br>@endif
+                  @if(!empty($det['vidrios_templados']))<strong>Cristal:</strong> {{ implode(', ', $det['vidrios_templados']) }}<br>@endif
+                  @if(!empty($det['tiradores']))<strong>Tirador:</strong> {{ implode(', ', $det['tiradores']) }}@endif
+                </td>
+              </tr>
+            @endif
+          </table>
+        </td>
+      </tr>
+    </table>
+    @php $obsV = $ventana->observacion ?? ($ventana->config['observacion'] ?? null); @endphp
+    @if($obsV)
+      <div class="obs">Observación: {{ $obsV }}</div>
+    @endif
+  @endforeach
+@endif
+
+{{-- ── Ventanas WINPERFIL ─────────────────────────────────── --}}
 @php
   $winperfilItems = $cotizacion->detalles->where('tipo_item', 'winperfil')->values();
   $productosItems = $cotizacion->detalles->where('tipo_item', '!=', 'winperfil')->values();
 @endphp
 
 @if($winperfilItems->count() > 0)
-  <div class="section-title">Ventanas WINPERFIL</div>
-
+  <div class="section-title">Ventanas Winperfil</div>
   @foreach($winperfilItems as $i => $detalle)
-    {{-- Una tarjeta por ventana: imagen izq. | datos der. --}}
-    <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1px solid #ddd; page-break-inside:avoid;">
+    <table class="card">
       <tr>
-
-        {{-- Celda imagen: ancho fijo 38%, imagen centrada con max-height --}}
-        <td style="width:38%; background:#f7f9fb; border-right:1px solid #ddd; padding:10px; text-align:center; vertical-align:middle;">
+        <td class="card-img">
           @if(!empty($graficos[$detalle->id]))
-            <img
-              src="{{ $graficos[$detalle->id] }}"
-              style="display:block; margin:0 auto; max-width:190px; max-height:160px; width:auto; height:auto;"
-              alt="{{ $detalle->descripcion }}"
-            />
+            <img src="{{ $graficos[$detalle->id] }}" style="max-width:240px; max-height:210px; width:auto; height:auto;" alt="{{ $detalle->descripcion }}">
           @else
-            <span style="color:#bbb; font-size:10px;">Sin imagen</span>
+            <span class="muted" style="font-size:9px;">Sin imagen</span>
           @endif
         </td>
-
-        {{-- Celda datos --}}
-        <td style="width:62%; vertical-align:top; padding:0;">
-          {{-- Encabezado azul --}}
-          <div style="background:#1B3A6B; color:#fff; padding:7px 10px; font-size:11px; font-weight:bold; line-height:1.4;">
-            {{ $detalle->descripcion }}
-          </div>
-          {{-- Tabla de atributos --}}
-          @php
-            $lbl = 'padding:5px 8px; font-weight:bold; color:#555; background:#f5f5f5; border:1px solid #eee; width:40%; font-size:10px;';
-            $val = 'padding:5px 8px; border:1px solid #eee; font-size:10px;';
-          @endphp
-          <table style="width:100%; border-collapse:collapse;">
+        <td style="width:60%; vertical-align:top; padding:0;">
+          <div class="card-head">{{ $limpiar($detalle->descripcion) }}</div>
+          <table class="attr">
             @if($detalle->ancho_mm && $detalle->alto_mm)
-            <tr>
-              <td style="{{ $lbl }}">Dimensiones</td>
-              <td style="{{ $val }}">{{ number_format($detalle->ancho_mm,0,',','.') }} × {{ number_format($detalle->alto_mm,0,',','.') }} mm</td>
-            </tr>
+              <tr><td>Medidas (an × al)</td><td>{{ number_format($detalle->ancho_mm,0,',','.') }} × {{ number_format($detalle->alto_mm,0,',','.') }} mm</td></tr>
+              <tr><td>Superficie</td><td>{{ number_format(($detalle->ancho_mm/1000)*($detalle->alto_mm/1000)*$detalle->cantidad, 2, ',', '.') }} m²</td></tr>
             @endif
-            <tr>
-              <td style="{{ $lbl }}">Cantidad</td>
-              <td style="{{ $val }}">{{ number_format($detalle->cantidad, 0) }} ud.</td>
-            </tr>
-            <tr>
-              <td style="{{ $lbl }}">Precio Unitario</td>
-              <td style="{{ $val }}">${{ number_format($detalle->precio_unitario, 0, ',', '.') }}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 8px; font-weight:bold; color:#fff; background:#1B3A6B; font-size:10px;">Total</td>
-              <td style="padding:6px 8px; font-weight:bold; color:#1B3A6B; border:1px solid #ddd; font-size:11px;">${{ number_format($detalle->total, 0, ',', '.') }}</td>
-            </tr>
+            <tr><td>Cantidad</td><td>{{ number_format($detalle->cantidad, 0) }} ud.</td></tr>
+            <tr><td>Valor unitario</td><td>${{ number_format($detalle->precio_unitario, 0, ',', '.') }}</td></tr>
+            <tr class="ssub"><td>Subtotal</td><td>${{ number_format($detalle->total, 0, ',', '.') }}</td></tr>
           </table>
         </td>
-
       </tr>
     </table>
   @endforeach
 @endif
 
-{{-- ── Productos Adicionales (sin winperfil) ─────────────────────────── --}}
+{{-- ── Productos ──────────────────────────────────────────── --}}
 @if($productosItems->count() > 0)
-  <div class="section-title">Productos</div>
-  <table class="products-table">
+  @if($cotizacion->ventanas->count() > 0 || $winperfilItems->count() > 0)
+    <div class="section-title sub">Adicionales y servicios</div>
+  @endif
+  <table class="items">
     <thead>
       <tr>
-        <th style="text-align: left; width: 50%;">Descripción</th>
-        <th style="text-align: center; width: 10%;">Cant.</th>
-        <th style="text-align: right; width: 20%;">P. Unit.</th>
-        <th style="text-align: right; width: 20%;">Total</th>
+        <th style="text-align:left; width:48%;">Detalle</th>
+        <th class="c" style="width:9%;">Cant.</th>
+        <th class="r" style="width:15%;">P. Unit.</th>
+        <th class="c" style="width:11%;">Desc.</th>
+        <th class="r" style="width:17%;">Subtotal</th>
       </tr>
     </thead>
     <tbody>
       @foreach($productosItems as $detalle)
+        @php
+          if ($detalle->listaPrecio) {
+            $nombre = $detalle->listaPrecio->producto->nombre ?? 'N/A';
+          } elseif ($detalle->producto) {
+            $nombre = $detalle->descripcion ?: $detalle->producto->nombre;
+          } else {
+            $nombre = $detalle->descripcion;
+          }
+          $nombre = $limpiar($nombre);
+          $color  = $detalle->listaPrecio->color ?? $detalle->listaPrecio->productoColorProveedor->color ?? null;
+          $descPct = $detalle->descuento ?? null;
+        @endphp
         <tr>
           <td>
-            @if($detalle->listaPrecio)
-              <strong>{{ $detalle->listaPrecio->producto->nombre ?? 'N/A' }}</strong>
-              @if($detalle->esVidrio && $detalle->ancho_mm && $detalle->alto_mm)
-                <br><span style="font-size: 10px; color: #888;">
-                  {{ $detalle->ancho_mm }}mm × {{ $detalle->alto_mm }}mm
-                  ({{ number_format($detalle->m2, 4) }} m²)
-                  @if($detalle->pulido) <strong>[PULIDO]</strong> @endif
-                </span>
-              @endif
-              @php $color = $detalle->listaPrecio->color ?? $detalle->listaPrecio->productoColorProveedor->color ?? null; @endphp
-              @if($color)
-                <br><span style="font-size: 10px; color: #888;">Color: {{ $color->nombre ?? 'N/A' }}</span>
-              @endif
-            @elseif($detalle->producto)
-              <strong>{{ $detalle->descripcion ?: $detalle->producto->nombre }}</strong>
-            @else
-              <strong>{{ $detalle->descripcion }}</strong>
+            <div class="item-name">{{ $nombre }}</div>
+            @if($detalle->listaPrecio && $detalle->esVidrio && $detalle->ancho_mm && $detalle->alto_mm)
+              <div class="item-sub">
+                {{ $detalle->ancho_mm }} × {{ $detalle->alto_mm }} mm ({{ number_format($detalle->m2, 4) }} m²)
+                @if($detalle->pulido) · Pulido @endif
+              </div>
+            @endif
+            @if($color)
+              <div class="item-sub">Color: {{ $color->nombre ?? 'N/A' }}</div>
             @endif
           </td>
-          <td style="text-align: center;">{{ number_format($detalle->cantidad, 0) }}</td>
-          <td style="text-align: right;">${{ number_format($detalle->precio_unitario, 0, ',', '.') }}</td>
-          <td style="text-align: right; font-weight: bold;">${{ number_format($detalle->total, 0, ',', '.') }}</td>
+          <td class="c">{{ number_format($detalle->cantidad, 0) }}</td>
+          <td class="r nowrap">${{ number_format($detalle->precio_unitario, 0, ',', '.') }}</td>
+          <td class="c muted">{{ $descPct ? $descPct . '%' : '—' }}</td>
+          <td class="r nowrap" style="font-weight:bold; color:#23272e;">${{ number_format($detalle->total, 0, ',', '.') }}</td>
         </tr>
       @endforeach
     </tbody>
   </table>
 @endif
 
-{{-- Totales --}}
+{{-- ── Resumen económico ──────────────────────────────────── --}}
 @php
-  $totalVentanas    = $cotizacion->ventanas->sum('precio');
-  $totalProductos   = $cotizacion->detalles->sum('total');   // incluye winperfil + productos
-  $subtotalNeto     = $totalVentanas + $totalProductos;
-  $iva              = $subtotalNeto * 0.19;
-  $totalGeneral     = $subtotalNeto + $iva;
+  $totalVentanas  = $cotizacion->ventanas->sum('precio');
+  $totalProductos = $cotizacion->detalles->sum('total');       // winperfil + productos
+  $subtotalNeto   = $totalVentanas + $totalProductos;
+  $iva            = round($subtotalNeto * 0.19);
+  $totalGeneral   = $subtotalNeto + $iva;
 
-  // Cantidad y m² de ventanas del cotizador
-  $cantidadTotal    = $cotizacion->ventanas->sum('cantidad');
-  $totalM2          = $cotizacion->ventanas->sum(fn($v) => ($v->ancho / 1000) * ($v->alto / 1000) * $v->cantidad);
-
-  // Sumar también las ventanas Winperfil (tipo_item = 'winperfil' en detalles)
-  $wpItems = $cotizacion->detalles->where('tipo_item', 'winperfil');
+  $cantidadTotal  = $cotizacion->ventanas->sum('cantidad');
+  $totalM2        = $cotizacion->ventanas->sum(fn($v) => ($v->ancho / 1000) * ($v->alto / 1000) * $v->cantidad);
+  $wpItems        = $cotizacion->detalles->where('tipo_item', 'winperfil');
   $cantidadTotal += $wpItems->sum('cantidad');
-  $totalM2       += $wpItems->sum(
-      fn($d) => ($d->ancho_mm > 0 && $d->alto_mm > 0)
-          ? ($d->ancho_mm / 1000) * ($d->alto_mm / 1000) * $d->cantidad
-          : 0
-  );
+  $totalM2       += $wpItems->sum(fn($d) => ($d->ancho_mm > 0 && $d->alto_mm > 0) ? ($d->ancho_mm / 1000) * ($d->alto_mm / 1000) * $d->cantidad : 0);
 @endphp
 
-<div class="totals-section">
-  <table class="totals-wrapper">
-    <tr>
-      <td style="width: 58%; border: none;"></td>
-      <td style="width: 42%; border: none;">
-        <table class="totals-inner">
-          @if($cantidadTotal > 0)
-          <tr>
-            <td><strong>Cantidad ventanas:</strong></td>
-            <td>{{ $cantidadTotal }} ud.</td>
-          </tr>
-          <tr>
-            <td><strong>Total m²:</strong></td>
-            <td>{{ number_format($totalM2, 2, ',', '.') }} m²</td>
-          </tr>
-          @endif
-          @if($totalVentanas > 0)
-          <tr>
-            <td><strong>Subtotal Ventanas:</strong></td>
-            <td>${{ number_format($totalVentanas, 0, ',', '.') }}</td>
-          </tr>
-          @endif
-          @if($totalProductos > 0)
-          <tr>
-            <td><strong>Subtotal Productos:</strong></td>
-            <td>${{ number_format($totalProductos, 0, ',', '.') }}</td>
-          </tr>
-          @endif
-          <tr>
-            <td><strong>IVA 19%:</strong></td>
-            <td>${{ number_format($iva, 0, ',', '.') }}</td>
-          </tr>
-          <tr class="total-final">
-            <td>TOTAL</td>
-            <td>${{ number_format($totalGeneral, 0, ',', '.') }}</td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</div>
+<table class="summary">
+  <tr class="summary">
+    <td style="width:52%;"></td>
+    <td style="width:48%;">
+      @if($cantidadTotal > 0)
+        <div class="proj-summary">Resumen del proyecto · {{ $cantidadTotal }} {{ $cantidadTotal == 1 ? 'ventana' : 'ventanas' }} · {{ number_format($totalM2, 2, ',', '.') }} m²</div>
+      @endif
+      <table class="sum-inner">
+        <tr class="sum-line"><td>Neto</td><td>${{ number_format($subtotalNeto, 0, ',', '.') }}</td></tr>
+        <tr><td>IVA 19%</td><td>${{ number_format($iva, 0, ',', '.') }}</td></tr>
+      </table>
+      <table style="width:100%; margin-top:6px;">
+        <tr class="total-band"><td>TOTAL</td><td>${{ number_format($totalGeneral, 0, ',', '.') }}</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
 
-<!-- <p class="nota">Precios netos, no incluyen IVA &nbsp;·&nbsp; Cotización válida por 30 días</p> -->
+{{-- ── Condiciones + firma ────────────────────────────────── --}}
+@php
+  // Condiciones variables desde el ERP si existen (una por línea); si no, las por defecto.
+  $condRaw = $cotizacion->condiciones_comerciales ?? null;
+  $condLineas = $condRaw
+      ? array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $condRaw))))
+      : [
+          "Validez de la oferta: {$validez} días corridos.",
+          'Valores expresados en pesos chilenos. Precios netos, IVA no incluido.',
+          'Forma de pago y plazo de entrega: a convenir.',
+          'Despacho e instalación se cotizan por separado si aplica.',
+        ];
+  $vend = $cotizacion->vendedor;
+  $vendMail = $vend->email ?? null;
+  $vendTel  = $vend->phone ?? $vend->telefono ?? null;
+@endphp
+<table class="bottom">
+  <tr>
+    <td style="width:58%;">
+      <div class="cond-title">Condiciones comerciales</div>
+      <div class="cond">
+        @foreach($condLineas as $cl)· {{ $cl }}<br>@endforeach
+      </div>
+    </td>
+    <td style="width:42%; vertical-align:bottom;" class="sign">
+      @if($vend && ($vend->name ?? $vend->nombre ?? null))
+        <div class="sign-label">Ejecutivo comercial</div>
+        <div class="sign-name">{{ $vend->name ?? $vend->nombre }}</div>
+        @if($vendMail)<div class="sign-sub">{{ $vendMail }}</div>@endif
+        @if($vendTel)<div class="sign-sub">{{ $vendTel }}</div>@endif
+      @endif
+    </td>
+  </tr>
+</table>
 
-{{-- Números de página vía dompdf --}}
+{{-- Números de página + encabezado reducido desde la página 2 --}}
 <script type="text/php">
   if (isset($pdf)) {
     $w    = $pdf->get_width();
     $h    = $pdf->get_height();
     $font = $fontMetrics->get_font("helvetica", "normal");
-    $pdf->page_text($w / 2 - 15, $h - 16, "Página {PAGE_NUM} de {PAGE_COUNT}", $font, 8, [0.6, 0.6, 0.6]);
+    $bold = $fontMetrics->get_font("helvetica", "bold");
+    $pdf->page_text($w - 90, $h - 24, "Página {PAGE_NUM} de {PAGE_COUNT}", $font, 7, [0.70, 0.73, 0.77]);
+
+    // Encabezado reducido en páginas 2 en adelante (en el margen superior).
+    $cotId = "{{ $cotizacion->id }}";
+    $pdf->page_script('
+      if ($PAGE_NUM > 1) {
+        $f = $fontMetrics->get_font("helvetica", "bold");
+        $pdf->text(42, 22, "VIALUM   -   Cotización N\xc2\xb0 ' . $cotId . '   -   Página " . $PAGE_NUM . " de " . $PAGE_COUNT, $f, 8, array(0.42, 0.45, 0.50));
+      }
+    ');
   }
 </script>
 

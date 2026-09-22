@@ -629,13 +629,13 @@ public function store(Request $request)
             }
         }
 
+        // Logo: se prefiere el archivo local del repo (rápido, offline). Si no existe,
+        // el blade cae al logo tipográfico. (El logo transparente va en public/assets/logo-vialum.png)
         $logoBase64 = null;
         try {
-            $logoUrl = env('LOGO_URL', 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png');
-            $ctx = stream_context_create(['http' => ['timeout' => 5]]);
-            $logoData = @file_get_contents($logoUrl, false, $ctx);
-            if ($logoData !== false) {
-                $logoBase64 = 'data:image/png;base64,' . base64_encode($logoData);
+            $logoPath = public_path('img/logo-vialum.png');
+            if (is_file($logoPath)) {
+                $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
             }
         } catch (\Exception $e) {
             Log::warning('PDF: no se pudo cargar logo: ' . $e->getMessage());

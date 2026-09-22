@@ -158,10 +158,7 @@ function confirmarMedidas() {
 }
 
 // ── Ítems ────────────────────────────────────────────────────────────────────
-const items = ref([
-  { nombre: 'Ventana PVC corredera 2 hojas 1200×1200', cantidad: 2, precio: 189900, costo: 120000, descuento: 0, producto_id: null, es_vidrio: false },
-  { nombre: 'Kit instalación + silicona neutra',        cantidad: 1, precio: 24900,  costo: 12000,  descuento: 0, producto_id: null, es_vidrio: false },
-])
+const items = ref([])
 
 const subtotal = it => (Number(it.cantidad) || 0) * (Number(it.precio) || 0) * (1 - (Number(it.descuento) || 0) / 100)
 const neto  = computed(() => items.value.reduce((s, it) => s + subtotal(it), 0))
@@ -265,40 +262,52 @@ const nombreCli = c => c ? (c.razon_social || [c.first_name, c.last_name].filter
 const clienteNombre = computed(() => cliente.value ? nombreCli(cliente.value) : 'Consumidor Final')
 const tipoLabel = computed(() => ({ boleta: 'Boleta electrónica', factura: 'Factura electrónica', cotizacion: 'Cotización' }[tipo.value]))
 // CSS de la hoja carta para impresión (sin scope; se inyecta en el iframe).
+const COTI_CSS = `
+  .coti-head { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+  .coti-head img { height:52px; display:block; }
+  .coti-company { margin-top:12px; font-size:11px; color:#8a9099; line-height:1.55; }
+  .coti-company .legal { font-weight:700; color:#4a5560; font-size:12px; display:block; margin-bottom:1px; }
+  .coti-box { border:1px solid #c9d4e2; min-width:200px; height:fit-content; }
+  .coti-box-title { color:#1B3A6B; font-weight:700; letter-spacing:.14em; text-align:center; border-bottom:1px solid #e7ecf2; padding:6px 0 5px; font-size:13px; }
+  .coti-box table { width:100%; }
+  .coti-box td { padding:4px 14px; font-size:11.5px; }
+  .coti-box td:first-child { color:#8a9099; }
+  .coti-box td:last-child { text-align:right; font-weight:700; color:#2b2f36; }
+  .coti-rule { height:2px; background:#1B3A6B; margin:16px 0; }
+  .coti-section { color:#1B3A6B; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; border-bottom:1px solid #dfe4ea; padding-bottom:5px; margin:14px 0 8px; }
+  .coti-cliente-name { font-size:15px; font-weight:700; color:#1B3A6B; margin:0; }
+  .coti-muted { color:#5a616b; font-size:11.5px; margin:0; }
+  .coti-intro { margin:16px 0 12px; font-size:12.5px; color:#3a3f47; }
+  .coti-table { width:100%; border-collapse:collapse; margin-top:4px; }
+  .coti-table th { background:#eef2f7; color:#5a6472; text-align:left; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; padding:9px 10px; border-top:2px solid #1B3A6B; border-bottom:1px solid #d5deea; }
+  .coti-table th.r, .coti-table td.r { text-align:right; }
+  .coti-table th.c, .coti-table td.c { text-align:center; }
+  .coti-table td { padding:10px; border-bottom:1px solid #e7ebf0; font-size:12px; vertical-align:top; }
+  .coti-table td.name { font-weight:700; color:#2b2f36; }
+  .coti-totales { display:flex; justify-content:flex-end; margin-top:16px; }
+  .coti-totales table { min-width:300px; border-collapse:collapse; }
+  .coti-totales td { padding:6px 12px; color:#6b7280; font-size:12.5px; }
+  .coti-totales td.r { text-align:right; color:#2b2f36; font-weight:700; }
+  .coti-totales tr.line td { border-top:1px solid #dfe4ea; }
+  .coti-total-band td { background:#1B3A6B; color:#fff; padding:12px; font-weight:700; }
+  .coti-total-band td:first-child { font-size:14px; letter-spacing:.14em; color:#fff; }
+  .coti-total-band td.r { font-size:19px; color:#fff; }
+  .coti-nota { margin-top:14px; padding:10px 12px; background:#f6f8fb; border-left:3px solid #1B3A6B; font-size:12px; }
+  .coti-bottom { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-top:22px; }
+  .coti-cond-title { font-size:10px; font-weight:700; letter-spacing:.08em; color:#9aa1ab; text-transform:uppercase; margin-bottom:6px; }
+  .coti-bottom ul { margin:0; padding-left:16px; color:#55606b; font-size:12px; line-height:1.8; }
+  .coti-firma { text-align:right; }
+  .coti-firma .lbl { font-size:9.5px; font-weight:700; letter-spacing:.08em; color:#9aa1ab; text-transform:uppercase; }
+  .coti-firma .nm { font-weight:700; color:#2b2f36; font-size:13px; }
+  .coti-firma .sub { font-size:11px; color:#6b7280; }
+  .coti-foot { margin-top:24px; border-top:1px solid #e7ebf0; padding-top:6px; text-align:center; font-size:10px; color:#8a9099; }
+`
 const PRINT_CSS = `
   @page { size: Letter; margin: 14mm; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #2b2f42; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .coti-paper { background: #fff; color: #2b2f42; font-size: 13px; line-height: 1.5; }
-  .coti-head { display: flex; justify-content: space-between; gap: 24px; }
-  .coti-head img { height: 40px; display: block; }
-  .coti-sub { color: #1e4d8b; letter-spacing: .14em; font-size: 10px; font-weight: 700; margin: 3px 0 12px; }
-  .coti-strong { font-weight: 700; margin: 0; }
-  .coti-muted { color: #6b7180; font-size: 12px; margin: 0; }
-  .coti-box { border: 1.5px solid #1e4d8b; border-radius: 8px; padding: 10px 16px; min-width: 180px; height: fit-content; }
-  .coti-box-title { color: #1e4d8b; font-weight: 800; letter-spacing: .08em; text-align: center; border-bottom: 1px solid #d9dee6; padding-bottom: 6px; margin-bottom: 6px; }
-  .coti-box table { width: 100%; }
-  .coti-box td { padding: 2px 0; font-size: 12px; }
-  .coti-box td:last-child { text-align: right; font-weight: 600; }
-  .coti-rule { height: 3px; background: #1e4d8b; border-radius: 2px; margin: 20px 0; }
-  .coti-label { text-transform: uppercase; letter-spacing: .06em; font-size: 10px; color: #6b7180; font-weight: 700; margin-bottom: 4px; }
-  .coti-intro { margin: 18px 0; }
-  .coti-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .coti-table th { background: #f2f5f9; color: #4a5060; text-align: left; font-size: 11px; letter-spacing: .04em; padding: 8px 10px; border-bottom: 2px solid #1e4d8b; }
-  .coti-table th.r, .coti-table td.r { text-align: right; }
-  .coti-table td { padding: 8px 10px; border-bottom: 1px solid #eceef3; font-size: 12.5px; }
-  .coti-totales { display: flex; justify-content: flex-end; margin-top: 16px; }
-  .coti-totales table { min-width: 260px; }
-  .coti-totales td { padding: 4px 0; color: #6b7180; }
-  .coti-totales td.r { text-align: right; color: #2b2f42; font-weight: 600; }
-  .coti-totales tr.tot td { border-top: 2px solid #d9dee6; padding-top: 10px; font-size: 16px; font-weight: 800; color: #1e4d8b; }
-  .coti-nota { margin-top: 18px; padding: 10px 12px; background: #f6f8fb; border-left: 3px solid #1e4d8b; border-radius: 4px; font-size: 12.5px; }
-  .coti-cond { margin-top: 24px; }
-  .coti-cond ul { margin: 6px 0 0; padding-left: 18px; color: #4a5060; font-size: 12px; }
-  .coti-cond li { margin: 3px 0; }
-  .coti-firma { margin-top: 48px; display: flex; justify-content: flex-end; text-align: center; }
-  .coti-line { width: 220px; border-top: 1px solid #9aa1b0; margin-bottom: 4px; }
-`
+  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #2b2f36; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .coti-paper { background: #fff; color: #2b2f36; font-size: 12.5px; line-height: 1.55; }
+` + COTI_CSS
 function imprimir() {
   const el = document.getElementById('doc-print')
   if (!el) return
@@ -710,19 +719,20 @@ function nuevaCotizacion() {
           <div id="doc-print" class="coti-paper">
             <div class="coti-head">
               <div>
-                <img :src="logoVialum" alt="VIALUM" height="40" style="display:block">
-                <div class="coti-sub">VENTANAS PVC · ALUMINIO</div>
-                <p class="coti-strong mb-0">HIDALGO E HIDALGO LIMITADA</p>
-                <p class="coti-muted mb-0">RUT 76.096.031-4 · Vidriería, aluminios y ferretería</p>
-                <p class="coti-muted mb-0">Balmaceda 454, Los Ángeles</p>
-                <p class="coti-muted mb-0">contacto@vialum.cl · +56 43 2 311859</p>
+                <img :src="logoVialum" alt="VIALUM" style="display:block">
+                <div class="coti-company">
+                  <span class="legal">HIDALGO E HIDALGO LIMITADA</span>
+                  RUT 76.096.031-4 · Vidriería, aluminios y ferretería<br>
+                  Balmaceda 454, Los Ángeles<br>
+                  contacto@vialum.cl · +56 43 2 311859
+                </div>
               </div>
               <div class="coti-box">
                 <div class="coti-box-title">COTIZACIÓN</div>
                 <table>
                   <tbody>
                     <tr><td>N°</td><td>—</td></tr>
-                    <tr><td>Fecha</td><td>{{ fecha }}</td></tr>
+                    <tr><td>Fecha</td><td>{{ fecha.split('-').reverse().join('/') }}</td></tr>
                     <tr><td>Validez</td><td>{{ validez }} días</td></tr>
                   </tbody>
                 </table>
@@ -731,27 +741,27 @@ function nuevaCotizacion() {
 
             <div class="coti-rule"></div>
 
-            <div class="coti-label">Señor(es)</div>
-            <p class="coti-strong mb-0">{{ clienteNombre }}</p>
+            <div class="coti-section">Cliente</div>
+            <p class="coti-cliente-name">{{ clienteNombre }}</p>
             <template v-if="cliente">
-              <p class="coti-muted mb-0" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
-              <p class="coti-muted mb-0" v-if="cliente.direccion">{{ cliente.direccion }}</p>
-              <p class="coti-muted mb-0" v-if="cliente.email">{{ cliente.email }}</p>
+              <p class="coti-muted" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
+              <p class="coti-muted" v-if="cliente.direccion">{{ cliente.direccion }}</p>
+              <p class="coti-muted" v-if="cliente.email">{{ cliente.email }}</p>
             </template>
-            <p class="coti-muted mb-0" v-if="dirDespacho"><strong>Despacho:</strong> {{ dirDespacho }}</p>
+            <p class="coti-muted" v-if="dirDespacho"><strong>Despacho:</strong> {{ dirDespacho }}</p>
 
-            <p class="coti-intro">Junto con saludar, tenemos el agrado de presentar la siguiente cotización según su solicitud:</p>
+            <p class="coti-intro">De acuerdo con lo solicitado, presentamos nuestra propuesta comercial:</p>
 
             <table class="coti-table">
               <thead>
-                <tr><th>Detalle</th><th class="r">Cant.</th><th class="r">P. Unit</th><th class="r">Desc.</th><th class="r">Subtotal</th></tr>
+                <tr><th>Detalle</th><th class="c">Cant.</th><th class="r">P. Unit.</th><th class="c">Desc.</th><th class="r">Subtotal</th></tr>
               </thead>
               <tbody>
                 <tr v-for="(it, i) in items" :key="i">
-                  <td>{{ it.nombre }}</td>
-                  <td class="r">{{ it.cantidad }}</td>
+                  <td class="name">{{ it.nombre }}</td>
+                  <td class="c">{{ it.cantidad }}</td>
                   <td class="r">{{ CLP(it.precio) }}</td>
-                  <td class="r">{{ it.descuento ? it.descuento + '%' : '—' }}</td>
+                  <td class="c">{{ it.descuento ? it.descuento + '%' : '—' }}</td>
                   <td class="r">{{ CLP(subtotal(it)) }}</td>
                 </tr>
               </tbody>
@@ -760,32 +770,33 @@ function nuevaCotizacion() {
             <div class="coti-totales">
               <table>
                 <tbody>
-                  <tr><td>Neto</td><td class="r">{{ CLP(neto) }}</td></tr>
+                  <tr class="line"><td>Neto</td><td class="r">{{ CLP(neto) }}</td></tr>
                   <tr><td>IVA 19%</td><td class="r">{{ CLP(iva) }}</td></tr>
-                  <tr class="tot"><td>TOTAL</td><td class="r">{{ CLP(total) }}</td></tr>
+                  <tr class="coti-total-band"><td>TOTAL</td><td class="r">{{ CLP(total) }}</td></tr>
                 </tbody>
               </table>
             </div>
 
             <div v-if="nota" class="coti-nota"><strong>Nota:</strong> {{ nota }}</div>
 
-            <div class="coti-cond">
-              <div class="coti-label">Condiciones comerciales</div>
-              <ul>
-                <li>Validez de la oferta: {{ validez }} días corridos.</li>
-                <li>Valores en pesos chilenos, IVA incluido.</li>
-                <li>Forma de pago y plazo de entrega: a convenir.</li>
-                <li>Despacho e instalación se cotizan por separado si aplica.</li>
-              </ul>
-            </div>
-
-            <div class="coti-firma">
+            <div class="coti-bottom">
               <div>
-                <div class="coti-line"></div>
-                <div class="coti-strong" style="font-size:12px">{{ vendedor }}</div>
-                <div class="coti-muted">VIALUM · contacto@vialum.cl</div>
+                <div class="coti-cond-title">Condiciones comerciales</div>
+                <ul>
+                  <li>Validez de la oferta: {{ validez }} días corridos.</li>
+                  <li>Valores expresados en pesos chilenos. Precios netos, IVA no incluido.</li>
+                  <li>Forma de pago y plazo de entrega: a convenir.</li>
+                  <li>Despacho e instalación se cotizan por separado si aplica.</li>
+                </ul>
+              </div>
+              <div class="coti-firma">
+                <div class="lbl">Ejecutivo comercial</div>
+                <div class="nm">{{ vendedor }}</div>
+                <div class="sub">{{ currentUser.email || 'contacto@vialum.cl' }}</div>
               </div>
             </div>
+
+            <div class="coti-foot">www.vialum.cl · contacto@vialum.cl · Los Ángeles</div>
           </div>
         </VCardText>
 
@@ -850,33 +861,44 @@ function nuevaCotizacion() {
   .detalle-cell { grid-column: 1 / -1; }
 }
 
-/* ── Hoja carta de cotización (papel blanco, se ve igual en claro/oscuro y al imprimir) ── */
-.coti-paper { background: #fff; color: #2b2f42; padding: 48px 52px; font-size: 13px; line-height: 1.5; }
-.coti-head { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
-.coti-sub { color: #1e4d8b; letter-spacing: .14em; font-size: 10px; font-weight: 700; margin: 3px 0 12px; }
-.coti-strong { font-weight: 700; }
-.coti-muted { color: #6b7180; font-size: 12px; }
-.coti-box { border: 1.5px solid #1e4d8b; border-radius: 8px; padding: 10px 16px; min-inline-size: 180px; block-size: fit-content; }
-.coti-box-title { color: #1e4d8b; font-weight: 800; letter-spacing: .08em; text-align: center; border-bottom: 1px solid #d9dee6; padding-bottom: 6px; margin-bottom: 6px; }
+/* ── Hoja carta de cotización (papel blanco; calca el PDF descargable) ── */
+.coti-paper { background: #fff; color: #2b2f36; padding: 44px 48px; font-size: 12.5px; line-height: 1.55; }
+.coti-head { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.coti-head img { height: 52px; display: block; }
+.coti-company { margin-top: 12px; font-size: 11px; color: #8a9099; line-height: 1.55; }
+.coti-company .legal { font-weight: 700; color: #4a5560; font-size: 12px; display: block; margin-bottom: 1px; }
+.coti-box { border: 1px solid #c9d4e2; min-inline-size: 200px; block-size: fit-content; }
+.coti-box-title { color: #1B3A6B; font-weight: 700; letter-spacing: .14em; text-align: center; border-bottom: 1px solid #e7ecf2; padding: 6px 0 5px; font-size: 13px; }
 .coti-box table { inline-size: 100%; }
-.coti-box td { padding: 2px 0; font-size: 12px; }
-.coti-box td:last-child { text-align: right; font-weight: 600; }
-.coti-rule { block-size: 3px; background: #1e4d8b; border-radius: 2px; margin: 20px 0; }
-.coti-label { text-transform: uppercase; letter-spacing: .06em; font-size: 10px; color: #6b7180; font-weight: 700; margin-bottom: 4px; }
-.coti-intro { margin: 18px 0; }
-.coti-table { inline-size: 100%; border-collapse: collapse; margin-top: 8px; }
-.coti-table th { background: #f2f5f9; color: #4a5060; text-align: left; font-size: 11px; letter-spacing: .04em; padding: 8px 10px; border-bottom: 2px solid #1e4d8b; }
+.coti-box td { padding: 4px 14px; font-size: 11.5px; }
+.coti-box td:first-child { color: #8a9099; }
+.coti-box td:last-child { text-align: right; font-weight: 700; color: #2b2f36; }
+.coti-rule { block-size: 2px; background: #1B3A6B; margin: 16px 0; }
+.coti-section { color: #1B3A6B; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid #dfe4ea; padding-bottom: 5px; margin: 14px 0 8px; }
+.coti-cliente-name { font-size: 15px; font-weight: 700; color: #1B3A6B; margin: 0; }
+.coti-muted { color: #5a616b; font-size: 11.5px; margin: 0; }
+.coti-intro { margin: 16px 0 12px; font-size: 12.5px; color: #3a3f47; }
+.coti-table { inline-size: 100%; border-collapse: collapse; margin-top: 4px; }
+.coti-table th { background: #eef2f7; color: #5a6472; text-align: left; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; padding: 9px 10px; border-top: 2px solid #1B3A6B; border-bottom: 1px solid #d5deea; }
 .coti-table th.r, .coti-table td.r { text-align: right; }
-.coti-table td { padding: 8px 10px; border-bottom: 1px solid #eceef3; font-size: 12.5px; }
+.coti-table th.c, .coti-table td.c { text-align: center; }
+.coti-table td { padding: 10px; border-bottom: 1px solid #e7ebf0; font-size: 12px; vertical-align: top; }
+.coti-table td.name { font-weight: 700; color: #2b2f36; }
 .coti-totales { display: flex; justify-content: flex-end; margin-top: 16px; }
-.coti-totales table { min-inline-size: 260px; }
-.coti-totales td { padding: 4px 0; color: #6b7180; }
-.coti-totales td.r { text-align: right; color: #2b2f42; font-weight: 600; }
-.coti-totales tr.tot td { border-top: 2px solid #d9dee6; padding-top: 10px; font-size: 16px; font-weight: 800; color: #1e4d8b; }
-.coti-nota { margin-top: 18px; padding: 10px 12px; background: #f6f8fb; border-left: 3px solid #1e4d8b; border-radius: 4px; font-size: 12.5px; }
-.coti-cond { margin-top: 24px; }
-.coti-cond ul { margin: 6px 0 0; padding-inline-start: 18px; color: #4a5060; font-size: 12px; }
-.coti-cond li { margin: 3px 0; }
-.coti-firma { margin-top: 48px; display: flex; justify-content: flex-end; text-align: center; }
-.coti-line { inline-size: 220px; border-top: 1px solid #9aa1b0; margin-bottom: 4px; }
+.coti-totales table { min-inline-size: 300px; border-collapse: collapse; }
+.coti-totales td { padding: 6px 12px; color: #6b7280; font-size: 12.5px; }
+.coti-totales td.r { text-align: right; color: #2b2f36; font-weight: 700; }
+.coti-totales tr.line td { border-top: 1px solid #dfe4ea; }
+.coti-total-band td { background: #1B3A6B; color: #fff; padding: 12px; font-weight: 700; }
+.coti-total-band td:first-child { font-size: 14px; letter-spacing: .14em; color: #fff; }
+.coti-total-band td.r { font-size: 19px; color: #fff; }
+.coti-nota { margin-top: 14px; padding: 10px 12px; background: #f6f8fb; border-left: 3px solid #1B3A6B; font-size: 12px; }
+.coti-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-top: 22px; }
+.coti-cond-title { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: #9aa1ab; text-transform: uppercase; margin-bottom: 6px; }
+.coti-bottom ul { margin: 0; padding-inline-start: 16px; color: #55606b; font-size: 12px; line-height: 1.8; }
+.coti-firma { text-align: right; }
+.coti-firma .lbl { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; color: #9aa1ab; text-transform: uppercase; }
+.coti-firma .nm { font-weight: 700; color: #2b2f36; font-size: 13px; }
+.coti-firma .sub { font-size: 11px; color: #6b7280; }
+.coti-foot { margin-top: 24px; border-top: 1px solid #e7ebf0; padding-top: 6px; text-align: center; font-size: 10px; color: #8a9099; }
 </style>
