@@ -40,6 +40,8 @@ class ClienteController extends Controller
         'ciudad'         => $request->ciudad,
         'comuna'         => $request->comuna,
         'address'          => $request->address,
+        'latitud'        => $request->latitud,
+        'longitud'       => $request->longitud,
         'first_name'     => $request->first_name,
         'last_name'      => $request->last_name,
         'email'          => $request->email,

@@ -161,7 +161,12 @@
                 <v-text-field v-model="nuevoCliente.email" label="Email" variant="outlined" density="compact" type="email" />
               </v-col>
               <v-col cols="12">
-                <v-text-field v-model="nuevoCliente.address" label="Dirección" variant="outlined" density="compact" />
+                <AddressAutocomplete
+                  :model-value="nuevoCliente.address"
+                  label="Dirección"
+                  @update:model-value="v => { nuevoCliente.address = v; nuevoCliente.latitud = null; nuevoCliente.longitud = null }"
+                  @selected="onDireccionElegida"
+                />
               </v-col>
               <v-col cols="12" sm="6">
                 <v-text-field v-model="nuevoCliente.ciudad" label="Ciudad" variant="outlined" density="compact" />
@@ -203,6 +208,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { fetchClientesLocales } from '@/api/clientes'
 import ClienteTable from '../ClienteTable.vue'
+import AddressAutocomplete from '@/components/AddressAutocomplete.vue'
 import api from '@/axiosInstance'
 
 const LS_KEY = 'clientes_ultima_sync'
@@ -225,8 +231,18 @@ const guardando = ref(false)
 const nuevoClienteVacio = () => ({
   tipo_cliente: null, razon_social: '', giro: '', first_name: '', last_name: '',
   identification: '', phone: '', email: '', address: '', ciudad: '', comuna: '',
+  latitud: null, longitud: null,
 })
 const nuevoCliente = ref(nuevoClienteVacio())
+
+// Al elegir una dirección real del autocompletado, rellena dirección + comuna + ciudad + coordenadas
+const onDireccionElegida = (s) => {
+  nuevoCliente.value.address = s.direccion
+  if (s.comuna) nuevoCliente.value.comuna = s.comuna
+  if (s.ciudad) nuevoCliente.value.ciudad = s.ciudad
+  nuevoCliente.value.latitud = s.lat
+  nuevoCliente.value.longitud = s.lng
+}
 
 const mostrarNotificacion = (text, color = 'success', timeout = 5000) => {
   snackbar.value = { show: true, text, color, timeout }

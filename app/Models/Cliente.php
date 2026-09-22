@@ -19,6 +19,9 @@ class Cliente extends Model
         'giro',
         'ciudad',
         'comuna',
+        'latitud',
+        'longitud',
+        'direccion',
         'descuento_productos',
     ];
 
