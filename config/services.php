@@ -87,4 +87,9 @@ return [
         'token' => env('CRON_TOKEN'),
     ],
 
+    // Token secreto para el bot de WhatsApp (endpoints máquina-a-máquina, sin login)
+    'bot' => [
+        'token' => env('BOT_API_TOKEN'),
+    ],
+
 ];

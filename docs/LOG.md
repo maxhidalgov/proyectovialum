@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-09-30 — Endpoint para bot de WhatsApp: ausentes del día
+- **Qué se hizo:** Nuevo endpoint `GET /api/bot/ausentes-hoy` (protegido por token `BOT_API_TOKEN`, sin login, patrón del cron) que reutiliza `AsistenciaController::diario` (Workera) y devuelve texto listo para WhatsApp con quién no marcó y los atrasos. Lo consume el bot de pendientes (proyecto aparte) que lo postea al grupo cada mañana 9:30.
+- **Archivos principales:** `app/Http/Controllers/BotController.php` (nuevo), `routes/api.php`, `config/services.php`.
+- **Pendiente / ojo con:** Falta cargar `BOT_API_TOKEN` (mismo valor en Railway y en el bot) y las credenciales `WORKERA_API_USER`/`WORKERA_API_KEY` en Railway (sin ellas el endpoint responde 422). El bot corre aparte (no es este repo).
+
 ## 2026-09-30 — Prompt caching en servicios de IA
 - **Qué se hizo:** Se agregó `cache_control` (ephemeral) al system prompt + tools de `AgenteLeadsService` e `IaProduccionService` para bajar el gasto de API directa (la consola de Anthropic marcó "low cache hit rate", ahorro estimado hasta ~46%). En Producción el system se dividió en dos bloques: estático (cacheado, incluye las tools por prefijo) y contexto en vivo (sin cachear, va después del breakpoint).
 - **Archivos principales:** `app/Services/AgenteLeadsService.php`, `app/Services/IaProduccionService.php`.
