@@ -98,7 +98,16 @@ class AgenteLeadsService
                 'json' => [
                     'model'      => $this->model,
                     'max_tokens' => $this->maxTokens,
-                    'system'     => $this->systemPrompt(),
+                    // El system prompt y las tools son estáticos: se cachean (prompt caching)
+                    // para no re-pagar ~1k tokens en cada turno de la conversación.
+                    // El breakpoint en el system cachea todo el prefijo (tools + system).
+                    'system'     => [
+                        [
+                            'type'          => 'text',
+                            'text'          => $this->systemPrompt(),
+                            'cache_control' => ['type' => 'ephemeral'],
+                        ],
+                    ],
                     'tools'      => $this->tools(),
                     'messages'   => $this->normalizeMessages($messages),
                 ],

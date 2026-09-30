@@ -43,7 +43,24 @@ class IaProduccionService
         $historial   = $this->buildHistorial();
         $contexto    = $this->buildContexto();
         $tools       = $this->definirTools();
-        $systemPrompt = $this->buildSystemPrompt($contexto);
+
+        // System dividido en dos bloques para prompt caching:
+        //  1) instrucciones estáticas + tools → se cachean (breakpoint ephemeral).
+        //     Es el bloque grande e idéntico en cada turno; el breakpoint cachea
+        //     todo el prefijo previo (las tools también).
+        //  2) contexto de producción en vivo → cambia cada mensaje, va SIN cachear
+        //     y después del breakpoint para no invalidar la caché.
+        $systemBlocks = [
+            [
+                'type'          => 'text',
+                'text'          => $this->buildSystemPrompt(),
+                'cache_control' => ['type' => 'ephemeral'],
+            ],
+            [
+                'type' => 'text',
+                'text' => "CONTEXTO ACTUAL DEL SISTEMA:\n{$contexto}",
+            ],
+        ];
 
         $accionesEjecutadas = [];
         $respuestaFinal     = '';
@@ -53,7 +70,7 @@ class IaProduccionService
 
         // Loop de tool use — Claude puede llamar múltiples tools antes de responder
         for ($i = 0; $i < 5; $i++) {
-            $response = $this->llamarClaude($systemPrompt, $messages, $tools);
+            $response = $this->llamarClaude($systemBlocks, $messages, $tools);
 
             if (!$response) {
                 $respuestaFinal = 'Hubo un error al contactar la IA. Intenta de nuevo.';
@@ -128,7 +145,7 @@ class IaProduccionService
 
     // ── Claude API ────────────────────────────────────────────────────────────
 
-    private function llamarClaude(string $system, array $messages, array $tools): ?array
+    private function llamarClaude(array $system, array $messages, array $tools): ?array
     {
         $response = Http::withHeaders([
             'x-api-key'         => config('services.anthropic.api_key'),
@@ -155,7 +172,7 @@ class IaProduccionService
 
     // ── System prompt ─────────────────────────────────────────────────────────
 
-    private function buildSystemPrompt(string $contexto): string
+    private function buildSystemPrompt(): string
     {
         $hoy = now()->locale('es')->isoFormat('dddd D [de] MMMM [de] YYYY');
 
@@ -181,9 +198,6 @@ Reglas:
 - Si mencionan una obra o cliente, busca la cotización correspondiente.
 - Responde siempre en español, de forma directa y concisa. Sin saludos largos.
 - Si no entiendes algo, pregunta la mínima información necesaria.
-
-CONTEXTO ACTUAL DEL SISTEMA:
-{$contexto}
 PROMPT;
     }
 
