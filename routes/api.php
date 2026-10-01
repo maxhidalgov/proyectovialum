@@ -78,6 +78,10 @@ Route::get('/bot/precio', [\App\Http\Controllers\BotController::class, 'precio']
 Route::get('/bot/factura', [\App\Http\Controllers\BotController::class, 'factura']);
 //    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
 Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
+//    GET  /api/bot/clientes?token=XXXX&q=juan  → buscar clientes (con % de descuento)
+//    POST /api/bot/cotizacion?token=XXXX[&confirmar=1]  → vista previa / crear cotización rápida
+Route::get('/bot/clientes', [\App\Http\Controllers\BotController::class, 'clientes']);
+Route::post('/bot/cotizacion', [\App\Http\Controllers\BotController::class, 'cotizacion']);
 
 // 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
 Route::middleware(['auth:api', 'permission:area_admin'])->prefix('admin')->group(function () {

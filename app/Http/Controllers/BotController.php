@@ -97,15 +97,28 @@ class BotController extends Controller
             })
             ->orderBy('p.nombre')
             ->limit(30)
-            ->get(['p.id as producto_id', 'p.nombre as producto',
+            ->get(['lp.id as lista_precio_id', 'p.id as producto_id', 'p.nombre as producto',
                    DB::raw('COALESCE(c.id, c2.id) as color_id'),
                    DB::raw('COALESCE(c.nombre, c2.nombre) as color'),
                    'lp.precio_venta', 'lp.precio_costo']);
 
-        $total = $rows->count();
-        $items = [];
-        foreach ($rows->take(3) as $row) {
+        $total   = $rows->count();
+        $n       = max(1, min(8, (int) $r->query('n', 3)));
+        $compacto = filter_var($r->query('compacto', false), FILTER_VALIDATE_BOOLEAN);
+        $items   = [];
+        foreach ($rows->take($n) as $row) {
+            // Modo compacto (para el agente de cotizaciones): solo lo necesario, sin costo ni compras
+            if ($compacto) {
+                $items[] = [
+                    'lista_precio_id' => (int) $row->lista_precio_id,
+                    'producto'        => $row->producto,
+                    'color'           => $row->color,
+                    'precio_neto'     => (int) round($row->precio_venta),
+                ];
+                continue;
+            }
             $items[] = [
+                'lista_precio_id' => (int) $row->lista_precio_id,
                 'producto'      => $row->producto,
                 'color'         => $row->color,
                 'precio_venta'  => (int) round($row->precio_venta),
@@ -118,7 +131,7 @@ class BotController extends Controller
             'ok'    => true,
             'q'     => $q,
             'total' => $total,
-            'texto' => $this->formatearPrecios($q, $items, $total),
+            'texto' => $compacto ? null : $this->formatearPrecios($q, $items, $total),
             'items' => $items,
         ]);
     }
@@ -408,6 +421,184 @@ class BotController extends Controller
         if ($ventas)  $partes = array_merge($partes, $bloque('Últimas ' . count($ventas) . ' facturas de venta', $ventas, 'por cobrar'));
 
         return ltrim(implode("\n", $partes), "\n");
+    }
+
+    /**
+     * GET /api/bot/clientes?token=XXXX&q=juan perez
+     * Busca clientes por nombre, razón social o RUT (hasta 5), con su % de descuento.
+     */
+    public function clientes(Request $r)
+    {
+        $this->verificarToken($r);
+
+        $q = trim((string) $r->query('q', ''));
+        if (mb_strlen($q) < 2) {
+            return response()->json(['ok' => false, 'error' => 'Texto de búsqueda muy corto'], 422);
+        }
+
+        $encontrados = collect(app(ClienteController::class)->buscar(new Request(['q' => $q]))->getData(true))->take(5);
+        $desc = DB::table('clientes')->whereIn('id', $encontrados->pluck('id'))->pluck('descuento_productos', 'id');
+
+        return response()->json([
+            'ok'       => true,
+            'clientes' => $encontrados->map(fn ($c) => [
+                'id'                  => $c['id'],
+                'nombre'              => $c['razon_social'] ?: trim(($c['first_name'] ?? '') . ' ' . ($c['last_name'] ?? '')),
+                'rut'                 => $c['identification'] ?? null,
+                'telefono'            => $c['phone'] ?? null,
+                'descuento_productos' => (float) ($desc[$c['id']] ?? 0),
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * POST /api/bot/cotizacion?token=XXXX[&confirmar=1]
+     * Body: { cliente_id, observaciones?, items: [
+     *   { lista_precio_id?, nombre?, cantidad, precio?, incluye_iva?, descuento? } ] }
+     *
+     * - Ítem de lista: indica lista_precio_id (el precio sale de la lista, con el descuento
+     *   del cliente). Si además trae `precio`, ese precio manual manda.
+     * - Ítem libre: sin lista_precio_id; requiere nombre y precio manual.
+     * - `precio` es NETO salvo que `incluye_iva` sea true (se convierte a neto).
+     *
+     * Sin `confirmar` solo devuelve la vista previa. Con `confirmar=1` crea la cotización
+     * (misma que Cotización Rápida) y devuelve el link público del PDF.
+     */
+    public function cotizacion(Request $r)
+    {
+        $this->verificarToken($r);
+
+        $cli = DB::table('clientes')->where('id', (int) $r->input('cliente_id'))->first();
+        if (!$cli) {
+            return response()->json(['ok' => false, 'error' => 'Cliente no encontrado. Búscalo primero con buscar_cliente.'], 422);
+        }
+
+        $items = $r->input('items');
+        if (!is_array($items) || !$items) {
+            return response()->json(['ok' => false, 'error' => 'La cotización no tiene ítems.'], 422);
+        }
+        if (count($items) > 30) {
+            return response()->json(['ok' => false, 'error' => 'Máximo 30 ítems por cotización.'], 422);
+        }
+
+        [$norm, $errores] = $this->normalizarItemsCotizacion($items, (float) ($cli->descuento_productos ?? 0));
+        if ($errores) {
+            return response()->json(['ok' => false, 'error' => implode(' | ', $errores)], 422);
+        }
+
+        $neto    = (int) round(array_sum(array_column($norm, 'total')));
+        $nombre  = $cli->razon_social ?: trim("{$cli->first_name} {$cli->last_name}");
+        $texto   = $this->formatearCotizacion($nombre, $cli->identification ?? null, $norm, $neto, (float) ($cli->descuento_productos ?? 0));
+        $out     = ['ok' => true, 'texto' => $texto, 'neto' => $neto, 'total_con_iva' => (int) round($neto * 1.19)];
+
+        if (!filter_var($r->query('confirmar', false), FILTER_VALIDATE_BOOLEAN)) {
+            return response()->json($out);
+        }
+
+        // Vendedor: configurable (BOT_VENDEDOR_ID); si no, el fallback habitual de guardarCotizacion.
+        $vid = config('services.bot.vendedor_id');
+        if ($vid && ($u = \App\Models\User::find((int) $vid))) {
+            auth()->setUser($u);
+        }
+
+        $resp = app(VentaExpressController::class)->guardarCotizacion(new Request([
+            'cliente_id'    => $cli->id,
+            'observaciones' => $r->input('observaciones'),
+            'items'         => array_map(fn ($i) => [
+                'nombre'      => $i['nombre'],
+                'cantidad'    => $i['cantidad'],
+                'precio'      => $i['precio'],
+                'descuento'   => $i['descuento'],
+                'producto_id' => $i['producto_id'],
+            ], $norm),
+        ]))->getData(true);
+
+        $cot = \App\Models\Cotizacion::find($resp['cotizacion_id'] ?? 0);
+        if (!$cot) {
+            return response()->json(['ok' => false, 'error' => 'No se pudo crear la cotización.'], 500);
+        }
+
+        return response()->json($out + [
+            'cotizacion_id' => $cot->id,
+            'url'           => url("/p/cotizacion/{$cot->publicToken()}"),
+        ]);
+    }
+
+    // Deja cada ítem con nombre, cantidad, precio NETO, descuento y total de línea.
+    private function normalizarItemsCotizacion(array $items, float $descCliente): array
+    {
+        $norm = [];
+        $errores = [];
+
+        foreach (array_values($items) as $idx => $it) {
+            $n = $idx + 1;
+            $cant = (float) ($it['cantidad'] ?? 0);
+            if ($cant <= 0) { $errores[] = "Ítem {$n}: la cantidad debe ser mayor que 0"; continue; }
+
+            $precioManual = isset($it['precio']) && $it['precio'] !== '' ? (float) $it['precio'] : null;
+            if ($precioManual !== null && $precioManual < 0) { $errores[] = "Ítem {$n}: precio inválido"; continue; }
+            if ($precioManual !== null && !empty($it['incluye_iva'])) {
+                $precioManual = $precioManual / 1.19; // el usuario dio el precio con IVA
+            }
+
+            $productoId = null;
+            $esLista    = !empty($it['lista_precio_id']);
+
+            if ($esLista) {
+                $lp = DB::table('lista_precios as lp')
+                    ->join('productos as p', 'p.id', '=', 'lp.producto_id')
+                    ->leftJoin('colores as c', 'c.id', '=', 'lp.color_id')
+                    ->leftJoin('producto_color_proveedor as pcp', 'pcp.id', '=', 'lp.producto_color_proveedor_id')
+                    ->leftJoin('colores as c2', 'c2.id', '=', 'pcp.color_id')
+                    ->where('lp.id', (int) $it['lista_precio_id'])->where('lp.activo', 1)
+                    ->first(['lp.producto_id', 'lp.precio_venta', 'p.nombre',
+                             DB::raw('COALESCE(c.nombre, c2.nombre) as color')]);
+                if (!$lp) { $errores[] = "Ítem {$n}: producto de lista no encontrado (búscalo de nuevo)"; continue; }
+
+                $nombre     = $lp->nombre . ($lp->color ? " — {$lp->color}" : '');
+                $precio     = $precioManual ?? (float) $lp->precio_venta;
+                $productoId = (int) $lp->producto_id;
+                // Descuento del cliente solo sobre productos de lista y si no se fijó precio manual
+                $desc       = isset($it['descuento']) ? (float) $it['descuento'] : ($precioManual === null ? $descCliente : 0);
+            } else {
+                $nombre = trim((string) ($it['nombre'] ?? ''));
+                if ($nombre === '')        { $errores[] = "Ítem {$n}: falta el nombre/descripción"; continue; }
+                if ($precioManual === null) { $errores[] = "Ítem {$n} ({$nombre}): falta el precio"; continue; }
+                $precio = $precioManual;
+                $desc   = (float) ($it['descuento'] ?? 0);
+            }
+
+            $desc = max(0, min(100, $desc));
+            $norm[] = [
+                'nombre'      => $nombre,
+                'cantidad'    => $cant,
+                'precio'      => round($precio),
+                'descuento'   => $desc,
+                'producto_id' => $productoId,
+                'es_libre'    => !$esLista,
+                'total'       => round($precio) * $cant * (1 - $desc / 100),
+            ];
+        }
+
+        return [$norm, $errores];
+    }
+
+    private function formatearCotizacion(string $cliente, ?string $rut, array $norm, int $neto, float $descCliente): string
+    {
+        $partes = ['📝 *Cotización para ' . $cliente . '*' . ($rut ? " ({$rut})" : '')];
+
+        foreach ($norm as $i => $it) {
+            $cant = rtrim(rtrim(number_format($it['cantidad'], 2, ',', ''), '0'), ',');
+            $desc = $it['descuento'] > 0 ? " (-" . rtrim(rtrim(number_format($it['descuento'], 2, ',', ''), '0'), ',') . '%)' : '';
+            $tag  = $it['es_libre'] ? ' _(libre)_' : '';
+            $partes[] = ($i + 1) . ". {$cant} x {$it['nombre']}{$tag} — {$this->clp($it['precio'])} c/u{$desc} = {$this->clp($it['total'])}";
+        }
+
+        $iva = (int) round($neto * 0.19);
+        $partes[] = '';
+        $partes[] = "*Neto {$this->clp($neto)}* · IVA {$this->clp($iva)} · *Total {$this->clp($neto + $iva)}*";
+
+        return implode("\n", $partes);
     }
 
     // Última línea de compra de un producto (+color), vía producto_color_proveedor.

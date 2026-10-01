@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-01 — Bot de WhatsApp: cotización rápida por chat privado
+- **Qué se hizo:** Endpoints `GET /api/bot/clientes` y `POST /api/bot/cotizacion` (token `BOT_API_TOKEN`; `confirmar=1` crea, sin él solo vista previa). Admiten ítems de lista (`lista_precio_id`, con descuento del cliente) e ítems libres (nombre + precio manual, `incluye_iva` convierte a neto). Crea la cotización por `VentaExpressController::guardarCotizacion` (la misma de Cotización Rápida) y devuelve el link público del PDF; el vendedor sale de `BOT_VENDEDOR_ID`. `precio` ahora acepta `n` y `compacto=1` y devuelve `lista_precio_id`. En el bot (`src/cotizador.js`) Claude arma el borrador con herramientas pero NO crea: solo el código, al recibir "SI" del dueño por privado, confirma.
+- **Archivos principales:** `app/Http/Controllers/BotController.php`, `routes/api.php`, `config/services.php`.
+- **Pendiente / ojo con:** Cargar `BOT_VENDEDOR_ID` en Railway (en local el usuario 1 es otra persona; verificar el id real en prod). Solo productos de lista e ítems libres (sin ventanas a medida ni vidrios por m²). Funciona solo por privado con el número del dueño. Requiere saldo de la API de Anthropic para la parte con IA.
+
 ## 2026-10-01 — Bot de WhatsApp: últimas N facturas de un proveedor/cliente
 - **Qué se hizo:** Nuevo endpoint `GET /api/bot/facturas?q=&n=&lado=` (token `BOT_API_TOKEN`): últimas N (máx. 15, por defecto 5) facturas de compra de un proveedor (por nombre o RUT) y/o de venta de un cliente, con estado de pago por línea y total por pagar/cobrar. Solo facturas 33/34 (no NC ni boletas). El bot entiende "asistente, últimas 5 facturas de haustek" y el comando `facturas haustek`.
 - **Archivos principales:** `app/Http/Controllers/BotController.php`, `routes/api.php`.

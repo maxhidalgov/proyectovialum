@@ -89,7 +89,9 @@ return [
 
     // Token secreto para el bot de WhatsApp (endpoints máquina-a-máquina, sin login)
     'bot' => [
-        'token' => env('BOT_API_TOKEN'),
+        'token'       => env('BOT_API_TOKEN'),
+        // Usuario al que quedan asignadas las cotizaciones creadas por el bot (id de users)
+        'vendedor_id' => env('BOT_VENDEDOR_ID'),
     ],
 
 ];
