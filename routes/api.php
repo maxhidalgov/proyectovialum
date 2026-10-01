@@ -72,6 +72,8 @@ Route::get('/cron/sync-diario', function (\Illuminate\Http\Request $r) {
 // 🤖 Endpoints para el bot de WhatsApp (protegidos por token, sin login).
 //    GET /api/bot/ausentes-hoy?token=XXXX  → quién no marcó asistencia hoy
 Route::get('/bot/ausentes-hoy', [\App\Http\Controllers\BotController::class, 'ausentesHoy']);
+//    GET /api/bot/precio?token=XXXX&q=silicona negra  → precio venta/costo + última compra
+Route::get('/bot/precio', [\App\Http\Controllers\BotController::class, 'precio']);
 
 // 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
 Route::middleware(['auth:api', 'permission:area_admin'])->prefix('admin')->group(function () {

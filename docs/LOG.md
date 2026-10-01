@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-01 — Bot de WhatsApp: consulta de precios y última compra
+- **Qué se hizo:** Nuevo endpoint `GET /api/bot/precio?q=` (token `BOT_API_TOKEN`) que busca en `lista_precios` (cada palabra en producto o color) y devuelve hasta 3 coincidencias con precio de venta (neto y c/IVA), costo de lista y última compra (fecha, proveedor, factura) vía `compra_items`→`producto_color_proveedor`. Si no hay compra del mismo color, muestra la última del producto indicando el color. En el bot, "asistente, precio de la silicona negra" en el grupo se responde sin IA. También se corrigió que `ausentes-hoy` usaba fecha UTC en vez de Chile.
+- **Archivos principales:** `app/Http/Controllers/BotController.php`, `routes/api.php`.
+- **Pendiente / ojo con:** El costo y las compras se ven en el grupo para todos los miembros (decisión del dueño). La última compra depende de que las facturas tengan líneas cargadas (XML) y `pcp_id` asignado.
+
 ## 2026-09-30 — Endpoint para bot de WhatsApp: ausentes del día
 - **Qué se hizo:** Nuevo endpoint `GET /api/bot/ausentes-hoy` (protegido por token `BOT_API_TOKEN`, sin login, patrón del cron) que reutiliza `AsistenciaController::diario` (Workera) y devuelve texto listo para WhatsApp con quién no marcó y los atrasos. Lo consume el bot de pendientes (proyecto aparte) que lo postea al grupo cada mañana 9:30.
 - **Archivos principales:** `app/Http/Controllers/BotController.php` (nuevo), `routes/api.php`, `config/services.php`.
