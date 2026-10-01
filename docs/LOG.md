@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-01 — Bot de WhatsApp: últimas N facturas de un proveedor/cliente
+- **Qué se hizo:** Nuevo endpoint `GET /api/bot/facturas?q=&n=&lado=` (token `BOT_API_TOKEN`): últimas N (máx. 15, por defecto 5) facturas de compra de un proveedor (por nombre o RUT) y/o de venta de un cliente, con estado de pago por línea y total por pagar/cobrar. Solo facturas 33/34 (no NC ni boletas). El bot entiende "asistente, últimas 5 facturas de haustek" y el comando `facturas haustek`.
+- **Archivos principales:** `app/Http/Controllers/BotController.php`, `routes/api.php`.
+- **Pendiente / ojo con:** Si el nombre coincide con varios proveedores, mezcla sus facturas y rotula cada línea con el nombre.
+
 ## 2026-10-01 — Bot de WhatsApp: info de factura/boleta por folio
 - **Qué se hizo:** Nuevo endpoint `GET /api/bot/factura?q=&lado=` (token `BOT_API_TOKEN`). Busca por folio en compras (proveedor, fecha, neto/IVA/total, estado de pago, hasta 6 líneas, PDF) y en ventas (facturas/NC con cobrado y pendiente vía `registroVentas`; boletas aparte). Los folios se repiten entre proveedores/tipos, así que devuelve hasta 3 por lado. `CuentasPorPagarController::efectivoPagadoSub` pasó a `public` para reusar el cálculo de pagado. El bot detecta "asistente, factura de compra 457307" / "boleta 8037" y el comando privado `factura N`.
 - **Archivos principales:** `app/Http/Controllers/BotController.php`, `app/Http/Controllers/CuentasPorPagarController.php`, `routes/api.php`.

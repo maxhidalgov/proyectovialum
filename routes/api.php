@@ -76,6 +76,8 @@ Route::get('/bot/ausentes-hoy', [\App\Http\Controllers\BotController::class, 'au
 Route::get('/bot/precio', [\App\Http\Controllers\BotController::class, 'precio']);
 //    GET /api/bot/factura?token=XXXX&q=457307&lado=compra|venta  → info de un documento por folio
 Route::get('/bot/factura', [\App\Http\Controllers\BotController::class, 'factura']);
+//    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
+Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
 
 // 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
 Route::middleware(['auth:api', 'permission:area_admin'])->prefix('admin')->group(function () {

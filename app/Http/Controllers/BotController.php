@@ -304,6 +304,112 @@ class BotController extends Controller
         return implode("\n", $partes);
     }
 
+    /**
+     * GET /api/bot/facturas?token=XXXX&q=haustek[&n=5&lado=compra|venta]
+     * Últimas N facturas de un proveedor (compras) y/o de un cliente (ventas),
+     * buscando por nombre o RUT. Solo facturas (no notas de crédito ni boletas).
+     */
+    public function facturas(Request $r)
+    {
+        $this->verificarToken($r);
+
+        $q    = trim((string) $r->query('q', ''));
+        $n    = max(1, min(15, (int) $r->query('n', 5)));
+        $lado = $r->query('lado');
+        if (mb_strlen($q) < 2) {
+            return response()->json(['ok' => false, 'error' => 'Indica el proveedor o cliente'], 422);
+        }
+
+        $palabras = array_filter(explode(' ', preg_replace('/\s+/', ' ', $q)));
+        $compras  = $lado === 'venta'  ? [] : $this->listarCompras($palabras, $n);
+        $ventas   = $lado === 'compra' ? [] : $this->listarVentas($q, $n);
+
+        return response()->json([
+            'ok'      => true,
+            'q'       => $q,
+            'texto'   => $this->formatearListado($q, $n, $compras, $ventas),
+            'compras' => $compras,
+            'ventas'  => $ventas,
+        ]);
+    }
+
+    private function listarCompras(array $palabras, int $n): array
+    {
+        $ef = app(CuentasPorPagarController::class)->efectivoPagadoSub();
+
+        return DB::table('compras')
+            ->leftJoin($ef, 'ef.compra_id', '=', 'compras.id')
+            ->whereIn('compras.tipo_dte', [33, 34])
+            ->where(function ($o) use ($palabras) {
+                foreach ($palabras as $p) {
+                    $o->where(fn ($w) => $w->where('compras.nombre_emisor', 'like', "%$p%")
+                                           ->orWhere('compras.rut_emisor', 'like', "%$p%"));
+                }
+            })
+            ->orderByDesc('compras.fecha_emision')
+            ->orderByDesc('compras.id')
+            ->limit($n)
+            ->get(['compras.folio', 'compras.nombre_emisor', 'compras.fecha_emision', 'compras.total',
+                   'compras.pagado_historico', DB::raw('COALESCE(ef.monto_pagado_efectivo, 0) as pagado')])
+            ->map(fn ($c) => [
+                'folio'     => $c->folio,
+                'quien'     => $c->nombre_emisor,
+                'fecha'     => $c->fecha_emision ? \Carbon\Carbon::parse($c->fecha_emision)->format('d/m/Y') : null,
+                'total'     => (int) $c->total,
+                'pendiente' => $c->pagado_historico ? 0 : max(0, (int) $c->total - (int) round($c->pagado)),
+                'pagado'    => (int) round($c->pagado),
+            ])->all();
+    }
+
+    private function listarVentas(string $q, int $n): array
+    {
+        $data = app(CuentasPorCobrarController::class)
+            ->registroVentas(new Request(['buscar' => $q]))
+            ->getData(true);
+
+        return collect($data['documentos'] ?? [])
+            ->filter(fn ($d) => empty($d['es_nc']) && !empty($d['numero_documento_bsale']))
+            ->take($n)
+            ->map(fn ($d) => [
+                'folio'     => $d['numero_documento_bsale'],
+                'quien'     => $d['razon_social'] ?? null,
+                'fecha'     => !empty($d['fecha_emision']) ? \Carbon\Carbon::parse($d['fecha_emision'])->format('d/m/Y') : null,
+                'total'     => (int) round($d['monto'] ?? 0),
+                'pendiente' => max(0, (int) round($d['pendiente'] ?? 0)),
+                'pagado'    => (int) round($d['monto_cobrado'] ?? 0),
+            ])->values()->all();
+    }
+
+    private function formatearListado(string $q, int $n, array $compras, array $ventas): string
+    {
+        if (!$compras && !$ventas) {
+            return "🔎 No encontré facturas de \"{$q}\" (busco por nombre o RUT del proveedor o cliente).";
+        }
+
+        $bloque = function (string $titulo, array $filas, string $verbo) {
+            $nombres = array_values(array_unique(array_filter(array_column($filas, 'quien'))));
+            $unico   = count($nombres) === 1;
+            $out     = ['', '🧾 *' . $titulo . ($unico ? " — {$nombres[0]}" : '') . '*'];
+            $pend    = 0;
+            foreach ($filas as $f) {
+                $estado = $f['pendiente'] > 0
+                    ? ($f['pagado'] > 0 ? "⚠️ parcial, {$verbo} {$this->clp($f['pendiente'])}" : "⏳ {$verbo} {$this->clp($f['pendiente'])}")
+                    : '✅';
+                $quien = $unico ? '' : " — {$f['quien']}";
+                $out[] = "• N° {$f['folio']} — {$f['fecha']} — {$this->clp($f['total'])} — {$estado}{$quien}";
+                $pend += $f['pendiente'];
+            }
+            if ($pend > 0) $out[] = "_Total {$verbo} en estas: {$this->clp($pend)}_";
+            return $out;
+        };
+
+        $partes = [];
+        if ($compras) $partes = array_merge($partes, $bloque('Últimas ' . count($compras) . ' facturas de compra', $compras, 'por pagar'));
+        if ($ventas)  $partes = array_merge($partes, $bloque('Últimas ' . count($ventas) . ' facturas de venta', $ventas, 'por cobrar'));
+
+        return ltrim(implode("\n", $partes), "\n");
+    }
+
     // Última línea de compra de un producto (+color), vía producto_color_proveedor.
     private function ultimaCompra(int $productoId, ?int $colorId): ?array
     {
