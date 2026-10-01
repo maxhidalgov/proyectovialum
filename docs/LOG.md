@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-01 — Bot de WhatsApp: info de factura/boleta por folio
+- **Qué se hizo:** Nuevo endpoint `GET /api/bot/factura?q=&lado=` (token `BOT_API_TOKEN`). Busca por folio en compras (proveedor, fecha, neto/IVA/total, estado de pago, hasta 6 líneas, PDF) y en ventas (facturas/NC con cobrado y pendiente vía `registroVentas`; boletas aparte). Los folios se repiten entre proveedores/tipos, así que devuelve hasta 3 por lado. `CuentasPorPagarController::efectivoPagadoSub` pasó a `public` para reusar el cálculo de pagado. El bot detecta "asistente, factura de compra 457307" / "boleta 8037" y el comando privado `factura N`.
+- **Archivos principales:** `app/Http/Controllers/BotController.php`, `app/Http/Controllers/CuentasPorPagarController.php`, `routes/api.php`.
+- **Pendiente / ojo con:** Los datos de facturas (montos, proveedores, cobrado) los ve todo el grupo (decisión del dueño). El link PDF de compras es un link firmado de Bsale.
+
 ## 2026-10-01 — Bot de WhatsApp: consulta de precios y última compra
 - **Qué se hizo:** Nuevo endpoint `GET /api/bot/precio?q=` (token `BOT_API_TOKEN`) que busca en `lista_precios` (cada palabra en producto o color) y devuelve hasta 3 coincidencias con precio de venta (neto y c/IVA), costo de lista y última compra (fecha, proveedor, factura) vía `compra_items`→`producto_color_proveedor`. Si no hay compra del mismo color, muestra la última del producto indicando el color. En el bot, "asistente, precio de la silicona negra" en el grupo se responde sin IA. También se corrigió que `ausentes-hoy` usaba fecha UTC en vez de Chile.
 - **Archivos principales:** `app/Http/Controllers/BotController.php`, `routes/api.php`.

@@ -74,6 +74,8 @@ Route::get('/cron/sync-diario', function (\Illuminate\Http\Request $r) {
 Route::get('/bot/ausentes-hoy', [\App\Http\Controllers\BotController::class, 'ausentesHoy']);
 //    GET /api/bot/precio?token=XXXX&q=silicona negra  → precio venta/costo + última compra
 Route::get('/bot/precio', [\App\Http\Controllers\BotController::class, 'precio']);
+//    GET /api/bot/factura?token=XXXX&q=457307&lado=compra|venta  → info de un documento por folio
+Route::get('/bot/factura', [\App\Http\Controllers\BotController::class, 'factura']);
 
 // 🔐 RUTAS DE ADMINISTRACIÓN (Solo Admin)
 Route::middleware(['auth:api', 'permission:area_admin'])->prefix('admin')->group(function () {

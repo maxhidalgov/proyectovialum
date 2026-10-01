@@ -16,7 +16,7 @@ class CuentasPorPagarController extends Controller
     //  Para DTE 33/34 (facturas): banco + NC aplicada sobre esta factura
     //  Para DTE 61  (NCs)      : banco + monto de esta NC ya aplicado a alguna factura
     //
-    private function efectivoPagadoSub(): \Illuminate\Database\Query\Expression
+    public function efectivoPagadoSub(): \Illuminate\Database\Query\Expression
     {
         return DB::raw("(
             SELECT
