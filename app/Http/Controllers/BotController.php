@@ -29,7 +29,9 @@ class BotController extends Controller
     {
         $this->verificarToken($r);
 
-        $fecha      = $r->query('fecha', now()->toDateString());
+        // La app corre en UTC: "hoy" debe ser el día en Chile, no el de UTC
+        // (pasadas las 21:00 hora chilena UTC ya cambió de día).
+        $fecha      = $r->query('fecha', now('America/Santiago')->toDateString());
         $tolerancia = (int) $r->query('tolerancia', 5);
 
         // Reutiliza el cálculo existente (horarios + marcaciones + permisos + feriados).
