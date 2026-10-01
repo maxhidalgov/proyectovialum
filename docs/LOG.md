@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-01 — Bot de WhatsApp: el precio también busca en facturas de compra
+- **Qué se hizo:** `GET /api/bot/precio` solo miraba `lista_precios` por el nombre del producto en Vialum, así que "precio de compra ángulo revestimiento" no encontraba nada (en la lista es "Angulo 50 x 50" y la factura de Haustek dice "ANGULO REVESTIMIENTO 50/50 mm - NOGAL"). Ahora, si la lista no tiene el producto, o si se pasa `compras=1` (el bot lo manda cuando la frase dice compra/costo/proveedor), busca también en `compra_items` por nombre o código del proveedor y muestra la última compra (fecha, proveedor, factura, neto c/u después del descuento, cantidad). Limpia nombres que la factura repite entre paréntesis.
+- **Archivos principales:** `app/Http/Controllers/BotController.php`.
+- **Pendiente / ojo con:** Depende de que la factura tenga sus líneas cargadas (XML) en producción. Las palabras deben estar todas en la descripción del proveedor (ej. "50/50" no equivale a "50 x 50").
+
 ## 2026-10-01 — Bot de WhatsApp: cotización rápida por chat privado
 - **Qué se hizo:** Endpoints `GET /api/bot/clientes` y `POST /api/bot/cotizacion` (token `BOT_API_TOKEN`; `confirmar=1` crea, sin él solo vista previa). Admiten ítems de lista (`lista_precio_id`, con descuento del cliente) e ítems libres (nombre + precio manual, `incluye_iva` convierte a neto). Crea la cotización por `VentaExpressController::guardarCotizacion` (la misma de Cotización Rápida) y devuelve el link público del PDF; el vendedor sale de `BOT_VENDEDOR_ID`. `precio` ahora acepta `n` y `compacto=1` y devuelve `lista_precio_id`. En el bot (`src/cotizador.js`) Claude arma el borrador con herramientas pero NO crea: solo el código, al recibir "SI" del dueño por privado, confirma.
 - **Archivos principales:** `app/Http/Controllers/BotController.php`, `routes/api.php`, `config/services.php`.

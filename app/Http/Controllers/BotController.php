@@ -127,13 +127,72 @@ class BotController extends Controller
             ];
         }
 
+        // Compras que coinciden: si la lista no tiene el producto o si se pidió precio de compra.
+        // Las facturas lo describen con el texto del proveedor ("ANGULO REVESTIMIENTO 50/50 mm - NOGAL"),
+        // que suele diferir del nombre que tiene en la lista ("Angulo 50 x 50").
+        $comprasItems = [];
+        if (!$compacto && ($total === 0 || filter_var($r->query('compras', false), FILTER_VALIDATE_BOOLEAN))) {
+            $comprasItems = $this->buscarEnCompras($palabras, 3);
+        }
+
         return response()->json([
-            'ok'    => true,
-            'q'     => $q,
-            'total' => $total,
-            'texto' => $compacto ? null : $this->formatearPrecios($q, $items, $total),
-            'items' => $items,
+            'ok'      => true,
+            'q'       => $q,
+            'total'   => $total,
+            'texto'   => $compacto ? null : $this->formatearPrecios($q, $items, $total, $comprasItems),
+            'items'   => $items,
+            'compras' => $comprasItems,
         ]);
+    }
+
+    // Algunas facturas repiten la descripción entre paréntesis: "ANGULO … NOGAL (ANGULO … NOGAL)".
+    private function limpiarNombreLinea(string $nombre): string
+    {
+        if (preg_match('/^(.*\S)\s*\((.*)\)\s*$/u', $nombre, $m)
+            && mb_strtolower(trim($m[1])) === mb_strtolower(trim($m[2]))) {
+            return trim($m[1]);
+        }
+        return trim($nombre);
+    }
+
+    // Últimas compras de productos cuyo texto de factura (nombre o código del proveedor) contiene
+    // todas las palabras. Agrupa por descripción y devuelve la compra más reciente de cada una.
+    private function buscarEnCompras(array $palabras, int $n): array
+    {
+        $rows = DB::table('compra_items as ci')
+            ->join('compras as co', 'co.id', '=', 'ci.compra_id')
+            ->where('co.tipo_dte', '!=', 61) // sin notas de crédito
+            ->where(function ($o) use ($palabras) {
+                foreach ($palabras as $p) {
+                    $o->where(fn ($w) => $w->where('ci.nombre', 'like', "%$p%")->orWhere('ci.codigo', 'like', "%$p%"));
+                }
+            })
+            ->orderByDesc('co.fecha_emision')
+            ->orderByDesc('co.id')
+            ->limit(80)
+            ->get(['ci.codigo', 'ci.nombre', 'ci.cantidad', 'ci.unidad', 'ci.precio_unitario', 'ci.descuento',
+                   'co.folio', 'co.fecha_emision', 'co.nombre_emisor']);
+
+        $vistos = [];
+        foreach ($rows as $row) {
+            $clave = mb_strtolower(trim($row->nombre));
+            $vistos[$clave]['veces'] = ($vistos[$clave]['veces'] ?? 0) + 1;
+            if (isset($vistos[$clave]['ultima'])) continue; // ya está la más reciente
+            $vistos[$clave]['ultima'] = [
+                'nombre'    => $this->limpiarNombreLinea($row->nombre),
+                'codigo'    => $row->codigo,
+                'fecha'     => \Carbon\Carbon::parse($row->fecha_emision)->format('d/m/Y'),
+                'proveedor' => $row->nombre_emisor,
+                'folio'     => $row->folio,
+                'lista'     => (int) $row->precio_unitario,
+                'descuento' => (float) $row->descuento,
+                'neto'      => (int) ($row->descuento > 0 ? round($row->precio_unitario * (1 - $row->descuento / 100)) : $row->precio_unitario),
+                'cantidad'  => (float) $row->cantidad,
+                'unidad'    => $row->unidad,
+            ];
+        }
+
+        return array_slice(array_values(array_map(fn ($v) => $v['ultima'] + ['veces' => $v['veces']], $vistos)), 0, $n);
     }
 
     /**
@@ -649,13 +708,16 @@ class BotController extends Controller
         return '$' . number_format((float) $n, 0, ',', '.');
     }
 
-    private function formatearPrecios(string $q, array $items, int $total): string
+    private function formatearPrecios(string $q, array $items, int $total, array $compras = []): string
     {
-        if (empty($items)) {
-            return "🔎 No encontré productos para \"{$q}\" en la lista de precios.";
+        if (empty($items) && empty($compras)) {
+            return "🔎 No encontré \"{$q}\" ni en la lista de precios ni en las facturas de compra.";
         }
 
         $partes = ["🔎 *{$q}*"];
+        if (empty($items)) {
+            $partes[] = '_No está en la lista de precios; esto encontré en facturas de compra:_';
+        }
         foreach ($items as $it) {
             $nombre = $it['producto'] . ($it['color'] ? " — {$it['color']}" : '');
             $iva    = (int) round($it['precio_venta'] * 1.19);
@@ -678,6 +740,22 @@ class BotController extends Controller
         if ($total > count($items)) {
             $partes[] = '';
             $partes[] = "_Hay {$total} coincidencias, muestro " . count($items) . '. Sé más específico para acotar._';
+        }
+
+        if ($compras) {
+            if ($items) {
+                $partes[] = '';
+                $partes[] = '🧾 *En facturas de compra:*';
+            }
+            foreach ($compras as $c) {
+                $cant = rtrim(rtrim(number_format($c['cantidad'], 2, ',', ''), '0'), ',');
+                $dto  = $c['descuento'] > 0 ? ", lista {$this->clp($c['lista'])} -" . rtrim(rtrim(number_format($c['descuento'], 2, ',', ''), '0'), ',') . '%' : '';
+                $cod  = $c['codigo'] ? " ({$c['codigo']})" : '';
+                $partes[] = '';
+                $partes[] = "*{$c['nombre']}*{$cod}";
+                $partes[] = "• Última compra: {$c['fecha']} a {$c['proveedor']} — *{$this->clp($c['neto'])} neto c/u*{$dto} x " . trim("{$cant} {$c['unidad']}") . " (factura {$c['folio']})";
+                if ($c['veces'] > 1) $partes[] = "• Comprado {$c['veces']} veces en el historial";
+            }
         }
 
         return implode("\n", $partes);
