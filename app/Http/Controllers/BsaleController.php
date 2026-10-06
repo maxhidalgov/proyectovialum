@@ -502,7 +502,29 @@ class BsaleController extends Controller
             ]];
         }
 
-        $label = $porcentaje <= 50 ? 'Anticipo' : 'Saldo';
+        // Anticipo = primer documento de la cotización; Saldo = los siguientes. (Antes se decidía
+        // por el %: un segundo documento de 50% o menos salía rotulado "Anticipo".)
+        $hayEmitidosPrevios = \App\Models\DocumentoFacturacion::where('cotizacion_id', $cotizacion->id)
+            ->where('estado', 'emitido')->exists();
+        $label = $hayEmitidosPrevios ? 'Saldo' : 'Anticipo';
+
+        // Documento parcial (anticipo/saldo): UNA línea con el monto real del documento.
+        // Antes se enviaba cada línea al 100% del precio de la obra con un descuento de
+        // (100 − %), y la plantilla del documento no imprime el descuento: salía
+        // "valor unitario $5.407.124 × 1" con subtotal $2.741.379, algo incoherente a la vista.
+        // El monto final no cambia (neto × % del total; el IVA y el pago se calculan igual).
+        if ($porcentaje < 100) {
+            $pctTxt = rtrim(rtrim(number_format($porcentaje, 2, ',', ''), '0'), ',');
+            $base   = $glosaTxt !== '' ? $glosaTxt : "según cotización #{$cotizacion->id}";
+            $detalles = [[
+                'netUnitValue' => round($totalNeto * $porcentaje / 100, 4),
+                'quantity'     => 1,
+                'taxId'        => '[1]',
+                'comment'      => mb_substr("{$label} {$pctTxt}% — {$base}", 0, 250),
+                'discount'     => 0,
+            ]];
+        }
+
         $nota  = $porcentaje < 100
             ? "{$label} {$porcentaje}% sobre cotización #{$cotizacion->id}. Total cotización: $" . number_format($cotizacion->total, 0, ',', '.')
             : null;

@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-06 — Facturas de anticipo/saldo: una sola línea con el monto real
+- **Qué se hizo:** `construirPayloadBsale` enviaba cada línea (o la glosa) al 100% del precio de la obra con `discount = 100 − %`, y la plantilla de Bsale no imprime el descuento: la factura 5235 salió "valor unitario $5.407.124 × 1, subtotal $2.741.379". Ahora, si el porcentaje es < 100, manda UNA línea "Anticipo/Saldo X% — {glosa o 'según cotización #N'}" con `netUnitValue` = neto del documento, cantidad 1 y sin descuento. Además el rótulo Anticipo/Saldo ya no depende del % (antes un 2º documento de 50% o menos salía "Anticipo") sino de si la cotización ya tiene un documento emitido. Con 100% no cambia nada.
+- **Archivos principales:** `app/Http/Controllers/BsaleController.php`.
+- **Pendiente / ojo con:** Probado armando el payload en local (montos idénticos a los de antes, sin llamar a Bsale); la primera factura parcial real conviene revisarla al emitirla. El campo `tipo` guardado en `documentos_facturacion` (anticipo/saldo/total, `BsaleController` ~L79) sigue decidiéndose por el % y no se tocó. La 5235 ya emitida no se corrige.
+
 ## 2026-10-06 — Ventas y cobranza: la factura anulada por NC se ve junto a su NC
 - **Qué se hizo:** Las pantallas de ventas filtraban `estado = 'emitido'`, así que una factura marcada `anulado` (botón Anular de la app) desaparecía pero su nota de crédito seguía visible y restaba de más. Caso Villanueva: factura 5107 oculta + NC 89 visible se descontaban de la 5108 y el cliente figuraba en $0 (ventas de agosto $3,17 M más bajas, IVA ≈ $506 mil sin contar). Ahora `filtroDocVisible()` incluye las facturas `anulado` que tienen una NC emitida asignada (`nc_referencia_df_id`): se ven las dos y se neutralizan, como ya pasaba con las otras 35 NC. Aplicado en Registro de Ventas, resumen y detalle de Cuentas por Cobrar, y buscador de la pantalla Ventas. No cambia la facturación por cotización.
 - **Archivos principales:** `app/Http/Controllers/CuentasPorCobrarController.php`, `app/Http/Controllers/BsaleVentaSyncController.php` (`buscarDocumentos`).
