@@ -152,7 +152,7 @@
         <template #item.acciones="{ item }">
           <div class="d-flex align-center gap-1" @click.stop>
             <v-btn
-              v-if="item.estado_facturacion !== 'pagada'"
+              v-if="puedeEmitir(item)"
               color="success" variant="tonal" size="small"
               @click="abrirModalBsale(item)"
             >
@@ -949,6 +949,16 @@ function pctEmitido(item) {
 function pctCobrado(item) {
   const emitido = totalEmitido(item)
   return emitido > 0 ? Math.round((totalCobrado(item) / emitido) * 100) : 0
+}
+// ¿Se puede emitir un documento? El estado pasa a 'pagada' apenas TODO lo emitido está cobrado,
+// aunque solo se haya facturado una parte (ej. 50% facturado y cobrado): en ese caso igual
+// queda saldo por facturar. Si el proceso se cerró a mano (boletas, ya conciliado) no se ofrece.
+// Se tolera hasta $1.000 de diferencia por redondeos de IVA.
+function puedeEmitir(item) {
+  if (item.estado_facturacion !== 'pagada') return true
+  if (item.facturacion_cerrada) return false
+  const saldoPorFacturar = Number(item.total) * 1.19 - totalEmitido(item)
+  return saldoPorFacturar > 1000
 }
 
 // ── Carga ────────────────────────────────────────────────────────────

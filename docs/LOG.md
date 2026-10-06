@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-06 — Facturación: poder emitir el saldo de una cotización ya cobrada
+- **Qué se hizo:** El estado pasa a "Cobrada" apenas todo lo emitido está cobrado, aunque solo se haya facturado una parte, y el botón Emitir se ocultaba (caso #158 Villanueva: 50% facturado y cobrado). Ahora `puedeEmitir()` lo muestra mientras queden más de $1.000 por facturar y el proceso no esté cerrado a mano. Además el "Saldo" del modal de emisión usa el % exacto con decimales (antes el % entero redondeado podía facturar de más, ej. +$19.344).
+- **Archivos principales:** `vuexy-frontend/src/pages/facturacion/index.vue`, `vuexy-frontend/src/components/facturacion/ModalBsale.vue`, `public/` (build). El build se hizo desde una copia limpia de HEAD para NO incluir el Optimizador de Corte ni la ayuda de Operaciones (siguen solo en local).
+- **Pendiente / ojo con:** Cotizaciones antiguas pagadas con boletas y sin "Cerrar proceso" podrían mostrar Emitir (se cierran a mano). El backend rotula como "Anticipo" todo documento ≤ 50% aunque ya haya emitidos previos (`BsaleController` ~L79/L505); no se tocó. Para sumar un ítem (ej. ángulos) a una cotización Winperfil, hoy solo sirve "Ajustar precio" en `cotizacion-ver`.
+
 ## 2026-10-01 — Bot de WhatsApp: el precio también busca en facturas de compra
 - **Qué se hizo:** `GET /api/bot/precio` solo miraba `lista_precios` por el nombre del producto en Vialum, así que "precio de compra ángulo revestimiento" no encontraba nada (en la lista es "Angulo 50 x 50" y la factura de Haustek dice "ANGULO REVESTIMIENTO 50/50 mm - NOGAL"). Ahora, si la lista no tiene el producto, o si se pasa `compras=1` (el bot lo manda cuando la frase dice compra/costo/proveedor), busca también en `compra_items` por nombre o código del proveedor y muestra la última compra (fecha, proveedor, factura, neto c/u después del descuento, cantidad). Limpia nombres que la factura repite entre paréntesis.
 - **Archivos principales:** `app/Http/Controllers/BotController.php`.

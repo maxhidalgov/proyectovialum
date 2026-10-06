@@ -27,7 +27,7 @@
           type="info" density="compact" variant="tonal" class="mb-3 text-caption"
         >
           Ya se emitieron <strong>{{ clp(yaEmitido) }}</strong> ({{ pctYaEmitido }}%).
-          El saldo pendiente es <strong>{{ clp(totalBruto - yaEmitido) }}</strong> ({{ 100 - pctYaEmitido }}%).
+          El saldo pendiente es <strong>{{ clp(totalBruto - yaEmitido) }}</strong> ({{ fmtPct(pctSaldo) }}%).
         </v-alert>
 
         <!-- ¿Cuánto vas a facturar? -->
@@ -60,7 +60,7 @@
           <v-text-field
             v-model.number="porcentaje"
             type="number"
-            min="1" :max="100 - pctYaEmitido"
+            min="1" :max="Math.ceil(pctSaldo)" step="any"
             density="compact"
             variant="outlined"
             hide-details
@@ -387,13 +387,20 @@ const pctYaEmitido = computed(() => {
   return total > 0 ? Math.round((yaEmitido.value / total) * 100) : 0
 })
 
-const pctSaldo = computed(() => 100 - pctYaEmitido.value)
+// Saldo EXACTO (con decimales). Con el % entero redondeado se podía sobre o sub-facturar
+// varios miles de pesos (ej. total $6.434.478 con $3.172.238 emitido ofrecía 51% = +$19.344).
+const pctSaldo = computed(() => {
+  const total = totalBruto.value
+  if (total <= 0) return 100
+  return Math.round(((total - yaEmitido.value) / total) * 100 * 10000) / 10000
+})
+const fmtPct = (n) => Number(Number(n).toFixed(1)).toString() // 50 → "50", 50.6994 → "50.7"
 
 // Opciones contextuales: si hay saldo, mostrar "Saldo (X%)" primero
 const opcionesDisponibles = computed(() => {
   if (pctYaEmitido.value > 0) {
     // Ya hay algo emitido — ofrecer el saldo exacto + opciones menores
-    const opciones = [{ label: `Saldo (${pctSaldo.value}%)`, value: pctSaldo.value }]
+    const opciones = [{ label: `Saldo (${fmtPct(pctSaldo.value)}%)`, value: pctSaldo.value }]
     OPCIONES_BASE.forEach(opt => {
       if (opt.value < pctSaldo.value) opciones.push(opt)
     })
