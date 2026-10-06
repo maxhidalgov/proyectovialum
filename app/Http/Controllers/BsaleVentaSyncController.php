@@ -609,7 +609,11 @@ class BsaleVentaSyncController extends Controller
 
         $query = DB::table('documentos_facturacion as df')
             ->leftJoin('clientes as cl', 'cl.id', '=', 'df.cliente_id')
-            ->where('df.estado', 'emitido')
+            // Emitidos + facturas marcadas "anulado" que tienen una NC asignada: así la factura
+            // anulada se ve junto a su nota de crédito (queda constancia de la anulación).
+            ->whereRaw("(df.estado = 'emitido' OR (df.estado = 'anulado' AND df.tipo_documento_bsale_id <> 2 AND EXISTS (
+                SELECT 1 FROM documentos_facturacion ncv
+                WHERE ncv.nc_referencia_df_id = df.id AND ncv.tipo_documento_bsale_id = 2 AND ncv.estado = 'emitido')))")
             ->when($tipo, fn ($w) => $w->where('df.tipo_documento_bsale_id', (int) $tipo))
             ->when($desde, fn ($w) => $w->whereDate('df.fecha_emision', '>=', $desde))
             ->when($hasta, fn ($w) => $w->whereDate('df.fecha_emision', '<=', $hasta))

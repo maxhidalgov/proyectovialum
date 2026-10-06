@@ -29,10 +29,12 @@ Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-en
 - [ ] 2026-10-05 — Apache local sirve toda la carpeta htdocs (se tapó con `.htaccess` en la raíz): apuntarlo solo a `public/` o usar `artisan serve`; decidir si el `.htaccess` se commitea
 
 Facturación:
+- [ ] 2026-10-06 — Botón "Anular" (`DocumentoFacturacionController::anular`) solo cambia el estado local a `anulado` y no llama a Bsale; avisar o impedir anular desde la app una factura que no tenga NC en Bsale
 - [ ] 2026-10-05 — Cotizaciones Winperfil: poder agregar un ítem adicional (ej. "Ángulos", precio con IVA) desde `cotizacion-ver` sin repartirlo entre las ventanas. Ojo: `update()` calcula el total sin las líneas `winperfil`, por eso el cotizador completo NO sirve para editar cotizaciones Winperfil (dejaría el total solo con extras)
 
 ## En curso
 
 ## Hechas
+- [x] 2026-10-06 → 2026-10-06 — Registro de Ventas / Cuentas por Cobrar / buscador de Ventas: una factura marcada `anulado` que tiene NC asignada ahora se muestra junto a su NC (se neutralizan) en vez de ocultarse. Caso Villanueva: antes 5108 + NC 89 daban $0, ahora $3.172.239. Verificado contra producción: único documento afectado
 - [x] 2026-10-05 → 2026-10-06 — Facturación: botón "Emitir" visible mientras quede saldo por facturar aunque lo emitido esté todo cobrado (caso #158 Villanueva: 50% facturado y cobrado)
 - [x] 2026-10-05 → 2026-10-06 — Facturación: el "Saldo" del modal de emisión usa el porcentaje exacto (con decimales) en vez del % entero redondeado

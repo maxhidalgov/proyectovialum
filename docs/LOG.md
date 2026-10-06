@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-06 — Ventas y cobranza: la factura anulada por NC se ve junto a su NC
+- **Qué se hizo:** Las pantallas de ventas filtraban `estado = 'emitido'`, así que una factura marcada `anulado` (botón Anular de la app) desaparecía pero su nota de crédito seguía visible y restaba de más. Caso Villanueva: factura 5107 oculta + NC 89 visible se descontaban de la 5108 y el cliente figuraba en $0 (ventas de agosto $3,17 M más bajas, IVA ≈ $506 mil sin contar). Ahora `filtroDocVisible()` incluye las facturas `anulado` que tienen una NC emitida asignada (`nc_referencia_df_id`): se ven las dos y se neutralizan, como ya pasaba con las otras 35 NC. Aplicado en Registro de Ventas, resumen y detalle de Cuentas por Cobrar, y buscador de la pantalla Ventas. No cambia la facturación por cotización.
+- **Archivos principales:** `app/Http/Controllers/CuentasPorCobrarController.php`, `app/Http/Controllers/BsaleVentaSyncController.php` (`buscarDocumentos`).
+- **Pendiente / ojo con:** Verificado contra producción (solo lectura): 36 NC, todas con factura asignada y todas anulan el total; solo 1 factura estaba oculta. El botón Anular sigue sin avisar a Bsale (anotado en IDEAS).
+
 ## 2026-10-06 — Facturación: poder emitir el saldo de una cotización ya cobrada
 - **Qué se hizo:** El estado pasa a "Cobrada" apenas todo lo emitido está cobrado, aunque solo se haya facturado una parte, y el botón Emitir se ocultaba (caso #158 Villanueva: 50% facturado y cobrado). Ahora `puedeEmitir()` lo muestra mientras queden más de $1.000 por facturar y el proceso no esté cerrado a mano. Además el "Saldo" del modal de emisión usa el % exacto con decimales (antes el % entero redondeado podía facturar de más, ej. +$19.344).
 - **Archivos principales:** `vuexy-frontend/src/pages/facturacion/index.vue`, `vuexy-frontend/src/components/facturacion/ModalBsale.vue`, `public/` (build). El build se hizo desde una copia limpia de HEAD para NO incluir el Optimizador de Corte ni la ayuda de Operaciones (siguen solo en local).

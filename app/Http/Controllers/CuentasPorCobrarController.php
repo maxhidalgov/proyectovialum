@@ -73,6 +73,20 @@ class CuentasPorCobrarController extends Controller
         ) AS ec");
     }
 
+    // Documentos visibles en ventas y cobranza: los emitidos y también las facturas que el sistema
+    // marcó "anulado" pero que tienen una nota de crédito asignada (nc_referencia_df_id).
+    // Esa factura debe verse junto a su NC (se neutralizan y queda constancia de la anulación);
+    // si solo se ocultara la factura, la NC quedaría restando de más (caso Villanueva: factura
+    // 5107 oculta + NC 89 visible dejaban la factura 5108 en $0).
+    private function filtroDocVisible(): string
+    {
+        return "(df.estado = 'emitido' OR (df.estado = 'anulado' AND df.tipo_documento_bsale_id <> 2 AND EXISTS (
+                    SELECT 1 FROM documentos_facturacion ncv
+                    WHERE ncv.nc_referencia_df_id = df.id
+                      AND ncv.tipo_documento_bsale_id = 2
+                      AND ncv.estado = 'emitido')))";
+    }
+
     // Resumen por cliente
     public function index(Request $request)
     {
@@ -87,7 +101,7 @@ class CuentasPorCobrarController extends Controller
             ->leftJoin('clientes as cl_cot', 'cl_cot.id', '=', 'c.cliente_id')
             ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
             ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
-            ->where('df.estado', 'emitido')
+            ->whereRaw($this->filtroDocVisible())
             ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->select(
                 DB::raw('COALESCE(cl_dir.id, cl_cot.id) as cliente_id'),
@@ -137,7 +151,7 @@ class CuentasPorCobrarController extends Controller
             ->leftJoin('clientes as cl_cot', 'cl_cot.id', '=', 'c.cliente_id')
             ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
             ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
-            ->where('df.estado', 'emitido')
+            ->whereRaw($this->filtroDocVisible())
             ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->when($desde, fn($sq) => $sq->where('df.fecha_emision', '>=', $desde))
             ->when($hasta, fn($sq) => $sq->where('df.fecha_emision', '<=', $hasta))
@@ -259,7 +273,7 @@ class CuentasPorCobrarController extends Controller
                     $sq->where('df.bsale_cliente_rut', $clienteId);
                 }
             })
-            ->where('df.estado', 'emitido')
+            ->whereRaw($this->filtroDocVisible())
             ->select(
                 'df.id', 'df.cotizacion_id', 'df.tipo', 'df.monto',
                 DB::raw('COALESCE(df.neto, df.monto) as neto'),
@@ -433,7 +447,7 @@ class CuentasPorCobrarController extends Controller
             ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
             ->leftJoin('clientes as cl_cot', 'cl_cot.id', '=', 'c.cliente_id')
             ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
-            ->where('df.estado', 'emitido')
+            ->whereRaw($this->filtroDocVisible())
             ->whereNotIn('df.tipo_documento_bsale_id', [1])
             ->select(
                 'df.id',
