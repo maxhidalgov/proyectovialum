@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-09 — Facturación: cotizaciones Entregada / En Producción ahora aparecen
+- **Qué se hizo:** `getAprobadas` (lista de Facturación) solo traía estados Aprobada y Facturada; la cotización A-725 de PESA importada como "Entregada" no aparecía. Ahora incluye también En Producción y Entregada (en prod había 1 Entregada y 0 En Producción, no cambia el volumen). `estado_facturacion` sigue saliendo "aprobada" para ellas hasta emitir el 100%.
+- **Archivos principales:** `app/Http/Controllers/CotizacionController.php` (`getAprobadas`).
+- **Pendiente / ojo con:** Al emitir el 100% `BsaleController` las pasa a Facturada (flujo Entregada → Facturada ya previsto).
+
 ## 2026-10-09 — Winperfil: dos presupuestos con el mismo NUMFACTURA se pisaban
 - **Qué se hizo:** NUMFACTURA no es único en Winperfil (725 existe como oferta de Ar Alena SPA, presupuesto 649, y como A-725 de PESA). La app emparejaba solo por serie+número, así que importar el A-725 de PESA pisó cliente/fecha/estado de la cotización #181 (Ar Alena, 10 ventanas; el candado de precio salvó líneas y total) y el listado marcaba "Re-sync" por error. Ahora `upsertPresupuesto` solo reutiliza una cotización si coincide fecha o cliente (`mismoDocumentoWinperfil`), el listado calcula `_synced` igual, e `importarUno` devuelve la cotización exacta que tocó (no la última con ese número). Migración idempotente que devuelve la #181 a Ar Alena (cliente 1880, fecha 12-05, estado de la 649). Al importar el A-725 de PESA falló `Duplicate entry '725-A' ... uq_cotizacion_winperfil`: el índice único (winperfil_numero, winperfil_serie) se cambió por uno normal (`2026_10_09_190000_winperfil_numero_no_unico`).
 - **Archivos principales:** `app/Http/Controllers/WinperfilController.php`, `database/migrations/2026_10_09_180000_restaurar_cotizacion_ar_alena_725.php`.

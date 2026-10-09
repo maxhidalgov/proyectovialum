@@ -1307,7 +1307,8 @@ public function getAprobadas()
             'estado'
         ])
         ->whereHas('estado', function($query) {
-            $query->whereIn('nombre', ['Aprobada', 'Facturada']);
+            // Entregada / En Producción también se facturan (el flujo es Entregada → Facturada)
+            $query->whereIn('nombre', ['Aprobada', 'En Producción', 'Entregada', 'Facturada']);
         })
         ->orderBy('created_at', 'desc')
         ->get();
