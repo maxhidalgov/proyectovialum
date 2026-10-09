@@ -34,6 +34,9 @@ Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-en
 - [ ] 2026-10-05 — Bot: probar "precio de compra ángulo revestimiento" en prod; si no aparece, cargar los XML pendientes de Compras (la factura Haustek 269051 de sep-2026 debe tener sus líneas)
 - [ ] 2026-10-05 — Apache local sirve toda la carpeta htdocs (se tapó con `.htaccess` en la raíz): apuntarlo solo a `public/` o usar `artisan serve`; decidir si el `.htaccess` se commitea
 
+Winperfil:
+- [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
+
 Facturación:
 - [ ] 2026-10-06 — Botón "Anular" (`DocumentoFacturacionController::anular`) solo cambia el estado local a `anulado` y no llama a Bsale; avisar o impedir anular desde la app una factura que no tenga NC en Bsale
 - [ ] 2026-10-05 — Cotizaciones Winperfil: poder agregar un ítem adicional (ej. "Ángulos", precio con IVA) desde `cotizacion-ver` sin repartirlo entre las ventanas. Ojo: `update()` calcula el total sin las líneas `winperfil`, por eso el cotizador completo NO sirve para editar cotizaciones Winperfil (dejaría el total solo con extras)
@@ -41,6 +44,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-09 → 2026-10-09 — Winperfil: cotizaciones de distintos clientes con el mismo NUMFACTURA (725 Ar Alena vs PESA) ya no se pisan; #181 restaurada a Ar Alena por migración
 - [x] 2026-10-09 → 2026-10-09 — Cotización express: elegir una persona de contacto de la empresa (cliente) a quien va dirigida; aparece como "Atención" en el PDF y la vista previa
 - [x] 2026-10-06 → 2026-10-06 — Facturas de anticipo/saldo en Bsale: ahora salen con UNA línea con el monto real del documento (sin precio completo + descuento oculto); el rótulo Anticipo/Saldo depende de si ya hay un documento emitido de la cotización. Monto, IVA y pago no cambian. Aplica a facturas nuevas (la 5235 ya emitida no se toca)
 - [x] 2026-10-06 → 2026-10-06 — Registro de Ventas / Cuentas por Cobrar / buscador de Ventas: una factura marcada `anulado` que tiene NC asignada ahora se muestra junto a su NC (se neutralizan) en vez de ocultarse. Caso Villanueva: antes 5108 + NC 89 daban $0, ahora $3.172.239. Verificado contra producción: único documento afectado

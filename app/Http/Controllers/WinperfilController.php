@@ -16,6 +16,7 @@ class WinperfilController extends Controller
     private string $baseUrl;
     private int    $empresa;
     private string $serieDefault;
+    private ?int   $ultimaCotizacionId = null; // cotización que tocó el último upsertPresupuesto
 
     public function __construct()
     {
@@ -165,15 +166,24 @@ class WinperfilController extends Controller
             // NUMFACTURA es el número REAL/único del documento (PRESUPUESTO_NUMERO se repite entre versiones)
             $getNumero = fn($p) => $p['NUMFACTURA'] ?? $p['PRESUPUESTO_NUMERO'] ?? $p['numfactura'] ?? null;
             $numeros = collect($items)->map($getNumero)->filter()->toArray();
-            $syncMap = DB::table('cotizaciones')
-                ->whereIn('winperfil_numero', $numeros)
-                ->where('winperfil_serie', $serie)
-                ->pluck('winperfil_synced_at', 'winperfil_numero');
+            // Ojo: un mismo NUMFACTURA puede existir en 2 presupuestos distintos (ej. 725 de
+            // Ar Alena y 725 de PESA). Solo es "sincronizada" si coincide número Y (fecha o cliente).
+            $syncRows = DB::table('cotizaciones as c')
+                ->leftJoin('clientes as cl', 'cl.id', '=', 'c.cliente_id')
+                ->whereIn('c.winperfil_numero', $numeros)
+                ->where('c.winperfil_serie', $serie)
+                ->get(['c.winperfil_numero', 'c.winperfil_synced_at', 'c.fecha', 'cl.razon_social'])
+                ->groupBy('winperfil_numero');
 
-            $items = collect($items)->map(function ($p) use ($syncMap, $getNumero) {
-                $num = $getNumero($p);
-                $p['_synced']    = isset($syncMap[$num]);
-                $p['_synced_at'] = $syncMap[$num] ?? null;
+            $items = collect($items)->map(function ($p) use ($syncRows, $getNumero) {
+                $num   = $getNumero($p);
+                $fecha = $this->parseFechaOpcional($p['FECHAFACTURA'] ?? $p['FECHA'] ?? null);
+                $nom   = $p['NOMBRECLIENTE'] ?? $p['CLIENTE_NOMBRE'] ?? null;
+                $match = ($syncRows[$num] ?? collect())->first(
+                    fn($r) => $this->mismoDocumentoWinperfil($r->fecha, $r->razon_social, $fecha, $nom)
+                );
+                $p['_synced']    = (bool) $match;
+                $p['_synced_at'] = $match->winperfil_synced_at ?? null;
                 return $p;
             })->values()->all();
 
@@ -433,10 +443,9 @@ class WinperfilController extends Controller
             $accion  = $this->upsertPresupuesto($pres, $serie, $this->buildEstadoMap($estados));
 
             // Cotización recién importada (para el modal de confirmación en el front)
-            $cot = \App\Models\Cotizacion::with('detalles')
-                ->where('winperfil_serie', $serie)
-                ->where('winperfil_numero', (string) ($numfactura ?? $numero))
-                ->latest('id')->first();
+            $cot = $this->ultimaCotizacionId
+                ? \App\Models\Cotizacion::with('detalles')->find($this->ultimaCotizacionId)
+                : null;
             $ventanas = $cot ? $cot->detalles->where('tipo_item', 'winperfil') : collect();
 
             return response()->json([
@@ -1091,9 +1100,12 @@ class WinperfilController extends Controller
             }
 
             // ─── Upsert cotizacion ───────────────────────────────────────────
-            $existing = Cotizacion::where('winperfil_numero', $numero)
-                ->where('winperfil_serie', $serie)
-                ->first();
+            $existing = $this->buscarCotizacionWinperfil(
+                $serie,
+                (string) $numero,
+                $fecha,
+                $pres['NOMBRECLIENTE'] ?? $pres['nombrecliente'] ?? $pres['CLIENTE_NOMBRE'] ?? null
+            );
 
             $payload = [
                 'cliente_id'          => $clienteId,
@@ -1130,6 +1142,7 @@ class WinperfilController extends Controller
                 $cotizacion = Cotizacion::create($payload);
                 $action = 'created';
             }
+            $this->ultimaCotizacionId = $cotizacion->id;
 
             // Si el precio está bloqueado, preservar las líneas ajustadas y no re-importar.
             if ($precioLock) {
@@ -1448,6 +1461,36 @@ class WinperfilController extends Controller
     /**
      * Parsea una fecha de Winperfil (varios formatos posibles).
      */
+    /**
+     * NUMFACTURA NO es único en Winperfil: el mismo número puede existir en presupuestos de
+     * clientes distintos (A-725 de PESA y la oferta 725 de Ar Alena). Para no pisar una
+     * cotización ajena se considera "otro documento" solo si difieren la fecha Y el cliente
+     * (el usuario puede editar uno de los dos en la app, pero no ambos).
+     */
+    private function mismoDocumentoWinperfil(?string $fechaBd, ?string $nombreBd, ?string $fechaWp, ?string $nombreWp): bool
+    {
+        $norm = fn($v) => mb_strtolower(trim(preg_replace('/[\s\x{00A0}]+/u', ' ', (string) $v)));
+        $difiere = fn($a, $b) => $a !== null && $a !== '' && $b !== null && $b !== '' && $a !== $b;
+        return !($difiere(substr((string) $fechaBd, 0, 10), $fechaWp) && $difiere($norm($nombreBd), $norm($nombreWp)));
+    }
+
+    private function parseFechaOpcional(?string $fecha): ?string
+    {
+        return $fecha ? $this->parseFecha($fecha) : null;
+    }
+
+    private function buscarCotizacionWinperfil(string $serie, string $numero, ?string $fecha, ?string $nombreCliente): ?Cotizacion
+    {
+        $candidatas = Cotizacion::where('winperfil_numero', $numero)->where('winperfil_serie', $serie)->get();
+        foreach ($candidatas as $c) {
+            $nombreBd = DB::table('clientes')->where('id', $c->cliente_id)->value('razon_social');
+            if ($this->mismoDocumentoWinperfil((string) $c->fecha, $nombreBd, $fecha, $nombreCliente)) {
+                return $c;
+            }
+        }
+        return null;
+    }
+
     private function parseFecha(?string $fecha): string
     {
         if (!$fecha) return now()->format('Y-m-d');
