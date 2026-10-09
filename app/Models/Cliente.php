@@ -33,4 +33,9 @@ class Cliente extends Model
     {
         return $this->hasMany(\App\Models\Cotizacion::class, 'cliente_id');
     }
+
+    public function contactos()
+    {
+        return $this->hasMany(\App\Models\ClienteContacto::class, 'cliente_id');
+    }
 }

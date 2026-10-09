@@ -22,6 +22,9 @@ class Cotizacion extends Model
     protected $fillable = [
         'cliente_id',
         'cliente_facturacion_id',
+        // Persona de contacto de la empresa a la que va dirigida la cotización
+        'contacto_id',
+        'contacto_nombre',
         'vendedor_id',
         'fecha',
         'estado_cotizacion_id',
@@ -84,6 +87,11 @@ class Cotizacion extends Model
     public function clienteFacturacion()
     {
         return $this->belongsTo(Cliente::class, 'cliente_facturacion_id');
+    }
+
+    public function contacto()
+    {
+        return $this->belongsTo(ClienteContacto::class, 'contacto_id');
     }
 
     public function vendedor()

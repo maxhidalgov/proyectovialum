@@ -160,6 +160,16 @@
   @if($clienteDir) {{ $clienteDir }}{{ $clienteCiu ? ', ' . $clienteCiu : '' }}<br> @endif
   @if($clienteMail) {{ $clienteMail }} @endif
 </div>
+{{-- Persona de la empresa a quien va dirigida la cotización (opcional) --}}
+@if($cotizacion->contacto_nombre)
+  @php
+    $ct = $cotizacion->contacto;
+    $ctExtra = collect([$ct?->cargo, $ct?->telefono, $ct?->email])->filter()->implode(' · ');
+  @endphp
+  <div class="client-meta" style="margin-top:4px;">
+    <strong>Atención:</strong> {{ $cotizacion->contacto_nombre }}@if($ctExtra) <span style="color:#6b7280;">· {{ $ctExtra }}</span>@endif
+  </div>
+@endif
 
 <div class="intro">De acuerdo con lo solicitado, presentamos nuestra propuesta comercial:</div>
 

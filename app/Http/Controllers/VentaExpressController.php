@@ -390,6 +390,8 @@ class VentaExpressController extends Controller
     {
         $data = $request->validate([
             'cliente_id'         => 'required|integer|exists:clientes,id',
+            // Persona de contacto de la empresa (opcional); debe pertenecer al cliente elegido
+            'contacto_id'        => 'nullable|integer|exists:cliente_contactos,id',
             'observaciones'      => 'nullable|string',
             'items'              => 'required|array|min:1',
             'items.*.nombre'     => 'required|string',
@@ -411,8 +413,20 @@ class VentaExpressController extends Controller
             $total += (float) $it['precio'] * (float) $it['cantidad'] * (1 - (float) ($it['descuento'] ?? 0) / 100);
         }
 
+        // Contacto: debe ser una persona de ESTE cliente (no de otra empresa)
+        $contacto = null;
+        if (!empty($data['contacto_id'])) {
+            $contacto = \App\Models\ClienteContacto::where('id', $data['contacto_id'])
+                ->where('cliente_id', $data['cliente_id'])->first();
+            if (!$contacto) {
+                return response()->json(['error' => 'El contacto elegido no pertenece a ese cliente.'], 422);
+            }
+        }
+
         $cot = \App\Models\Cotizacion::create([
             'cliente_id'           => $data['cliente_id'],
+            'contacto_id'          => $contacto?->id,
+            'contacto_nombre'      => $contacto?->nombre,
             'vendedor_id'          => auth()->id() ?? 1,
             'fecha'                => now()->toDateString(),
             'estado_cotizacion_id' => $estadoEval,

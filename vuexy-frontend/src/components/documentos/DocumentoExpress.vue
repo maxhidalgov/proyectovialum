@@ -60,6 +60,47 @@ function buscarClientes(q) {
 // Descuento % configurado en la ficha del cliente (mismo campo que Venta Express)
 function descuentoCliente() { return Number(cliente.value?.descuento || 0) }
 
+// ── Contacto (persona de la empresa a quien va dirigida la cotización) ──────
+// Ej.: cliente "Guindo Santo" (RUT de la empresa) y cotización para "Juanito Pérez".
+const contactos      = ref([])
+const contacto       = ref(null)
+const nuevoContVacio = () => ({ show: false, loading: false, error: '', nombre: '', cargo: '', telefono: '', email: '' })
+const nuevoCont      = ref(nuevoContVacio())
+const nombreContacto = c => c ? (c.nombre + (c.cargo ? ` — ${c.cargo}` : '')) : ''
+
+// Al cambiar de cliente se cargan sus contactos y se limpia el elegido (cada empresa tiene los suyos)
+watch(cliente, async (c) => {
+  contacto.value = null
+  contactos.value = []
+  if (!c?.id) return
+  try {
+    const { data } = await api.get(`/api/clientes/${c.id}/contactos`)
+    contactos.value = data
+  } catch { contactos.value = [] }
+})
+
+function abrirNuevoContacto() { nuevoCont.value = { ...nuevoContVacio(), show: true } }
+async function guardarContacto() {
+  const n = nuevoCont.value
+  n.error = ''
+  n.loading = true
+  try {
+    const { data } = await api.post(`/api/clientes/${cliente.value.id}/contactos`, {
+      nombre: n.nombre.trim(),
+      cargo: n.cargo || undefined,
+      telefono: n.telefono || undefined,
+      email: n.email || undefined,
+    })
+    if (!contactos.value.some(x => x.id === data.id)) contactos.value.push(data)
+    contacto.value = data           // queda seleccionado
+    nuevoCont.value.show = false
+  } catch (e) {
+    n.error = e.response?.data?.message || 'No se pudo guardar el contacto.'
+  } finally {
+    n.loading = false
+  }
+}
+
 // Crear cliente (prototipo: lo agrega localmente; el módulo real llama a Bsale)
 const nuevoCliVacio = () => ({ show: false, loading: false, error: '', tipo: 'empresa', razon_social: '', identification: '', giro: '', email: '', telefono: '', direccion: '', comuna: '', ciudad: '' })
 const nuevoCli = ref(nuevoCliVacio())
@@ -347,6 +388,7 @@ async function guardarCotizacion() {
   try {
     const { data } = await api.post('/api/venta-express/cotizacion', {
       cliente_id: cliente.value.id,
+      contacto_id: contacto.value?.id || undefined,
       observaciones: nota.value || undefined,
       items: items.value.map(it => ({
         nombre: it.nombre,
@@ -374,6 +416,8 @@ function nuevaCotizacion() {
   errorMsg.value = ''
   items.value = []
   cliente.value = null
+  contacto.value = null
+  contactos.value = []
   nota.value = ''
   dirDespacho.value = ''
 }
@@ -457,6 +501,28 @@ function nuevaCotizacion() {
                 </p>
                 <p class="text-medium-emphasis mb-0" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
                 <p class="text-medium-emphasis mb-0" v-if="cliente.direccion">{{ cliente.direccion }}</p>
+
+                <!-- Contacto: persona de la empresa a quien va dirigida la cotización (opcional) -->
+                <div v-if="esCotizacion && cliente.id" class="d-flex align-center gap-2 mt-3" style="max-inline-size: 380px">
+                  <VAutocomplete
+                    v-model="contacto"
+                    :items="contactos"
+                    :item-title="nombreContacto"
+                    item-value="id"
+                    return-object clearable hide-details density="compact"
+                    label="Contacto / Atención (opcional)"
+                    placeholder="¿A quién va dirigida?"
+                    no-data-text="Esta empresa aún no tiene contactos. Crea uno con el botón +"
+                  />
+                  <VBtn icon variant="tonal" color="primary" size="small" @click="abrirNuevoContacto" title="Nuevo contacto">
+                    <VIcon>mdi-account-plus-outline</VIcon>
+                  </VBtn>
+                </div>
+                <p v-if="contacto" class="text-medium-emphasis mb-0 mt-1">
+                  Atención: <strong>{{ contacto.nombre }}</strong>
+                  <span v-if="contacto.telefono"> · {{ contacto.telefono }}</span>
+                  <span v-if="contacto.email"> · {{ contacto.email }}</span>
+                </p>
               </template>
               <template v-else>
                 <p class="font-weight-medium mb-0">Consumidor Final</p>
@@ -711,6 +777,30 @@ function nuevaCotizacion() {
       </VCard>
     </VDialog>
 
+    <!-- ══════════ Modal: nuevo contacto de la empresa ══════════ -->
+    <VDialog v-model="nuevoCont.show" max-width="460">
+      <VCard>
+        <VCardItem>
+          <VCardTitle>Nuevo contacto</VCardTitle>
+          <VCardSubtitle>Persona de {{ nombreCli(cliente) }} a quien va dirigida la cotización</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <VRow>
+            <VCol cols="12"><VTextField v-model="nuevoCont.nombre" label="Nombre" density="compact" autofocus placeholder="Juanito Pérez" /></VCol>
+            <VCol cols="12"><VTextField v-model="nuevoCont.cargo" label="Cargo (opcional)" density="compact" placeholder="Jefe de obra" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCont.telefono" label="Teléfono (opcional)" density="compact" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCont.email" label="Email (opcional)" type="email" density="compact" /></VCol>
+          </VRow>
+          <VAlert v-if="nuevoCont.error" type="error" variant="tonal" density="compact" class="text-caption mt-2">{{ nuevoCont.error }}</VAlert>
+        </VCardText>
+        <VCardActions class="pa-4 pt-0">
+          <VSpacer />
+          <VBtn variant="tonal" color="secondary" @click="nuevoCont.show = false">Cancelar</VBtn>
+          <VBtn color="primary" :loading="nuevoCont.loading" :disabled="!nuevoCont.nombre.trim()" @click="guardarContacto">Guardar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
     <!-- ══════════ Vista Previa del documento ══════════ -->
     <VDialog v-model="previewOpen" :max-width="esCotizacion ? 840 : 640" scrollable>
       <VCard>
@@ -747,6 +837,12 @@ function nuevaCotizacion() {
               <p class="coti-muted" v-if="cliente.identification">RUT {{ cliente.identification }}</p>
               <p class="coti-muted" v-if="cliente.direccion">{{ cliente.direccion }}</p>
               <p class="coti-muted" v-if="cliente.email">{{ cliente.email }}</p>
+              <p class="coti-muted" v-if="contacto">
+                <strong>Atención:</strong> {{ contacto.nombre }}
+                <template v-if="contacto.cargo"> · {{ contacto.cargo }}</template>
+                <template v-if="contacto.telefono"> · {{ contacto.telefono }}</template>
+                <template v-if="contacto.email"> · {{ contacto.email }}</template>
+              </p>
             </template>
             <p class="coti-muted" v-if="dirDespacho"><strong>Despacho:</strong> {{ dirDespacho }}</p>
 

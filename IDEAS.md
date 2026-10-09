@@ -2,6 +2,11 @@
 
 ## Pendientes
 
+Contactos por cliente (seguimiento de la cotización express con contacto, 2026-10-09):
+- [ ] 2026-10-09 — Contactos: selector "Contacto / Atención" también en el cotizador completo (`pages/cotizador/index.vue`) y en la edición de cotizaciones; hoy `update()` conserva el contacto pero no permite cambiarlo
+- [ ] 2026-10-09 — Contactos: al enviar la cotización por WhatsApp/correo usar el teléfono/email del contacto como destino por defecto (hoy usa el del cliente) y mostrar el contacto en Seguimiento
+- [ ] 2026-10-09 — Contactos: administrar los contactos desde la ficha del cliente (hoy solo se crean desde la cotización express) y que el bot de WhatsApp pueda cotizar "para Juanito de Guindo Santo"
+
 Bot de WhatsApp (proyecto aparte `bot-pendientes-whatsapp` + endpoints `/api/bot/*` en BotController):
 - [ ] 2026-10-01 — Bot: consulta "cómo va la obra de X" (estado de producción, fecha de entrega, etapa; datos de Operaciones)
 - [ ] 2026-10-01 — Bot: consulta de stock "¿cuánto hay de X?" (inventario_movimientos)
@@ -21,6 +26,7 @@ Bot de WhatsApp (proyecto aparte `bot-pendientes-whatsapp` + endpoints `/api/bot
 - [ ] 2026-10-01 — Bot: limpiar el `BOT_API_TOKEN` real que quedó en `.env.example` del bot y cargarlo en Railway si falta
 
 Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-env-expuesto`):
+- [ ] 2026-10-06 — URGENTE: `public/info.php` (phpinfo) estuvo público en producción y expuso TODOS los secretos de Railway. Archivo eliminado (f1ab711c). ROTAR en este orden: DB_PASSWORD (MySQL Railway, proxy público), BSALE_TOKEN/BSALE_ACCESS_TOKEN, CHIPAX_SECRET_KEY/APP_ID/COOKIE, R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY, WORKERA_API_KEY, BCH_CLIENT_SECRET, FTP_PASSWORD, MAIL_PASSWORD, REDIS_PASSWORD, CRON_TOKEN, BOT_API_TOKEN (también en el bot), JWT_SECRET (cierra sesiones), APP_KEY (cuidado con datos encriptados). Revisar Bsale/Chipax/DB por actividad que no reconozcas
 - [ ] 2026-10-05 — Confirmar que la clave nueva `Vialum-app` esté en las variables de Railway y probar el Agente de Leads / IA de Producción en app.vialum.cl (en local ya responde 200)
 - [ ] 2026-10-05 — Revisar en la consola de Anthropic, Uso agrupado por clave: `Vialum-app` debe mostrar solo Sonnet 4.6; si aparece Opus, algo más la usa. Y buscar `invalid x-api-key` en logs de Railway (delata qué usaba la clave vieja FirstExito)
 - [ ] 2026-10-05 — Rotar la clave del bot (`whatsapp-bot`) y sacar la carpeta del bot de OneDrive (el `.env` se sincroniza a la nube)
@@ -35,6 +41,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-09 → 2026-10-09 — Cotización express: elegir una persona de contacto de la empresa (cliente) a quien va dirigida; aparece como "Atención" en el PDF y la vista previa
 - [x] 2026-10-06 → 2026-10-06 — Facturas de anticipo/saldo en Bsale: ahora salen con UNA línea con el monto real del documento (sin precio completo + descuento oculto); el rótulo Anticipo/Saldo depende de si ya hay un documento emitido de la cotización. Monto, IVA y pago no cambian. Aplica a facturas nuevas (la 5235 ya emitida no se toca)
 - [x] 2026-10-06 → 2026-10-06 — Registro de Ventas / Cuentas por Cobrar / buscador de Ventas: una factura marcada `anulado` que tiene NC asignada ahora se muestra junto a su NC (se neutralizan) en vez de ocultarse. Caso Villanueva: antes 5108 + NC 89 daban $0, ahora $3.172.239. Verificado contra producción: único documento afectado
 - [x] 2026-10-05 → 2026-10-06 — Facturación: botón "Emitir" visible mientras quede saldo por facturar aunque lo emitido esté todo cobrado (caso #158 Villanueva: 50% facturado y cobrado)
