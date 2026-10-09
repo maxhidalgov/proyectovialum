@@ -155,7 +155,7 @@ class BsaleController extends Controller
                 'metodo_pago' => $metodoPago,
             ]);
 
-            if ($cotizacion->estado_cotizacion_id != 2) { // 2 = Aprobada
+            if (!in_array((int) $cotizacion->estado_cotizacion_id, [2, 7, 8], true)) { // 2 Aprobada, 7 En Producción, 8 Entregada
                 return response()->json([
                     'success' => false,
                     'error' => 'La cotización debe estar aprobada para generar documento'
