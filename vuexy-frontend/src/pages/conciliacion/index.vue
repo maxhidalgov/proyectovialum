@@ -905,7 +905,7 @@
               (1) Entra al portal del banco y ve a la sección <strong>Cartola</strong> →
               (2) Abre DevTools (F12) → pestaña <strong>Console</strong> →
               (3) Pega el script y presiona Enter → verás un alert "Interceptor activo" →
-              (4) <strong>Cambia el rango de fechas en la cartola</strong> para que el portal dispare su request → el JSON se copia solo al portapapeles. El portal entrega de a 100: si el aviso dice que hay más, baja hasta el final o pulsa "ver más" en el portal hasta cargar todo; cada aviso suma al anterior y <strong>lo último copiado es el total</strong>.
+              (4) <strong>Cambia el rango de fechas en la cartola</strong> para que el portal dispare su request → el JSON se copia solo al portapapeles. El aviso indica cuántos movimientos se copiaron (aunque en pantalla veas de a 100, el banco suele entregarlos todos). Si el portal llegara a cargar más en una 2ª llamada, el script los suma solo y <strong>lo último copiado es el total</strong>.
             </VAlert>
 
             <!-- Script interceptor -->
@@ -2035,9 +2035,9 @@ const portalForm = ref({
 
 // Script interceptor: captura la respuesta que el propio portal hace al banco
 // (evita problemas de XSRF-TOKEN HttpOnly y permisos de session).
-// El portal entrega la cartola de a 100 movimientos por página: el script NO se desinstala y
-// acumula todas las páginas que el portal pida (al hacer scroll / "ver más"), sin repetir
-// movimientos. Cada vez copia el TOTAL acumulado, así que vale lo último que copió.
+// El script NO se desinstala: si el portal hace más de una llamada getcartola (ej. paginación)
+// acumula todas sin repetir movimientos y copia el TOTAL acumulado cada vez. Si el banco entrega
+// todo en una sola respuesta (lo habitual), se comporta igual que antes.
 const consolaScript = computed(() => {
   // Intercepta XMLHttpRequest (Angular HttpClient usa XHR, no fetch)
   return (
