@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-16 — Conciliación: depósitos de cheque duplicados desde el Portal BCH
+- **Qué se hizo:** El banco entrega un depósito de cheque primero como provisorio ("Dep. Docto Bch En Autoservicio", ~12:30) y de noche contabilizado con otro id y nombre ("Deposito Con Cheque Mismo Banco" / "Dep.cheq.otros Bancos", 21:04). `bch_codigo` = md5 del id del banco, así que la importación creaba 2 movimientos (mismo monto, fecha y número de documento). Ahora `procesarMovimientos` reconoce el gemelo (abono que parte con "Dep", misma cuenta/fecha/monto/nº documento) y lo actualiza en vez de duplicar. Migración que elimina la copia antigua de los 3 pares existentes en prod (7/07 $3.150.000 ids 10859/10860; 12/08 $450.000 ids 11135/11238; 12/06 $993.553 ids 10267/10291), solo si ninguna está conciliada ni enlazada (revisa todas las FK a movimientos_bancarios); traspasa la nota si la antigua la tenía.
+- **Archivos principales:** `app/Http/Controllers/BancochilePortalController.php`, `database/migrations/2026_10_16_120000_fusionar_depositos_cheque_duplicados.php`.
+- **Pendiente / ojo con:** Solo cubre abonos "Dep…" con número de documento; otros tipos de movimiento que el banco renombre al contabilizar no se detectan. El `saldo_disponible` de la fila fusionada queda con el del último import. Revisar que `Saldo Disponible` del encabezado no cambie tras el deploy.
+
 ## 2026-10-09 — Facturación: cotizaciones Entregada / En Producción ahora aparecen
 - **Qué se hizo:** `getAprobadas` (lista de Facturación) solo traía estados Aprobada y Facturada; la cotización A-725 de PESA importada como "Entregada" no aparecía. Ahora incluye también En Producción y Entregada (en prod había 1 Entregada y 0 En Producción, no cambia el volumen). `estado_facturacion` sigue saliendo "aprobada" para ellas hasta emitir el 100%.
 - **Archivos principales:** `app/Http/Controllers/CotizacionController.php` (`getAprobadas`).

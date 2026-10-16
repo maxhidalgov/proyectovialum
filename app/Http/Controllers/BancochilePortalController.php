@@ -218,6 +218,30 @@ class BancochilePortalController extends Controller
                     continue;
                 }
 
+                // Un depósito de cheque aparece primero como provisorio ("Dep. Docto … Autoservicio")
+                // y de noche el banco lo contabiliza con OTRO id y nombre ("Deposito Con Cheque…",
+                // "Dep.cheq.otros Bancos"). Es el mismo movimiento: mismo monto, fecha y número de
+                // documento. Lo reutilizamos en vez de crear un duplicado.
+                if ($nroDoc && $tipo === 'C' && preg_match('/^dep/i', (string) ($m['descripcion'] ?? ''))) {
+                    $gemelo = MovimientoBancario::where('cuenta', self::CUENTA['numero'])
+                        ->where('tipo', 'C')
+                        ->where('monto', $monto)
+                        ->where('fecha_contable', $fecha)
+                        ->where('numero_documento', $nroDoc)
+                        ->first();
+                    if ($gemelo) {
+                        $gemelo->update([
+                            'bch_codigo'       => $bchCodigo,
+                            'descripcion'      => $descripcion,
+                            'glosa'            => $glosa,
+                            'fecha_hora_mov'   => $fechaHora ?: $gemelo->fecha_hora_mov,
+                            'saldo_disponible' => $saldo ?? $gemelo->saldo_disponible,
+                        ]);
+                        $duplicados++;
+                        continue;
+                    }
+                }
+
                 $categoria = ReglaConciliacion::categorizar($descripcion, $tipo);
 
                 MovimientoBancario::create([
