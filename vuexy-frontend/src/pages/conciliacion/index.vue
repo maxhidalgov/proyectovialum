@@ -905,7 +905,7 @@
               (1) Entra al portal del banco y ve a la sección <strong>Cartola</strong> →
               (2) Abre DevTools (F12) → pestaña <strong>Console</strong> →
               (3) Pega el script y presiona Enter → verás un alert "Interceptor activo" →
-              (4) <strong>Cambia el rango de fechas en la cartola</strong> para que el portal dispare su request → el JSON se copia solo al portapapeles.
+              (4) <strong>Cambia el rango de fechas en la cartola</strong> para que el portal dispare su request → el JSON se copia solo al portapapeles. El portal entrega de a 100: si el aviso dice que hay más, baja hasta el final o pulsa "ver más" en el portal hasta cargar todo; cada aviso suma al anterior y <strong>lo último copiado es el total</strong>.
             </VAlert>
 
             <!-- Script interceptor -->
@@ -2034,25 +2034,32 @@ const portalForm = ref({
 })
 
 // Script interceptor: captura la respuesta que el propio portal hace al banco
-// (evita problemas de XSRF-TOKEN HttpOnly y permisos de session)
+// (evita problemas de XSRF-TOKEN HttpOnly y permisos de session).
+// El portal entrega la cartola de a 100 movimientos por página: el script NO se desinstala y
+// acumula todas las páginas que el portal pida (al hacer scroll / "ver más"), sin repetir
+// movimientos. Cada vez copia el TOTAL acumulado, así que vale lo último que copió.
 const consolaScript = computed(() => {
   // Intercepta XMLHttpRequest (Angular HttpClient usa XHR, no fetch)
   return (
-    `const _open=XMLHttpRequest.prototype.open;` +
+    `window.__cart=null;const _open=XMLHttpRequest.prototype.open;` +
     `const _send=XMLHttpRequest.prototype.send;` +
     `XMLHttpRequest.prototype.open=function(m,u,...r){this.__url=u;return _open.call(this,m,u,...r);};` +
     `XMLHttpRequest.prototype.send=function(b){` +
     `if(this.__url&&this.__url.includes('getcartola')){` +
     `this.addEventListener('load',function(){` +
-    `XMLHttpRequest.prototype.open=_open;XMLHttpRequest.prototype.send=_send;` +
-    `const t=this.responseText;` +
+    `let d;try{d=JSON.parse(this.responseText);}catch(e){alert('⚠️ Respuesta no válida');return;}` +
+    `const nuevos=d.movimientos||[];` +
+    `if(!window.__cart){window.__cart=d;d.movimientos=[];}` +
+    `const A=window.__cart,vistos=new Set(A.movimientos.map(x=>x.id??JSON.stringify(x)));` +
+    `let ag=0;nuevos.forEach(x=>{const k=x.id??JSON.stringify(x);if(!vistos.has(k)){vistos.add(k);A.movimientos.push(x);ag++;}});` +
+    `const t=JSON.stringify(A);` +
     `const ta=document.createElement('textarea');` +
     `ta.value=t;ta.style.cssText='position:fixed;top:0;left:0;opacity:0.01';` +
     `document.body.appendChild(ta);ta.focus();ta.select();` +
     `let ok=false;try{ok=document.execCommand('copy');}catch(e){}` +
     `document.body.removeChild(ta);` +
-    `const n=JSON.parse(t).movimientos?.length??'?';` +
-    `alert(ok?'✅ Copiado: '+n+' movimientos. Pégalo en la app.':'⚠️ No copiado — busca %%CART%% en consola');` +
+    `const meta=Object.keys(d).filter(k=>/pagin|mas|indice/i.test(k)).map(k=>k+'='+JSON.stringify(d[k])).join(' ');` +
+    `alert((ok?'✅ Copiado: ':'⚠️ No copiado (busca %%CART%% en consola): ')+A.movimientos.length+' movimientos en total (+'+ag+' de esta página).'+(meta?'\\n'+meta:'')+'\\nSi hay más, baja/pulsa "ver más" en el portal y se suman solos.');` +
     `if(!ok)console.log('%%CART%%'+t+'%%END%%');` +
     `});` +
     `}` +

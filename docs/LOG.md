@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-16 — Importar cartola BCH: el script ahora junta todas las páginas (el portal entrega de a 100)
+- **Qué se hizo:** El script interceptor se desinstalaba tras la 1ª respuesta de `getcartola`, y el portal entrega la cartola de a 100 movimientos, así que cuando el rango traía más solo se importaban los primeros 100. Ahora el script no se desinstala: acumula las páginas que el portal pida (scroll / "ver más"), no repite movimientos (por `id`), copia el TOTAL acumulado cada vez y muestra en el aviso los campos de paginación que traiga la respuesta (`pagin|mas|indice`). Texto de instrucciones actualizado. Probado con un XHR simulado (100+60 → 160, página repetida suma 0).
+- **Archivos principales:** `vuexy-frontend/src/pages/conciliacion/index.vue` (`consolaScript`), `public/` (build).
+- **Pendiente / ojo con:** No verificado contra el portal real: depende de que "ver más"/scroll dispare otra llamada `getcartola`. Si el aviso muestra campos de paginación, conviene ver cuáles son para automatizar la paginación. El botón de importar con cookies (`importar()`) sigue pidiendo una sola página (`paginacionDesde` vacío). Para empezar de cero hay que volver a pegar el script (reinicia el acumulador).
+
 ## 2026-10-16 — Conciliación: depósitos de cheque duplicados desde el Portal BCH
 - **Qué se hizo:** El banco entrega un depósito de cheque primero como provisorio ("Dep. Docto Bch En Autoservicio", ~12:30) y de noche contabilizado con otro id y nombre ("Deposito Con Cheque Mismo Banco" / "Dep.cheq.otros Bancos", 21:04). `bch_codigo` = md5 del id del banco, así que la importación creaba 2 movimientos (mismo monto, fecha y número de documento). Ahora `procesarMovimientos` reconoce el gemelo (abono que parte con "Dep", misma cuenta/fecha/monto/nº documento) y lo actualiza en vez de duplicar. Migración que elimina la copia antigua de los 3 pares existentes en prod (7/07 $3.150.000 ids 10859/10860; 12/08 $450.000 ids 11135/11238; 12/06 $993.553 ids 10267/10291), solo si ninguna está conciliada ni enlazada (revisa todas las FK a movimientos_bancarios); traspasa la nota si la antigua la tenía.
 - **Archivos principales:** `app/Http/Controllers/BancochilePortalController.php`, `database/migrations/2026_10_16_120000_fusionar_depositos_cheque_duplicados.php`.
