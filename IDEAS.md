@@ -35,6 +35,7 @@ Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-en
 - [ ] 2026-10-05 — Apache local sirve toda la carpeta htdocs (se tapó con `.htaccess` en la raíz): apuntarlo solo a `public/` o usar `artisan serve`; decidir si el `.htaccess` se commitea
 
 Winperfil:
+- [ ] 2026-10-17 — Winperfil/Compras: orden de compra y hoja de cortes con `pedbarra` (barras/rollos a comprar; ya funciona) en vez de lismonta, y orden complementaria = materiales de la oferta nueva menos lo ya pedido (caso Juan Cea 754→893)
 - [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
 
 Facturación:
@@ -44,6 +45,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-17 → 2026-10-17 — Winperfil: botón "Cambiar oferta" para que una cotización pase a la oferta nueva cuando el cliente modifica el presupuesto aceptado (sin duplicar)
 - [x] 2026-10-09 → 2026-10-09 — Winperfil: cotizaciones de distintos clientes con el mismo NUMFACTURA (725 Ar Alena vs PESA) ya no se pisan; #181 restaurada a Ar Alena por migración
 - [x] 2026-10-09 → 2026-10-09 — Cotización express: elegir una persona de contacto de la empresa (cliente) a quien va dirigida; aparece como "Atención" en el PDF y la vista previa
 - [x] 2026-10-06 → 2026-10-06 — Facturas de anticipo/saldo en Bsale: ahora salen con UNA línea con el monto real del documento (sin precio completo + descuento oculto); el rótulo Anticipo/Saldo depende de si ya hay un documento emitido de la cotización. Monto, IVA y pago no cambian. Aplica a facturas nuevas (la 5235 ya emitida no se toca)

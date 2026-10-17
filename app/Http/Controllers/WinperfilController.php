@@ -17,6 +17,8 @@ class WinperfilController extends Controller
     private int    $empresa;
     private string $serieDefault;
     private ?int   $ultimaCotizacionId = null; // cotización que tocó el último upsertPresupuesto
+    private ?array $ofertaActual = null;       // ['presupuesto' => ..., 'oferta' => n] de la oferta que se está importando
+    private ?int   $forzarCotizacionId = null; // "Cambiar oferta": upsert actualiza ESTA cotización
 
     public function __construct()
     {
@@ -175,7 +177,21 @@ class WinperfilController extends Controller
                 ->get(['c.winperfil_numero', 'c.winperfil_synced_at', 'c.fecha', 'cl.razon_social'])
                 ->groupBy('winperfil_numero');
 
-            $items = collect($items)->map(function ($p) use ($syncRows, $getNumero) {
+            // "Hermanas": cotizaciones ya en la app de OTRA oferta del mismo presupuesto y mismo
+            // cliente (para ofrecer "Cambiar oferta"). Un presupuesto sin nº de presupuesto guardado
+            // se asume oferta 1 (su NUMFACTURA es el número del presupuesto).
+            $presNums = collect($items)->pluck('PRESUPUESTO_NUMERO')->filter()->unique()->values()->all();
+            $hermRows = DB::table('cotizaciones as c')
+                ->leftJoin('clientes as cl', 'cl.id', '=', 'c.cliente_id')
+                ->where('c.winperfil_serie', $serie)
+                ->where(function ($w) use ($presNums) {
+                    $w->whereIn('c.winperfil_presupuesto', $presNums)
+                      ->orWhere(fn($x) => $x->whereNull('c.winperfil_presupuesto')->whereIn('c.winperfil_numero', $presNums));
+                })
+                ->get(['c.id', 'c.winperfil_numero', 'c.winperfil_presupuesto', 'c.total', 'c.estado_produccion', 'cl.razon_social']);
+            $normNombre = fn($v) => mb_strtolower(trim(preg_replace('/[\s\x{00A0}]+/u', ' ', (string) $v)));
+
+            $items = collect($items)->map(function ($p) use ($syncRows, $getNumero, $hermRows, $normNombre) {
                 $num   = $getNumero($p);
                 $fecha = $this->parseFechaOpcional($p['FECHAFACTURA'] ?? $p['FECHA'] ?? null);
                 $nom   = $p['NOMBRECLIENTE'] ?? $p['CLIENTE_NOMBRE'] ?? null;
@@ -184,6 +200,20 @@ class WinperfilController extends Controller
                 );
                 $p['_synced']    = (bool) $match;
                 $p['_synced_at'] = $match->winperfil_synced_at ?? null;
+                $p['_hermanas']  = [];
+                if (!$match) {
+                    $pres = (string) ($p['PRESUPUESTO_NUMERO'] ?? '');
+                    foreach ($hermRows as $h) {
+                        $presH = (string) ($h->winperfil_presupuesto ?: $h->winperfil_numero);
+                        if ($presH === $pres && (string) $h->winperfil_numero !== (string) $num
+                            && $normNombre($h->razon_social) === $normNombre($nom)) {
+                            $p['_hermanas'][] = [
+                                'id' => $h->id, 'numero' => $h->winperfil_numero,
+                                'total' => (float) $h->total, 'estado_produccion' => $h->estado_produccion,
+                            ];
+                        }
+                    }
+                }
                 return $p;
             })->values()->all();
 
@@ -419,28 +449,83 @@ class WinperfilController extends Controller
             }
 
             $body    = $res->json();
-            $ofertas = $body['ofertas'] ?? [];
+            $ofertas = array_values($body['ofertas'] ?? []);
 
             // Un presupuesto puede tener varias ofertas/versiones (cada una con su NUMFACTURA).
-            // Elegimos la que pidió el usuario por NUMFACTURA; si no, la primera.
+            // Se elige la que pidió el usuario por NUMFACTURA; su posición es el nº de oferta
+            // que piden lismonta/pedbarra. Si se pidió una y no está, se avisa (antes se caía
+            // en silencio a la primera y se importaba OTRA oferta).
             $oferta = null;
+            $posOferta = null;
             if ($numfactura && !empty($ofertas)) {
-                foreach ($ofertas as $o) {
+                foreach ($ofertas as $i => $o) {
                     $cab = $o['cabecera'] ?? $o;
                     if ((string) ($cab['NUMFACTURA'] ?? '') === (string) $numfactura) {
                         $oferta = $o;
+                        $posOferta = $i + 1;
                         break;
                     }
                 }
+                if (!$oferta) {
+                    return response()->json(['error' => "No se encontró la oferta {$numfactura} en el presupuesto {$numero}"], 422);
+                }
             }
-            $oferta = $oferta ?? ($ofertas[0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []]);
-            $pres   = array_merge($oferta['cabecera'] ?? $oferta, ['DETALLES' => $oferta['detalle'] ?? []]);
+            if (!$oferta) {
+                $oferta    = $ofertas[0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+                $posOferta = !empty($ofertas) ? 1 : null;
+            }
+            $pres = array_merge($oferta['cabecera'] ?? $oferta, ['DETALLES' => $oferta['detalle'] ?? []]);
 
             // Asegurar el número por si la cabecera no lo trae
             $pres['PRESUPUESTO_NUMERO'] = $pres['PRESUPUESTO_NUMERO'] ?? $pres['numfactura'] ?? $numero;
 
+            $this->ofertaActual       = ['presupuesto' => (string) $numero, 'oferta' => $posOferta];
+            $this->forzarCotizacionId = null;
+
+            // "Cambiar oferta": el cliente modificó el presupuesto y la oferta vigente pasó a ser
+            // otra. La cotización existente (con su producción, pedido a proveedor, material…) pasa
+            // a apuntar a la nueva oferta en vez de crear un duplicado.
+            $reemplazarId = (int) $request->get('reemplazar_cotizacion_id', 0);
+            if ($reemplazarId) {
+                $destino   = Cotizacion::find($reemplazarId);
+                $nuevoNum  = (string) ($pres['NUMFACTURA'] ?? $numfactura ?? $numero);
+                if (!$destino || !$destino->winperfil_numero || (string) $destino->winperfil_serie !== (string) $serie) {
+                    return response()->json(['error' => 'La cotización a reemplazar no existe o no es de Winperfil'], 422);
+                }
+                if ((string) $destino->winperfil_numero === $nuevoNum) {
+                    return response()->json(['error' => "La cotización #{$destino->id} ya está en la oferta {$nuevoNum}"], 422);
+                }
+                $fechaNueva = $this->parseFecha($pres['FECHAFACTURA'] ?? $pres['fechafactura'] ?? null);
+                $yaExiste = $this->buscarCotizacionWinperfil($serie, $nuevoNum, $fechaNueva,
+                    $pres['NOMBRECLIENTE'] ?? $pres['nombrecliente'] ?? $pres['CLIENTE_NOMBRE'] ?? null);
+                if ($yaExiste && $yaExiste->id !== $destino->id) {
+                    return response()->json(['error' => "La oferta {$nuevoNum} ya está importada en la cotización #{$yaExiste->id}"], 422);
+                }
+
+                DB::beginTransaction();
+                $previos   = $destino->winperfil_numeros_previos ?? [];
+                $previos[] = ['numero' => (string) $destino->winperfil_numero, 'fecha' => substr((string) $destino->fecha, 0, 10)];
+                // Se suelta el candado para que total y ventanas se actualicen desde la oferta nueva
+                // (el modal de confirmación permite fijar de nuevo el total).
+                $destino->update([
+                    'winperfil_numero'          => $nuevoNum,
+                    'winperfil_precio_lock'     => false,
+                    'winperfil_numeros_previos' => $previos,
+                ]);
+                $this->forzarCotizacionId = $destino->id;
+            }
+
             $estados = EstadoCotizacion::all()->keyBy(fn($e) => strtolower($e->nombre));
             $accion  = $this->upsertPresupuesto($pres, $serie, $this->buildEstadoMap($estados));
+            if ($reemplazarId) {
+                DB::commit();
+            }
+
+            if ($accion === 'skipped') {
+                return response()->json([
+                    'error' => "La oferta {$numfactura} ya fue reemplazada por otra oferta en la cotización #{$this->ultimaCotizacionId}",
+                ], 422);
+            }
 
             // Cotización recién importada (para el modal de confirmación en el front)
             $cot = $this->ultimaCotizacionId
@@ -464,8 +549,14 @@ class WinperfilController extends Controller
                 ] : null,
             ]);
         } catch (\Throwable $e) {
+            while (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             Log::error('Winperfil importarUno', ['serie' => $serie, 'numero' => $numero, 'error' => $e->getMessage()]);
             return response()->json(['error' => $e->getMessage()], 500);
+        } finally {
+            $this->ofertaActual = null;
+            $this->forzarCotizacionId = null;
         }
     }
 
@@ -602,7 +693,7 @@ class WinperfilController extends Controller
         $q = DB::table('cotizaciones as c')
             ->where('c.winperfil_serie', $serie)
             ->whereNotNull('c.winperfil_numero')
-            ->select('c.winperfil_numero');
+            ->select('c.winperfil_numero', 'c.winperfil_presupuesto');
 
         if ($soloSinSvg) {
             // Solo cotizaciones donde algún detalle le falta el SVG (o no tiene detalles)
@@ -624,8 +715,9 @@ class WinperfilController extends Controller
         $numerosEnBd = $q->orderBy('c.winperfil_numero')
             ->skip($offset)
             ->take($limite)
-            ->pluck('winperfil_numero')
-            ->toArray();
+            ->get()
+            ->map(fn($r) => ['n' => $r->winperfil_numero, 'p' => $r->winperfil_presupuesto ?: $r->winperfil_numero])
+            ->all();
 
         if (empty($numerosEnBd)) {
             return response()->json([
@@ -644,12 +736,13 @@ class WinperfilController extends Controller
         $actualizados = 0;
         $errores      = [];
 
-        foreach ($numerosEnBd as $numero) {
+        foreach ($numerosEnBd as $fila) {
+            $numero = $fila['n'];
             try {
                 $res = Http::timeout(30)->get("{$this->baseUrl}/erp/presupuesto", $this->paramsConImagen([
                     'empresa' => $this->empresa,
                     'serie'   => $serie,
-                    'numero'  => $numero,
+                    'numero'  => $fila['p'],
                 ]));
 
                 if ($res->failed()) {
@@ -658,9 +751,10 @@ class WinperfilController extends Controller
                 }
 
                 $body   = $res->json();
-                $oferta = $body['ofertas'][0] ?? null;
+                $oferta = $this->elegirOferta($body, $numero);
                 if (!$oferta) {
-                    $oferta = ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+                    $errores[] = "Presupuesto {$numero}: la oferta ya no existe en Winperfil";
+                    continue;
                 }
 
                 $pres = array_merge(
@@ -754,13 +848,13 @@ class WinperfilController extends Controller
             return response()->json(['error' => 'La cotización no proviene de Winperfil.'], 422);
         }
 
-        $oferta = $request->integer('oferta', 1);
+        $oferta = $request->integer('oferta', (int) ($cotizacion->winperfil_oferta ?: 1));
 
         try {
             $res = Http::connectTimeout(15)->timeout(90)->get("{$this->baseUrl}/erp/lismonta", [
                 'empresa'     => $this->empresa,
                 'serie'       => $cotizacion->winperfil_serie,
-                'presupuesto' => $cotizacion->winperfil_numero,
+                'presupuesto' => $cotizacion->winperfil_presupuesto ?: $cotizacion->winperfil_numero,
                 'oferta'      => $oferta,
             ]);
         } catch (\Throwable $e) {
@@ -889,7 +983,7 @@ class WinperfilController extends Controller
             return response()->json(['error' => 'La cotización no proviene de Winperfil.'], 422);
         }
 
-        $oferta     = $request->integer('oferta', 1);
+        $oferta     = $request->integer('oferta', (int) ($cotizacion->winperfil_oferta ?: 1));
         $largoBarra = $request->integer('largo_barra', 6000);
         $kerf       = 5; // viruta por corte (mm)
 
@@ -897,7 +991,7 @@ class WinperfilController extends Controller
             $res = Http::connectTimeout(15)->timeout(90)->get("{$this->baseUrl}/erp/lismonta", [
                 'empresa'     => $this->empresa,
                 'serie'       => $cotizacion->winperfil_serie,
-                'presupuesto' => $cotizacion->winperfil_numero,
+                'presupuesto' => $cotizacion->winperfil_presupuesto ?: $cotizacion->winperfil_numero,
                 'oferta'      => $oferta,
             ]);
         } catch (\Throwable $e) {
@@ -1044,12 +1138,15 @@ class WinperfilController extends Controller
             $res = Http::connectTimeout(15)->timeout(30)->get("{$this->baseUrl}/erp/presupuesto", $this->paramsConImagen([
                 'empresa' => $this->empresa,
                 'serie'   => $cotizacion->winperfil_serie,
-                'numero'  => $cotizacion->winperfil_numero,
+                'numero'  => $cotizacion->winperfil_presupuesto ?: $cotizacion->winperfil_numero,
             ]));
 
             if ($res->successful()) {
                 $body   = $res->json();
-                $oferta = $body['ofertas'][0] ?? ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+                $oferta = $this->elegirOferta($body, $cotizacion->winperfil_numero);
+                if (!$oferta) {
+                    throw new \RuntimeException("No se encontró la oferta {$cotizacion->winperfil_numero} en Winperfil");
+                }
                 $pres   = array_merge($oferta['cabecera'] ?? $oferta, ['DETALLES' => $oferta['detalle'] ?? []]);
 
                 $estados = EstadoCotizacion::all()->keyBy(fn($e) => strtolower($e->nombre));
@@ -1070,6 +1167,21 @@ class WinperfilController extends Controller
         // repetirse entre versiones/ofertas de un mismo presupuesto, así que priorizamos NUMFACTURA.
         $numero = $pres['NUMFACTURA'] ?? $pres['PRESUPUESTO_NUMERO'] ?? $pres['numfactura'] ?? null;
         if (!$numero) throw new \Exception('Sin NUMFACTURA/PRESUPUESTO_NUMERO');
+
+        // Oferta que otra cotización ya reemplazó ("Cambiar oferta"): no se vuelve a crear.
+        // Se compara también la fecha, porque el mismo NUMFACTURA puede ser de otro presupuesto.
+        if (!$this->forzarCotizacionId) {
+            $fechaIn = $this->parseFecha($pres['FECHAFACTURA'] ?? $pres['fechafactura'] ?? null);
+            $reemplazadas = Cotizacion::where('winperfil_serie', $serie)->whereNotNull('winperfil_numeros_previos')->get();
+            foreach ($reemplazadas as $c) {
+                foreach ($c->winperfil_numeros_previos ?? [] as $prev) {
+                    if ((string) ($prev['numero'] ?? '') === (string) $numero && ($prev['fecha'] ?? null) === $fechaIn) {
+                        $this->ultimaCotizacionId = $c->id;
+                        return 'skipped';
+                    }
+                }
+            }
+        }
 
         DB::beginTransaction();
         try {
@@ -1100,12 +1212,14 @@ class WinperfilController extends Controller
             }
 
             // ─── Upsert cotizacion ───────────────────────────────────────────
-            $existing = $this->buscarCotizacionWinperfil(
-                $serie,
-                (string) $numero,
-                $fecha,
-                $pres['NOMBRECLIENTE'] ?? $pres['nombrecliente'] ?? $pres['CLIENTE_NOMBRE'] ?? null
-            );
+            $existing = $this->forzarCotizacionId
+                ? Cotizacion::find($this->forzarCotizacionId)
+                : $this->buscarCotizacionWinperfil(
+                    $serie,
+                    (string) $numero,
+                    $fecha,
+                    $pres['NOMBRECLIENTE'] ?? $pres['nombrecliente'] ?? $pres['CLIENTE_NOMBRE'] ?? null
+                );
 
             $payload = [
                 'cliente_id'          => $clienteId,
@@ -1117,6 +1231,16 @@ class WinperfilController extends Controller
                 'winperfil_serie'     => $serie,
                 'winperfil_synced_at' => now(),
             ];
+
+            // Presupuesto y nº de oferta (los piden lismonta/pedbarra); solo si se conocen
+            if ($this->ofertaActual && $this->ofertaActual['oferta']) {
+                $payload['winperfil_presupuesto'] = $this->ofertaActual['presupuesto'];
+                $payload['winperfil_oferta']      = $this->ofertaActual['oferta'];
+            }
+            // Cambiar oferta: la cotización conserva su cliente (Winperfil puede crear uno nuevo por oferta)
+            if ($this->forzarCotizacionId) {
+                unset($payload['cliente_id']);
+            }
 
             // Al aceptarse en Winperfil (ACEPTADO='T'), la cotización entra al pipeline
             // de producción en su etapa inicial. No pisa el avance manual: solo lo setea
@@ -1472,6 +1596,22 @@ class WinperfilController extends Controller
         $norm = fn($v) => mb_strtolower(trim(preg_replace('/[\s\x{00A0}]+/u', ' ', (string) $v)));
         $difiere = fn($a, $b) => $a !== null && $a !== '' && $b !== null && $b !== '' && $a !== $b;
         return !($difiere(substr((string) $fechaBd, 0, 10), $fechaWp) && $difiere($norm($nombreBd), $norm($nombreWp)));
+    }
+
+    /** Oferta de un body de /erp/presupuesto por NUMFACTURA; null si no está (nunca cae en otra). */
+    private function elegirOferta(array $body, $numfactura): ?array
+    {
+        $ofertas = $body['ofertas'] ?? [];
+        if (empty($ofertas)) {
+            return ['cabecera' => $body['cabecera'] ?? $body, 'detalle' => $body['detalle'] ?? []];
+        }
+        foreach ($ofertas as $o) {
+            $cab = $o['cabecera'] ?? $o;
+            if ((string) ($cab['NUMFACTURA'] ?? '') === (string) $numfactura) {
+                return $o;
+            }
+        }
+        return null;
     }
 
     private function parseFechaOpcional(?string $fecha): ?string

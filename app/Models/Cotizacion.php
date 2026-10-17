@@ -51,6 +51,9 @@ class Cotizacion extends Model
         'winperfil_serie',
         'winperfil_synced_at',
         'winperfil_precio_lock',
+        'winperfil_presupuesto',
+        'winperfil_oferta',
+        'winperfil_numeros_previos',
         'fecha_entrega_real',
         'tipo_vidrio',
         'fabricar_termopanel',
@@ -72,6 +75,7 @@ class Cotizacion extends Model
     protected $casts = [
         'pedido_proveedor'      => 'boolean',
         'winperfil_precio_lock' => 'boolean',
+        'winperfil_numeros_previos' => 'array',
         'postventa'             => 'boolean',
         'es_manual'             => 'boolean',
         'oculto_operaciones'    => 'boolean',

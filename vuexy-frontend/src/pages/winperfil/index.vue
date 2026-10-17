@@ -281,15 +281,28 @@
 
             <!-- Acciones -->
             <template #item.actions="{ item }">
-              <VBtn
-                size="x-small"
-                :color="item._synced ? 'success' : 'deep-purple'"
-                variant="tonal"
-                :loading="syncingId === (item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO)"
-                @click="syncUno(item)"
-              >
-                {{ item._synced ? 'Re-sync' : 'Importar' }}
-              </VBtn>
+              <div class="d-flex align-center justify-end ga-1">
+                <VBtn
+                  v-if="item._hermanas?.length"
+                  size="x-small"
+                  color="warning"
+                  variant="tonal"
+                  prepend-icon="mdi-swap-horizontal"
+                  :disabled="syncingId !== null"
+                  @click="abrirCambiarOferta(item)"
+                >
+                  Cambiar oferta
+                </VBtn>
+                <VBtn
+                  size="x-small"
+                  :color="item._synced ? 'success' : 'deep-purple'"
+                  variant="tonal"
+                  :loading="syncingId === (item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO)"
+                  @click="syncUno(item)"
+                >
+                  {{ item._synced ? 'Re-sync' : 'Importar' }}
+                </VBtn>
+              </div>
             </template>
 
             <template #no-data>
@@ -425,6 +438,49 @@
         </VCard>
       </VWindowItem>
     </VWindow>
+
+    <!-- ── Modal: cambiar la oferta vigente de una cotización existente ─────── -->
+    <VDialog v-model="cambiarOferta.show" max-width="560">
+      <VCard v-if="cambiarOferta.item">
+        <VCardItem>
+          <VCardTitle>Cambiar oferta</VCardTitle>
+          <VCardSubtitle>
+            {{ cambiarOferta.item.NOMBRECLIENTE }} · presupuesto {{ cambiarOferta.item.PRESUPUESTO_NUMERO }}
+          </VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <p class="mb-3">
+            La oferta <strong>{{ cambiarOferta.item.NUMFACTURA }}</strong>
+            (neto {{ clp(cambiarOferta.item.BASE) }}) pasará a ser la vigente de una cotización que ya existe en la app,
+            en vez de crear una duplicada.
+          </p>
+          <VRadioGroup v-model="cambiarOferta.hermanaId" hide-details>
+            <VRadio
+              v-for="h in cambiarOferta.item._hermanas"
+              :key="h.id"
+              :value="h.id"
+            >
+              <template #label>
+                Cotización #{{ h.id }} · oferta {{ h.numero }} · neto {{ clp(h.total) }}
+                <VChip v-if="h.estado_produccion" size="x-small" class="ml-2" variant="tonal">{{ h.estado_produccion }}</VChip>
+              </template>
+            </VRadio>
+          </VRadioGroup>
+          <VAlert type="info" variant="tonal" density="compact" class="mt-4 text-body-2">
+            Se mantienen el estado de producción, el pedido a proveedor, el material y el cliente.
+            Las ventanas y el total se actualizan desde Winperfil, y después podrás fijar el total final.
+            La oferta anterior no se volverá a importar.
+          </VAlert>
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="cambiarOferta.show = false">Cancelar</VBtn>
+          <VBtn color="warning" :disabled="!cambiarOferta.hermanaId" :loading="syncingId !== null" @click="confirmarCambiarOferta">
+            Cambiar oferta
+          </VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
 
     <!-- ── Modal: confirmar datos al importar de Winperfil ──────────────────── -->
     <VDialog v-model="importModal.show" max-width="520" persistent>
@@ -588,7 +644,20 @@ async function cargarPresupuestos() {
   }
 }
 
-async function syncUno(item) {
+const cambiarOferta = ref({ show: false, item: null, hermanaId: null })
+
+function abrirCambiarOferta(item) {
+  cambiarOferta.value = { show: true, item, hermanaId: item._hermanas.length === 1 ? item._hermanas[0].id : null }
+}
+
+async function confirmarCambiarOferta() {
+  const { item, hermanaId } = cambiarOferta.value
+  if (!item || !hermanaId) return
+  await syncUno(item, hermanaId)
+  cambiarOferta.value.show = false
+}
+
+async function syncUno(item, reemplazarCotizacionId = null) {
   const id = item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO
   syncingId.value = id
   try {
@@ -599,6 +668,7 @@ async function syncUno(item) {
       serie: item.PRESUPUESTO_SERIE || filtros.value.serie,
       numero: item.PRESUPUESTO_NUMERO,
       numfactura: item.NUMFACTURA,
+      ...(reemplazarCotizacionId ? { reemplazar_cotizacion_id: reemplazarCotizacionId } : {}),
     })
     // Refrescar estado sync
     await cargarPresupuestos()
