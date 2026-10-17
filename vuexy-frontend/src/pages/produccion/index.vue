@@ -302,9 +302,26 @@
           <v-window v-else v-model="dialogMat.tab">
             <!-- TAB compra -->
             <v-window-item value="compra">
+              <v-alert
+                v-if="dialogMat.data?.fuente === 'lismonta'"
+                type="warning" variant="tonal" density="compact" class="mb-3 text-caption"
+              >
+                Lista <strong>estimada</strong> a partir de las piezas de cada ventana (no son las barras exactas de Winperfil).
+                <span v-if="dialogMat.data?.aviso">{{ dialogMat.data.aviso }}</span>
+              </v-alert>
               <div class="d-flex align-center justify-space-between mb-3 flex-wrap gap-2">
                 <div class="text-caption text-medium-emphasis">
                   Marca lo que quieras pedir y genera una orden de compra.
+                  <v-chip v-if="dialogMat.data?.fuente === 'pedbarra'" size="x-small" color="success" variant="tonal" class="ml-1">
+                    Cantidades exactas de Winperfil
+                  </v-chip>
+                  <v-btn
+                    v-if="dialogMat.data?.fuente === 'pedbarra' || dialogMat.data?.aviso"
+                    size="x-small" variant="text" prepend-icon="mdi-refresh" class="ml-1"
+                    @click="abrirMateriales(cotizacionMat, true)"
+                  >
+                    Recalcular
+                  </v-btn>
                 </div>
                 <div class="d-flex align-center gap-2">
                   <v-chip v-if="nSeleccionados" size="small" color="deep-purple" variant="tonal">
@@ -343,7 +360,7 @@
                       <th class="text-left">Descripción</th>
                       <th v-if="grupo.key === 'vidrios'" class="text-left">Medida (mm)</th>
                       <th v-if="grupo.key === 'perfiles'" class="text-right">Metros</th>
-                      <th class="text-right">{{ grupo.key === 'perfiles' ? 'Piezas' : 'Cant.' }}</th>
+                      <th class="text-right">{{ grupo.key === 'perfiles' ? (dialogMat.data?.fuente === 'pedbarra' ? 'Barras' : 'Piezas') : 'Cant.' }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -359,10 +376,20 @@
                         />
                       </td>
                       <td class="font-monospace text-caption">{{ it.referencia || '—' }}</td>
-                      <td class="text-caption">{{ it.descripcion }}</td>
+                      <td class="text-caption">
+                        {{ it.descripcion }}
+                        <div v-if="it.color" class="text-medium-emphasis">{{ it.color }}</div>
+                      </td>
                       <td v-if="grupo.key === 'vidrios'" class="text-caption">{{ it.ancho }} × {{ it.alto }}</td>
                       <td v-if="grupo.key === 'perfiles'" class="text-right text-caption">{{ it.metros_lineales }} m</td>
-                      <td class="text-right font-weight-bold">{{ grupo.key === 'perfiles' ? it.piezas : it.cantidad }}</td>
+                      <td class="text-right font-weight-bold">
+                        <template v-if="grupo.key === 'perfiles'">
+                          {{ cantidadPerfil(it) }}
+                          <span v-if="it.barras != null" class="text-caption text-medium-emphasis font-weight-regular">× {{ it.largo_barra_m }} m</span>
+                          <span v-else-if="esPedbarra" class="text-caption text-medium-emphasis font-weight-regular">m</span>
+                        </template>
+                        <template v-else>{{ it.cantidad }}</template>
+                      </td>
                     </tr>
                   </tbody>
                 </v-table>
@@ -412,8 +439,24 @@
               </v-alert>
               <template v-else-if="hojaCortes.data">
                 <div class="d-flex align-center justify-space-between mb-3 gap-2 flex-wrap">
-                  <v-alert type="info" variant="tonal" density="compact" class="text-caption mb-0 flex-grow-1">
-                    Optimización estimada (bin-packing). Puede diferir en 1 barra respecto a Winperfil hasta habilitar la optimización exacta.
+                  <v-alert
+                    v-if="hojaCortes.data.fuente === 'pedbarra'"
+                    type="success" variant="tonal" density="compact" class="text-caption mb-0 flex-grow-1"
+                  >
+                    Las barras de cada perfil son <strong>las mismas que calcula Winperfil</strong>.
+                    La distribución de cortes dentro de cada barra la arma esta app (Winperfil no la entrega por su API),
+                    así que puede diferir de la hoja que imprime Winperfil.
+                  </v-alert>
+                  <v-alert
+                    v-else-if="hojaCortes.data.fuente === 'pedbarra_parcial'"
+                    type="warning" variant="tonal" density="compact" class="text-caption mb-0 flex-grow-1"
+                  >
+                    Las barras son las de Winperfil, pero en <strong>{{ (hojaCortes.data.no_coinciden || []).join(', ') }}</strong>
+                    no se logró acomodar todas las piezas en ese número de barras: ese dibujo es solo referencial.
+                  </v-alert>
+                  <v-alert v-else type="info" variant="tonal" density="compact" class="text-caption mb-0 flex-grow-1">
+                    Optimización estimada (barra de 6 m, puede diferir de Winperfil).
+                    <span v-if="hojaCortes.data.aviso">{{ hojaCortes.data.aviso }}</span>
                   </v-alert>
                   <v-btn color="deep-purple" prepend-icon="mdi-printer" @click="imprimirCortes">
                     Imprimir / PDF
@@ -528,12 +571,18 @@ const gruposCompra = computed(() => {
 
 const seleccion = ref({})          // { 'perfiles:0': true, ... }
 const cotizacionMatId = ref(null)  // cotización origen para la orden
+const cotizacionMat = ref(null)
+const esPedbarra = computed(() => dialogMat.value.data?.fuente === 'pedbarra')
+
+// Perfiles: con pedbarra se piden BARRAS (o metros, el separador); sin él, las piezas estimadas
+const cantidadPerfil = it => (it.barras != null ? it.barras : (esPedbarra.value ? it.metros_lineales : it.piezas))
 
 // Hoja de cortes (lazy: se carga al abrir la tab)
 const hojaCortes = ref({ loading: false, error: '', data: null })
 
-async function abrirMateriales(cotizacion) {
+async function abrirMateriales(cotizacion, recalcular = false) {
   seleccion.value = {}
+  cotizacionMat.value = cotizacion
   cotizacionMatId.value = cotizacion.id
   hojaCortes.value = { loading: false, error: '', data: null }
   dialogMat.value = {
@@ -543,7 +592,8 @@ async function abrirMateriales(cotizacion) {
   }
   try {
     const { data } = await api.get('/api/winperfil/materiales', {
-      params: { cotizacion_id: cotizacion.id },
+      params: { cotizacion_id: cotizacion.id, ...(recalcular ? { recalcular: 1 } : {}) },
+      timeout: 300000,   // la optimización de Winperfil puede tardar
     })
     dialogMat.value.data = data
   } catch (e) {
@@ -561,6 +611,7 @@ watch(() => dialogMat.value.tab, async (tab) => {
   try {
     const { data } = await api.get('/api/winperfil/hoja-cortes', {
       params: { cotizacion_id: cotizacionMatId.value },
+      timeout: 300000,
     })
     hojaCortes.value.data = data
   } catch (e) {
@@ -606,9 +657,11 @@ const itemsSeleccionados = computed(() => {
         referencia:  it.referencia || '',
         descripcion: it.descripcion || '',
         detalle:     grupo.key === 'vidrios' ? `${it.ancho}×${it.alto} mm`
+                    : grupo.key === 'perfiles' && it.barras != null ? `barras de ${it.largo_barra_m} m${it.color ? ' · ' + it.color : ''}`
+                    : grupo.key === 'perfiles' && esPedbarra.value ? 'metros lineales'
                     : grupo.key === 'perfiles' ? `${it.metros_lineales} m`
                     : '',
-        cantidad:    grupo.key === 'perfiles' ? it.piezas : it.cantidad,
+        cantidad:    grupo.key === 'perfiles' ? cantidadPerfil(it) : it.cantidad,
       })
     })
   }

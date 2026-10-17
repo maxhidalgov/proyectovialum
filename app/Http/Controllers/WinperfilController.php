@@ -6,7 +6,10 @@ use App\Models\Cotizacion;
 use App\Models\CotizacionDetalle;
 use App\Models\Cliente;
 use App\Models\EstadoCotizacion;
+use App\Services\OptimizadorBarrasService;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -951,17 +954,254 @@ class WinperfilController extends Controller
             return $p;
         }, array_values($perfiles));
 
+        $compra = [
+            'perfiles' => $perfiles,
+            'vidrios'  => array_values($vidrios),
+            'herrajes' => array_values($herrajes),
+            'juntas'   => array_values($juntas),
+            'otros'    => array_values($otros),
+        ];
+
+        // La lista de compra EXACTA sale de la optimización de Winperfil (pedbarra): barras a
+        // comprar con su largo real y color, rollos en vez de tramos y solo los accesorios del
+        // color de cada ventana. Si Winperfil no responde se deja la lista estimada de lismonta.
+        $fuente  = 'lismonta';
+        $aviso   = null;
+        $resumen = null;
+        $pb = $this->pedbarraDe($cotizacion, $oferta, $request->boolean('recalcular'));
+        if ($pb['ok']) {
+            $compra  = $this->compraDesdePedbarra($pb['datos'], $datos['modelos']);
+            $fuente  = 'pedbarra';
+            $resumen = $pb['resultado'] ?? null;
+        } else {
+            $aviso = $pb['error'];
+        }
+
         return response()->json([
-            'cabecera' => $datos['cabecera'] ?? null,
-            'modelos'  => $modelos,
-            'compra'   => [
-                'perfiles' => $perfiles,
-                'vidrios'  => array_values($vidrios),
-                'herrajes' => array_values($herrajes),
-                'juntas'   => array_values($juntas),
-                'otros'    => array_values($otros),
-            ],
+            'cabecera'     => $datos['cabecera'] ?? null,
+            'modelos'      => $modelos,
+            'compra'       => $compra,
+            'fuente'       => $fuente,
+            'aviso'        => $aviso,
+            'optimizacion' => $resumen,
         ]);
+    }
+
+    /**
+     * Resultado de la optimización de barras de Winperfil (pedbarra) para una cotización/oferta.
+     *
+     * pedbarra es un proceso de 2 pasos (iniciar + consultar), solo corre UNO a la vez en todo
+     * Winperfil y el resultado se borra al leerlo. Por eso: se serializa con un candado, se
+     * reintenta si hay otra en curso y el resultado se guarda en caché (12 h, y se descarta si la
+     * cotización se vuelve a sincronizar desde Winperfil).
+     *
+     * @return array{ok: bool, datos?: array, resultado?: array, error?: string, cache?: bool}
+     */
+    private function pedbarraDe(Cotizacion $c, int $oferta, bool $forzar = false): array
+    {
+        $presupuesto = $c->winperfil_presupuesto ?: $c->winperfil_numero;
+        $key = 'wp_pedbarra:' . implode(':', [
+            $c->winperfil_serie, $presupuesto, $oferta, $c->winperfil_numero,
+            optional($c->winperfil_synced_at)->timestamp ?? 0,
+        ]);
+
+        $deCache = function () use ($key) {
+            try {
+                $hit = Cache::get($key);
+                return is_array($hit) ? $hit + ['cache' => true] : null;
+            } catch (\Throwable $e) {
+                return null;
+            }
+        };
+
+        if (!$forzar && ($hit = $deCache())) {
+            return $hit;
+        }
+
+        @set_time_limit(300);
+
+        $tengoCandado = false;
+        $candado = null;
+        try {
+            $candado = Cache::lock('wp_pedbarra', 280);
+            $candado->block(150);
+            $tengoCandado = true;
+        } catch (LockTimeoutException $e) {
+            return ['ok' => false, 'error' => 'Winperfil está optimizando otra obra. Intenta de nuevo en un momento.'];
+        } catch (\Throwable $e) {
+            // sin soporte de candados en el almacén de caché: se sigue sin serializar
+        }
+
+        try {
+            if (!$forzar && ($hit = $deCache())) {   // otro usuario pudo terminar el mismo cálculo mientras esperábamos
+                return $hit;
+            }
+
+            $params = [
+                'empresa'     => $this->empresa,
+                'serie'       => $c->winperfil_serie,
+                'presupuesto' => $presupuesto,
+                'oferta'      => $oferta,
+            ];
+
+            $iniciada = false;
+            for ($i = 0; $i < 25; $i++) {
+                $r = Http::connectTimeout(15)->timeout(30)->get("{$this->baseUrl}/erp/pedbarra_iniciar", $params)->json();
+                if (($r['ok'] ?? null) === 'ok') {
+                    $iniciada = true;
+                    break;
+                }
+                if (is_array($r) && str_contains(mb_strtolower($r['error'] ?? ''), 'otra optimiz')) {
+                    sleep(3);   // la usa otro programa/usuario de Winperfil
+                    continue;
+                }
+                return ['ok' => false, 'error' => 'Winperfil no pudo iniciar la optimización (¿existe la oferta ' . $oferta . ' del presupuesto ' . $presupuesto . '?)'];
+            }
+            if (!$iniciada) {
+                return ['ok' => false, 'error' => 'Winperfil está ocupado con otra optimización. Intenta de nuevo en un momento.'];
+            }
+
+            $fin = microtime(true) + 150;
+            $vacias = 0;
+            while (microtime(true) < $fin) {
+                sleep(2);
+                $r = Http::connectTimeout(15)->timeout(30)->get("{$this->baseUrl}/erp/pedbarra_resultado")->json();
+                if (!is_array($r)) {
+                    if (++$vacias > 5) {
+                        break;
+                    }
+                    continue;
+                }
+                if (!empty($r['terminado']) && isset($r['datos'])) {
+                    $out = ['ok' => true, 'datos' => $r['datos'], 'resultado' => $r['resultado'] ?? []];
+                    try {
+                        Cache::put($key, $out, now()->addHours(12));
+                    } catch (\Throwable $e) {
+                        // sin caché: igual se devuelve
+                    }
+                    return $out;
+                }
+                if (isset($r['error']) && !str_contains(mb_strtolower($r['error']), 'ninguna optimiz')) {
+                    return ['ok' => false, 'error' => 'Winperfil: ' . $r['error']];
+                }
+            }
+            return ['ok' => false, 'error' => 'La optimización de Winperfil tardó demasiado. Intenta de nuevo.'];
+        } catch (\Throwable $e) {
+            Log::warning('pedbarraDe falló', ['cotizacion' => $c->id, 'error' => $e->getMessage()]);
+            return ['ok' => false, 'error' => 'No se pudo obtener la optimización de Winperfil: ' . $e->getMessage()];
+        } finally {
+            if ($tengoCandado) {
+                try {
+                    $candado->release();
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Lista de compra exacta a partir del resultado de pedbarra. Mantiene las claves que ya
+     * usa la pantalla (perfiles/vidrios/herrajes/juntas/otros) y agrega barras, largo y color.
+     * El tipo de cada accesorio (herraje/junta/otro) se toma de lismonta por referencia.
+     */
+    private function compraDesdePedbarra(array $datosPb, array $modelos): array
+    {
+        $base = fn ($ref) => preg_replace('/@\d+$/', '', trim((string) $ref));
+
+        // lismonta: tipo de elemento y piezas/metros por referencia base
+        $refTipo = [];
+        $lm = [];
+        foreach ($modelos as $m) {
+            foreach ($m['detalle'] ?? [] as $d) {
+                $ref = $base($d['Referencia'] ?? '');
+                $tipo = (int) ($d['TipoElemento'] ?? 5);
+                $refTipo[$ref] = $tipo;
+                if ($tipo === 0) {
+                    $n = (float) ($d['TotalUnidades'] ?? 0);
+                    $lm[$ref]['piezas'] = ($lm[$ref]['piezas'] ?? 0) + $n;
+                    $lm[$ref]['mm']     = ($lm[$ref]['mm'] ?? 0) + $n * (float) ($d['Longitud'] ?? 0);
+                }
+            }
+        }
+
+        $perfiles = [];
+        foreach ($datosPb['barras'] ?? [] as $b) {
+            $ref = $base($b['Referencia'] ?? '');
+            $perfiles[] = [
+                'referencia'      => trim((string) ($b['ReferenciaProveedor'] ?? '')) ?: trim((string) ($b['Referencia'] ?? '')),
+                'descripcion'     => $this->limpiarTexto($b['DesArticulo'] ?? ''),
+                'color'           => $this->limpiarTexto($b['DesColor'] ?? ''),
+                'barras'          => (int) ($b['TotalBarras'] ?? 0),
+                'largo_barra_m'   => (float) ($b['Longitud'] ?? 0),
+                'peso_kg'         => isset($b['PesoReal']) ? (float) $b['PesoReal'] : null,
+                'piezas'          => (int) round($lm[$ref]['piezas'] ?? 0),
+                'metros_lineales' => round(($lm[$ref]['mm'] ?? 0) / 1000, 2),
+            ];
+        }
+
+        // Vidrios: los "Separador…" de termopanel vienen en esta lista, en metros por paño
+        $vidrios = [];
+        $separadores = [];
+        foreach ($datosPb['vidrios'] ?? [] as $v) {
+            $desc = $this->limpiarTexto($v['Descripcion'] ?? '');
+            $uds  = (float) ($v['Unidades'] ?? 0);
+            if (preg_match('/^separador/i', $desc)) {
+                $k = trim((string) ($v['Referencia'] ?? '')) . '|' . $desc;
+                $separadores[$k] ??= ['referencia' => trim((string) ($v['Referencia'] ?? '')), 'descripcion' => $desc, 'metros' => 0.0, 'piezas' => 0];
+                $separadores[$k]['metros'] += $uds * (float) ($v['Ancho'] ?? 0);
+                $separadores[$k]['piezas'] += (int) round($uds);
+                continue;
+            }
+            $ancho = (int) round(((float) ($v['Ancho'] ?? 0)) * 1000);
+            $alto  = (int) round(((float) ($v['Alto'] ?? 0)) * 1000);
+            $k = trim((string) ($v['Referencia'] ?? '')) . '|' . $ancho . 'x' . $alto;
+            $vidrios[$k] ??= ['referencia' => trim((string) ($v['Referencia'] ?? '')), 'descripcion' => $desc, 'ancho' => $ancho, 'alto' => $alto, 'cantidad' => 0];
+            $vidrios[$k]['cantidad'] += (int) round($uds);
+        }
+        // El separador se pide por metros (no se sabe el largo de barra del proveedor)
+        foreach ($separadores as $sp) {
+            $perfiles[] = [
+                'referencia'      => $sp['referencia'],
+                'descripcion'     => $sp['descripcion'] . ' (se pide por metros)',
+                'color'           => '',
+                'barras'          => null,
+                'largo_barra_m'   => null,
+                'peso_kg'         => null,
+                'piezas'          => $sp['piezas'],
+                'metros_lineales' => round($sp['metros'], 2),
+            ];
+        }
+
+        $herrajes = [];
+        $juntas = [];
+        $otros = [];
+        foreach ($datosPb['accesorios'] ?? [] as $a) {
+            $refRaw = trim((string) ($a['Referencia'] ?? ''));
+            $desc   = $this->limpiarTexto($a['Descripcion'] ?? '');
+            $ref    = $base($refRaw);
+            // La mano de obra no se compra
+            if (($refTipo[$ref] ?? null) === 6 || preg_match('/^(MANO|MONTAJE)/i', $refRaw) || preg_match('/mano de obra/i', $desc)) {
+                continue;
+            }
+            $item = [
+                'referencia'  => trim((string) ($a['ReferenciaProveedor'] ?? '')) ?: $refRaw,
+                'descripcion' => $desc,
+                'cantidad'    => (int) ceil((float) ($a['Unidades'] ?? 0)),
+            ];
+            match ($refTipo[$ref] ?? 5) {
+                3 => $herrajes[] = $item,
+                4 => $juntas[]   = $item,
+                default => $otros[] = $item,
+            };
+        }
+
+        return [
+            'perfiles' => $perfiles,
+            'vidrios'  => array_values($vidrios),
+            'herrajes' => $herrajes,
+            'juntas'   => $juntas,
+            'otros'    => $otros,
+        ];
     }
 
     /**
@@ -1045,29 +1285,77 @@ class WinperfilController extends Controller
             }
         }
 
-        // 2) Bin-packing FFD por referencia → barras
+        // 2) Barras a comprar según Winperfil (pedbarra): cuántas barras y de qué largo por perfil.
+        //    Las piezas de lismonta se acomodan en EXACTAMENTE esas barras. Si pedbarra no
+        //    responde, se usa el acomodo estimado de antes (barra de 6 m, referencial).
+        $pb = $this->pedbarraDe($cotizacion, $oferta, $request->boolean('recalcular'));
+        $objetivos = [];
+        if ($pb['ok']) {
+            foreach ($pb['datos']['barras'] ?? [] as $b) {
+                $r = preg_replace('/@\d+$/', '', trim((string) ($b['Referencia'] ?? '')));
+                $objetivos[$r] = ['barras' => (int) ($b['TotalBarras'] ?? 0), 'largo' => (int) round(((float) ($b['Longitud'] ?? 0)) * 1000)];
+            }
+        }
+        $optimizador = new OptimizadorBarrasService();
+
         $grupos = [];
+        $noCoinciden = [];
+        $sinBarras = [];
         foreach ($perfilesPorRef as $ref => $info) {
             $piezas = $info['piezas'];
             usort($piezas, fn ($a, $b) => $b['largo'] <=> $a['largo']);
 
-            // Best-Fit-Decreasing: cada pieza va a la barra donde deje menos sobra.
-            $barrasRaw = [];
-            foreach ($piezas as $p) {
-                $mejorIdx   = null;
-                $mejorSobra = PHP_INT_MAX;
-                foreach ($barrasRaw as $idx => $barra) {
-                    $usado = array_sum(array_column($barra, 'largo')) + count($barra) * $kerf;
-                    $sobra = $largoBarra - ($usado + $p['largo'] + $kerf);
-                    if ($sobra >= 0 && $sobra < $mejorSobra) {
-                        $mejorSobra = $sobra;
-                        $mejorIdx   = $idx;
-                    }
+            $largoGrupo = $largoBarra;
+            $objetivo   = null;
+            $coincide   = null;
+
+            if ($pb['ok']) {
+                if (!isset($objetivos[$ref])) {
+                    // perfil de lismonta que Winperfil no compra por barras (ej. separador de termopanel)
+                    $sinBarras[] = $info['nombre'] ?: $ref;
+                    continue;
                 }
-                if ($mejorIdx !== null) {
-                    $barrasRaw[$mejorIdx][] = $p;
-                } else {
-                    $barrasRaw[] = [$p];
+                $objetivo   = $objetivos[$ref]['barras'];
+                $largoGrupo = $objetivos[$ref]['largo'] ?: $largoBarra;
+
+                $res = $optimizador->empaquetar(array_column($piezas, 'largo'), $largoGrupo, $kerf, $objetivo, 3.0);
+                $coincide = $res['alcanzo_objetivo'];
+                if (!$coincide) {
+                    $noCoinciden[] = $info['nombre'] ?: $ref;
+                }
+
+                // Asignar a cada largo sus piezas reales (con ángulos, posición y ventana)
+                $cola = [];
+                foreach ($piezas as $p) {
+                    $cola[(int) round($p['largo'])][] = $p;
+                }
+                $barrasRaw = [];
+                foreach ($res['barras'] as $largosBarra) {
+                    $barraPiezas = [];
+                    foreach ($largosBarra as $l) {
+                        $barraPiezas[] = array_shift($cola[(int) round($l)]);
+                    }
+                    $barrasRaw[] = $barraPiezas;
+                }
+            } else {
+                // Best-Fit-Decreasing: cada pieza va a la barra donde deje menos sobra.
+                $barrasRaw = [];
+                foreach ($piezas as $p) {
+                    $mejorIdx   = null;
+                    $mejorSobra = PHP_INT_MAX;
+                    foreach ($barrasRaw as $idx => $barra) {
+                        $usado = array_sum(array_column($barra, 'largo')) + count($barra) * $kerf;
+                        $sobra = $largoGrupo - ($usado + $p['largo'] + $kerf);
+                        if ($sobra >= 0 && $sobra < $mejorSobra) {
+                            $mejorSobra = $sobra;
+                            $mejorIdx   = $idx;
+                        }
+                    }
+                    if ($mejorIdx !== null) {
+                        $barrasRaw[$mejorIdx][] = $p;
+                    } else {
+                        $barrasRaw[] = [$p];
+                    }
                 }
             }
 
@@ -1076,7 +1364,7 @@ class WinperfilController extends Controller
             foreach ($barrasRaw as $i => $barra) {
                 $uso     = array_sum(array_column($barra, 'largo'));
                 $virutas = count($barra) * $kerf;
-                $retal   = max(0, $largoBarra - $uso - $virutas);
+                $retal   = max(0, $largoGrupo - $uso - $virutas);
                 $totalCortes += count($barra);
 
                 $barras[] = [
@@ -1099,9 +1387,11 @@ class WinperfilController extends Controller
                 'nombre'       => $info['nombre'],
                 'color'        => $info['color'],
                 'proveedor'    => 'Winhouse Chile',
-                'largo_barra'  => $largoBarra,
+                'largo_barra'  => $largoGrupo,
                 'total_barras' => count($barras),
                 'total_cortes' => $totalCortes,
+                'barras_winperfil' => $objetivo,
+                'coincide'     => $coincide,
                 'barras'       => $barras,
             ];
         }
@@ -1114,7 +1404,13 @@ class WinperfilController extends Controller
             ],
             'grupos'            => $grupos,
             'ventanas_omitidas' => [],
-            'fuente'            => 'winperfil_binpacking',
+            // pedbarra: totales exactos de Winperfil · pedbarra_parcial: algún perfil no cuadró ·
+            // winperfil_binpacking: Winperfil no respondió, acomodo estimado
+            'fuente'            => !$pb['ok'] ? 'winperfil_binpacking' : (empty($noCoinciden) ? 'pedbarra' : 'pedbarra_parcial'),
+            'no_coinciden'      => $noCoinciden,
+            'sin_barras'        => $sinBarras,
+            'aviso'             => $pb['ok'] ? null : $pb['error'],
+            'optimizacion'      => $pb['ok'] ? ($pb['resultado'] ?? null) : null,
         ]);
     }
 
