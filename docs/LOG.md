@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-17 — Winperfil: el filtro de cliente no encontraba "jose carrasco"
+- **Qué se hizo:** El filtro de cliente (client-side) comparaba el texto tal cual con `includes`, y Winperfil guarda los nombres con espacios duros/dobles, así que "jose carrasco" no coincidía con "Jose␣␣Carrasco" (solo funcionaba una palabra). Ahora se normaliza (minúsculas, sin tildes, espacios simples) y se exige que aparezca cada palabra, en cualquier orden. Aplica a las pestañas Live y Sincronizados. Aparte: ese mismo día el listado vino vacío porque la API de Winperfil (DesktopMax:2024) respondía un "200 OK" vacío a todo; se arregló reiniciando el servicio en el PC, no era la app.
+- **Archivos principales:** `vuexy-frontend/src/pages/winperfil/index.vue` (`normalizarTexto`, `coincideCliente`), `public/` (build).
+- **Pendiente / ojo con:** El cartel "Conectado" solo comprueba HTTP 200, por eso decía conectado con la API devolviendo vacío; mejorarlo para que pida un dato real si vuelve a pasar.
+
 ## 2026-10-16 — Importar cartola BCH: el script acumula si el portal hace varias llamadas
 - **Qué se hizo:** El script interceptor se desinstalaba tras la 1ª respuesta de `getcartola`. Ahora no se desinstala: si el portal hiciera más de una llamada acumula todas sin repetir (por `id`), copia el total y muestra en el aviso los campos de paginación que traiga la respuesta. OJO: la hipótesis inicial ("el portal entrega de a 100 y se perdía el resto") era errónea: el dueño confirmó que antes ya importaba todo (en pantalla se ven 100 pero la respuesta trae más). Con una sola respuesta se comporta igual que antes; es solo una red de seguridad.
 - **Archivos principales:** `vuexy-frontend/src/pages/conciliacion/index.vue` (`consolaScript`), `public/` (build).

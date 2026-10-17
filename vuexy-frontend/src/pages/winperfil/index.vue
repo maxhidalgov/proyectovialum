@@ -641,12 +641,23 @@ const estadosDisponibles = computed(() => {
   return [...new Set(cotizacionesSync.value.map(c => c.estado).filter(Boolean))]
 })
 
+// Búsqueda tolerante: Winperfil guarda espacios duros/dobles en los nombres (ej. "Jose  Carrasco"),
+// así que se normaliza (minúsculas, sin tildes, espacios simples) y se exige que aparezca cada palabra,
+// en cualquier orden.
+const normalizarTexto = t => String(t ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[\s\u00A0]+/g, ' ').trim()
+
+const coincideCliente = hayTexto => {
+  const hay = normalizarTexto(hayTexto)
+  return normalizarTexto(filtroCliente.value).split(' ').every(palabra => hay.includes(palabra))
+}
+
 // Tablas filtradas client-side por cliente + estado
 const presupuestosFiltrados = computed(() =>
   presupuestosWin.value.filter(p => {
     if (filtroCliente.value) {
-      const hay = `${p.NOMBRECLIENTE ?? ''} ${p.CIFCLIENTE ?? ''}`.toLowerCase()
-      if (!hay.includes(filtroCliente.value.toLowerCase())) return false
+      if (!coincideCliente(`${p.NOMBRECLIENTE ?? ''} ${p.CIFCLIENTE ?? ''}`)) return false
     }
     if (filtroEstado.value && labelAceptado(p.ACEPTADO) !== filtroEstado.value) return false
     return true
@@ -656,8 +667,7 @@ const presupuestosFiltrados = computed(() =>
 const cotizacionesFiltradas = computed(() =>
   cotizacionesSync.value.filter(c => {
     if (filtroCliente.value) {
-      const hay = `${c.cliente_nombre ?? ''} ${c.cliente_rut ?? ''} ${c.observaciones ?? ''}`.toLowerCase()
-      if (!hay.includes(filtroCliente.value.toLowerCase())) return false
+      if (!coincideCliente(`${c.cliente_nombre ?? ''} ${c.cliente_rut ?? ''} ${c.observaciones ?? ''}`)) return false
     }
     if (filtroEstado.value && (c.estado ?? '') !== filtroEstado.value) return false
     return true
