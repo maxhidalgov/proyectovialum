@@ -64,6 +64,191 @@ class BotController extends Controller
     }
 
     /**
+     * GET /api/bot/resumen-comercial?token=XXXX[&top=6]
+     * Resumen comercial semanal para postear en el grupo: cotizaciones sin aprobar que hay que
+     * llamar (3 / 7 / 15 días, por vendedor), presupuestos de Winperfil sin aceptar que aún no
+     * están en la app, y cómo va la semana (nuevas / aprobadas / rechazadas).
+     */
+    public function resumenComercial(Request $r)
+    {
+        $this->verificarToken($r);
+
+        $tz  = 'America/Santiago';
+        $hoy = now($tz)->startOfDay();
+        $top = max(3, min(15, (int) $r->query('top', 6)));
+
+        $bruto = fn ($neto) => (int) round(((float) $neto) * 1.19);
+        $clp   = fn ($n) => '$' . number_format((int) $n, 0, ',', '.');
+        $mm    = fn ($n) => $n >= 1_000_000 ? '$' . number_format($n / 1_000_000, 1, ',', '.') . ' M' : '$' . number_format((int) $n, 0, ',', '.');
+        $limpio = fn ($t) => trim(preg_replace('/[\s\x{00A0}]+/u', ' ', (string) $t));
+        $diasDesde = fn ($fecha) => abs((int) \Carbon\Carbon::parse($fecha, $tz)->startOfDay()->diffInDays($hoy));
+
+        // ── Cotizaciones de la app sin aprobar (Evaluación / Enviada) ───────────────
+        $filas = DB::table('cotizaciones as c')
+            ->leftJoin('clientes as cl', 'cl.id', '=', 'c.cliente_id')
+            ->leftJoin('users as u', 'u.id', '=', 'c.vendedor_id')
+            ->whereIn('c.estado_cotizacion_id', [1, 5])
+            ->where(fn ($q) => $q->whereNull('c.es_manual')->orWhere('c.es_manual', 0))
+            ->where('c.total', '>', 0)
+            ->get(['c.id', 'c.total', 'c.fecha', 'c.enviado_at', 'cl.razon_social', 'cl.first_name', 'cl.last_name', 'u.name as vendedor']);
+
+        $buckets = ['rojo' => [], 'naranja' => [], 'amarillo' => [], 'antiguas' => []];
+        $porVendedor = [];
+        foreach ($filas as $f) {
+            $d = $diasDesde($f->enviado_at ?? $f->fecha);
+            if ($d < 3) {
+                continue;
+            }
+            $cliente = $limpio($f->razon_social) ?: $limpio(($f->first_name ?? '') . ' ' . ($f->last_name ?? '')) ?: 'Sin cliente';
+            $it = ['id' => $f->id, 'cliente' => $cliente, 'vendedor' => $f->vendedor ?: 'Sin vendedor', 'total' => $bruto($f->total), 'dias' => $d];
+            $clave = $d > 30 ? 'antiguas' : ($d >= 15 ? 'rojo' : ($d >= 7 ? 'naranja' : 'amarillo'));
+            $buckets[$clave][] = $it;
+            if ($clave !== 'antiguas') {
+                $v = $it['vendedor'];
+                $porVendedor[$v] ??= ['n' => 0, 'total' => 0];
+                $porVendedor[$v]['n']++;
+                $porVendedor[$v]['total'] += $it['total'];
+            }
+        }
+        foreach ($buckets as &$b) {
+            usort($b, fn ($x, $y) => $y['total'] <=> $x['total']);
+        }
+        unset($b);
+
+        // ── Cómo va la semana ──────────────────────────────────────────────────────
+        $desde7 = now($tz)->subDays(7)->startOfDay();
+        $nuevas = DB::table('cotizaciones')
+            ->where('created_at', '>=', $desde7)->where('total', '>', 0)
+            ->where(fn ($q) => $q->whereNull('es_manual')->orWhere('es_manual', 0))
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as t')->first();
+        $cambio = fn (string $estado) => DB::table('cotizacion_estado_historial as h')
+            ->join('cotizaciones as c', 'c.id', '=', 'h.cotizacion_id')
+            ->where('h.tipo', 'comercial')->where('h.estado', $estado)->where('h.fecha', '>=', $desde7)
+            ->selectRaw('COUNT(DISTINCT c.id) as n, COALESCE(SUM(c.total), 0) as t')->first();
+        $aprobadas  = $cambio('Aprobada');
+        $rechazadas = $cambio('Rechazada');
+
+        // ── Presupuestos de Winperfil sin aceptar que aún no están en la app ───────
+        $wp = ['ok' => false, 'items' => [], 'error' => null];
+        try {
+            $resp  = app(WinperfilController::class)->getPresupuestos(new Request([
+                'serie' => 'A',
+                'desde' => now($tz)->subDays(60)->toDateString(),
+                'hasta' => now($tz)->toDateString(),
+            ]));
+            $lista = json_decode($resp->getContent(), true);
+            if (!is_array($lista) || isset($lista['error'])) {
+                throw new \RuntimeException($lista['error'] ?? 'respuesta inválida');
+            }
+            $porPres = collect($lista)->groupBy(fn ($p) => (string) ($p['PRESUPUESTO_NUMERO'] ?? $p['NUMFACTURA'] ?? ''));
+            foreach ($porPres as $ofertas) {
+                // Si alguna oferta está aceptada/facturada o ya está en la app, no es un pendiente de llamar
+                $resuelto = $ofertas->contains(fn ($p) => in_array(strtoupper((string) ($p['ACEPTADO'] ?? '')), ['T', 'C'], true) || !empty($p['_synced']));
+                if ($resuelto) {
+                    continue;
+                }
+                $ult  = $ofertas->sortByDesc(fn ($p) => (int) ($p['NUMFACTURA'] ?? 0))->first();
+                $base = (float) ($ult['BASE'] ?? 0);
+                $nom  = $limpio($ult['NOMBRECLIENTE'] ?? '');
+                if ($base <= 0 || $nom === '') {
+                    continue;
+                }
+                try {
+                    $fecha = \Carbon\Carbon::createFromFormat('d-m-Y', (string) ($ult['FECHAFACTURA'] ?? ''), $tz)->startOfDay();
+                } catch (\Throwable $e) {
+                    continue;
+                }
+                $d = abs((int) $fecha->diffInDays($hoy));
+                if ($d < 3) {
+                    continue;
+                }
+                $wp['items'][] = ['cliente' => $nom, 'numero' => ($ult['PRESUPUESTO_SERIE'] ?? 'A') . '-' . ($ult['NUMFACTURA'] ?? ''), 'total' => $bruto($base), 'dias' => $d];
+            }
+            usort($wp['items'], fn ($x, $y) => $y['total'] <=> $x['total']);
+            $wp['ok'] = true;
+        } catch (\Throwable $e) {
+            $wp['error'] = $e->getMessage();
+        }
+
+        // ── Texto para WhatsApp ────────────────────────────────────────────────────
+        $suma  = fn (array $items) => array_sum(array_column($items, 'total'));
+        $lineas = [];
+        $lineas[] = '📊 *Resumen comercial* — semana del ' . $desde7->format('d/m') . ' al ' . now($tz)->format('d/m');
+        $lineas[] = '';
+        $lineas[] = '*Cómo va la semana*';
+        $lineas[] = '• Cotizaciones nuevas: ' . $nuevas->n . ($nuevas->n ? ' (' . $mm($bruto($nuevas->t)) . ')' : '');
+        $lineas[] = '• Aprobadas: ' . $aprobadas->n . ($aprobadas->n ? ' (' . $mm($bruto($aprobadas->t)) . ')' : '');
+        $lineas[] = '• Rechazadas: ' . $rechazadas->n;
+
+        $etq = [
+            'rojo'     => ['🔴', '15 a 30 días'],
+            'naranja'  => ['🟠', '7 a 14 días'],
+            'amarillo' => ['🟡', '3 a 6 días'],
+        ];
+        $hayLlamar = false;
+        $lineas[] = '';
+        $lineas[] = '*Para llamar* — cotizaciones sin respuesta';
+        foreach ($etq as $k => [$ico, $titulo]) {
+            if (empty($buckets[$k])) {
+                continue;
+            }
+            $hayLlamar = true;
+            $lineas[] = "{$ico} *{$titulo}* (" . count($buckets[$k]) . ' · ' . $mm($suma($buckets[$k])) . ')';
+            foreach (array_slice($buckets[$k], 0, $top) as $it) {
+                $lineas[] = "  • {$it['cliente']} · " . $clp($it['total']) . " · hace {$it['dias']} d · {$it['vendedor']}";
+            }
+            if (count($buckets[$k]) > $top) {
+                $lineas[] = '  _+' . (count($buckets[$k]) - $top) . ' más_';
+            }
+        }
+        if (!$hayLlamar) {
+            $lineas[] = '✅ No hay cotizaciones pendientes de llamar.';
+        }
+        if (!empty($buckets['antiguas'])) {
+            $lineas[] = '⚪ ' . count($buckets['antiguas']) . ' cotizaciones de más de 30 días (' . $mm($suma($buckets['antiguas'])) . '): conviene revisarlas y cerrar las perdidas.';
+        }
+
+        if ($porVendedor) {
+            uasort($porVendedor, fn ($x, $y) => $y['total'] <=> $x['total']);
+            $lineas[] = '';
+            $lineas[] = '*Por vendedor* (cotizaciones por llamar)';
+            foreach ($porVendedor as $nombre => $v) {
+                $lineas[] = "• {$nombre} — {$v['n']} · " . $mm($v['total']);
+            }
+        }
+
+        $lineas[] = '';
+        if ($wp['ok'] && $wp['items']) {
+            $lineas[] = '*Presupuestos de Winperfil sin aceptar* (aún no están en la app) — ' . count($wp['items']) . ' · ' . $mm($suma($wp['items']));
+            foreach (array_slice($wp['items'], 0, $top) as $it) {
+                $lineas[] = "  • {$it['cliente']} · {$it['numero']} · " . $clp($it['total']) . " · hace {$it['dias']} d";
+            }
+            if (count($wp['items']) > $top) {
+                $lineas[] = '  _+' . (count($wp['items']) - $top) . ' más_';
+            }
+        } elseif ($wp['ok']) {
+            $lineas[] = '*Presupuestos de Winperfil sin aceptar*: ninguno pendiente fuera de la app ✅';
+        } else {
+            $lineas[] = '_No pude consultar Winperfil (' . ($wp['error'] ?: 'sin respuesta') . '); falta esa parte del resumen._';
+        }
+        $lineas[] = '';
+        $lineas[] = '_Montos con IVA. "Hace N d" cuenta desde el envío o la fecha de la cotización._';
+
+        return response()->json([
+            'ok'          => true,
+            'texto'       => implode("\n", $lineas),
+            'por_llamar'  => $buckets,
+            'por_vendedor' => $porVendedor,
+            'semana'      => [
+                'nuevas' => ['n' => $nuevas->n, 'total' => $bruto($nuevas->t)],
+                'aprobadas' => ['n' => $aprobadas->n, 'total' => $bruto($aprobadas->t)],
+                'rechazadas' => ['n' => $rechazadas->n, 'total' => $bruto($rechazadas->t)],
+            ],
+            'winperfil'   => $wp,
+        ]);
+    }
+
+    /**
      * GET /api/bot/precio?token=XXXX&q=silicona negra
      * Busca en la lista de precios (cada palabra del texto debe estar en el nombre
      * del producto o su color) y por cada coincidencia devuelve precio de venta,

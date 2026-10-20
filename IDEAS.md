@@ -23,7 +23,6 @@ Bot de WhatsApp (proyecto aparte `bot-pendientes-whatsapp` + endpoints `/api/bot
 - [ ] 2026-10-01 — Bot con IA: leer fotos de croquis/medidas y transcribir audios (tiene costo de API)
 - [ ] 2026-10-01 — Agente de Leads Fase 2: conectar el cerebro al canal WhatsApp del bot (con otro número)
 - [ ] 2026-10-01 — Bot: permisos por número — lo sensible (costos, deudas de clientes, pagos) solo para el dueño y autorizados; hacerlo ANTES de sumar cobros/pagos (hoy cualquiera del grupo ve costos y montos)
-- [ ] 2026-10-01 — Bot: limpiar el `BOT_API_TOKEN` real que quedó en `.env.example` del bot y cargarlo en Railway si falta
 
 Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-env-expuesto`):
 - [ ] 2026-10-06 — URGENTE: `public/info.php` (phpinfo) estuvo público en producción y expuso TODOS los secretos de Railway. Archivo eliminado (f1ab711c). ROTAR en este orden: DB_PASSWORD (MySQL Railway, proxy público), BSALE_TOKEN/BSALE_ACCESS_TOKEN, CHIPAX_SECRET_KEY/APP_ID/COOKIE, R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY, WORKERA_API_KEY, BCH_CLIENT_SECRET, FTP_PASSWORD, MAIL_PASSWORD, REDIS_PASSWORD, CRON_TOKEN, BOT_API_TOKEN (también en el bot), JWT_SECRET (cierra sesiones), APP_KEY (cuidado con datos encriptados). Revisar Bsale/Chipax/DB por actividad que no reconozcas
@@ -38,7 +37,7 @@ Producción y bot (ideas del dueño, 2026-10-20):
 - [ ] 2026-10-20 — Servicio compartido "aprobar y pedir material" (app + bot): botón de un solo paso en la web y, sobre eso, el bot ("aprueba la 196") con vista previa, preguntas necesarias (total, anticipo, material/EETT, proveedor) y confirmación. Antes: permisos por número y rotar el token del bot
 - [ ] 2026-10-20 — Bot: seguimiento de obras aprobadas sin cambio de estado en N días (umbral por etapa), aviso diario con resumen y respuesta en lenguaje natural que actualiza estado/nota/pausa; columna "Días sin movimiento" en Operaciones
 - [ ] 2026-10-20 — Bot → calendario: "mañana vamos a medir donde Juanito Pérez / instalar donde Pedrito" crea el evento (calendario/recordatorios/visitas_cliente existentes) vinculado a la obra, y pregunta después si se hizo; también anotar cosas en el calendario
-- [ ] 2026-10-20 — Bot: seguimiento de cotizaciones SIN aprobar (Evaluación/Enviada): aviso diario escalonado (3/7/15 días) ordenado por monto, responder "llamé, quedó en responder el viernes" (nota + nuevo recordatorio) / "rechazó" / "aprobó" (inicia la aprobación); limpieza de las antiguas (hoy 41 de 42 llevan +7 días sin tocarse y solo 1 pasó por "Enviar" de la app); opcional: presupuestos Winperfil sin aceptar sin importarlos
+- [ ] 2026-10-20 — Bot: seguimiento de cotizaciones sin aprobar, parte 2: aviso escalonado diario/por vendedor y responder en lenguaje natural ("llamé, quedó en responder el viernes" → nota + recordatorio; "rechazó" → Rechazada con motivo; "aprobó" → inicia la aprobación); limpieza guiada de las +30 días (112 en prod)
 - [ ] 2026-10-20 — Ciclo semanal de proveedor (Winhouse viene los miércoles): recordar el martes en la mañana las obras con `pedido_proveedor` sin marcar, y armar el pedido consolidado
 
 Winperfil:
@@ -52,6 +51,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-20 → 2026-10-20 — Bot: resumen comercial semanal al grupo (comando `comercial` + cron lunes 9:00): cotizaciones por llamar a 3/7/15 días por vendedor y presupuestos de Winperfil sin aceptar; además se vació el token real de `.env.example` del bot (la rotación sigue pendiente)
 - [x] 2026-10-20 → 2026-10-20 — Historial de modificaciones de la cotización (cambio de oferta / ajuste de precio, con total antes/después y motivo) y orden de compra complementaria (pestaña "Falta pedir": lo que Winperfil calcula hoy menos lo ya pedido)
 - [x] 2026-10-17 → 2026-10-17 — Materiales Winperfil: lista de compra y hoja de cortes con las barras exactas de pedbarra (largo real, color, rollos, sin mano de obra) y acomodo de cortes que cuadra con Winperfil
 - [x] 2026-10-17 → 2026-10-17 — Winperfil: botón "Cambiar oferta" para que una cotización pase a la oferta nueva cuando el cliente modifica el presupuesto aceptado (sin duplicar)
