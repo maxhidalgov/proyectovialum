@@ -170,10 +170,22 @@
         </v-card-title>
         <v-divider />
         <v-card-text class="pa-4">
-          <v-btn-toggle v-model="dialogEnviar.canal" mandatory density="compact" color="primary" variant="outlined" class="mb-3" @update:model-value="cambiarCanal">
-            <v-btn value="whatsapp"><v-icon start>mdi-whatsapp</v-icon>WhatsApp</v-btn>
-            <v-btn value="email"><v-icon start>mdi-email-outline</v-icon>Correo (PDF adjunto)</v-btn>
-          </v-btn-toggle>
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <v-btn
+              size="small" :variant="dialogEnviar.canal === 'whatsapp' ? 'flat' : 'outlined'"
+              :color="dialogEnviar.canal === 'whatsapp' ? 'green' : undefined"
+              prepend-icon="mdi-whatsapp" @click="elegirCanal('whatsapp')"
+            >
+              WhatsApp
+            </v-btn>
+            <v-btn
+              size="small" :variant="dialogEnviar.canal === 'email' ? 'flat' : 'outlined'"
+              :color="dialogEnviar.canal === 'email' ? 'primary' : undefined"
+              prepend-icon="mdi-email-outline" @click="elegirCanal('email')"
+            >
+              Correo (PDF adjunto)
+            </v-btn>
+          </div>
           <v-text-field v-if="dialogEnviar.canal === 'whatsapp'" v-model="dialogEnviar.telefono" label="Teléfono (WhatsApp)" placeholder="Ej: 9 1234 5678"
             density="compact" variant="outlined" prepend-inner-icon="mdi-phone" class="mb-3" />
           <v-text-field v-else v-model="dialogEnviar.email" label="Correo del destinatario" placeholder="cliente@empresa.cl" type="email"
@@ -347,8 +359,12 @@ const descargarPDF = async (cotizacionId) => {
 const dialogEnviar = ref({ show: false, enviando: false, presencial: false, item: null, canal: 'whatsapp', telefono: '', email: '', mensaje: '', mensajeWhatsapp: '', mensajeCorreo: '', error: null })
 
 // Cada canal tiene su propio texto: WhatsApp lleva el link; el correo lleva el PDF adjunto
-function cambiarCanal(canal) {
+function elegirCanal(canal) {
   const d = dialogEnviar.value
+  if (d.canal === canal) return
+  // conserva lo que se haya editado del mensaje del canal que se deja
+  if (d.canal === 'email') d.mensajeCorreo = d.mensaje; else d.mensajeWhatsapp = d.mensaje
+  d.canal = canal
   d.mensaje = canal === 'email' ? d.mensajeCorreo : d.mensajeWhatsapp
   d.error = null
 }
