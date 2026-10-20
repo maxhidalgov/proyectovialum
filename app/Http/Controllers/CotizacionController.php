@@ -20,7 +20,7 @@ class CotizacionController extends Controller
      */
     public function index()
 {
-    $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'ventanas.tipoVentana', 'estado'])
+    $cotizaciones = Cotizacion::with(['cliente', 'contacto', 'vendedor', 'ventanas.tipoVentana', 'estado'])
         ->latest()
         ->get();
 
@@ -581,6 +581,12 @@ public function store(Request $request)
 
     public function generarPDF($id, Request $request)
     {
+        return $this->construirPdfCotizacion($id, $request)->download('cotizacion_' . $id . '.pdf');
+    }
+
+    /** Arma el PDF de la cotización (lo usan la descarga y el envío por correo). */
+    private function construirPdfCotizacion($id, Request $request)
+    {
         // Imágenes PNG convertidas en el navegador (canvg SVG→PNG), indexadas por detalle ID.
         // Vienen solo cuando el frontend hace POST /api/cotizaciones/{id}/pdf.
         // Cuando la petición es GET (sin parámetros), $graficos estará vacío.
@@ -780,7 +786,7 @@ public function store(Request $request)
         $pdf = Pdf::loadView('cotizaciones.pdf', compact('cotizacion', 'imagenesBase64', 'logoBase64', 'detallesConstructor', 'graficos'))
             ->setOptions(['isPhpEnabled' => true]);
 
-        return $pdf->download('cotizacion_' . $cotizacion->id . '.pdf');
+        return $pdf;
     }
 
     /**
@@ -1050,10 +1056,11 @@ public function store(Request $request)
         $data = $request->validate([
             'via'      => 'required|in:whatsapp,email,presencial',
             'telefono' => 'nullable|string|max:30',
+            'email'    => 'nullable|email|max:120',
             'mensaje'  => 'nullable|string|max:2000',
         ]);
 
-        $cot = Cotizacion::with(['cliente', 'estado'])->findOrFail($id);
+        $cot = Cotizacion::with(['cliente', 'contacto', 'vendedor', 'estado'])->findOrFail($id);
         $nombre  = $cot->cliente?->razon_social
             ?: trim(($cot->cliente?->first_name ?? '') . ' ' . ($cot->cliente?->last_name ?? ''));
 
@@ -1066,17 +1073,17 @@ public function store(Request $request)
 
         // Link con token no adivinable (no expone IDs secuenciales)
         $pdfUrl  = url("/p/cotizacion/{$cot->publicToken()}");
-        $mensaje = $data['mensaje'] ?: (
+        $mensaje = ($data['mensaje'] ?? null) ?: (
             ($nombre ? "Hola {$nombre}," : 'Hola,') .
             "\n\nTe comparto la cotización #{$cot->id} de Vialum. Puedes verla y descargarla acá:\n{$pdfUrl}\n\nCualquier duda quedo atento. ¡Saludos!"
         );
 
         if ($data['via'] === 'email') {
-            return response()->json(['message' => 'El envío por correo estará disponible al configurar el SMTP. Usa WhatsApp por ahora.'], 422);
+            return $this->enviarPorCorreo($cot, $data);
         }
 
         // WhatsApp
-        $tel = $data['telefono'] ?: ($cot->cliente?->telefono ?? $cot->cliente?->phone ?? null);
+        $tel = ($data['telefono'] ?? null) ?: ($cot->cliente?->telefono ?? $cot->cliente?->phone ?? null);
         if (!$tel) {
             return response()->json(['message' => 'El cliente no tiene teléfono. Ingresa uno para enviar por WhatsApp.'], 422);
         }
@@ -1089,6 +1096,49 @@ public function store(Request $request)
         $this->registrarEnvioCotizacion($cot, 'whatsapp', $tel);
 
         return response()->json(['ok' => true, 'wa_url' => $waUrl, 'enviado_at' => $cot->enviado_at?->toDateTimeString()]);
+    }
+
+    /** Envía la cotización por correo con el PDF ADJUNTO (no un link). */
+    private function enviarPorCorreo(Cotizacion $cot, array $data)
+    {
+        // Con el driver "log"/"array" el envío "funciona" pero no llega a nadie: se avisa en vez de marcar enviada
+        if (in_array(config('mail.default'), ['log', 'array'], true)) {
+            return response()->json(['message' => 'El correo no está configurado en el servidor (falta el SMTP). Usa WhatsApp por ahora.'], 422);
+        }
+
+        $escrito = trim((string) ($data['email'] ?? ''));
+        $dest    = $escrito ?: ($cot->contacto?->email ?: $cot->cliente?->email);
+        if (!$dest || !filter_var($dest, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['message' => 'El cliente no tiene un correo válido. Ingresa uno para enviar por correo.'], 422);
+        }
+
+        $nombre = $cot->contacto_nombre
+            ?: ($cot->cliente?->razon_social ?: trim(($cot->cliente?->first_name ?? '') . ' ' . ($cot->cliente?->last_name ?? '')));
+        $cuerpo = trim((string) ($data['mensaje'] ?? '')) ?: (
+            ($nombre ? "Hola {$nombre}," : 'Hola,')
+            . "\n\nTe envío adjunta la cotización #{$cot->id} de Vialum. Cualquier duda quedo atento."
+            . "\n\nSaludos,\n" . ($cot->vendedor?->name ?: 'Vialum')
+        );
+
+        try {
+            $pdf = $this->construirPdfCotizacion($cot->id, new Request())->output();
+            \Illuminate\Support\Facades\Mail::to($dest)->send(new \App\Mail\CotizacionMail($cot, $cuerpo, $pdf));
+        } catch (\Throwable $e) {
+            Log::warning('Cotización: no se pudo enviar el correo', ['cotizacion' => $cot->id, 'error' => $e->getMessage()]);
+            return response()->json([
+                'message' => 'No se pudo enviar el correo. Revisa la configuración de correo (SMTP) en el servidor.',
+                'detalle' => $e->getMessage(),
+            ], 500);
+        }
+
+        // Si el cliente no tenía correo y se escribió uno, se guarda en su ficha
+        if ($escrito && $cot->cliente && empty($cot->cliente->email)) {
+            $cot->cliente->update(['email' => $escrito]);
+        }
+
+        $this->registrarEnvioCotizacion($cot, 'email', $dest);
+
+        return response()->json(['ok' => true, 'mensaje' => "Cotización enviada a {$dest}", 'enviado_at' => $cot->enviado_at?->toDateTimeString()]);
     }
 
     private function registrarEnvioCotizacion(Cotizacion $cot, string $via, string $dest): void

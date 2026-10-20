@@ -161,20 +161,29 @@
       </v-data-table>
     </v-card>
 
-    <!-- Enviar cotización (WhatsApp) -->
+    <!-- Enviar cotización (WhatsApp o correo con el PDF adjunto) -->
     <v-dialog v-model="dialogEnviar.show" max-width="520">
       <v-card v-if="dialogEnviar.item">
         <v-card-title class="d-flex align-center gap-2 pa-4">
-          <v-icon color="green">mdi-whatsapp</v-icon>
+          <v-icon :color="dialogEnviar.canal === 'email' ? 'primary' : 'green'">{{ dialogEnviar.canal === 'email' ? 'mdi-email-outline' : 'mdi-whatsapp' }}</v-icon>
           Enviar cotización #{{ dialogEnviar.item.id }}
         </v-card-title>
         <v-divider />
         <v-card-text class="pa-4">
-          <v-text-field v-model="dialogEnviar.telefono" label="Teléfono (WhatsApp)" placeholder="Ej: 9 1234 5678"
+          <v-btn-toggle v-model="dialogEnviar.canal" mandatory density="compact" color="primary" variant="outlined" class="mb-3" @update:model-value="cambiarCanal">
+            <v-btn value="whatsapp"><v-icon start>mdi-whatsapp</v-icon>WhatsApp</v-btn>
+            <v-btn value="email"><v-icon start>mdi-email-outline</v-icon>Correo (PDF adjunto)</v-btn>
+          </v-btn-toggle>
+          <v-text-field v-if="dialogEnviar.canal === 'whatsapp'" v-model="dialogEnviar.telefono" label="Teléfono (WhatsApp)" placeholder="Ej: 9 1234 5678"
             density="compact" variant="outlined" prepend-inner-icon="mdi-phone" class="mb-3" />
+          <v-text-field v-else v-model="dialogEnviar.email" label="Correo del destinatario" placeholder="cliente@empresa.cl" type="email"
+            density="compact" variant="outlined" prepend-inner-icon="mdi-email-outline" class="mb-3" />
           <v-textarea v-model="dialogEnviar.mensaje" label="Mensaje" rows="6" density="compact" variant="outlined" auto-grow />
-          <p class="text-caption text-medium-emphasis mt-1">
+          <p v-if="dialogEnviar.canal === 'whatsapp'" class="text-caption text-medium-emphasis mt-1">
             Se abrirá WhatsApp con el mensaje y el link al PDF. La cotización queda como <strong>Enviada</strong> y se crea un recordatorio de seguimiento en 3 días.
+          </p>
+          <p v-else class="text-caption text-medium-emphasis mt-1">
+            Se envía un correo con el <strong>PDF adjunto</strong>. La cotización queda como <strong>Enviada</strong> y se crea un recordatorio de seguimiento en 3 días.
           </p>
           <v-alert v-if="dialogEnviar.error" color="error" variant="tonal" density="compact" class="mt-2 text-caption">{{ dialogEnviar.error }}</v-alert>
         </v-card-text>
@@ -186,8 +195,9 @@
           </v-btn>
           <v-spacer />
           <v-btn variant="text" @click="dialogEnviar.show = false">Cancelar</v-btn>
-          <v-btn color="green" :loading="dialogEnviar.enviando" @click="enviarCotizacion">
-            <v-icon start>mdi-whatsapp</v-icon>Enviar por WhatsApp
+          <v-btn :color="dialogEnviar.canal === 'email' ? 'primary' : 'green'" :loading="dialogEnviar.enviando" @click="enviarCotizacion">
+            <v-icon start>{{ dialogEnviar.canal === 'email' ? 'mdi-email-outline' : 'mdi-whatsapp' }}</v-icon>
+            {{ dialogEnviar.canal === 'email' ? 'Enviar por correo' : 'Enviar por WhatsApp' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -334,7 +344,14 @@ const descargarPDF = async (cotizacionId) => {
 }
 
 // ── Enviar cotización (WhatsApp) ──────────────────────────────────
-const dialogEnviar = ref({ show: false, enviando: false, presencial: false, item: null, telefono: '', mensaje: '', error: null })
+const dialogEnviar = ref({ show: false, enviando: false, presencial: false, item: null, canal: 'whatsapp', telefono: '', email: '', mensaje: '', mensajeWhatsapp: '', mensajeCorreo: '', error: null })
+
+// Cada canal tiene su propio texto: WhatsApp lleva el link; el correo lleva el PDF adjunto
+function cambiarCanal(canal) {
+  const d = dialogEnviar.value
+  d.mensaje = canal === 'email' ? d.mensajeCorreo : d.mensajeWhatsapp
+  d.error = null
+}
 
 async function abrirEnviar(item) {
   const nombre = item.cliente?.razon_social
@@ -353,7 +370,15 @@ async function abrirEnviar(item) {
   }
   const linkTxt = pdfUrl ? `\n\nTe comparto la cotización #${item.id} de Vialum. Puedes verla y descargarla acá:\n${pdfUrl}` : `\n\nTe comparto la cotización #${item.id} de Vialum.`
   const mensaje = `${nombre ? 'Hola ' + nombre + ',' : 'Hola,'}${linkTxt}\n\nCualquier duda quedo atento. ¡Saludos!`
-  dialogEnviar.value = { show: true, enviando: false, presencial: false, item, telefono: tel, mensaje, error: null }
+  // Correo por defecto: el de la persona de contacto, si la hay; si no, el del cliente
+  const email = item.contacto?.email || item.cliente?.email || ''
+  const atencion = item.contacto_nombre || nombre
+  const vendedor = item.vendedor?.name || 'Vialum'
+  const mensajeCorreo = `${atencion ? 'Hola ' + atencion + ',' : 'Hola,'}\n\nTe envío adjunta la cotización #${item.id} de Vialum. Cualquier duda quedo atento.\n\nSaludos,\n${vendedor}`
+  dialogEnviar.value = {
+    show: true, enviando: false, presencial: false, item, canal: 'whatsapp',
+    telefono: tel, email, mensaje, mensajeWhatsapp: mensaje, mensajeCorreo, error: null,
+  }
 }
 
 async function marcarEntregaPresencial() {
@@ -378,11 +403,11 @@ async function enviarCotizacion() {
   try {
     // Garantizar que el PDF público que se comparte tenga las imágenes Winperfil
     await asegurarGraficosCotizacion(api, d.item.id)
-    const { data } = await api.post(`/api/cotizaciones/${d.item.id}/enviar`, {
-      via: 'whatsapp',
-      telefono: d.telefono || undefined,
-      mensaje: d.mensaje || undefined,
-    })
+    const porCorreo = d.canal === 'email'
+    if (porCorreo && !d.email) throw { response: { data: { message: 'Ingresa el correo del destinatario' } } }
+    const { data } = await api.post(`/api/cotizaciones/${d.item.id}/enviar`, porCorreo
+      ? { via: 'email', email: d.email, mensaje: d.mensaje || undefined }
+      : { via: 'whatsapp', telefono: d.telefono || undefined, mensaje: d.mensaje || undefined })
     if (data.wa_url) window.open(data.wa_url, '_blank')
     // Reflejar el envío en la fila
     d.item.enviado_at = data.enviado_at || new Date().toISOString()

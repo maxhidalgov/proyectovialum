@@ -44,6 +44,9 @@ Winperfil:
 - [ ] 2026-10-17 — Winperfil: control de costo/margen por obra con PERFCOSTE/ACCCOSTE/VIDCOSTE/MANOCOSTE de la cabecera de oferta
 - [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
 
+Correo:
+- [ ] 2026-10-20 — Cargar el SMTP (Workspace contacto@vialum.cl) en las variables de Railway: sin eso no funciona el envío de cotizaciones ni de órdenes de compra por correo; probar con un envío real. Después: copia (CC) al vendedor y envío por correo también desde Seguimiento
+
 Facturación:
 - [ ] 2026-10-06 — Botón "Anular" (`DocumentoFacturacionController::anular`) solo cambia el estado local a `anulado` y no llama a Bsale; avisar o impedir anular desde la app una factura que no tenga NC en Bsale
 - [ ] 2026-10-05 — Cotizaciones Winperfil: poder agregar un ítem adicional (ej. "Ángulos", precio con IVA) desde `cotizacion-ver` sin repartirlo entre las ventanas. Ojo: `update()` calcula el total sin las líneas `winperfil`, por eso el cotizador completo NO sirve para editar cotizaciones Winperfil (dejaría el total solo con extras)
@@ -51,6 +54,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-20 → 2026-10-20 — Cotizaciones: enviar por correo con el PDF adjunto (no el link), con el correo del contacto/cliente por defecto; requiere cargar el SMTP en Railway
 - [x] 2026-10-20 → 2026-10-20 — Bot: resumen comercial semanal al grupo (comando `comercial` + cron lunes 9:00): cotizaciones por llamar a 3/7/15 días por vendedor y presupuestos de Winperfil sin aceptar; además se vació el token real de `.env.example` del bot (la rotación sigue pendiente)
 - [x] 2026-10-20 → 2026-10-20 — Historial de modificaciones de la cotización (cambio de oferta / ajuste de precio, con total antes/después y motivo) y orden de compra complementaria (pestaña "Falta pedir": lo que Winperfil calcula hoy menos lo ya pedido)
 - [x] 2026-10-17 → 2026-10-17 — Materiales Winperfil: lista de compra y hoja de cortes con las barras exactas de pedbarra (largo real, color, rollos, sin mano de obra) y acomodo de cortes que cuadra con Winperfil
