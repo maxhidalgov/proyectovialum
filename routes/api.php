@@ -520,6 +520,7 @@ Route::middleware('auth:api')->group(function () {
 
         // Lista de materiales (lismonta, en vivo)
         Route::get('/materiales',               [WinperfilController::class, 'materiales']);
+        Route::get('/materiales-pendientes',    [WinperfilController::class, 'materialesPendientes']);
         // Hoja de cortes (bin-packing sobre lismonta; pedbarra a futuro)
         Route::get('/hoja-cortes',              [WinperfilController::class, 'hojaCortes']);
 

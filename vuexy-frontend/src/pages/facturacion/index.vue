@@ -243,6 +243,23 @@
                         </div>
                       </div>
                     </div>
+                    <div v-if="item.modificaciones?.length" class="mt-3">
+                      <p class="text-caption font-weight-medium mb-1">Modificaciones del proyecto</p>
+                      <div v-for="m in item.modificaciones" :key="m.id" class="text-caption d-flex align-start gap-2 mb-2">
+                        <v-icon size="14" :color="difModificacion(m) >= 0 ? 'warning' : 'info'" class="mt-1">mdi-swap-horizontal</v-icon>
+                        <div>
+                          <strong>{{ m.tipo === 'cambio_oferta' ? `Cambio de oferta ${m.oferta_anterior} → ${m.oferta_nueva}` : 'Ajuste de precio' }}</strong>
+                          · {{ fechaModificacion(m) }}
+                          <div>
+                            Neto {{ clp(m.total_anterior) }} → {{ clp(m.total_nuevo) }}
+                            <strong :class="difModificacion(m) >= 0 ? 'text-warning' : 'text-info'">
+                              ({{ difModificacion(m) >= 0 ? '+' : '−' }}{{ clp(Math.abs(difModificacion(m))) }})
+                            </strong>
+                          </div>
+                          <div v-if="m.motivo" class="text-medium-emphasis">{{ m.motivo }}</div>
+                        </div>
+                      </div>
+                    </div>
                   </v-col>
 
                   <!-- Derecha: historial de emisiones con estado de cobro -->
@@ -1255,6 +1272,11 @@ async function desrepartirDoc(doc, item) {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 const clp = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(n) || 0)
+
+// ── Historial de modificaciones (cambios de oferta / ajustes de precio) ──
+const difModificacion = m => Math.round((Number(m.total_nuevo) || 0) - (Number(m.total_anterior) || 0))
+const fechaModificacion = m => (m.created_at ? new Date(m.created_at).toLocaleDateString('es-CL') : '')
+
 const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-CL') : '-'
 const colorEstado = (e) => ({ aprobada: 'warning', facturada: 'info', pagada: 'success' }[e] || 'grey')
 const textoEstado = (e) => ({ aprobada: 'Por facturar', facturada: 'Facturada', pagada: 'Cobrada' }[e] || e)

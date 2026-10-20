@@ -195,4 +195,9 @@ class Cotizacion extends Model
             }
         });
     }
+
+    public function modificaciones()
+    {
+        return $this->hasMany(CotizacionModificacion::class)->orderBy('created_at')->orderBy('id');
+    }
 }

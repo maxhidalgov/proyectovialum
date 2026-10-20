@@ -187,6 +187,16 @@
               hide-details
             />
           </v-col>
+          <v-col cols="12">
+            <v-text-field
+              v-model="ajuste.motivo"
+              label="Motivo del cambio (opcional)"
+              placeholder="Ej: cliente agregó una ventana"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
           <v-col cols="12" sm="1">
             <v-btn
               color="deep-purple"
@@ -202,6 +212,23 @@
         </v-row>
         <div class="text-caption text-medium-emphasis mt-1">
           El nuevo total se reparte proporcionalmente entre las {{ winperfilDetalles.length }} ventanas.
+        </div>
+        <div v-if="cotizacion?.modificaciones?.length" class="mt-3">
+          <p class="text-caption font-weight-medium mb-1">Modificaciones del proyecto</p>
+          <div v-for="m in cotizacion?.modificaciones" :key="m.id" class="text-caption d-flex align-start gap-2 mb-2">
+            <v-icon size="14" :color="difModificacion(m) >= 0 ? 'warning' : 'info'" class="mt-1">mdi-swap-horizontal</v-icon>
+            <div>
+              <strong>{{ m.tipo === 'cambio_oferta' ? `Cambio de oferta ${m.oferta_anterior} → ${m.oferta_nueva}` : 'Ajuste de precio' }}</strong>
+              · {{ fechaModificacion(m) }}
+              <div>
+                Neto {{ clp(m.total_anterior) }} → {{ clp(m.total_nuevo) }}
+                <strong :class="difModificacion(m) >= 0 ? 'text-warning' : 'text-info'">
+                  ({{ difModificacion(m) >= 0 ? '+' : '−' }}{{ clp(Math.abs(difModificacion(m))) }})
+                </strong>
+              </div>
+              <div v-if="m.motivo" class="text-medium-emphasis">{{ m.motivo }}</div>
+            </div>
+          </div>
         </div>
       </v-card-text>
 
@@ -327,7 +354,11 @@ const dialogSvg  = ref(false)
 const svgAmpliado = ref('')
 
 // ── Ajuste de precio Winperfil ──────────────────────────────────
-const ajuste = ref({ total: null, tipo: 'bruto', loading: false })
+const ajuste = ref({ total: null, tipo: 'bruto', motivo: '', loading: false })
+
+// ── Historial de modificaciones (cambios de oferta / ajustes de precio) ──
+const difModificacion = m => Math.round((Number(m.total_nuevo) || 0) - (Number(m.total_anterior) || 0))
+const fechaModificacion = m => (m.created_at ? new Date(m.created_at).toLocaleDateString('es-CL') : '')
 
 const netoWinperfil = computed(() =>
   winperfilDetalles.value.reduce((s, d) => s + Number(d.total || 0), 0),
@@ -340,11 +371,13 @@ async function aplicarAjustePrecio() {
     const { data } = await api.patch(`/api/cotizaciones/${cotizacion.value.id}/ajustar-precio`, {
       total: ajuste.value.total,
       tipo:  ajuste.value.tipo,
+      motivo: ajuste.value.motivo || undefined,
     })
     // Recargar la cotización con los precios recalculados
     const { data: fresca } = await api.get(`/api/cotizaciones/${cotizacion.value.id}`)
     cotizacion.value = fresca
     ajuste.value.total = null
+    ajuste.value.motivo = ''
     alert(data.message)
   } catch (e) {
     alert(e.response?.data?.message || 'Error al ajustar el precio')

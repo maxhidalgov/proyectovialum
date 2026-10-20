@@ -6,6 +6,7 @@ use App\Models\Cotizacion;
 use App\Models\CotizacionDetalle;
 use App\Models\Cliente;
 use App\Models\EstadoCotizacion;
+use App\Models\OrdenCompra;
 use App\Services\OptimizadorBarrasService;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
@@ -505,6 +506,8 @@ class WinperfilController extends Controller
                     return response()->json(['error' => "La oferta {$nuevoNum} ya está importada en la cotización #{$yaExiste->id}"], 422);
                 }
 
+                $totalAntes = (float) $destino->total;
+                $ofertaAntes = (string) $destino->winperfil_numero;
                 DB::beginTransaction();
                 $previos   = $destino->winperfil_numeros_previos ?? [];
                 $previos[] = ['numero' => (string) $destino->winperfil_numero, 'fecha' => substr((string) $destino->fecha, 0, 10)];
@@ -521,6 +524,17 @@ class WinperfilController extends Controller
             $estados = EstadoCotizacion::all()->keyBy(fn($e) => strtolower($e->nombre));
             $accion  = $this->upsertPresupuesto($pres, $serie, $this->buildEstadoMap($estados));
             if ($reemplazarId) {
+                // Historial: total antes/después (si se ajusta en el modal, se actualiza el total final)
+                $destino->refresh();
+                $destino->modificaciones()->create([
+                    'tipo'            => 'cambio_oferta',
+                    'oferta_anterior' => $ofertaAntes,
+                    'oferta_nueva'    => $nuevoNum,
+                    'total_anterior'  => $totalAntes,
+                    'total_nuevo'     => (float) $destino->total,
+                    'motivo'          => trim((string) $request->get('motivo', '')) ?: null,
+                    'usuario_id'      => auth()->id(),
+                ]);
                 DB::commit();
             }
 
@@ -985,6 +999,122 @@ class WinperfilController extends Controller
             'aviso'        => $aviso,
             'optimizacion' => $resumen,
         ]);
+    }
+
+    /**
+     * Qué falta pedir: compara lo que Winperfil calcula AHORA (barras, rollos, vidrios…) con lo ya
+     * pedido en las órdenes de compra anteriores de la cotización. Sirve cuando se pidió material
+     * con medidas provisorias, o cuando el cliente modificó el proyecto (otra oferta), para generar
+     * una orden complementaria solo con la diferencia.
+     *
+     * GET /api/winperfil/materiales-pendientes?cotizacion_id=X
+     */
+    public function materialesPendientes(Request $request)
+    {
+        $cotizacion = Cotizacion::findOrFail($request->integer('cotizacion_id'));
+
+        $resp = $this->materiales($request);
+        if ($resp->getStatusCode() !== 200) {
+            return $resp;
+        }
+        $mat = $resp->getData(true);
+        if (($mat['fuente'] ?? '') !== 'pedbarra') {
+            return response()->json([
+                'error' => 'Para comparar con lo ya pedido se necesitan las cantidades exactas de Winperfil. ' . ($mat['aviso'] ?? ''),
+            ], 503);
+        }
+
+        $etiquetas = [
+            'perfiles' => 'Perfiles', 'vidrios' => 'Vidrios', 'herrajes' => 'Herrajes',
+            'juntas' => 'Juntas/Felpas/Gomas', 'otros' => 'Otros',
+        ];
+
+        // Lo que se necesita hoy (mismos textos que arma la pantalla al generar una orden)
+        $necesario = [];
+        foreach ($etiquetas as $grupo => $label) {
+            foreach ($mat['compra'][$grupo] ?? [] as $it) {
+                [$detalle, $cantidad] = $this->detalleYCantidadCompra($grupo, $it);
+                $clave = $this->claveCompra($label, $it['referencia'] ?? '', $detalle);
+                $necesario[$clave] ??= [
+                    'categoria' => $label, 'referencia' => $it['referencia'] ?? '',
+                    'descripcion' => $it['descripcion'] ?? '', 'detalle' => $detalle, 'cantidad' => 0,
+                ];
+                $necesario[$clave]['cantidad'] += $cantidad;
+            }
+        }
+
+        // Lo que ya se pidió en órdenes anteriores de esta cotización
+        $ordenes = OrdenCompra::where('cotizacion_id', $cotizacion->id)->orderBy('id')->get();
+        $pedido = [];
+        foreach ($ordenes as $o) {
+            foreach ($o->items ?? [] as $it) {
+                $clave = $this->claveCompra($it['categoria'] ?? '', $it['referencia'] ?? '', $it['detalle'] ?? '');
+                $pedido[$clave] ??= $it + ['cantidad' => 0];
+                $pedido[$clave]['_total'] = ($pedido[$clave]['_total'] ?? 0) + (float) ($it['cantidad'] ?? 0);
+            }
+        }
+
+        $limpio = fn ($n) => ((float) (int) round($n, 2) === round($n, 2)) ? (int) round($n, 2) : round($n, 2);
+        $faltan = [];
+        $sobran = [];
+        $cubiertos = 0;
+        foreach ($necesario as $clave => $n) {
+            $ya   = (float) ($pedido[$clave]['_total'] ?? 0);
+            $dif  = round($n['cantidad'] - $ya, 2);
+            $fila = $n + ['necesario' => $limpio($n['cantidad']), 'pedido' => $limpio($ya)];
+            if ($dif > 0.004) {
+                $fila['cantidad'] = $limpio($dif);   // lo que falta: listo para ir en la orden
+                $faltan[] = $fila;
+            } elseif ($dif < -0.004) {
+                $fila['cantidad'] = $limpio(-$dif);  // lo que sobra
+                $sobran[] = $fila;
+            } else {
+                $cubiertos++;
+            }
+        }
+        foreach ($pedido as $clave => $it) {
+            if (!isset($necesario[$clave])) {        // se pidió algo que ya no se necesita
+                $ya = (float) ($it['_total'] ?? 0);
+                $sobran[] = [
+                    'categoria' => $it['categoria'] ?? '', 'referencia' => $it['referencia'] ?? '',
+                    'descripcion' => $it['descripcion'] ?? '', 'detalle' => $it['detalle'] ?? '',
+                    'cantidad' => $limpio($ya), 'necesario' => 0, 'pedido' => $limpio($ya),
+                ];
+            }
+        }
+
+        return response()->json([
+            'ordenes'   => $ordenes->map(fn ($o) => [
+                'id' => $o->id, 'numero' => $o->numero,
+                'fecha' => $o->created_at?->toDateTimeString(), 'items' => is_array($o->items) ? count($o->items) : 0,
+            ])->values(),
+            'faltan'    => $faltan,
+            'sobran'    => $sobran,
+            'cubiertos' => $cubiertos,
+        ]);
+    }
+
+    /** Detalle y cantidad de un ítem de compra, igual a como los arma la pantalla para la orden. */
+    private function detalleYCantidadCompra(string $grupo, array $it): array
+    {
+        if ($grupo === 'vidrios') {
+            return [($it['ancho'] ?? 0) . '×' . ($it['alto'] ?? 0) . ' mm', (float) ($it['cantidad'] ?? 0)];
+        }
+        if ($grupo === 'perfiles') {
+            if (($it['barras'] ?? null) !== null) {
+                return ['barras de ' . ($it['largo_barra_m'] ?? '') . ' m' . (!empty($it['color']) ? ' · ' . $it['color'] : ''), (float) $it['barras']];
+            }
+            return ['metros lineales', (float) ($it['metros_lineales'] ?? 0)];
+        }
+        return ['', (float) ($it['cantidad'] ?? 0)];
+    }
+
+    /** Identifica un ítem entre la necesidad y lo pedido: categoría + referencia (+ medida en vidrios). */
+    private function claveCompra(string $categoria, string $referencia, string $detalle): string
+    {
+        $cat = mb_strtolower(trim($categoria));
+        $med = str_contains($cat, 'vidrio') ? preg_replace('/\s+/', '', $detalle) : '';
+        return $cat . '|' . mb_strtolower(trim($referencia)) . '|' . $med;
     }
 
     /**

@@ -35,7 +35,6 @@ Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-en
 - [ ] 2026-10-05 — Apache local sirve toda la carpeta htdocs (se tapó con `.htaccess` en la raíz): apuntarlo solo a `public/` o usar `artisan serve`; decidir si el `.htaccess` se commitea
 
 Winperfil:
-- [ ] 2026-10-17 — Orden de compra complementaria: materiales de la oferta nueva menos lo ya pedido (caso Juan Cea 754→893), usando pedbarra de cada oferta
 - [ ] 2026-10-17 — Winperfil: control de costo/margen por obra con PERFCOSTE/ACCCOSTE/VIDCOSTE/MANOCOSTE de la cabecera de oferta
 - [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
 
@@ -46,6 +45,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-20 → 2026-10-20 — Historial de modificaciones de la cotización (cambio de oferta / ajuste de precio, con total antes/después y motivo) y orden de compra complementaria (pestaña "Falta pedir": lo que Winperfil calcula hoy menos lo ya pedido)
 - [x] 2026-10-17 → 2026-10-17 — Materiales Winperfil: lista de compra y hoja de cortes con las barras exactas de pedbarra (largo real, color, rollos, sin mano de obra) y acomodo de cortes que cuadra con Winperfil
 - [x] 2026-10-17 → 2026-10-17 — Winperfil: botón "Cambiar oferta" para que una cotización pase a la oferta nueva cuando el cliente modifica el presupuesto aceptado (sin duplicar)
 - [x] 2026-10-09 → 2026-10-09 — Winperfil: cotizaciones de distintos clientes con el mismo NUMFACTURA (725 Ar Alena vs PESA) ya no se pisan; #181 restaurada a Ar Alena por migración

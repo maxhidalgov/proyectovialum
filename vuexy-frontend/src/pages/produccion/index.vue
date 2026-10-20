@@ -286,6 +286,7 @@
           <v-tab value="compra"><v-icon size="16" class="mr-1">mdi-cart</v-icon>Lista de compra</v-tab>
           <v-tab value="ventana"><v-icon size="16" class="mr-1">mdi-format-list-bulleted</v-icon>Despiece por ventana</v-tab>
           <v-tab value="cortes"><v-icon size="16" class="mr-1">mdi-content-cut</v-icon>Hoja de cortes</v-tab>
+          <v-tab value="pendiente"><v-icon size="16" class="mr-1">mdi-cart-plus</v-icon>Falta pedir</v-tab>
         </v-tabs>
         <v-divider />
 
@@ -332,7 +333,7 @@
                     size="small"
                     prepend-icon="mdi-cart-arrow-down"
                     :disabled="!nSeleccionados"
-                    @click="abrirDialogOrden"
+                    @click="abrirDialogOrden()"
                   >
                     Generar orden de compra
                   </v-btn>
@@ -428,6 +429,86 @@
               </v-expansion-panels>
             </v-window-item>
 
+            <!-- TAB falta pedir (orden complementaria) -->
+            <v-window-item value="pendiente">
+              <div v-if="pendiente.loading" class="text-center py-10">
+                <v-progress-circular indeterminate color="deep-purple" />
+                <div class="text-caption text-medium-emphasis mt-3">Comparando con las órdenes anteriores...</div>
+              </div>
+              <v-alert v-else-if="pendiente.error" type="warning" variant="tonal" density="compact">
+                {{ pendiente.error }}
+              </v-alert>
+              <template v-else-if="pendiente.data">
+                <v-alert type="info" variant="tonal" density="compact" class="mb-3 text-caption">
+                  <template v-if="pendiente.data.ordenes.length">
+                    Se compara lo que Winperfil calcula <strong>hoy</strong> con lo ya pedido en
+                    <strong>{{ pendiente.data.ordenes.map(o => o.numero).join(', ') }}</strong>.
+                  </template>
+                  <template v-else>
+                    Todavía no hay órdenes de compra de esta obra: todo lo de la lista de compra está por pedir.
+                  </template>
+                </v-alert>
+
+                <div class="d-flex align-center justify-space-between mb-2 flex-wrap gap-2">
+                  <div class="text-subtitle-2 font-weight-bold">
+                    Falta pedir
+                    <v-chip size="x-small" color="deep-purple" variant="tonal" class="ml-1">{{ pendiente.data.faltan.length }}</v-chip>
+                    <span class="text-caption text-medium-emphasis font-weight-regular ml-2">{{ pendiente.data.cubiertos }} ítems ya cubiertos</span>
+                  </div>
+                  <v-btn
+                    color="deep-purple" size="small" prepend-icon="mdi-cart-arrow-down"
+                    :disabled="!pendiente.data.faltan.length"
+                    @click="abrirOrdenComplementaria"
+                  >
+                    Generar orden complementaria
+                  </v-btn>
+                </div>
+                <v-table v-if="pendiente.data.faltan.length" density="compact" class="mb-4">
+                  <thead>
+                    <tr>
+                      <th class="text-left">Referencia</th><th class="text-left">Descripción</th>
+                      <th class="text-right">Necesario</th><th class="text-right">Ya pedido</th><th class="text-right">Falta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(it, i) in pendiente.data.faltan" :key="'f' + i">
+                      <td class="font-monospace text-caption">{{ it.referencia || '—' }}</td>
+                      <td class="text-caption">{{ it.descripcion }}<div v-if="it.detalle" class="text-medium-emphasis">{{ it.detalle }}</div></td>
+                      <td class="text-right">{{ it.necesario }}</td>
+                      <td class="text-right text-medium-emphasis">{{ it.pedido }}</td>
+                      <td class="text-right font-weight-bold text-deep-purple">{{ it.cantidad }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+                <div v-else class="text-caption text-medium-emphasis mb-4">No falta pedir nada: lo pedido cubre lo que Winperfil calcula hoy.</div>
+
+                <template v-if="pendiente.data.sobran.length">
+                  <div class="text-subtitle-2 font-weight-bold mb-1">
+                    Pedido de más
+                    <v-chip size="x-small" color="orange" variant="tonal" class="ml-1">{{ pendiente.data.sobran.length }}</v-chip>
+                    <span class="text-caption text-medium-emphasis font-weight-regular ml-2">queda de sobrante, no se descuenta</span>
+                  </div>
+                  <v-table density="compact">
+                    <thead>
+                      <tr>
+                        <th class="text-left">Referencia</th><th class="text-left">Descripción</th>
+                        <th class="text-right">Necesario</th><th class="text-right">Ya pedido</th><th class="text-right">Sobra</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(it, i) in pendiente.data.sobran" :key="'s' + i">
+                        <td class="font-monospace text-caption">{{ it.referencia || '—' }}</td>
+                        <td class="text-caption">{{ it.descripcion }}<div v-if="it.detalle" class="text-medium-emphasis">{{ it.detalle }}</div></td>
+                        <td class="text-right">{{ it.necesario }}</td>
+                        <td class="text-right text-medium-emphasis">{{ it.pedido }}</td>
+                        <td class="text-right font-weight-bold text-orange">{{ it.cantidad }}</td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </template>
+              </template>
+            </v-window-item>
+
             <!-- TAB hoja de cortes -->
             <v-window-item value="cortes">
               <div v-if="hojaCortes.loading" class="text-center py-10">
@@ -475,7 +556,7 @@
       <v-card>
         <v-card-title class="text-body-1 font-weight-bold pa-4">
           <v-icon color="deep-purple" class="mr-1">mdi-cart-arrow-down</v-icon>
-          Orden de compra ({{ nSeleccionados }} ítems)
+          Orden de compra ({{ dialogOrden.items ? dialogOrden.items.length : nSeleccionados }} ítems)
         </v-card-title>
         <v-card-text>
           <template v-if="!dialogOrden.ordenId">
@@ -585,6 +666,7 @@ async function abrirMateriales(cotizacion, recalcular = false) {
   cotizacionMat.value = cotizacion
   cotizacionMatId.value = cotizacion.id
   hojaCortes.value = { loading: false, error: '', data: null }
+  pendiente.value = { loading: false, error: '', data: null }
   dialogMat.value = {
     show: true, loading: true, error: '',
     cliente: cotizacion.cliente, numero: cotizacion.winperfil_numero,
@@ -602,6 +684,28 @@ async function abrirMateriales(cotizacion, recalcular = false) {
     dialogMat.value.loading = false
   }
 }
+
+// Falta pedir: compara lo que Winperfil calcula hoy con las órdenes de compra anteriores
+const pendiente = ref({ loading: false, error: '', data: null })
+
+async function cargarPendiente() {
+  pendiente.value = { loading: true, error: '', data: null }
+  try {
+    const { data } = await api.get('/api/winperfil/materiales-pendientes', {
+      params: { cotizacion_id: cotizacionMatId.value },
+      timeout: 300000,
+    })
+    pendiente.value.data = data
+  } catch (e) {
+    pendiente.value.error = e.response?.data?.error || 'No se pudo comparar con las órdenes anteriores'
+  } finally {
+    pendiente.value.loading = false
+  }
+}
+
+watch(() => dialogMat.value.tab, tab => {
+  if (tab === 'pendiente' && !pendiente.value.data && !pendiente.value.loading) cargarPendiente()
+})
 
 // Cargar la hoja de cortes solo cuando se entra a esa tab (es una llamada extra a Winperfil)
 watch(() => dialogMat.value.tab, async (tab) => {
@@ -670,16 +774,25 @@ const itemsSeleccionados = computed(() => {
 
 // ── Orden de compra ───────────────────────────────────────────────
 const proveedores = ref([])
-const dialogOrden = ref({ show: false, proveedorId: null, observaciones: '', creando: false, ordenId: null, numero: '' })
+const dialogOrden = ref({ show: false, proveedorId: null, observaciones: '', creando: false, ordenId: null, numero: '', items: null })
 
-async function abrirDialogOrden() {
-  dialogOrden.value = { show: true, proveedorId: null, observaciones: '', creando: false, ordenId: null, numero: '' }
+// items = null → los seleccionados en la lista de compra; con lista → orden complementaria
+async function abrirDialogOrden(items = null, observaciones = '') {
+  dialogOrden.value = { show: true, proveedorId: null, observaciones, creando: false, ordenId: null, numero: '', items }
   if (!proveedores.value.length) {
     try {
       const { data } = await api.get('/api/proveedores')
       proveedores.value = Array.isArray(data) ? data : (data?.data ?? [])
     } catch { /* sin proveedores, se puede crear sin uno */ }
   }
+}
+
+function abrirOrdenComplementaria() {
+  const items = pendiente.value.data.faltan.map(it => ({
+    categoria: it.categoria, referencia: it.referencia, descripcion: it.descripcion,
+    detalle: it.detalle, cantidad: it.cantidad,
+  }))
+  abrirDialogOrden(items, 'Orden complementaria: diferencia con los pedidos anteriores')
 }
 
 async function crearOrden() {
@@ -689,8 +802,9 @@ async function crearOrden() {
       cotizacion_id: cotizacionMatId.value,
       proveedor_id:  dialogOrden.value.proveedorId,
       observaciones: dialogOrden.value.observaciones || null,
-      items:         itemsSeleccionados.value,
+      items:         dialogOrden.value.items ?? itemsSeleccionados.value,
     })
+    pendiente.value = { loading: false, error: '', data: null }   // la comparación quedó vieja
     dialogOrden.value.ordenId = data.id
     dialogOrden.value.numero  = data.numero
     mostrarSnack(`Orden ${data.numero} creada`)

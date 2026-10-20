@@ -466,6 +466,15 @@
               </template>
             </VRadio>
           </VRadioGroup>
+          <VTextField
+            v-model="cambiarOferta.motivo"
+            class="mt-4"
+            label="Motivo del cambio (opcional)"
+            placeholder="Ej: el cliente agregó una ventana"
+            density="compact"
+            variant="outlined"
+            hide-details
+          />
           <VAlert type="info" variant="tonal" density="compact" class="mt-4 text-body-2">
             Se mantienen el estado de producción, el pedido a proveedor, el material y el cliente.
             Las ventanas y el total se actualizan desde Winperfil, y después podrás fijar el total final.
@@ -644,20 +653,20 @@ async function cargarPresupuestos() {
   }
 }
 
-const cambiarOferta = ref({ show: false, item: null, hermanaId: null })
+const cambiarOferta = ref({ show: false, item: null, hermanaId: null, motivo: '' })
 
 function abrirCambiarOferta(item) {
-  cambiarOferta.value = { show: true, item, hermanaId: item._hermanas.length === 1 ? item._hermanas[0].id : null }
+  cambiarOferta.value = { show: true, item, hermanaId: item._hermanas.length === 1 ? item._hermanas[0].id : null, motivo: '' }
 }
 
 async function confirmarCambiarOferta() {
   const { item, hermanaId } = cambiarOferta.value
   if (!item || !hermanaId) return
-  await syncUno(item, hermanaId)
+  await syncUno(item, hermanaId, cambiarOferta.value.motivo)
   cambiarOferta.value.show = false
 }
 
-async function syncUno(item, reemplazarCotizacionId = null) {
+async function syncUno(item, reemplazarCotizacionId = null, motivo = '') {
   const id = item.NUMFACTURA ?? item.PRESUPUESTO_NUMERO
   syncingId.value = id
   try {
@@ -668,7 +677,7 @@ async function syncUno(item, reemplazarCotizacionId = null) {
       serie: item.PRESUPUESTO_SERIE || filtros.value.serie,
       numero: item.PRESUPUESTO_NUMERO,
       numfactura: item.NUMFACTURA,
-      ...(reemplazarCotizacionId ? { reemplazar_cotizacion_id: reemplazarCotizacionId } : {}),
+      ...(reemplazarCotizacionId ? { reemplazar_cotizacion_id: reemplazarCotizacionId, motivo: motivo || undefined } : {}),
     })
     // Refrescar estado sync
     await cargarPresupuestos()

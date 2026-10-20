@@ -276,7 +276,8 @@ public function store(Request $request)
         'estado',
         'detalles.productoLista.tipoProducto',
         'detalles.productoLista.unidad',
-        'detalles.listaPrecio'
+        'detalles.listaPrecio',
+        'modificaciones',
     ])->findOrFail($id);
 
 
@@ -914,9 +915,23 @@ public function store(Request $request)
         // ingresa un bruto, le quitamos el IVA (19%) para obtener el neto a distribuir.
         $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / 1.19) : (float) $data['total'];
 
+        $netoAntes = (float) $cotizacion->total;
+
         \DB::beginTransaction();
         try {
             $this->prorratearWinperfilNeto($cotizacion, $nuevoNeto);
+            // Historial: solo si el total realmente cambió
+            if (abs(round($nuevoNeto) - $netoAntes) >= 1) {
+                $cotizacion->modificaciones()->create([
+                    'tipo'            => 'ajuste_precio',
+                    'oferta_anterior' => $cotizacion->winperfil_numero,
+                    'oferta_nueva'    => $cotizacion->winperfil_numero,
+                    'total_anterior'  => $netoAntes,
+                    'total_nuevo'     => round($nuevoNeto),
+                    'motivo'          => trim((string) $request->input('motivo', '')) ?: null,
+                    'usuario_id'      => auth()->id(),
+                ]);
+            }
             \DB::commit();
         } catch (\Throwable $e) {
             \DB::rollBack();
@@ -997,6 +1012,12 @@ public function store(Request $request)
             if (isset($data['total']) && $data['total'] > 0 && !empty($data['tipo'])) {
                 $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / 1.19) : (float) $data['total'];
                 $this->prorratearWinperfilNeto($cotizacion, $nuevoNeto);
+
+                // Si acaba de hacerse "Cambiar oferta", el total final es el que se fija aquí
+                $mod = $cotizacion->modificaciones()->where('tipo', 'cambio_oferta')->latest('id')->first();
+                if ($mod && (string) $mod->oferta_nueva === (string) $cotizacion->winperfil_numero) {
+                    $mod->update(['total_nuevo' => round($nuevoNeto)]);
+                }
             }
             \DB::commit();
         } catch (\Throwable $e) {
@@ -1304,7 +1325,8 @@ public function getAprobadas()
                     'listaPrecio.color',
                 ]);
             },
-            'estado'
+            'estado',
+            'modificaciones',
         ])
         ->whereHas('estado', function($query) {
             // Entregada / En Producción también se facturan (el flujo es Entregada → Facturada)
