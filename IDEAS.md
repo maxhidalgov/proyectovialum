@@ -38,6 +38,7 @@ Producción y bot (ideas del dueño, 2026-10-20):
 - [ ] 2026-10-20 — Servicio compartido "aprobar y pedir material" (app + bot): botón de un solo paso en la web y, sobre eso, el bot ("aprueba la 196") con vista previa, preguntas necesarias (total, anticipo, material/EETT, proveedor) y confirmación. Antes: permisos por número y rotar el token del bot
 - [ ] 2026-10-20 — Bot: seguimiento de obras aprobadas sin cambio de estado en N días (umbral por etapa), aviso diario con resumen y respuesta en lenguaje natural que actualiza estado/nota/pausa; columna "Días sin movimiento" en Operaciones
 - [ ] 2026-10-20 — Bot → calendario: "mañana vamos a medir donde Juanito Pérez / instalar donde Pedrito" crea el evento (calendario/recordatorios/visitas_cliente existentes) vinculado a la obra, y pregunta después si se hizo; también anotar cosas en el calendario
+- [ ] 2026-10-20 — Bot: seguimiento de cotizaciones SIN aprobar (Evaluación/Enviada): aviso diario escalonado (3/7/15 días) ordenado por monto, responder "llamé, quedó en responder el viernes" (nota + nuevo recordatorio) / "rechazó" / "aprobó" (inicia la aprobación); limpieza de las antiguas (hoy 41 de 42 llevan +7 días sin tocarse y solo 1 pasó por "Enviar" de la app); opcional: presupuestos Winperfil sin aceptar sin importarlos
 - [ ] 2026-10-20 — Ciclo semanal de proveedor (Winhouse viene los miércoles): recordar el martes en la mañana las obras con `pedido_proveedor` sin marcar, y armar el pedido consolidado
 
 Winperfil:
