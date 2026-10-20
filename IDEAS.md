@@ -34,6 +34,12 @@ Créditos de API y seguridad (incidente: ver memoria `incidente-credito-api-y-en
 - [ ] 2026-10-05 — Bot: probar "precio de compra ángulo revestimiento" en prod; si no aparece, cargar los XML pendientes de Compras (la factura Haustek 269051 de sep-2026 debe tener sus líneas)
 - [ ] 2026-10-05 — Apache local sirve toda la carpeta htdocs (se tapó con `.htaccess` en la raíz): apuntarlo solo a `public/` o usar `artisan serve`; decidir si el `.htaccess` se commitea
 
+Producción y bot (ideas del dueño, 2026-10-20):
+- [ ] 2026-10-20 — Servicio compartido "aprobar y pedir material" (app + bot): botón de un solo paso en la web y, sobre eso, el bot ("aprueba la 196") con vista previa, preguntas necesarias (total, anticipo, material/EETT, proveedor) y confirmación. Antes: permisos por número y rotar el token del bot
+- [ ] 2026-10-20 — Bot: seguimiento de obras aprobadas sin cambio de estado en N días (umbral por etapa), aviso diario con resumen y respuesta en lenguaje natural que actualiza estado/nota/pausa; columna "Días sin movimiento" en Operaciones
+- [ ] 2026-10-20 — Bot → calendario: "mañana vamos a medir donde Juanito Pérez / instalar donde Pedrito" crea el evento (calendario/recordatorios/visitas_cliente existentes) vinculado a la obra, y pregunta después si se hizo; también anotar cosas en el calendario
+- [ ] 2026-10-20 — Ciclo semanal de proveedor (Winhouse viene los miércoles): recordar el martes en la mañana las obras con `pedido_proveedor` sin marcar, y armar el pedido consolidado
+
 Winperfil:
 - [ ] 2026-10-17 — Winperfil: control de costo/margen por obra con PERFCOSTE/ACCCOSTE/VIDCOSTE/MANOCOSTE de la cabecera de oferta
 - [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
