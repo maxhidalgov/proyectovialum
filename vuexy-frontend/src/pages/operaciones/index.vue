@@ -213,7 +213,7 @@
                         </v-btn>
                       </template>
                       <template v-else>
-                        <v-tooltip location="top" max-width="340">
+                        <v-tooltip location="top" max-width="340" content-class="op-tooltip">
                           <template #activator="{ props }">
                             <a v-bind="props" class="cliente-link font-weight-medium" @click.stop="abrirDetalle(item)">{{ item.cliente }}</a>
                           </template>
@@ -222,7 +222,7 @@
                             <div>{{ item.cant_ventanas }} ventana(s) · {{ item.m2 }} m² · {{ item.material }}<span v-if="item.eett"> · {{ item.eett }}</span></div>
                             <div>{{ item.estado_produccion || 'Sin estado de producción' }}<span v-if="item.vendedor"> · {{ item.vendedor }}</span></div>
                             <div>Total {{ fmt(item.total) }} · Deuda {{ fmt(item.saldo) }}</div>
-                            <div class="mt-1 text-medium-emphasis">Haz clic para ver el detalle</div>
+                            <div class="mt-1 op-tooltip-sub">Haz clic para ver el detalle</div>
                           </div>
                         </v-tooltip>
                         <v-icon v-if="estaVencida(item)" color="error" size="13" title="Entrega vencida">mdi-calendar-alert</v-icon>
@@ -293,7 +293,7 @@
                   </td>
                   <!-- Semáforo técnico (Winperfil): 🔴 falta oferta · 🟡 medidas provisorias · 🟢 definitiva -->
                   <td class="text-center">
-                    <v-tooltip v-if="item.tecnico" :text="item.tecnico.texto" location="top">
+                    <v-tooltip v-if="item.tecnico" :text="item.tecnico.texto" location="top" content-class="op-tooltip">
                       <template #activator="{ props }">
                         <v-icon
                           v-bind="props" size="18"
@@ -469,7 +469,7 @@
 
           <!-- Semáforo técnico (Winperfil): 🔴 falta oferta · 🟡 medidas provisorias · 🟢 definitiva -->
           <template #item.tecnico="{ item }">
-            <v-tooltip v-if="item.tecnico" :text="item.tecnico.texto" location="top">
+            <v-tooltip v-if="item.tecnico" :text="item.tecnico.texto" location="top" content-class="op-tooltip">
               <template #activator="{ props }">
                 <v-icon
                   v-bind="props" size="18"
@@ -1557,6 +1557,22 @@ function fmtFechaCorta(iso) {
   return `${d}-${m}`
 }
 </script>
+
+<style>
+/* Los cuadros emergentes (tooltip) se dibujan fuera de la página: necesitan estilo global, con colores explícitos del tema activo */
+.op-tooltip {
+  background: rgb(var(--v-theme-surface)) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border: 1px solid rgba(var(--v-border-color), 0.6);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  opacity: 1 !important;
+  padding: 8px 12px;
+}
+.op-tooltip .op-tooltip-sub {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+</style>
 
 <style scoped>
 .operaciones-table :deep(td) {
