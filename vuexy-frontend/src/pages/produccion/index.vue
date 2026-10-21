@@ -303,6 +303,14 @@
           <v-window v-else v-model="dialogMat.tab">
             <!-- TAB compra -->
             <v-window-item value="compra">
+              <v-chip
+                v-if="dialogMat.data?.tecnico"
+                size="small" variant="tonal" class="mb-2"
+                :color="dialogMat.data.tecnico.nivel === 'rojo' ? 'error' : dialogMat.data.tecnico.nivel === 'amarillo' ? 'warning' : 'success'"
+                prepend-icon="mdi-circle"
+              >
+                {{ dialogMat.data.tecnico.texto }}
+              </v-chip>
               <v-alert
                 v-if="dialogMat.data?.fuente === 'lismonta'"
                 type="warning" variant="tonal" density="compact" class="mb-3 text-caption"

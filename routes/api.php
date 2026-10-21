@@ -523,6 +523,10 @@ Route::middleware('auth:api')->group(function () {
         // Lista de materiales (lismonta, en vivo)
         Route::get('/materiales',               [WinperfilController::class, 'materiales']);
         Route::get('/materiales-pendientes',    [WinperfilController::class, 'materialesPendientes']);
+        // Pendientes técnicos (semáforo 🔴🟡🟢)
+        Route::get('/pendientes',               [WinperfilController::class, 'pendientes']);
+        Route::get('/pendientes/{id}/ofertas',  [WinperfilController::class, 'ofertasCandidatas']);
+        Route::patch('/estado-tecnico',         [WinperfilController::class, 'estadoTecnico']);
         // Hoja de cortes (bin-packing sobre lismonta; pedbarra a futuro)
         Route::get('/hoja-cortes',              [WinperfilController::class, 'hojaCortes']);
 

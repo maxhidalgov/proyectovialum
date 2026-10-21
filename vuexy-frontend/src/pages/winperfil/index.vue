@@ -201,6 +201,10 @@
         <VIcon size="16" class="mr-1">mdi-magnify</VIcon>
         Winperfil Live ({{ presupuestosWin.length }})
       </VTab>
+      <VTab value="pendientes">
+        <VIcon start size="16">mdi-clipboard-alert-outline</VIcon>
+        Pendientes técnicos ({{ pendientes.length }})
+      </VTab>
       <VTab value="sync">
         <VIcon size="16" class="mr-1">mdi-database-check</VIcon>
         Sincronizados ({{ cotizSyncCount }})
@@ -316,6 +320,58 @@
       </VWindowItem>
 
       <!-- TAB 2: Cotizaciones ya sincronizadas -->
+      <VWindowItem value="pendientes">
+        <VCard>
+          <VCardText>
+            <div class="d-flex align-center justify-space-between mb-3 flex-wrap gap-2">
+              <div class="text-body-2 text-medium-emphasis">
+                Proyectos aprobados a los que aún les falta algo del lado de Winperfil para fabricar con cantidades exactas.
+              </div>
+              <VBtn size="small" variant="tonal" prepend-icon="mdi-refresh" :loading="cargandoPend" @click="cargarPendientes">Actualizar</VBtn>
+            </div>
+            <VAlert v-if="!pendientes.length && !cargandoPend" type="success" variant="tonal" density="compact">
+              Todo al día: ningún proyecto está esperando algo en Winperfil.
+            </VAlert>
+            <VTable v-else density="comfortable">
+              <thead>
+                <tr>
+                  <th style="width:36px"></th>
+                  <th>Cliente</th>
+                  <th>Qué falta</th>
+                  <th>Desde</th>
+                  <th class="text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in pendientes" :key="p.id">
+                  <td><VIcon size="14" :color="p.nivel === 'rojo' ? 'error' : 'warning'">mdi-circle</VIcon></td>
+                  <td>
+                    <div class="font-weight-medium">{{ p.cliente }}</div>
+                    <div class="text-caption text-medium-emphasis">Cot. #{{ p.id }} · WP {{ p.winperfil_numero }} · {{ clp(p.total_bruto) }}</div>
+                  </td>
+                  <td>
+                    {{ p.texto }}
+                    <div v-if="p.nivel === 'rojo' && p.ventanas.length" class="text-caption text-medium-emphasis">
+                      Vendido: {{ p.ventanas.join(' · ') }}
+                    </div>
+                    <div v-else-if="p.pedido_proveedor" class="text-caption text-medium-emphasis">Ya hay material pedido</div>
+                  </td>
+                  <td :class="p.dias >= 2 ? 'text-error font-weight-medium' : ''">{{ p.dias }} d</td>
+                  <td class="text-right">
+                    <VBtn v-if="p.nivel === 'rojo'" size="x-small" color="primary" variant="tonal" @click="buscarOfertas(p)">
+                      Buscar oferta en Winperfil
+                    </VBtn>
+                    <VBtn v-else size="x-small" color="success" variant="tonal" @click="marcarDefinitiva(p)">
+                      Pauta definitiva lista
+                    </VBtn>
+                  </td>
+                </tr>
+              </tbody>
+            </VTable>
+          </VCardText>
+        </VCard>
+      </VWindowItem>
+
       <VWindowItem value="sync">
         <VCard>
           <VCardText class="pb-0">
@@ -438,6 +494,49 @@
         </VCard>
       </VWindowItem>
     </VWindow>
+
+    <!-- ── Modal: ofertas de Winperfil para vincular como oferta técnica ───────── -->
+    <VDialog v-model="ofertasDialog.show" max-width="560">
+      <VCard v-if="ofertasDialog.item">
+        <VCardItem>
+          <VCardTitle>Oferta técnica en Winperfil</VCardTitle>
+          <VCardSubtitle>{{ ofertasDialog.item.cliente }} · presupuesto {{ ofertasDialog.item.presupuesto }}</VCardSubtitle>
+        </VCardItem>
+        <VCardText>
+          <div v-if="ofertasDialog.loading" class="text-center py-6"><VProgressCircular indeterminate color="primary" /></div>
+          <VAlert v-else-if="ofertasDialog.error" type="warning" variant="tonal" density="compact">{{ ofertasDialog.error }}</VAlert>
+          <template v-else>
+            <p class="text-body-2 mb-3">
+              Vendido: <strong>{{ ofertasDialog.item.ventanas.join(' · ') }}</strong>.
+              Crea en Winperfil una oferta con solo eso y vincúlala aquí: <strong>se conserva el precio acordado</strong>,
+              cambian los materiales y cortes a los exactos.
+            </p>
+            <VAlert v-if="!ofertasDialog.ofertas.length" type="info" variant="tonal" density="compact">
+              Todavía no hay otra oferta de este presupuesto en Winperfil. Créala allá (duplica la oferta y deja solo lo vendido) y vuelve a buscar.
+            </VAlert>
+            <VList v-else density="compact" lines="two">
+              <VListItem v-for="o in ofertasDialog.ofertas" :key="o.numfactura" class="px-0">
+                <VListItemTitle>
+                  Oferta {{ o.orden }} · N° {{ o.numfactura }}
+                  <VChip v-if="o.aceptado === 'T'" size="x-small" color="success" variant="tonal" class="ml-1">Aceptada</VChip>
+                </VListItemTitle>
+                <VListItemSubtitle>{{ o.lineas }} línea(s) · {{ clp(o.total_bruto) }} con IVA · {{ o.fecha }}</VListItemSubtitle>
+                <template #append>
+                  <VBtn size="small" color="primary" :loading="ofertasDialog.vinculando === o.numfactura" @click="vincularOferta(o)">Vincular</VBtn>
+                </template>
+              </VListItem>
+            </VList>
+          </template>
+        </VCardText>
+        <VCardActions>
+          <VSpacer />
+          <VBtn variant="text" @click="ofertasDialog.show = false">Cerrar</VBtn>
+          <VBtn variant="text" prepend-icon="mdi-refresh" :disabled="ofertasDialog.loading" @click="buscarOfertas(ofertasDialog.item)">Volver a buscar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <VSnackbar v-model="snackPend.show" :color="snackPend.color" timeout="4000">{{ snackPend.text }}</VSnackbar>
 
     <!-- ── Modal: cambiar la oferta vigente de una cotización existente ─────── -->
     <VDialog v-model="cambiarOferta.show" max-width="560">
@@ -569,12 +668,13 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import axios from '@/axiosInstance'
 import MoneyField from '@/components/documentos/MoneyField.vue'
 import { asegurarGraficosCotizacion } from '@/composables/useSvgToPng'
 
 const router = useRouter()
+const route = useRoute()
 
 // ── Estado de conexión ─────────────────────────────────────────────────────────
 const conexion = ref({ ok: null, mensaje: '' })
@@ -609,7 +709,71 @@ const filtroCliente = ref('')
 const filtroEstado  = ref(null)
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-const tab = ref('preview')
+const tab = ref(route.query.tab === 'pendientes' ? 'pendientes' : 'preview')
+
+// ── Pendientes técnicos (semáforo 🔴🟡🟢) ───────────────────────────────────────
+const pendientes = ref([])
+const cargandoPend = ref(false)
+const snackPend = ref({ show: false, text: '', color: 'success' })
+const ofertasDialog = ref({ show: false, item: null, loading: false, error: '', ofertas: [], vinculando: null })
+
+async function cargarPendientes() {
+  cargandoPend.value = true
+  try {
+    const { data } = await axios.get('/api/winperfil/pendientes')
+    pendientes.value = data.items || []
+  } catch (e) {
+    console.error(e)
+  } finally {
+    cargandoPend.value = false
+  }
+}
+
+async function buscarOfertas(p) {
+  ofertasDialog.value = { show: true, item: p, loading: true, error: '', ofertas: [], vinculando: null }
+  try {
+    const { data } = await axios.get(`/api/winperfil/pendientes/${p.id}/ofertas`)
+    ofertasDialog.value.ofertas = data.ofertas || []
+  } catch (e) {
+    ofertasDialog.value.error = e.response?.data?.error || 'No se pudo consultar Winperfil'
+  } finally {
+    ofertasDialog.value.loading = false
+  }
+}
+
+// Vincula la oferta técnica (solo lo vendido) conservando el precio acordado
+async function vincularOferta(o) {
+  const d = ofertasDialog.value
+  d.vinculando = o.numfactura
+  try {
+    await axios.post('/api/winperfil/importar-uno', {
+      serie: 'A',
+      numero: d.item.presupuesto,
+      numfactura: o.numfactura,
+      reemplazar_cotizacion_id: d.item.id,
+      conservar_precio: 1,
+      motivo: 'Oferta técnica de lo vendido (venta parcial)',
+    })
+    d.show = false
+    snackPend.value = { show: true, text: `Oferta ${o.numfactura} vinculada: materiales y cortes ya son los exactos.`, color: 'success' }
+    await Promise.all([cargarPendientes(), cargarSync()])
+  } catch (e) {
+    d.error = e.response?.data?.error || e.response?.data?.message || 'No se pudo vincular la oferta'
+  } finally {
+    d.vinculando = null
+  }
+}
+
+async function marcarDefinitiva(p) {
+  if (!confirm(`¿La pauta definitiva de ${p.cliente} ya está lista en Winperfil?`)) return
+  try {
+    await axios.patch('/api/winperfil/estado-tecnico', { cotizacion_id: p.id, estado: 'definitiva' })
+    snackPend.value = { show: true, text: 'Marcado como definitivo.', color: 'success' }
+    await cargarPendientes()
+  } catch (e) {
+    snackPend.value = { show: true, text: e.response?.data?.message || 'No se pudo actualizar', color: 'error' }
+  }
+}
 
 // ── Tab 1: Presupuestos Winperfil (live) ──────────────────────────────────────
 const loadingWin       = ref(false)
@@ -1041,6 +1205,7 @@ watch(
 )
 
 onMounted(async () => {
+  cargarPendientes()
   await testConexion()
   if (conexion.value.ok) {
     await Promise.all([cargarPresupuestos(), cargarSync()])

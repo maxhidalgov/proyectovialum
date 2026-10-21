@@ -177,6 +177,7 @@ class OperacionesController extends Controller
                 'falta_conciliar'    => $faltaCon,
                 'notas_venta'        => (float) ($notasVenta[$c->id] ?? 0),
                 'pedido_proveedor'   => (bool) $c->pedido_proveedor,
+                'tecnico'            => $esManual ? null : $c->semaforoTecnico(),
                 'estado_produccion'  => $c->estado_produccion,
                 'fecha_entrega'      => $c->fecha_entrega,
                 'notas_operaciones'  => $c->notas_operaciones,

@@ -202,4 +202,37 @@ class Cotizacion extends Model
     {
         return $this->hasMany(CotizacionModificacion::class)->orderBy('created_at')->orderBy('id');
     }
+
+    /**
+     * Semáforo técnico de un proyecto de Winperfil ya aprobado (qué falta del lado de Winperfil
+     * para fabricar con las cantidades exactas). Devuelve ['nivel' => rojo|amarillo|verde, 'texto' => …]
+     * o null si no aplica (no es de Winperfil, aún no se aprueba o ya está instalada).
+     *   rojo     → venta parcial: falta crear la oferta con solo lo vendido
+     *   amarillo → esperando medidas definitivas (con o sin material ya pedido)
+     *   verde    → oferta y medidas definitivas
+     */
+    public function semaforoTecnico(): ?array
+    {
+        if (!$this->winperfil_numero || $this->es_manual) {
+            return null;
+        }
+        // Solo desde que hay venta: Aprobada, En Producción, Entregada, Facturada
+        if (!in_array((int) $this->estado_cotizacion_id, [2, 6, 7, 8], true)) {
+            return null;
+        }
+        $ep = (string) $this->estado_produccion;
+        if ($ep === 'Instalada') {
+            return null;
+        }
+        if ($this->estado_tecnico === 'sin_oferta') {
+            return ['nivel' => 'rojo', 'texto' => 'Falta crear en Winperfil la oferta con solo lo vendido'];
+        }
+        $pasoMedidas = in_array($ep, ['Lista para Corte', 'En Fabricación', 'Fabricadas OK'], true);
+        if ($this->estado_tecnico === 'definitiva' || $pasoMedidas) {
+            return ['nivel' => 'verde', 'texto' => 'Oferta y medidas definitivas'];
+        }
+        return ['nivel' => 'amarillo', 'texto' => $this->pedido_proveedor
+            ? 'Material pedido con medidas provisorias: falta la pauta definitiva'
+            : 'Esperando las medidas definitivas'];
+    }
 }

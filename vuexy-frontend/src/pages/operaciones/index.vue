@@ -438,6 +438,23 @@
             />
           </template>
 
+          <!-- Semáforo técnico (Winperfil): 🔴 falta oferta · 🟡 medidas provisorias · 🟢 definitiva -->
+          <template #item.tecnico="{ item }">
+            <v-tooltip v-if="item.tecnico" :text="item.tecnico.texto" location="top">
+              <template #activator="{ props }">
+                <v-icon
+                  v-bind="props" size="18"
+                  :color="item.tecnico.nivel === 'rojo' ? 'error' : item.tecnico.nivel === 'amarillo' ? 'warning' : 'success'"
+                  :style="item.tecnico.nivel !== 'verde' ? 'cursor:pointer' : ''"
+                  @click="item.tecnico.nivel !== 'verde' && irAPendientesTecnicos()"
+                >
+                  mdi-circle
+                </v-icon>
+              </template>
+            </v-tooltip>
+            <span v-else class="text-medium-emphasis">—</span>
+          </template>
+
           <!-- Estado producción -->
           <template #item.estado_produccion="{ item }">
             <div class="d-flex align-center gap-1">
@@ -931,6 +948,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '@/axiosInstance'
 
 const DIAS_ALERTA = 7   // días sin cambio de estado para mostrar alerta
@@ -1038,6 +1056,12 @@ const statCards = computed(() => {
 })
 
 // ── Tabla ────────────────────────────────────────────────────────
+// Ir a la lista de pendientes técnicos (página Winperfil)
+const router = useRouter()
+function irAPendientesTecnicos() {
+  router.push({ path: '/winperfil', query: { tab: 'pendientes' } })
+}
+
 const headers = [
   { title: '#',            value: 'id',                width: 48  },
   { title: 'Cliente',      value: 'cliente',           width: 150 },
@@ -1048,6 +1072,7 @@ const headers = [
   { title: 'Saldo',        value: 'saldo',             width: 95  },
   { title: 'Facturado',    value: 'facturado',         width: 100 },
   { title: 'Pedido Prov.', value: 'pedido_proveedor',  width: 70  },
+  { title: 'Técnica',      value: 'tecnico',           width: 70, sortable: false },
   { title: 'Estado Prod.', value: 'estado_produccion', width: 180 },
   { title: 'Entrega',      value: 'fecha_entrega',     width: 130 },
   { title: 'Tiempos',      value: 'tiempos',           width: 130, sortable: false },

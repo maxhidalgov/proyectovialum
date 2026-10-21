@@ -506,6 +506,7 @@ class WinperfilController extends Controller
                     return response()->json(['error' => "La oferta {$nuevoNum} ya está importada en la cotización #{$yaExiste->id}"], 422);
                 }
 
+                $conservarPrecio = $request->boolean('conservar_precio');
                 $totalAntes = (float) $destino->total;
                 $ofertaAntes = (string) $destino->winperfil_numero;
                 DB::beginTransaction();
@@ -513,9 +514,11 @@ class WinperfilController extends Controller
                 $previos[] = ['numero' => (string) $destino->winperfil_numero, 'fecha' => substr((string) $destino->fecha, 0, 10)];
                 // Se suelta el candado para que total y ventanas se actualicen desde la oferta nueva
                 // (el modal de confirmación permite fijar de nuevo el total).
+                // Se suelta el candado para que total y ventanas se actualicen desde la oferta nueva; salvo que
+                // solo se esté vinculando la oferta técnica (venta parcial): ahí se conserva el precio acordado.
                 $destino->update([
                     'winperfil_numero'          => $nuevoNum,
-                    'winperfil_precio_lock'     => false,
+                    'winperfil_precio_lock'     => $conservarPrecio ? (bool) $destino->winperfil_precio_lock : false,
                     'winperfil_numeros_previos' => $previos,
                 ]);
                 $this->forzarCotizacionId = $destino->id;
@@ -532,9 +535,13 @@ class WinperfilController extends Controller
                     'oferta_nueva'    => $nuevoNum,
                     'total_anterior'  => $totalAntes,
                     'total_nuevo'     => (float) $destino->total,
-                    'motivo'          => trim((string) $request->get('motivo', '')) ?: null,
+                    'motivo'          => trim((string) $request->get('motivo', '')) ?: ($conservarPrecio ? 'Oferta técnica vinculada (se conserva el precio acordado)' : null),
                     'usuario_id'      => auth()->id(),
                 ]);
+                // La oferta ya corresponde a lo vendido: el proyecto queda técnicamente definitivo
+                if ($destino->estado_tecnico === 'sin_oferta') {
+                    $destino->update(['estado_tecnico' => 'definitiva', 'tecnico_nota' => null]);
+                }
                 DB::commit();
             }
 
@@ -894,6 +901,17 @@ class WinperfilController extends Controller
             return response()->json(['error' => 'Winperfil no devolvió materiales para este presupuesto/oferta.'], 404);
         }
 
+        // Venta parcial: la oferta de Winperfil trae todas las ventanas; se consideran solo las vendidas
+        $vendidas = $this->ventanasVendidas($cotizacion);
+        if ($vendidas) {
+            $filtrados = array_values(array_filter($datos['modelos'], fn ($m) => in_array(mb_strtolower(trim((string) ($m['Tipo'] ?? ''))), $vendidas, true)));
+            if ($filtrados) {
+                $datos['modelos'] = $filtrados;
+            } else {
+                $vendidas = null;
+            }
+        }
+
         // ── Despiece por ventana + agregación de compra ──────────────────────
         $modelos = [];
         $perfiles = [];  // por referencia: piezas + longitud total
@@ -929,10 +947,14 @@ class WinperfilController extends Controller
                 // Para la lista de compra agregada
                 switch ((int) ($d['TipoElemento'] ?? 5)) {
                     case 0: // PERFILES
-                        $k = $ref ?: $desc;
-                        $perfiles[$k] ??= ['referencia' => $ref, 'descripcion' => $desc, 'piezas' => 0, 'longitud_total_mm' => 0];
+                        // En venta parcial se agrupan las variantes @N de un mismo perfil (para estimar sus barras)
+                        $k = $vendidas ? (preg_replace('/@\d+$/', '', $ref) ?: $desc) : ($ref ?: $desc);
+                        $perfiles[$k] ??= ['referencia' => $vendidas ? $k : $ref, 'descripcion' => $desc, 'piezas' => 0, 'longitud_total_mm' => 0];
                         $perfiles[$k]['piezas']            += $totU;
                         $perfiles[$k]['longitud_total_mm'] += $long * $totU;
+                        if ($vendidas && $long > 0) {
+                            $perfiles[$k]['_mm'] = array_merge($perfiles[$k]['_mm'] ?? [], array_fill(0, max(1, (int) round($totU)), $long));
+                        }
                         break;
                     case 1: // VIDRIOS — por medida, sin sumar m²
                         $k = $ref . '|' . $long . 'x' . $alto;
@@ -968,10 +990,16 @@ class WinperfilController extends Controller
             ];
         }
 
-        // Redondear longitudes de perfiles y calcular metros
-        $perfiles = array_map(function ($p) {
+        // Redondear longitudes de perfiles y calcular metros (y, en venta parcial, las barras estimadas de 6 m)
+        $optimizador = new OptimizadorBarrasService();
+        $perfiles = array_map(function ($p) use ($vendidas, $optimizador) {
             $p['longitud_total_mm'] = round($p['longitud_total_mm']);
             $p['metros_lineales']   = round($p['longitud_total_mm'] / 1000, 2);
+            if ($vendidas && !empty($p['_mm'])) {
+                $p['barras']        = count($optimizador->empaquetar($p['_mm'], 6000, 5, null, 1.5)['barras']);
+                $p['largo_barra_m'] = 6.0;
+            }
+            unset($p['_mm']);
             return $p;
         }, array_values($perfiles));
 
@@ -989,7 +1017,10 @@ class WinperfilController extends Controller
         $fuente  = 'lismonta';
         $aviso   = null;
         $resumen = null;
-        $pb = $this->pedbarraDe($cotizacion, $oferta, $request->boolean('recalcular'));
+        // En venta parcial la optimización de Winperfil corresponde a la oferta completa: no sirve
+        $pb = $vendidas
+            ? ['ok' => false, 'error' => 'Venta parcial: estimado solo con ' . implode(', ', $vendidas) . '. Falta crear en Winperfil la oferta con lo vendido para tener las cantidades exactas.']
+            : $this->pedbarraDe($cotizacion, $oferta, $request->boolean('recalcular'));
         if ($pb['ok']) {
             $compra  = $this->compraDesdePedbarra($pb['datos'], $datos['modelos']);
             $fuente  = 'pedbarra';
@@ -1005,7 +1036,138 @@ class WinperfilController extends Controller
             'fuente'       => $fuente,
             'aviso'        => $aviso,
             'optimizacion' => $resumen,
+            'tecnico'      => $cotizacion->semaforoTecnico(),
         ]);
+    }
+
+    /**
+     * Pendientes técnicos: proyectos aprobados de Winperfil que aún no están 🟢 (falta la oferta
+     * con solo lo vendido, o las medidas definitivas). GET /api/winperfil/pendientes
+     */
+    public function pendientes()
+    {
+        $cots = Cotizacion::with(['cliente', 'estado'])
+            ->whereNotNull('winperfil_numero')
+            ->whereIn('estado_cotizacion_id', [2, 6, 7, 8])
+            ->where(fn ($q) => $q->whereNull('oculto_operaciones')->orWhere('oculto_operaciones', 0))
+            ->where(fn ($q) => $q->whereNull('estado_produccion')->orWhere('estado_produccion', '<>', 'Instalada'))
+            ->get();
+
+        $orden = ['rojo' => 0, 'amarillo' => 1];
+        $items = [];
+        foreach ($cots as $c) {
+            $sem = $c->semaforoTecnico();
+            if (!$sem || $sem['nivel'] === 'verde') {
+                continue;
+            }
+            $desde = $c->modificaciones()->where('tipo', 'venta_parcial')->latest('id')->value('created_at')
+                ?? DB::table('cotizacion_estado_historial')->where('cotizacion_id', $c->id)->where('tipo', 'produccion')
+                    ->where('estado', 'En Espera de Medidas')->latest('id')->value('fecha')
+                ?? $c->updated_at;
+            $dias = (int) abs(\Carbon\Carbon::parse($desde)->startOfDay()->diffInDays(now()->startOfDay()));
+
+            $nombre = $c->cliente?->razon_social
+                ?: trim(($c->cliente?->first_name ?? '') . ' ' . ($c->cliente?->last_name ?? ''));
+            $ventanas = $c->detalles()->where('tipo_item', 'winperfil')->orderBy('id')->get(['id', 'descripcion'])
+                ->map(fn ($d) => $this->limpiarTexto($d->descripcion))->values();
+
+            $items[] = [
+                'id'                => $c->id,
+                'cliente'           => trim(preg_replace('/[\s\x{00A0}]+/u', ' ', (string) $nombre)) ?: 'Sin cliente',
+                'winperfil_numero'  => $c->winperfil_numero,
+                'presupuesto'       => $c->winperfil_presupuesto ?: $c->winperfil_numero,
+                'estado_produccion' => $c->estado_produccion,
+                'pedido_proveedor'  => (bool) $c->pedido_proveedor,
+                'nivel'             => $sem['nivel'],
+                'texto'             => $sem['texto'],
+                'nota'              => $c->tecnico_nota,
+                'dias'              => $dias,
+                'ventanas'          => $ventanas,
+                'total_bruto'       => (int) round(((float) $c->total) * 1.19),
+            ];
+        }
+        usort($items, fn ($a, $b) => [$orden[$a['nivel']], -$a['dias']] <=> [$orden[$b['nivel']], -$b['dias']]);
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * Ofertas de Winperfil del mismo presupuesto que podrían ser la oferta técnica de un proyecto
+     * (aún no usadas por ninguna cotización). GET /api/winperfil/pendientes/{id}/ofertas
+     */
+    public function ofertasCandidatas($id)
+    {
+        $c = Cotizacion::findOrFail($id);
+        $presupuesto = $c->winperfil_presupuesto ?: $c->winperfil_numero;
+        $previos = collect($c->winperfil_numeros_previos ?? [])->pluck('numero')->map(fn ($n) => (string) $n)->all();
+
+        try {
+            $res = Http::connectTimeout(10)->timeout(25)->get("{$this->baseUrl}/erp/presupuesto", $this->paramsConImagen([
+                'empresa' => $this->empresa,
+                'serie'   => $c->winperfil_serie,
+                'numero'  => $presupuesto,
+            ]));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'No se pudo conectar con Winperfil: ' . $e->getMessage()], 503);
+        }
+        if (!$res->successful() || !is_array($res->json())) {
+            return response()->json(['error' => 'Winperfil no respondió correctamente'], 502);
+        }
+
+        $out = [];
+        foreach (array_values($res->json()['ofertas'] ?? []) as $i => $o) {
+            $cab = $o['cabecera'] ?? $o;
+            $num = (string) ($cab['NUMFACTURA'] ?? '');
+            if ($num === '' || $num === (string) $c->winperfil_numero || in_array($num, $previos, true)) {
+                continue;
+            }
+            $fecha = $this->parseFecha($cab['FECHAFACTURA'] ?? null);
+            $uso = $this->buscarCotizacionWinperfil((string) $c->winperfil_serie, $num, $fecha, $cab['NOMBRECLIENTE'] ?? null);
+            if ($uso && $uso->id !== $c->id) {
+                continue;   // ya está en otra cotización
+            }
+            $out[] = [
+                'numfactura' => $num,
+                'orden'      => $i + 1,
+                'fecha'      => $fecha,
+                'lineas'     => count($o['detalle'] ?? []),
+                'total_bruto' => (int) round(((float) ($cab['BASE'] ?? 0)) * 1.19),
+                'aceptado'   => strtoupper((string) ($cab['ACEPTADO'] ?? '')),
+            ];
+        }
+        return response()->json(['presupuesto' => (string) $presupuesto, 'ofertas' => $out]);
+    }
+
+    /** Marca manualmente el estado técnico (ej. "pauta definitiva lista"). PATCH /api/winperfil/estado-tecnico */
+    public function estadoTecnico(Request $request)
+    {
+        $data = $request->validate([
+            'cotizacion_id' => 'required|integer|exists:cotizaciones,id',
+            'estado'        => 'required|in:definitiva,sin_oferta',
+        ]);
+        $c = Cotizacion::findOrFail($data['cotizacion_id']);
+        $c->update([
+            'estado_tecnico' => $data['estado'],
+            'tecnico_nota'   => $data['estado'] === 'definitiva' ? null : $c->tecnico_nota,
+        ]);
+        return response()->json(['ok' => true, 'tecnico' => $c->fresh()->semaforoTecnico()]);
+    }
+
+    /** Etiquetas (v1, v2…) de las ventanas que quedaron en una venta parcial; null si no es parcial o no se pueden determinar. */
+    private function ventanasVendidas(Cotizacion $c): ?array
+    {
+        if ($c->estado_tecnico !== 'sin_oferta') {
+            return null;
+        }
+        $etq = [];
+        foreach ($c->detalles()->where('tipo_item', 'winperfil')->get() as $d) {
+            $e = mb_strtolower(trim(explode('—', (string) $d->descripcion)[0]));
+            if (!preg_match('/^v\d+$/', $e)) {
+                return null;
+            }
+            $etq[] = $e;
+        }
+        return $etq ?: null;
     }
 
     /**
@@ -1384,6 +1546,17 @@ class WinperfilController extends Controller
             return response()->json(['error' => 'Winperfil no devolvió datos para este presupuesto/oferta.'], 404);
         }
 
+        // Venta parcial: solo las ventanas vendidas (y sin las barras de pedbarra, que son de la oferta completa)
+        $vendidas = $this->ventanasVendidas($cotizacion);
+        if ($vendidas) {
+            $filtrados = array_values(array_filter($datos['modelos'], fn ($m) => in_array(mb_strtolower(trim((string) ($m['Tipo'] ?? ''))), $vendidas, true)));
+            if ($filtrados) {
+                $datos['modelos'] = $filtrados;
+            } else {
+                $vendidas = null;
+            }
+        }
+
         // 1) Recolectar todas las piezas de cada perfil (TipoElemento 0)
         $perfilesPorRef = [];
         foreach ($datos['modelos'] as $mi => $m) {
@@ -1425,7 +1598,9 @@ class WinperfilController extends Controller
         // 2) Barras a comprar según Winperfil (pedbarra): cuántas barras y de qué largo por perfil.
         //    Las piezas de lismonta se acomodan en EXACTAMENTE esas barras. Si pedbarra no
         //    responde, se usa el acomodo estimado de antes (barra de 6 m, referencial).
-        $pb = $this->pedbarraDe($cotizacion, $oferta, $request->boolean('recalcular'));
+        $pb = $vendidas
+            ? ['ok' => false, 'error' => 'Venta parcial: acomodo estimado solo con ' . implode(', ', $vendidas) . ' (falta la oferta técnica en Winperfil).']
+            : $this->pedbarraDe($cotizacion, $oferta, $request->boolean('recalcular'));
         $objetivos = [];
         if ($pb['ok']) {
             foreach ($pb['datos']['barras'] ?? [] as $b) {
@@ -1671,8 +1846,9 @@ class WinperfilController extends Controller
                 $payload['winperfil_oferta']      = $this->ofertaActual['oferta'];
             }
             // Cambiar oferta: la cotización conserva su cliente (Winperfil puede crear uno nuevo por oferta)
+            // y su estado comercial (una oferta nueva aún sin aceptar la devolvería a Evaluación)
             if ($this->forzarCotizacionId) {
-                unset($payload['cliente_id']);
+                unset($payload['cliente_id'], $payload['estado_cotizacion_id']);
             }
 
             // Al aceptarse en Winperfil (ACEPTADO='T'), la cotización entra al pipeline
