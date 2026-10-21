@@ -1,0 +1,1 @@
+import{ac as a,av as e,X as o,w as n}from"./index-9_fbPLUE.js";const s=a({eager:Boolean},"lazy");function t(a,s){const t=e(!1),r=o(()=>t.value||a.eager||s.value);return n(s,()=>t.value=!0),{isBooted:t,hasContent:r,onAfterLeave:function(){a.eager||(t.value=!1)}}}export{s as m,t as u};
