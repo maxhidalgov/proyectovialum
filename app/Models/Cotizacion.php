@@ -54,6 +54,8 @@ class Cotizacion extends Model
         'winperfil_presupuesto',
         'winperfil_oferta',
         'winperfil_numeros_previos',
+        'estado_tecnico',
+        'tecnico_nota',
         'fecha_entrega_real',
         'tipo_vidrio',
         'fabricar_termopanel',

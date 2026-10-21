@@ -824,6 +824,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api from '@/axiosInstance'
 import ModalBsale from '@/components/facturacion/ModalBsale.vue'
 import DetalleCotizacion from '@/components/DetalleCotizacion.vue'
@@ -1301,7 +1302,20 @@ function mostrarSnack(text, color = 'success') {
   snack.value = { show: true, text, color }
 }
 
-onMounted(cargarCotizaciones)
+const route = useRoute()
+const router = useRouter()
+
+onMounted(async () => {
+  await cargarCotizaciones()
+  // "Aprobar y cobrar" (desde Winperfil): abre directo la emisión de esa cotización
+  const idEmitir = Number(route.query.emitir)
+  if (idEmitir) {
+    const item = cotizacionesAprobadas.value.find(c => c.id === idEmitir)
+    if (item) abrirModalBsale(item)
+    else mostrarSnack('No encontré la cotización para emitir: ábrela desde la lista.', 'warning')
+    router.replace({ query: {} })
+  }
+})
 </script>
 
 <style scoped>

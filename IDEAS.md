@@ -41,6 +41,7 @@ Producción y bot (ideas del dueño, 2026-10-20):
 - [ ] 2026-10-20 — Ciclo semanal de proveedor (Winhouse viene los miércoles): recordar el martes en la mañana las obras con `pedido_proveedor` sin marcar, y armar el pedido consolidado
 
 Winperfil:
+- [ ] 2026-10-21 — Pendientes técnicos (continuación de la venta parcial): marca 🔴🟡🟢 en una columna de Operaciones, pestaña "Pendientes en Winperfil" con Cambiar oferta directo, etiqueta Exacto/Estimado en Materiales WP (lista estimada solo con las ventanas vendidas) y que Cambiar oferta / "pauta definitiva lista" pasen `estado_tecnico` a definitiva; sugerir el vínculo de boletas/facturas de Bsale con la obra
 - [ ] 2026-10-17 — Winperfil: control de costo/margen por obra con PERFCOSTE/ACCCOSTE/VIDCOSTE/MANOCOSTE de la cabecera de oferta
 - [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
 
@@ -54,6 +55,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-21 → 2026-10-21 — Venta parcial de un presupuesto Winperfil (elegir qué ventanas se vendieron al importar) y botón "Aprobar y cobrar" que abre la emisión en Facturación
 - [x] 2026-10-20 → 2026-10-20 — Cotizaciones: enviar por correo con el PDF adjunto (no el link), con el correo del contacto/cliente por defecto; requiere cargar el SMTP en Railway
 - [x] 2026-10-20 → 2026-10-20 — Bot: resumen comercial semanal al grupo (comando `comercial` + cron lunes 9:00): cotizaciones por llamar a 3/7/15 días por vendedor y presupuestos de Winperfil sin aceptar; además se vació el token real de `.env.example` del bot (la rotación sigue pendiente)
 - [x] 2026-10-20 → 2026-10-20 — Historial de modificaciones de la cotización (cambio de oferta / ajuste de precio, con total antes/después y motivo) y orden de compra complementaria (pestaña "Falta pedir": lo que Winperfil calcula hoy menos lo ya pedido)

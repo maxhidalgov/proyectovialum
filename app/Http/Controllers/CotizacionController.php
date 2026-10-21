@@ -1002,18 +1002,66 @@ public function store(Request $request)
             'eett'                 => 'nullable|string|max:120',
             'total'                => 'nullable|numeric|min:0',
             'tipo'                 => 'nullable|in:neto,bruto',
+            // Venta parcial: ventanas del presupuesto que NO se vendieron (se quitan de la cotización)
+            'ventanas_excluidas'   => 'nullable|array',
+            'ventanas_excluidas.*' => 'integer',
         ]);
 
         $cotizacion = Cotizacion::with('detalles')->findOrFail($id);
 
         $upd = [];
         if (!empty($data['estado_cotizacion_id'])) $upd['estado_cotizacion_id'] = $data['estado_cotizacion_id'];
+
+        // Al aprobar, el proyecto entra a Operaciones esperando las medidas (igual que cuando Winperfil lo acepta)
+        $aprobadaId = EstadoCotizacion::where('nombre', 'Aprobada')->value('id');
+        if ($aprobadaId && (int) ($upd['estado_cotizacion_id'] ?? 0) === (int) $aprobadaId && empty($cotizacion->estado_produccion)) {
+            $upd['estado_produccion'] = 'En Espera de Medidas';
+        }
         if (array_key_exists('material', $data))    $upd['material'] = $data['material'];
         if (array_key_exists('eett', $data))        $upd['eett']     = $data['eett'];
 
         \DB::beginTransaction();
         try {
             if ($upd) $cotizacion->update($upd);
+
+            // ── Venta parcial: el cliente compró solo parte del presupuesto ──────────────
+            $excluidas = array_values(array_unique($data['ventanas_excluidas'] ?? []));
+            if ($excluidas) {
+                $lineas = $cotizacion->detalles->where('tipo_item', 'winperfil')->values();
+                $quitar = $lineas->whereIn('id', $excluidas)->values();
+                if ($quitar->count() !== count($excluidas)) {
+                    throw new \DomainException('Alguna ventana a excluir no pertenece a esta cotización.');
+                }
+                if ($quitar->count() >= $lineas->count()) {
+                    throw new \DomainException('Tiene que quedar al menos una ventana vendida.');
+                }
+
+                $etiqueta = fn ($l) => trim(explode('—', (string) $l->descripcion)[0]) ?: ('ventana ' . $l->id);
+                $netoAntes = (float) $lineas->sum('total');
+                $vendidas  = $lineas->whereNotIn('id', $excluidas)->values();
+                $motivo    = 'Venta parcial: se vendió ' . $vendidas->map($etiqueta)->implode(', ')
+                           . ' (' . $vendidas->count() . ' de ' . $lineas->count() . ' ventanas). No incluidas: '
+                           . $quitar->map($etiqueta)->implode(', ') . '.';
+
+                \App\Models\CotizacionDetalle::whereIn('id', $quitar->pluck('id'))->delete();
+                $cotizacion->load('detalles');
+
+                // Lo vendido queda pendiente de oferta técnica en Winperfil (materiales exactos)
+                $cotizacion->update(['estado_tecnico' => 'sin_oferta', 'tecnico_nota' => mb_substr($motivo, 0, 255)]);
+
+                $netoDespues = (float) $cotizacion->detalles->where('tipo_item', 'winperfil')->sum('total');
+                $cotizacion->modificaciones()->create([
+                    'tipo'            => 'venta_parcial',
+                    'oferta_anterior' => $cotizacion->winperfil_numero,
+                    'oferta_nueva'    => $cotizacion->winperfil_numero,
+                    'total_anterior'  => $netoAntes,
+                    'total_nuevo'     => round($netoDespues),
+                    'motivo'          => $motivo,
+                    'usuario_id'      => auth()->id(),
+                ]);
+                // El total pasa a ser lo vendido (si no se indicó otro monto abajo); bloquea el precio
+                $this->prorratearWinperfilNeto($cotizacion, $netoDespues);
+            }
 
             if (isset($data['total']) && $data['total'] > 0 && !empty($data['tipo'])) {
                 $nuevoNeto = $data['tipo'] === 'bruto' ? ($data['total'] / 1.19) : (float) $data['total'];
@@ -1026,6 +1074,9 @@ public function store(Request $request)
                 }
             }
             \DB::commit();
+        } catch (\DomainException $e) {
+            \DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             \DB::rollBack();
             return response()->json(['message' => 'Error al confirmar la importación: ' . $e->getMessage()], 500);

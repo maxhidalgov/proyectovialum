@@ -563,6 +563,13 @@ class WinperfilController extends Controller
                     'n_ventanas'           => $ventanas->count(),
                     'neto_ventanas'        => (float) $ventanas->sum('total'),
                     'precio_lock'          => (bool) $cot->winperfil_precio_lock,
+                    // Para elegir qué ventanas se vendieron (venta parcial)
+                    'ventanas'             => $ventanas->sortBy('id')->map(fn ($v) => [
+                        'id'          => $v->id,
+                        'descripcion' => $v->descripcion,
+                        'cantidad'    => (float) $v->cantidad,
+                        'total'       => (float) $v->total,
+                    ])->values(),
                 ] : null,
             ]);
         } catch (\Throwable $e) {

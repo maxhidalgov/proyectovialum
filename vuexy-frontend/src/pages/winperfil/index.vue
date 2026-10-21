@@ -496,7 +496,7 @@
       <VCard>
         <VCardItem>
           <VCardTitle>Confirmar cotización importada</VCardTitle>
-          <VCardSubtitle>N° {{ importModal.numero }} · {{ importModal.n_ventanas }} ventana(s)</VCardSubtitle>
+          <VCardSubtitle>N° {{ importModal.numero }} · {{ importModal.ventanas?.length ? ventanasVendidas.length + ' de ' + importModal.ventanas.length : importModal.n_ventanas }} ventana(s)</VCardSubtitle>
         </VCardItem>
         <VCardText>
           <VRow dense>
@@ -513,9 +513,35 @@
             </VCol>
           </VRow>
 
+          <template v-if="importModal.ventanas?.length > 1">
+            <VDivider class="my-4" />
+            <div class="d-flex align-center justify-space-between mb-1">
+              <div class="text-subtitle-2">¿Qué ventanas se vendieron?</div>
+              <VBtn size="x-small" variant="text" :disabled="!ventanasExcluidas.length" @click="marcarTodasVendidas">Todas</VBtn>
+            </div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Desmarca las que el cliente no compró: se quitan de la cotización y el total se recalcula.
+            </div>
+            <div style="max-height:210px; overflow-y:auto">
+              <VCheckbox
+                v-for="v in importModal.ventanas" :key="v.id"
+                v-model="v.vendida" density="compact" hide-details color="primary"
+                @update:model-value="recalcularVendido"
+              >
+                <template #label>
+                  <span class="text-body-2">{{ v.descripcion }}</span>
+                  <span class="ml-2 text-caption text-medium-emphasis">{{ clp(v.total) }}</span>
+                </template>
+              </VCheckbox>
+            </div>
+            <VAlert v-if="ventanasExcluidas.length" type="info" variant="tonal" density="compact" class="mt-2 text-caption">
+              Venta parcial: queda anotado que falta crear en Winperfil la oferta con solo lo vendido (para materiales y cortes exactos).
+            </VAlert>
+          </template>
+
           <VDivider class="my-4" />
           <div class="text-caption text-medium-emphasis mb-2">
-            Editá el total y se <strong>prorratea a las {{ importModal.n_ventanas }} ventanas</strong> para que cuadre.
+            Editá el total y se <strong>prorratea a las {{ importModal.ventanas?.length ? ventanasVendidas.length : importModal.n_ventanas }} ventanas</strong> para que cuadre.
           </div>
           <VRow dense>
             <VCol cols="6">
@@ -531,7 +557,10 @@
         <VCardActions class="pa-4 pt-0">
           <VBtn variant="text" color="secondary" @click="cerrarImportModal">Dejar como está</VBtn>
           <VSpacer />
-          <VBtn color="primary" :loading="importModal.loading" @click="confirmarImport">Confirmar</VBtn>
+          <VBtn variant="tonal" color="primary" :loading="importModal.loading" :disabled="sinVentanas" @click="confirmarImport()">Confirmar</VBtn>
+          <VBtn color="success" :loading="importModal.loading" :disabled="sinVentanas" prepend-icon="mdi-cash-register" @click="confirmarImport(true)">
+            Aprobar y cobrar
+          </VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
@@ -540,9 +569,12 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from '@/axiosInstance'
 import MoneyField from '@/components/documentos/MoneyField.vue'
 import { asegurarGraficosCotizacion } from '@/composables/useSvgToPng'
+
+const router = useRouter()
 
 // ── Estado de conexión ─────────────────────────────────────────────────────────
 const conexion = ref({ ok: null, mensaje: '' })
@@ -591,18 +623,37 @@ const estadosCotizacion = [
   { id: 7, nombre: 'En Producción' }, { id: 8, nombre: 'Entregada' },
 ]
 const materialesModal = ['PVC', 'Aluminio', 'Otros']
-const importModal = ref({ show: false, loading: false, id: null, numero: null, estado_cotizacion_id: 1, material: 'PVC', eett: '', neto: 0, bruto: 0, n_ventanas: 0 })
+const importModal = ref({ show: false, loading: false, id: null, numero: null, estado_cotizacion_id: 1, material: 'PVC', eett: '', neto: 0, bruto: 0, n_ventanas: 0, ventanas: [] })
+
+// Venta parcial: ventanas marcadas como vendidas / no vendidas
+const ventanasVendidas  = computed(() => (importModal.value.ventanas || []).filter(v => v.vendida))
+const ventanasExcluidas = computed(() => (importModal.value.ventanas || []).filter(v => !v.vendida))
+const sinVentanas = computed(() => (importModal.value.ventanas?.length || 0) > 0 && ventanasVendidas.value.length === 0)
+
+// El total pasa a ser la suma de lo vendido (sigue siendo editable)
+function recalcularVendido() {
+  const neto = Math.round(ventanasVendidas.value.reduce((s, v) => s + Number(v.total || 0), 0))
+  importModal.value.neto = neto
+  importModal.value.bruto = Math.round(neto * 1.19)
+}
+function marcarTodasVendidas() {
+  importModal.value.ventanas.forEach(v => { v.vendida = true })
+  recalcularVendido()
+}
 
 function onNeto(v)  { importModal.value.neto  = Number(v) || 0; importModal.value.bruto = Math.round(importModal.value.neto * 1.19) }
 function onBruto(v) { importModal.value.bruto = Number(v) || 0; importModal.value.neto  = Math.round(importModal.value.bruto / 1.19) }
 function cerrarImportModal() { importModal.value.show = false }
 
-async function confirmarImport() {
+// aprobarYCobrar: deja la cotización Aprobada y abre directo la emisión de la boleta/factura
+async function confirmarImport(aprobarYCobrar = false) {
   const m = importModal.value
   m.loading = true
   try {
+    const idAprobada = estadosCotizacion.find(e => e.nombre === 'Aprobada')?.id
     await axios.post(`/api/cotizaciones/${m.id}/confirmar-import-winperfil`, {
-      estado_cotizacion_id: m.estado_cotizacion_id || undefined,
+      estado_cotizacion_id: (aprobarYCobrar && idAprobada) ? idAprobada : (m.estado_cotizacion_id || undefined),
+      ventanas_excluidas: ventanasExcluidas.value.length ? ventanasExcluidas.value.map(v => v.id) : undefined,
       material: m.material || undefined,
       eett:     m.eett || undefined,
       total:    m.neto || undefined,
@@ -613,6 +664,7 @@ async function confirmarImport() {
     await asegurarGraficosCotizacion(axios, m.id)
     m.show = false
     await cargarSync()
+    if (aprobarYCobrar) router.push({ path: '/facturacion', query: { emitir: m.id } })
   } catch (e) {
     conexion.value = { ok: false, mensaje: e.response?.data?.message || 'No se pudo confirmar la importación' }
   } finally {
@@ -697,6 +749,7 @@ async function syncUno(item, reemplazarCotizacionId = null, motivo = '') {
         neto,
         bruto: Math.round(neto * 1.19),
         n_ventanas: c.n_ventanas || 0,
+        ventanas: (c.ventanas || []).map(v => ({ ...v, vendida: true })),
       }
     }
   } catch (e) {
