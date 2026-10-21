@@ -1013,10 +1013,22 @@ class BsaleController extends Controller
         }
 
         // 2) Fallback: PDF propio (formato carta) desde el detalle local
+        $pdf = $this->pdfPropio($doc);
+        if (!$pdf) {
+            return $doc->url_pdf_bsale ? redirect($doc->url_pdf_bsale) : abort(404, 'Sin detalle local de la boleta');
+        }
+
+        return $pdf->stream('boleta-' . ($doc->numero_documento_bsale ?? $doc->id) . '.pdf');
+    }
+
+    /** PDF propio (formato carta) armado con el detalle local; null si el documento no tiene líneas. */
+    private function pdfPropio(\App\Models\DocumentoFacturacion $doc)
+    {
+        $id = $doc->id;
         $items = \App\Models\DocumentoItem::where('documento_facturacion_id', $id)->get();
 
         if ($items->isEmpty()) {
-            return $doc->url_pdf_bsale ? redirect($doc->url_pdf_bsale) : abort(404, 'Sin detalle local de la boleta');
+            return null;
         }
 
         $neto  = (float) $items->sum('total_neto');
@@ -1060,7 +1072,51 @@ class BsaleController extends Controller
             'clienteNombre', 'clienteRut', 'formaPago', 'fecha', 'logoBase64', 'emisor'
         ))->setPaper('letter');
 
-        return $pdf->stream('boleta-' . ($doc->numero_documento_bsale ?? $doc->id) . '.pdf');
+        return $pdf;
+    }
+
+    /**
+     * PDF del documento como bytes (para adjuntar a un correo o compartir): primero el OFICIAL de
+     * Bsale (con timbre electrónico; la factura sale en hoja completa y la boleta en formato ticket);
+     * si no se puede, el PDF propio con el detalle local. Null si no hay forma de armarlo.
+     */
+    public function pdfBytesDocumento(\App\Models\DocumentoFacturacion $doc): ?string
+    {
+        $urls = [];
+        if ($doc->id_documento_bsale && $this->accessToken) {
+            try {
+                $resp = Http::withHeaders($this->getBsaleHeaders())->timeout(15)
+                    ->get($this->baseUrl . "documents/{$doc->id_documento_bsale}.json");
+                if ($resp->successful()) {
+                    $d = $resp->json();
+                    foreach (['urlPdfOriginal', 'urlPdf'] as $k) {
+                        if (!empty($d[$k])) {
+                            $urls[] = $d[$k];
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('PDF documento: no se pudo consultar Bsale', ['documento' => $doc->id, 'error' => $e->getMessage()]);
+            }
+        }
+        if ($doc->url_pdf_bsale) {
+            $urls[] = preg_replace('/\?.*$/', '', $doc->url_pdf_bsale);   // sin el ?sfd=… (variante de ticket)
+            $urls[] = $doc->url_pdf_bsale;
+        }
+        foreach (array_unique($urls) as $url) {
+            try {
+                $bytes = Http::timeout(30)->get($url)->body();
+                if (is_string($bytes) && str_starts_with($bytes, '%PDF')) {
+                    return $bytes;
+                }
+            } catch (\Throwable $e) {
+                // se prueba la siguiente
+            }
+        }
+
+        $pdf = $this->pdfPropio($doc);
+
+        return $pdf ? $pdf->output() : null;
     }
 
     /**

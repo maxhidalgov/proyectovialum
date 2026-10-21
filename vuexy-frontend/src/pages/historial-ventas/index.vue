@@ -94,6 +94,10 @@
             <VBtn v-if="item.url_pdf_bsale || item.id_documento_bsale" size="x-small" variant="text" icon :href="`/boleta/${item.id}/pdf`" target="_blank" class="ml-1" title="Ver PDF (formato completo)">
               <VIcon size="16">mdi-file-pdf-box</VIcon>
             </VBtn>
+            <VBtn size="x-small" variant="text" icon class="ml-1" color="primary" title="Enviar al cliente (correo o WhatsApp con el PDF)" @click="abrirEnviar(item)">
+              <VIcon size="16">mdi-send</VIcon>
+            </VBtn>
+            <VIcon v-if="item.ultimo_envio_at" size="16" color="success" class="ml-1" :title="textoEnvio(item)">mdi-check-circle-outline</VIcon>
           </template>
           <template #no-data>
             <div class="text-center py-8 text-medium-emphasis">
@@ -188,6 +192,8 @@
         </VCardText>
         <VCardActions>
           <VBtn v-if="detalle.doc.url_pdf_bsale || detalle.doc.id_documento_bsale" variant="tonal" color="error" prepend-icon="mdi-file-pdf-box" :href="`/boleta/${detalle.doc.id}/pdf`" target="_blank">Ver PDF</VBtn>
+          <VBtn variant="tonal" color="primary" prepend-icon="mdi-send" class="ml-2" @click="abrirEnviar(detalle.doc)">Enviar</VBtn>
+          <span v-if="detalle.doc.ultimo_envio_at" class="text-caption text-success ml-2">{{ textoEnvio(detalle.doc) }}</span>
           <VSpacer />
           <VBtn variant="text" @click="detalle.show = false">Cerrar</VBtn>
         </VCardActions>
@@ -215,6 +221,7 @@
       </VCard>
     </VDialog>
 
+    <EnviarDocumentoDialog v-model="docEnviar.show" :doc="docEnviar.doc" @enviado="alEnviado" />
     <VSnackbar v-model="snack.show" :color="snack.color" timeout="3000" location="top">{{ snack.msg }}</VSnackbar>
   </VContainer>
 </template>
@@ -222,9 +229,26 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '@/axiosInstance'
+import EnviarDocumentoDialog from '@/components/documentos/EnviarDocumentoDialog.vue'
 
 const tab = ref('docs')
 const snack = ref({ show: false, color: 'success', msg: '' })
+
+// ── Enviar el documento al cliente (correo o WhatsApp, con el PDF como archivo) ──
+const docEnviar = ref({ show: false, doc: null })
+function abrirEnviar(doc) { docEnviar.value = { show: true, doc } }
+function textoEnvio(d) {
+  if (!d.ultimo_envio_at) return ''
+  const via = d.ultimo_envio_via === 'email' ? 'correo' : 'WhatsApp'
+  return `Enviado por ${via}${d.ultimo_envio_a ? ' a ' + d.ultimo_envio_a : ''} el ${fmtFecha(d.ultimo_envio_at)}`
+}
+function alEnviado(r) {
+  const nuevos = { ultimo_envio_via: r.ultimo_envio_via, ultimo_envio_a: r.ultimo_envio_a, ultimo_envio_at: r.ultimo_envio_at }
+  const fila = docs.value.find(d => d.id === r.id)
+  if (fila) Object.assign(fila, nuevos)
+  if (detalle.value.doc?.id === r.id) Object.assign(detalle.value.doc, nuevos)
+  snack.value = { show: true, color: 'success', msg: r.ultimo_envio_via === 'email' ? `Documento enviado a ${r.ultimo_envio_a}` : 'Envío por WhatsApp registrado' }
+}
 
 // ── Buscar documento ───────────────────────────────────────────────────────
 const docs = ref([])

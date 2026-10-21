@@ -391,6 +391,9 @@ Route::middleware('auth:api')->group(function () {
     Route::patch('/ventas/{id}/forma-pago',       [\App\Http\Controllers\BsaleVentaSyncController::class, 'actualizarFormaPago']);
     Route::get('/ventas/historial-productos',     [\App\Http\Controllers\BsaleVentaSyncController::class, 'historialProductos']);
     Route::get('/ventas/buscar-documentos',       [\App\Http\Controllers\BsaleVentaSyncController::class, 'buscarDocumentos']);
+    // Enviar boletas/facturas al cliente: PDF como archivo (correo adjunto o WhatsApp)
+    Route::get('/ventas/documento/{id}/pdf',      [\App\Http\Controllers\DocumentoEnvioController::class, 'pdf']);
+    Route::post('/ventas/documento/{id}/enviar',  [\App\Http\Controllers\DocumentoEnvioController::class, 'enviar']);
     Route::get('/ventas/documento/{id}/items',    [\App\Http\Controllers\BsaleVentaSyncController::class, 'documentoItems']);
     Route::get('/ventas/top-productos',           [\App\Http\Controllers\BsaleVentaSyncController::class, 'topProductos']);
 

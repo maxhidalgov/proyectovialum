@@ -609,6 +609,8 @@ class BsaleVentaSyncController extends Controller
 
         $query = DB::table('documentos_facturacion as df')
             ->leftJoin('clientes as cl', 'cl.id', '=', 'df.cliente_id')
+            ->leftJoin('cotizaciones as ct', 'ct.id', '=', 'df.cotizacion_id')
+            ->leftJoin('cliente_contactos as kc', 'kc.id', '=', 'ct.contacto_id')
             // Emitidos + facturas marcadas "anulado" que tienen una NC asignada: así la factura
             // anulada se ve junto a su nota de crédito (queda constancia de la anulación).
             ->whereRaw("(df.estado = 'emitido' OR (df.estado = 'anulado' AND df.tipo_documento_bsale_id <> 2 AND EXISTS (
@@ -630,7 +632,11 @@ class BsaleVentaSyncController extends Controller
             ->get([
                 'df.id', 'df.tipo_documento_bsale_id', 'df.numero_documento_bsale',
                 'df.fecha_emision', 'df.monto', 'df.forma_pago', 'df.url_pdf_bsale',
-                'df.nro_comprobante_transbank',
+                'df.nro_comprobante_transbank', 'df.id_documento_bsale', 'df.cliente_id',
+                'df.ultimo_envio_via', 'df.ultimo_envio_a', 'df.ultimo_envio_at',
+                // Para enviar el documento: primero la persona de contacto de la cotización, si no el cliente
+                DB::raw("COALESCE(NULLIF(TRIM(kc.email), ''), NULLIF(TRIM(cl.email), '')) as email_sugerido"),
+                DB::raw("COALESCE(NULLIF(TRIM(kc.telefono), ''), NULLIF(TRIM(cl.phone), '')) as telefono_sugerido"),
                 DB::raw("COALESCE(cl.razon_social, NULLIF(TRIM(CONCAT_WS(' ', cl.first_name, cl.last_name)), ''), df.bsale_cliente_nombre) as cliente"),
             ]);
 

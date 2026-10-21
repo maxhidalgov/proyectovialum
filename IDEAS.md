@@ -50,7 +50,6 @@ Winperfil:
 
 Correo:
 - [ ] 2026-10-21 — WhatsApp Business oficial (Meta Cloud API) para enviar cotizaciones/boletas con el PDF adjunto de forma automática desde el número de la empresa: ver tarifa exacta en CLP en el Administrador de WhatsApp (Chile), necesita número dedicado, cuenta verificada y plantillas aprobadas; evaluar si el volumen lo justifica
-- [ ] 2026-10-21 — Botón "Enviar por correo" en las boletas y facturas del módulo Boletas/Facturas (/historial-ventas): enviar el documento al cliente con el PDF adjunto (mismo SMTP y mismo modal editable que las cotizaciones: correo del cliente por defecto, se puede cambiar)
 - [ ] 2026-10-20 — Cargar el SMTP (Workspace contacto@vialum.cl) en las variables de Railway: sin eso no funciona el envío de cotizaciones ni de órdenes de compra por correo; probar con un envío real. Después: copia (CC) al vendedor y envío por correo también desde Seguimiento
 
 Facturación:
@@ -60,6 +59,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-21 → 2026-10-21 — Boletas/Facturas: botón Enviar con el PDF oficial de Bsale como archivo, por correo (adjunto) o WhatsApp (compartir / descargar y adjuntar), con registro del envío
 - [x] 2026-10-21 → 2026-10-21 — Operaciones: el nombre del Elemento muestra un cuadro al pasar el mouse y un detalle completo del proyecto al hacer clic (cliente, contacto, qué se vendió, montos, notas)
 - [x] 2026-10-21 → 2026-10-21 — Cotizaciones: enviar el PDF por WhatsApp como archivo (menú de compartir en celular; descarga + chat en computador), canal "WhatsApp · PDF"
 - [x] 2026-10-21 → 2026-10-21 — Guía de uso para administración dentro de la app (/guia): flujo de venta, venta parcial, cobro, cambios del cliente, semáforo técnico, materiales y preguntas frecuentes
