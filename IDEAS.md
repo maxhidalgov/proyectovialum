@@ -49,6 +49,7 @@ Winperfil:
 - [ ] 2026-10-09 — Winperfil: las rutas que buscan cotización solo por `winperfil_numero` (pedidos, re-sync/plano/PDF de una cotización) siguen ambiguas si el número se repite; guardar un id único (cliente Winperfil + NUMFACTURA) en la cotización
 
 Correo:
+- [ ] 2026-10-21 — Botón "Enviar por correo" en las boletas y facturas del módulo Boletas/Facturas (/historial-ventas): enviar el documento al cliente con el PDF adjunto (mismo SMTP y mismo modal editable que las cotizaciones: correo del cliente por defecto, se puede cambiar)
 - [ ] 2026-10-20 — Cargar el SMTP (Workspace contacto@vialum.cl) en las variables de Railway: sin eso no funciona el envío de cotizaciones ni de órdenes de compra por correo; probar con un envío real. Después: copia (CC) al vendedor y envío por correo también desde Seguimiento
 
 Facturación:
