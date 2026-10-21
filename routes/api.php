@@ -78,6 +78,8 @@ Route::get('/bot/precio', [\App\Http\Controllers\BotController::class, 'precio']
 Route::get('/bot/resumen-comercial', [\App\Http\Controllers\BotController::class, 'resumenComercial']);
 //    GET /api/bot/factura?token=XXXX&q=457307&lado=compra|venta  → info de un documento por folio
 Route::get('/bot/factura', [\App\Http\Controllers\BotController::class, 'factura']);
+//    GET /api/bot/sumar-facturas?token=XXXX&folios=1,2,3&q=haustek  → suma varias facturas por folio
+Route::get('/bot/sumar-facturas', [\App\Http\Controllers\BotController::class, 'sumarFacturas']);
 //    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
 Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
 //    GET  /api/bot/clientes?token=XXXX&q=juan  → buscar clientes (con % de descuento)

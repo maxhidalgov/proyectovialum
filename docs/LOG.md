@@ -9,6 +9,13 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+---
+
+## 2026-10-21 — Bot WhatsApp: sumar varias facturas por folio
+- **Qué se hizo:** El bot entiende "suma las facturas de haustek 270123, 270456 y 270789" (también con puntos o el comando `suma …`). Nuevo endpoint `GET /api/bot/sumar-facturas?folios=…&q=…&lado=…`: busca cada folio en compras y ventas, filtra por proveedor/cliente (`q`, sin tildes), suma neto/IVA/total, las notas de crédito restan, y avisa folios no encontrados o que coinciden con varios documentos (no los suma). En ventas el neto es total/1,19; las boletas se ignoran.
+- **Archivos principales:** `BotController::sumarFacturas`, `routes/api.php`; bot Node (fuera del repo): `src/vialum.js`, `src/consultas.js` (`extraerSuma`), `src/comandos.js`.
+- **Pendiente / ojo con:** Backend probado en local con datos de prueba y el parseo con node; no probado de punta a punta por WhatsApp. Hay que **reiniciar el bot**; el backend se activa cuando Railway vuelva a desplegar.
+
 ## 2026-10-21 — Boletas/Facturas: enviar el documento al cliente con el PDF como archivo
 - **Qué se hizo:** En **Boletas/Facturas** (`/historial-ventas`) cada documento tiene un botón **Enviar** (en la fila y en el detalle) con dos canales: **Correo · PDF** (correo desde contacto@vialum.cl con el PDF adjunto) y **WhatsApp · PDF** (celular: menú de compartir con el PDF adjunto; computador: descarga el PDF y abre el chat para adjuntarlo con el clip). Destino por defecto: correo/teléfono de la persona de contacto de la cotización ligada al documento y, si no, los del cliente; editable. El PDF es el **oficial de Bsale** (`urlPdfOriginal`, con timbre: la factura sale en hoja completa 200×270 mm y la boleta en formato ticket 80 mm); si Bsale no responde se usa el PDF propio con el detalle local. Cada envío queda registrado (`ultimo_envio_via/a/at` en `documentos_facturacion`) y la fila muestra un check verde con "Enviado por correo a … el …". Endpoints: `GET /api/ventas/documento/{id}/pdf`, `POST /api/ventas/documento/{id}/enviar`; `buscar-documentos` ahora trae `email_sugerido`, `telefono_sugerido`, `id_documento_bsale` y el último envío. Si el cliente no tenía correo y se escribe uno, se guarda en su ficha. Sin SMTP en el servidor responde 422 en vez de fingir el envío.
 - **Archivos principales:** `DocumentoEnvioController`, `app/Mail/DocumentoMail.php`, `resources/views/emails/documento.blade.php`, `BsaleController` (`pdfBytesDocumento`, `pdfPropio` extraído de `boletaPdfLocal`), `BsaleVentaSyncController::buscarDocumentos`, migración `2026_10_21_130000_add_ultimo_envio_a_documentos_facturacion`, `components/documentos/EnviarDocumentoDialog.vue`, `pages/historial-ventas/index.vue`, `routes/api.php`, `public/`.

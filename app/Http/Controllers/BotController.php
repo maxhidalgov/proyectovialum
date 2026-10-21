@@ -408,6 +408,136 @@ class BotController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/bot/sumar-facturas?token=XXXX&folios=270123,270456,270789[&q=haustek][&lado=compra|venta]
+     * Suma varias facturas por folio. Los folios se repiten entre proveedores/clientes: con `q` se queda con
+     * el documento cuyo proveedor (compras) o cliente (ventas) contiene esas palabras; si un folio sigue
+     * coincidiendo con más de un documento no se suma y se avisa. Las notas de crédito restan.
+     */
+    public function sumarFacturas(Request $r)
+    {
+        $this->verificarToken($r);
+
+        $folios = collect(explode(',', (string) $r->query('folios', '')))
+            ->map(fn ($f) => (int) preg_replace('/\D/', '', $f))
+            ->filter(fn ($f) => $f > 0)->unique()->values()->take(30)->all();
+        if (count($folios) < 1) {
+            return response()->json(['ok' => false, 'error' => 'Indica los folios a sumar. Ej: 270123, 270456'], 422);
+        }
+        $q    = trim((string) $r->query('q', ''));
+        $lado = $r->query('lado');
+
+        $norm = function (string $s): string {
+            $s = mb_strtolower($s);
+            $s = strtr($s, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
+            return trim(preg_replace('/[^a-z0-9]+/', ' ', $s));
+        };
+        $palabras = array_values(array_filter(explode(' ', $norm($q))));
+        $coincide = function (?string $nombre) use ($palabras, $norm): bool {
+            if (!$palabras) {
+                return true;
+            }
+            $n = $norm((string) $nombre);
+            foreach ($palabras as $p) {
+                if (!str_contains($n, $p)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        $docs = [];       // documentos que sí se suman
+        $noEncontrados = [];
+        $ambiguos = [];
+        foreach ($folios as $folio) {
+            $cand = [];
+            if ($lado !== 'venta') {
+                foreach ($this->buscarCompras($folio) as $c) {
+                    if ($coincide($c['proveedor'] ?? null)) {
+                        $cand[] = ['lado' => 'compra', 'folio' => $folio, 'quien' => $c['proveedor'], 'tipo' => $c['tipo'], 'nc' => (bool) $c['es_nc'],
+                                   'fecha' => $c['fecha'], 'neto' => (int) $c['neto'], 'iva' => (int) $c['iva'], 'total' => (int) $c['total']];
+                    }
+                }
+            }
+            if ($lado !== 'compra') {
+                foreach ($this->buscarVentas($folio) as $v) {
+                    if (($v['tipo'] ?? '') === 'Boleta') {
+                        continue;   // se suman facturas
+                    }
+                    if ($coincide($v['cliente'] ?? null)) {
+                        $total = (int) $v['total'];
+                        $neto  = (int) round($total / 1.19);
+                        $cand[] = ['lado' => 'venta', 'folio' => $folio, 'quien' => $v['cliente'], 'tipo' => $v['tipo'], 'nc' => (bool) $v['es_nc'],
+                                   'fecha' => $v['fecha'], 'neto' => $neto, 'iva' => $total - $neto, 'total' => $total];
+                    }
+                }
+            }
+            if (count($cand) === 0) {
+                $noEncontrados[] = $folio;
+            } elseif (count($cand) === 1) {
+                $docs[] = $cand[0];
+            } else {
+                $ambiguos[] = ['folio' => $folio, 'opciones' => array_map(fn ($c) => ($c['lado'] === 'compra' ? 'compra' : 'venta') . ' · ' . $c['quien'], $cand)];
+            }
+        }
+
+        // Sumas por lado (las notas de crédito restan)
+        $sumas = [];
+        foreach ($docs as $d) {
+            $sg = $d['nc'] ? -1 : 1;
+            $sumas[$d['lado']] ??= ['neto' => 0, 'iva' => 0, 'total' => 0, 'n' => 0];
+            $sumas[$d['lado']]['neto']  += $sg * $d['neto'];
+            $sumas[$d['lado']]['iva']   += $sg * $d['iva'];
+            $sumas[$d['lado']]['total'] += $sg * $d['total'];
+            $sumas[$d['lado']]['n']++;
+        }
+
+        $m = fn (int $n) => ($n < 0 ? '−' : '') . $this->clp(abs($n));
+        $lineas = [];
+        foreach (['compra' => 'compra', 'venta' => 'venta'] as $clave => $rotulo) {
+            $grupo = array_values(array_filter($docs, fn ($d) => $d['lado'] === $clave));
+            if (!$grupo) {
+                continue;
+            }
+            // Un mismo proveedor puede venir con mayúsculas distintas ("HAUSTEK CHILE SPA" / "Haustek Chile SpA")
+            $quienes = array_values(array_intersect_key(
+                array_map(fn ($d) => trim((string) $d['quien']), $grupo),
+                array_unique(array_map(fn ($d) => mb_strtolower(trim((string) $d['quien'])), $grupo))
+            ));
+            $lineas[] = "🧾 *Facturas de {$rotulo}*" . (count($quienes) === 1 ? " · {$quienes[0]}" : '');
+            foreach ($grupo as $d) {
+                $sg = $d['nc'] ? -1 : 1;
+                $etq = $d['nc'] ? 'NC' : ($d['tipo'] === 'Factura' ? 'Factura' : $d['tipo']);
+                $quien = count($quienes) > 1 ? ' · ' . $d['quien'] : '';
+                $lineas[] = "• {$d['folio']} · {$etq} · {$d['fecha']}{$quien} · Neto {$m($sg * $d['neto'])} · Total {$m($sg * $d['total'])}";
+            }
+            $s = $sumas[$clave];
+            $lineas[] = "*Suma ({$s['n']}):* neto {$m($s['neto'])} · IVA {$m($s['iva'])} · *total {$m($s['total'])}*";
+            $lineas[] = '';
+        }
+        if (isset($sumas['compra'], $sumas['venta'])) {
+            $lineas[] = '_Hay facturas de compra y de venta: están sumadas por separado._';
+        }
+        if (!$docs) {
+            $lineas[] = '🔎 No encontré ninguna de esas facturas' . ($q !== '' ? " de «{$q}»" : '') . '.';
+        }
+        if ($noEncontrados) {
+            $lineas[] = '⚠️ No encontré el folio ' . implode(', ', $noEncontrados) . ($q !== '' ? " de «{$q}»" : '') . '.';
+        }
+        foreach ($ambiguos as $a) {
+            $lineas[] = "⚠️ El folio {$a['folio']} coincide con varios documentos (" . implode('; ', $a['opciones']) . '): no lo sumé. Indícame el proveedor o cliente.';
+        }
+
+        return response()->json([
+            'ok'             => true,
+            'texto'          => trim(implode("\n", $lineas)),
+            'documentos'     => $docs,
+            'sumas'          => $sumas,
+            'no_encontrados' => $noEncontrados,
+            'ambiguos'       => $ambiguos,
+        ]);
+    }
+
     private const TIPOS_COMPRA = [33 => 'Factura', 34 => 'Factura exenta', 56 => 'Nota de débito', 61 => 'Nota de crédito'];
 
     private function buscarCompras(int $folio): array
