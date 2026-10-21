@@ -179,6 +179,7 @@
                   <th>Tipo</th>
                   <th style="min-width:110px">EETT / Color</th>
                   <th style="min-width:150px">Estado</th>
+                  <th class="text-center" title="Semáforo técnico (Winperfil)">Técnica</th>
                   <th class="text-center">Cant</th>
                   <th class="text-right">M²</th>
                   <th class="text-center">Pedido</th>
@@ -279,6 +280,23 @@
                       </v-tooltip>
                     </div>
                   </td>
+                  <!-- Semáforo técnico (Winperfil): 🔴 falta oferta · 🟡 medidas provisorias · 🟢 definitiva -->
+                  <td class="text-center">
+                    <v-tooltip v-if="item.tecnico" :text="item.tecnico.texto" location="top">
+                      <template #activator="{ props }">
+                        <v-icon
+                          v-bind="props" size="18"
+                          :color="item.tecnico.nivel === 'rojo' ? 'error' : item.tecnico.nivel === 'amarillo' ? 'warning' : 'success'"
+                          :style="item.tecnico.nivel !== 'verde' ? 'cursor:pointer' : ''"
+                          @click="item.tecnico.nivel !== 'verde' && irAPendientesTecnicos()"
+                        >
+                          mdi-circle
+                        </v-icon>
+                      </template>
+                    </v-tooltip>
+                    <span v-else class="text-medium-emphasis">—</span>
+                  </td>
+
                   <!-- Cant / M2 -->
                   <td class="text-center">
                     <v-text-field v-if="item.es_manual" :model-value="item.cant_ventanas" type="number" min="0"
@@ -357,7 +375,7 @@
               </tbody>
               <tfoot>
                 <tr class="tablero-subtotal">
-                  <td colspan="9" class="text-right">Subtotal {{ g.material }}</td>
+                  <td colspan="10" class="text-right">Subtotal {{ g.material }}</td>
                   <td class="text-right">{{ fmt(g.totalBruto) }}</td>
                   <td class="text-right text-success">{{ fmt(g.totalAbono) }}</td>
                   <td class="text-right" :class="g.totalDeuda > 0 ? 'text-warning' : 'text-success'">{{ fmt(g.totalDeuda) }}</td>
