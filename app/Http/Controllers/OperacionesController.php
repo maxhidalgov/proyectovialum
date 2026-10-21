@@ -342,6 +342,69 @@ class OperacionesController extends Controller
      * de las facturas: transferencia (venta_movimiento), tarjeta (transbank) y cobro
      * manual, cada uno con su fecha/fuente (solo lectura).
      */
+    /**
+     * Detalle de un proyecto del tablero (cliente, contacto, elementos vendidos, notas…) para el
+     * cuadro que se abre al hacer clic en el nombre. GET /api/operaciones/{id}/detalle
+     */
+    public function detalle($id)
+    {
+        $c = Cotizacion::with(['cliente', 'contacto', 'vendedor', 'estado', 'ventanas.tipoVentana', 'detalles.listaPrecio.producto'])
+            ->findOrFail($id);
+
+        $limpio = fn ($t) => trim(preg_replace('/[\s\x{00A0}]+/u', ' ', (string) $t));
+
+        $elementos = [];
+        foreach ($c->ventanas as $v) {
+            $medida = ($v->ancho && $v->alto) ? " {$v->ancho}×{$v->alto} mm" : '';
+            $elementos[] = ['descripcion' => $limpio(($v->tipoVentana?->nombre ?? 'Ventana') . $medida), 'cantidad' => (float) ($v->cantidad ?? 1)];
+        }
+        foreach ($c->detalles as $d) {
+            $desc = $d->tipo_item === 'winperfil'
+                ? $d->descripcion
+                : ($d->descripcion ?: ($d->listaPrecio?->producto?->nombre ?? ''));
+            if (trim((string) $desc) === '') {
+                continue;
+            }
+            $elementos[] = ['descripcion' => $limpio($desc), 'cantidad' => (float) ($d->cantidad ?? 1)];
+        }
+
+        $cl = $c->cliente;
+        $nombre = $cl?->razon_social ?: trim(($cl?->first_name ?? '') . ' ' . ($cl?->last_name ?? ''));
+        $direccion = trim(implode(', ', array_filter([$cl?->direccion ?: $cl?->address, $cl?->comuna, $cl?->ciudad])));
+        $mapa = ($cl?->latitud && $cl?->longitud) ? 'https://www.google.com/maps?q=' . $cl->latitud . ',' . $cl->longitud : null;
+
+        return response()->json([
+            'id'                => $c->id,
+            'es_manual'         => (bool) $c->es_manual,
+            'nombre_manual'     => $c->es_manual ? $c->nombre_manual : null,
+            'fecha'             => $c->fecha,
+            'estado'            => $c->estado?->nombre,
+            'vendedor'          => $c->vendedor?->name,
+            'cliente'           => $cl ? [
+                'nombre'    => $limpio($nombre),
+                'rut'       => $cl->identification,
+                'telefono'  => $cl->phone,
+                'email'     => $cl->email,
+                'direccion' => $direccion ?: null,
+                'mapa'      => $mapa,
+            ] : null,
+            'contacto'          => $c->contacto_nombre ? [
+                'nombre'   => $c->contacto_nombre,
+                'telefono' => $c->contacto?->telefono,
+                'email'    => $c->contacto?->email,
+            ] : null,
+            'elementos'         => $elementos,
+            'material'          => $c->material ?: 'PVC',
+            'eett'              => $c->eett,
+            'estado_produccion' => $c->estado_produccion,
+            'fecha_entrega'     => $c->fecha_entrega,
+            'observaciones'     => $c->observaciones,
+            'notas_operaciones' => $c->notas_operaciones,
+            'winperfil_numero'  => $c->winperfil_numero,
+            'tecnico'           => $c->es_manual ? null : $c->semaforoTecnico(),
+        ]);
+    }
+
     public function abonosDetalle($id)
     {
         $cot = Cotizacion::findOrFail($id);

@@ -213,7 +213,18 @@
                         </v-btn>
                       </template>
                       <template v-else>
-                        <span class="font-weight-medium">{{ item.cliente }}</span>
+                        <v-tooltip location="top" max-width="340">
+                          <template #activator="{ props }">
+                            <a v-bind="props" class="cliente-link font-weight-medium" @click.stop="abrirDetalle(item)">{{ item.cliente }}</a>
+                          </template>
+                          <div class="text-caption">
+                            <div class="font-weight-bold">{{ item.cliente }} · Cot. #{{ item.id }}</div>
+                            <div>{{ item.cant_ventanas }} ventana(s) · {{ item.m2 }} m² · {{ item.material }}<span v-if="item.eett"> · {{ item.eett }}</span></div>
+                            <div>{{ item.estado_produccion || 'Sin estado de producción' }}<span v-if="item.vendedor"> · {{ item.vendedor }}</span></div>
+                            <div>Total {{ fmt(item.total) }} · Deuda {{ fmt(item.saldo) }}</div>
+                            <div class="mt-1 text-medium-emphasis">Haz clic para ver el detalle</div>
+                          </div>
+                        </v-tooltip>
                         <v-icon v-if="estaVencida(item)" color="error" size="13" title="Entrega vencida">mdi-calendar-alert</v-icon>
                         <v-icon v-if="sinMoverMucho(item)" color="warning" size="13" title="Sin avanzar hace días">mdi-clock-alert</v-icon>
                       </template>
@@ -760,6 +771,98 @@
     </v-dialog>
 
     <!-- Detalle de abonos -->
+    <!-- Detalle del proyecto (al hacer clic en el nombre) -->
+    <v-dialog v-model="dialogDetalle.show" max-width="640" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2 pa-4">
+          <v-icon color="primary">mdi-clipboard-text-outline</v-icon>
+          {{ dialogDetalle.item?.cliente }}
+          <span class="text-caption text-medium-emphasis">Cotización #{{ dialogDetalle.item?.id }}</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="dialogDetalle.show = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4" style="max-height:70vh">
+          <div v-if="dialogDetalle.loading" class="text-center py-8"><v-progress-circular indeterminate color="primary" /></div>
+          <v-alert v-else-if="dialogDetalle.error" type="warning" variant="tonal" density="compact">{{ dialogDetalle.error }}</v-alert>
+          <template v-else-if="dialogDetalle.data">
+            <div v-if="dialogDetalle.data.tecnico" class="mb-3">
+              <v-chip
+                size="small" variant="tonal" prepend-icon="mdi-circle"
+                :color="dialogDetalle.data.tecnico.nivel === 'rojo' ? 'error' : dialogDetalle.data.tecnico.nivel === 'amarillo' ? 'warning' : 'success'"
+              >
+                {{ dialogDetalle.data.tecnico.texto }}
+              </v-chip>
+            </div>
+
+            <div class="text-overline text-medium-emphasis">Cliente</div>
+            <div v-if="dialogDetalle.data.cliente" class="mb-3">
+              <div class="font-weight-medium">{{ dialogDetalle.data.cliente.nombre }}</div>
+              <div v-if="dialogDetalle.data.cliente.rut" class="text-body-2">RUT {{ dialogDetalle.data.cliente.rut }}</div>
+              <div v-if="dialogDetalle.data.cliente.telefono" class="text-body-2">
+                Tel. {{ dialogDetalle.data.cliente.telefono }}
+                <a :href="'https://wa.me/' + telefonoWa(dialogDetalle.data.cliente.telefono)" target="_blank" rel="noopener" class="ml-1">WhatsApp</a>
+              </div>
+              <div v-if="dialogDetalle.data.cliente.email" class="text-body-2">{{ dialogDetalle.data.cliente.email }}</div>
+              <div v-if="dialogDetalle.data.cliente.direccion" class="text-body-2">
+                {{ dialogDetalle.data.cliente.direccion }}
+                <a v-if="dialogDetalle.data.cliente.mapa" :href="dialogDetalle.data.cliente.mapa" target="_blank" rel="noopener" class="ml-1">Ver mapa</a>
+              </div>
+            </div>
+            <div v-else class="mb-3 text-medium-emphasis">{{ dialogDetalle.data.nombre_manual || 'Proyecto manual (sin cliente)' }}</div>
+            <div v-if="dialogDetalle.data.contacto" class="mb-3 text-body-2">
+              <strong>Atención:</strong> {{ dialogDetalle.data.contacto.nombre }}
+              <span v-if="dialogDetalle.data.contacto.telefono"> · {{ dialogDetalle.data.contacto.telefono }}</span>
+              <span v-if="dialogDetalle.data.contacto.email"> · {{ dialogDetalle.data.contacto.email }}</span>
+            </div>
+
+            <div class="text-overline text-medium-emphasis">Proyecto</div>
+            <div class="text-body-2 mb-3">
+              <div>Estado: <strong>{{ dialogDetalle.data.estado }}</strong> · Producción: <strong>{{ dialogDetalle.data.estado_produccion || 'sin estado' }}</strong></div>
+              <div>Material: {{ dialogDetalle.data.material }}<span v-if="dialogDetalle.data.eett"> · {{ dialogDetalle.data.eett }}</span></div>
+              <div v-if="dialogDetalle.data.vendedor">Vendedor: {{ dialogDetalle.data.vendedor }} · Fecha: {{ dialogDetalle.data.fecha }}</div>
+              <div v-if="dialogDetalle.data.fecha_entrega">Entrega: {{ dialogDetalle.data.fecha_entrega }}</div>
+              <div v-if="dialogDetalle.data.winperfil_numero">Presupuesto de Winperfil N° {{ dialogDetalle.data.winperfil_numero }}</div>
+            </div>
+
+            <div class="text-overline text-medium-emphasis">Qué se vendió ({{ dialogDetalle.data.elementos.length }})</div>
+            <v-table v-if="dialogDetalle.data.elementos.length" density="compact" class="mb-3">
+              <tbody>
+                <tr v-for="(e, i) in dialogDetalle.data.elementos" :key="i">
+                  <td class="text-body-2">{{ e.descripcion }}</td>
+                  <td class="text-right font-weight-bold" style="width:50px">{{ e.cantidad }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+            <div v-else class="text-body-2 text-medium-emphasis mb-3">Sin detalle de elementos.</div>
+
+            <div class="text-overline text-medium-emphasis">Montos</div>
+            <div class="text-body-2 mb-3">
+              Total <strong>{{ fmt(dialogDetalle.item.total) }}</strong> · Abonado <strong class="text-success">{{ fmt(dialogDetalle.item.total_abonado) }}</strong>
+              · Saldo <strong class="text-warning">{{ fmt(dialogDetalle.item.saldo) }}</strong>
+            </div>
+
+            <template v-if="dialogDetalle.data.observaciones || dialogDetalle.data.notas_operaciones">
+              <div class="text-overline text-medium-emphasis">Notas</div>
+              <div v-if="dialogDetalle.data.notas_operaciones" class="text-body-2 mb-1">{{ dialogDetalle.data.notas_operaciones }}</div>
+              <div v-if="dialogDetalle.data.observaciones" class="text-body-2 text-medium-emphasis">{{ dialogDetalle.data.observaciones }}</div>
+            </template>
+          </template>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-btn v-if="dialogDetalle.item && !dialogDetalle.item.es_manual" variant="text" prepend-icon="mdi-file-document-outline" @click="irACotizacion(dialogDetalle.item)">
+            Abrir cotización
+          </v-btn>
+          <v-btn v-if="dialogDetalle.item" variant="text" prepend-icon="mdi-cash-multiple" @click="dialogDetalle.show = false; abrirAbonos(dialogDetalle.item)">
+            Ver abonos
+          </v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="dialogDetalle.show = false">Cerrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="dialogAbonos.show" max-width="520">
       <v-card v-if="dialogAbonos.item">
         <v-card-title class="d-flex align-center gap-2 pa-4">
@@ -1074,6 +1177,27 @@ const statCards = computed(() => {
 })
 
 // ── Tabla ────────────────────────────────────────────────────────
+// ── Detalle del proyecto (clic en el nombre) ───────────────────────────────
+const dialogDetalle = ref({ show: false, loading: false, error: '', item: null, data: null })
+
+async function abrirDetalle(item) {
+  dialogDetalle.value = { show: true, loading: true, error: '', item, data: null }
+  try {
+    const { data } = await api.get(`/api/operaciones/${item.id}/detalle`)
+    dialogDetalle.value.data = data
+  } catch (e) {
+    dialogDetalle.value.error = e.response?.data?.message || 'No se pudo cargar el detalle del proyecto'
+  } finally {
+    dialogDetalle.value.loading = false
+  }
+}
+
+const telefonoWa = tel => {
+  const d = String(tel || '').replace(/\D+/g, '')
+  return d.length === 9 && d.startsWith('9') ? `56${d}` : d
+}
+const irACotizacion = item => router.push(`/cotizacion-ver?id=${item.id}`)
+
 // Ir a la lista de pendientes técnicos (página Winperfil)
 const router = useRouter()
 function irAPendientesTecnicos() {
@@ -1566,6 +1690,8 @@ function fmtFechaCorta(iso) {
 .tablero-table tbody .quitar-btn { opacity: 0; transition: opacity .15s; }
 .tablero-table tbody tr:hover .quitar-btn { opacity: .55; }
 .tablero-table tbody .quitar-btn:hover { opacity: 1; }
+.cliente-link { cursor: pointer; text-decoration: none; color: inherit; }
+.cliente-link:hover { text-decoration: underline; color: rgb(var(--v-theme-primary)); }
 /* Primera columna (Elemento) fija al hacer scroll horizontal */
 .tablero-table th:first-child,
 .tablero-table td:first-child {

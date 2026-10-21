@@ -60,6 +60,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-21 → 2026-10-21 — Operaciones: el nombre del Elemento muestra un cuadro al pasar el mouse y un detalle completo del proyecto al hacer clic (cliente, contacto, qué se vendió, montos, notas)
 - [x] 2026-10-21 → 2026-10-21 — Cotizaciones: enviar el PDF por WhatsApp como archivo (menú de compartir en celular; descarga + chat en computador), canal "WhatsApp · PDF"
 - [x] 2026-10-21 → 2026-10-21 — Guía de uso para administración dentro de la app (/guia): flujo de venta, venta parcial, cobro, cambios del cliente, semáforo técnico, materiales y preguntas frecuentes
 - [x] 2026-10-21 → 2026-10-21 — Semáforo técnico 🔴🟡🟢 de proyectos Winperfil: columna en Operaciones, pestaña "Pendientes técnicos" en Winperfil (buscar y vincular la oferta técnica conservando el precio, "pauta definitiva lista") y etiqueta + lista estimada en Materiales WP para ventas parciales

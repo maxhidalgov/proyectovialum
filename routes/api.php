@@ -467,6 +467,7 @@ Route::middleware('auth:api')->group(function () {
     Route::delete('/operaciones/manual/{id}', [OperacionesController::class, 'destroyManual']);
     Route::post('/operaciones/manual/{id}/vincular', [OperacionesController::class, 'vincularCotizacion']);
     Route::get('/operaciones/{id}/abonos', [OperacionesController::class, 'abonosDetalle']);
+    Route::get('/operaciones/{id}/detalle', [OperacionesController::class, 'detalle']);
     Route::patch('/operaciones/{id}', [OperacionesController::class, 'update']);
     Route::patch('/operaciones/historial/{id}', [OperacionesController::class, 'actualizarHistorial']);
     Route::post('/operaciones/{id}/historial', [OperacionesController::class, 'storeHistorial']);
