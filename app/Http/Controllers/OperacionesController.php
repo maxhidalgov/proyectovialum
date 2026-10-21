@@ -17,14 +17,18 @@ class OperacionesController extends Controller
     // Días hábiles de producción por defecto (para la entrega sugerida cuando aún no hay histórico)
     private const DIAS_PRODUCCION_DEFAULT = 15;
 
+    /**
+     * Estados que entran al tablero: solo lo que ya se vendió. Antes se excluían Evaluación/Rechazada/Anulada,
+     * pero al aparecer el estado "Enviada" (cotización enviada al cliente, aún sin aprobar) se colaba al tablero.
+     */
+    private const ESTADOS_EN_TABLERO = ['Aprobada', 'En Producción', 'Entregada', 'Facturada'];
+
     // Cotizaciones aprobadas/en producción/entregadas con datos de operaciones
     public function index()
     {
         $incluirOcultos = filter_var(request('incluir_ocultos', false), FILTER_VALIDATE_BOOLEAN);
         $cotizaciones = Cotizacion::with(['cliente', 'vendedor', 'estado', 'ventanas', 'detalles', 'historialEstados'])
-            ->whereHas('estado', fn($q) => $q->whereNotIn('nombre', [
-                'Evaluación', 'Rechazada', 'Anulada',
-            ]))
+            ->whereHas('estado', fn($q) => $q->whereIn('nombre', self::ESTADOS_EN_TABLERO))
             ->when(!$incluirOcultos, fn($q) => $q->where(fn($w) => $w->where('oculto_operaciones', false)->orWhereNull('oculto_operaciones')))
             ->latest()
             ->get();
@@ -222,9 +226,8 @@ class OperacionesController extends Controller
             'lead_days'          => $leadDays,
         ];
 
-        $ocultosCount = Cotizacion::whereHas('estado', fn($q) => $q->whereNotIn('nombre', [
-                'Evaluación', 'Rechazada', 'Anulada',
-            ]))->where('oculto_operaciones', true)->count();
+        $ocultosCount = Cotizacion::whereHas('estado', fn($q) => $q->whereIn('nombre', self::ESTADOS_EN_TABLERO))
+            ->where('oculto_operaciones', true)->count();
 
         return response()->json([
             'cotizaciones'  => $items,

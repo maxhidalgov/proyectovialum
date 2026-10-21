@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-21 — Operaciones: las cotizaciones "Enviada" ya no entran al tablero
+- **Qué se hizo:** El tablero de Operaciones mostraba cotizaciones solo enviadas al cliente (sin aprobar), como la #194 de Constructora Guindo Santo ("Sin estado", sin abonos ni producción). Causa: el filtro excluía solo Evaluación/Rechazada/Anulada y es anterior al estado "Enviada" (que se crea al usar Enviar en Cotizaciones), que nunca se agregó a la lista. Ahora usa una lista de estados permitidos (`ESTADOS_EN_TABLERO`: Aprobada, En Producción, Entregada, Facturada), también en el contador de ocultos. En producción solo se van del tablero las 2 cotizaciones en estado Enviada (#194 y #188); las 24 aprobadas y 5 facturadas no cambian.
+- **Archivos principales:** `app/Http/Controllers/OperacionesController.php` (`index`, `ocultosCount`).
+- **Pendiente / ojo con:** Probado en local con una cotización en cada estado. Si alguna vez se agrega un estado nuevo que deba verse en el tablero, hay que sumarlo a `ESTADOS_EN_TABLERO`. El fallback de `vincularCotizacion` (línea ~295) sigue usando la lista de exclusión antigua, pero siempre toma "Aprobada" primero, así que no afecta.
+
 ## 2026-10-21 — Operaciones: detalle del proyecto al pasar el mouse / hacer clic en el nombre
 - **Qué se hizo:** En el Tablero de Operaciones el nombre de la columna Elemento ahora es un enlace: al pasar el mouse muestra un cuadro con lo esencial (cliente, cotización #, ventanas y m², material/EETT, estado de producción, vendedor, total y deuda) y al hacer clic abre una ventana con el detalle: semáforo técnico, cliente (RUT, teléfono con enlace a WhatsApp, correo, dirección con "Ver mapa"), persona de contacto, proyecto (estados, vendedor, fecha, entrega, N° de presupuesto de Winperfil), **qué se vendió** (lista de ventanas/productos con cantidad), montos y notas, con botones "Abrir cotización" y "Ver abonos". Endpoint nuevo `GET /api/operaciones/{id}/detalle` (`OperacionesController::detalle`); funciona también para proyectos manuales (muestran el nombre manual).
 - **Archivos principales:** `OperacionesController` (`detalle`), `routes/api.php`, `vuexy-frontend/src/pages/operaciones/index.vue`, `public/`.
