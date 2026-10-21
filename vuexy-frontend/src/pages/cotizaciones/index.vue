@@ -176,17 +176,24 @@
               :color="dialogEnviar.canal === 'whatsapp' ? 'green' : undefined"
               prepend-icon="mdi-whatsapp" @click="elegirCanal('whatsapp')"
             >
-              WhatsApp
+              WhatsApp · link
+            </v-btn>
+            <v-btn
+              size="small" :variant="dialogEnviar.canal === 'wapdf' ? 'flat' : 'outlined'"
+              :color="dialogEnviar.canal === 'wapdf' ? 'green' : undefined"
+              prepend-icon="mdi-file-pdf-box" @click="elegirCanal('wapdf')"
+            >
+              WhatsApp · PDF
             </v-btn>
             <v-btn
               size="small" :variant="dialogEnviar.canal === 'email' ? 'flat' : 'outlined'"
               :color="dialogEnviar.canal === 'email' ? 'primary' : undefined"
               prepend-icon="mdi-email-outline" @click="elegirCanal('email')"
             >
-              Correo (PDF adjunto)
+              Correo · PDF
             </v-btn>
           </div>
-          <v-text-field v-if="dialogEnviar.canal === 'whatsapp'" v-model="dialogEnviar.telefono" label="Teléfono (WhatsApp)" placeholder="Ej: 9 1234 5678"
+          <v-text-field v-if="dialogEnviar.canal !== 'email'" v-model="dialogEnviar.telefono" label="Teléfono (WhatsApp)" placeholder="Ej: 9 1234 5678"
             density="compact" variant="outlined" prepend-inner-icon="mdi-phone" class="mb-3" />
           <v-text-field v-else v-model="dialogEnviar.email" label="Correo del destinatario" placeholder="cliente@empresa.cl" type="email"
             density="compact" variant="outlined" prepend-inner-icon="mdi-email-outline" class="mb-3" />
@@ -194,9 +201,15 @@
           <p v-if="dialogEnviar.canal === 'whatsapp'" class="text-caption text-medium-emphasis mt-1">
             Se abrirá WhatsApp con el mensaje y el link al PDF. La cotización queda como <strong>Enviada</strong> y se crea un recordatorio de seguimiento en 3 días.
           </p>
+          <p v-else-if="dialogEnviar.canal === 'wapdf'" class="text-caption text-medium-emphasis mt-1">
+            Envía el <strong>PDF como archivo</strong>, no como link. En el <strong>celular</strong> se abre el menú de compartir con el PDF ya adjunto
+            (elige WhatsApp y el contacto). En el <strong>computador</strong> se descarga el PDF y se abre el chat: tú lo adjuntas con el clip.
+            La cotización queda como <strong>Enviada</strong> con recordatorio en 3 días.
+          </p>
           <p v-else class="text-caption text-medium-emphasis mt-1">
             Se envía un correo con el <strong>PDF adjunto</strong>. La cotización queda como <strong>Enviada</strong> y se crea un recordatorio de seguimiento en 3 días.
           </p>
+          <v-alert v-if="dialogEnviar.aviso" color="success" variant="tonal" density="compact" class="mt-2 text-caption" icon="mdi-file-pdf-box">{{ dialogEnviar.aviso }}</v-alert>
           <v-alert v-if="dialogEnviar.error" color="error" variant="tonal" density="compact" class="mt-2 text-caption">{{ dialogEnviar.error }}</v-alert>
         </v-card-text>
         <v-divider />
@@ -206,10 +219,15 @@
             <v-icon start>mdi-handshake-outline</v-icon>Entregada en persona
           </v-btn>
           <v-spacer />
-          <v-btn variant="text" @click="dialogEnviar.show = false">Cancelar</v-btn>
-          <v-btn :color="dialogEnviar.canal === 'email' ? 'primary' : 'green'" :loading="dialogEnviar.enviando" @click="enviarCotizacion">
-            <v-icon start>{{ dialogEnviar.canal === 'email' ? 'mdi-email-outline' : 'mdi-whatsapp' }}</v-icon>
-            {{ dialogEnviar.canal === 'email' ? 'Enviar por correo' : 'Enviar por WhatsApp' }}
+          <v-btn variant="text" @click="dialogEnviar.show = false">{{ dialogEnviar.aviso ? 'Cerrar' : 'Cancelar' }}</v-btn>
+          <v-btn
+            v-if="!dialogEnviar.aviso"
+            :color="dialogEnviar.canal === 'email' ? 'primary' : 'green'"
+            :loading="dialogEnviar.enviando || (dialogEnviar.canal === 'wapdf' && dialogEnviar.pdfCargando)"
+            @click="dialogEnviar.canal === 'wapdf' ? enviarPdfWhatsapp() : enviarCotizacion()"
+          >
+            <v-icon start>{{ dialogEnviar.canal === 'email' ? 'mdi-email-outline' : dialogEnviar.canal === 'wapdf' ? 'mdi-file-pdf-box' : 'mdi-whatsapp' }}</v-icon>
+            {{ dialogEnviar.canal === 'email' ? 'Enviar por correo' : dialogEnviar.canal === 'wapdf' ? 'Compartir PDF' : 'Enviar por WhatsApp' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -356,17 +374,43 @@ const descargarPDF = async (cotizacionId) => {
 }
 
 // ── Enviar cotización (WhatsApp) ──────────────────────────────────
-const dialogEnviar = ref({ show: false, enviando: false, presencial: false, item: null, canal: 'whatsapp', telefono: '', email: '', mensaje: '', mensajeWhatsapp: '', mensajeCorreo: '', error: null })
+const dialogEnviar = ref({
+  show: false, enviando: false, presencial: false, item: null, canal: 'whatsapp', telefono: '', email: '',
+  mensaje: '', mensajeWhatsapp: '', mensajeWaPdf: '', mensajeCorreo: '', error: null, aviso: null,
+  pdfArchivo: null, pdfBlob: null, pdfCargando: false,
+})
 
-// Cada canal tiene su propio texto: WhatsApp lleva el link; el correo lleva el PDF adjunto
+// Cada canal tiene su propio texto: WhatsApp·link lleva el link; WhatsApp·PDF y correo llevan el PDF
+const claveMensaje = { whatsapp: 'mensajeWhatsapp', wapdf: 'mensajeWaPdf', email: 'mensajeCorreo' }
+
 function elegirCanal(canal) {
   const d = dialogEnviar.value
   if (d.canal === canal) return
   // conserva lo que se haya editado del mensaje del canal que se deja
-  if (d.canal === 'email') d.mensajeCorreo = d.mensaje; else d.mensajeWhatsapp = d.mensaje
+  d[claveMensaje[d.canal]] = d.mensaje
   d.canal = canal
-  d.mensaje = canal === 'email' ? d.mensajeCorreo : d.mensajeWhatsapp
+  d.mensaje = d[claveMensaje[canal]]
   d.error = null
+  d.aviso = null
+  if (canal === 'wapdf') prepararPdf()
+}
+
+// El PDF se genera ANTES del clic final: el navegador solo deja abrir el menú de compartir
+// si el clic es reciente, y generar el PDF puede tardar unos segundos.
+async function prepararPdf() {
+  const d = dialogEnviar.value
+  if (d.pdfArchivo || d.pdfCargando || !d.item) return
+  d.pdfCargando = true
+  try {
+    await asegurarGraficosCotizacion(api, d.item.id)
+    const res = await api.get(`/api/cotizaciones/${d.item.id}/pdf`, { responseType: 'blob' })
+    d.pdfBlob = res.data
+    d.pdfArchivo = new File([res.data], `Cotizacion-${d.item.id}-Vialum.pdf`, { type: 'application/pdf' })
+  } catch (e) {
+    d.error = 'No se pudo generar el PDF. Intenta de nuevo.'
+  } finally {
+    d.pdfCargando = false
+  }
 }
 
 async function abrirEnviar(item) {
@@ -391,9 +435,11 @@ async function abrirEnviar(item) {
   const atencion = item.contacto_nombre || nombre
   const vendedor = item.vendedor?.name || 'Vialum'
   const mensajeCorreo = `${atencion ? 'Hola ' + atencion + ',' : 'Hola,'}\n\nTe envío adjunta la cotización #${item.id} de Vialum. Cualquier duda quedo atento.\n\nSaludos,\n${vendedor}`
+  const mensajeWaPdf = `${nombre ? 'Hola ' + nombre + ',' : 'Hola,'}\n\nTe envío adjunta la cotización #${item.id} de Vialum. Cualquier duda quedo atento. ¡Saludos!`
   dialogEnviar.value = {
     show: true, enviando: false, presencial: false, item, canal: 'whatsapp',
-    telefono: tel, email, mensaje, mensajeWhatsapp: mensaje, mensajeCorreo, error: null,
+    telefono: tel, email, mensaje, mensajeWhatsapp: mensaje, mensajeWaPdf, mensajeCorreo, error: null, aviso: null,
+    pdfArchivo: null, pdfBlob: null, pdfCargando: false,
   }
 }
 
@@ -430,6 +476,62 @@ async function enviarCotizacion() {
     d.show = false
   } catch (e) {
     d.error = e.response?.data?.message || 'No se pudo enviar'
+  } finally {
+    d.enviando = false
+  }
+}
+
+// Teléfono chileno → solo dígitos con código de país (9 dígitos que parten con 9 = celular sin 56)
+function telefonoParaWhatsapp(tel) {
+  const digitos = String(tel || '').replace(/\D+/g, '')
+  return digitos.length === 9 && digitos.startsWith('9') ? `56${digitos}` : digitos
+}
+
+// Deja el registro del envío (queda "Enviada" y se crea el recordatorio de seguimiento)
+async function registrarEnvioPdf(d, destino) {
+  const { data } = await api.post(`/api/cotizaciones/${d.item.id}/enviar`, {
+    via: 'whatsapp', solo_registrar: true, telefono: destino || undefined,
+  })
+  d.item.enviado_at = data.enviado_at || new Date().toISOString()
+}
+
+// WhatsApp · PDF: el PDF viaja como ARCHIVO, no como link
+async function enviarPdfWhatsapp() {
+  const d = dialogEnviar.value
+  d.error = null
+  d.aviso = null
+  if (!d.pdfArchivo) await prepararPdf()
+  if (!d.pdfArchivo) return
+  d.enviando = true
+  try {
+    // 1) Celular (y navegadores que lo permiten): menú de compartir con el PDF adjunto
+    if (navigator.canShare && navigator.canShare({ files: [d.pdfArchivo] })) {
+      try {
+        await navigator.share({ files: [d.pdfArchivo], text: d.mensaje, title: `Cotización #${d.item.id}` })
+        await registrarEnvioPdf(d, d.telefono)
+        d.show = false
+        return
+      } catch (e) {
+        if (e?.name === 'AbortError') return  // cerró el menú sin compartir: no se registra nada
+        // cualquier otro fallo: se sigue con el plan 2
+      }
+    }
+    // 2) Computador: descarga el PDF y abre el chat con el mensaje; el PDF se adjunta con el clip
+    const url = window.URL.createObjectURL(d.pdfBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', d.pdfArchivo.name)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+
+    const tel = telefonoParaWhatsapp(d.telefono)
+    window.open(tel ? `https://wa.me/${tel}?text=${encodeURIComponent(d.mensaje)}` : 'https://web.whatsapp.com/', '_blank')
+    await registrarEnvioPdf(d, d.telefono)
+    d.aviso = `Se descargó «${d.pdfArchivo.name}». En WhatsApp pulsa el clip (📎) → Documento y elige ese archivo: es el último de tu carpeta Descargas.`
+  } catch (e) {
+    d.error = e.response?.data?.message || 'No se pudo preparar el envío'
   } finally {
     d.enviando = false
   }

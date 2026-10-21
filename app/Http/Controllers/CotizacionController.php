@@ -1109,6 +1109,8 @@ public function store(Request $request)
             'telefono' => 'nullable|string|max:30',
             'email'    => 'nullable|email|max:120',
             'mensaje'  => 'nullable|string|max:2000',
+            // PDF compartido como archivo desde el navegador: solo se deja el registro del envío
+            'solo_registrar' => 'nullable|boolean',
         ]);
 
         $cot = Cotizacion::with(['cliente', 'contacto', 'vendedor', 'estado'])->findOrFail($id);
@@ -1131,6 +1133,13 @@ public function store(Request $request)
 
         if ($data['via'] === 'email') {
             return $this->enviarPorCorreo($cot, $data);
+        }
+
+        // PDF enviado como archivo por WhatsApp (lo comparte el navegador): no hay link ni teléfono que armar
+        if (!empty($data['solo_registrar'])) {
+            $this->registrarEnvioCotizacion($cot, 'whatsapp', ($data['telefono'] ?? null) ?: 'PDF compartido');
+
+            return response()->json(['ok' => true, 'enviado_at' => $cot->enviado_at?->toDateTimeString()]);
         }
 
         // WhatsApp
