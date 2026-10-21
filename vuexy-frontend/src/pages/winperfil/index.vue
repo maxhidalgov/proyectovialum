@@ -326,6 +326,7 @@
             <div class="d-flex align-center justify-space-between mb-3 flex-wrap gap-2">
               <div class="text-body-2 text-medium-emphasis">
                 Proyectos aprobados a los que aún les falta algo del lado de Winperfil para fabricar con cantidades exactas.
+                <a href="/guia#semaforo" target="_blank" rel="noopener">¿Cómo funciona? Ver guía</a>
               </div>
               <VBtn size="small" variant="tonal" prepend-icon="mdi-refresh" :loading="cargandoPend" @click="cargarPendientes">Actualizar</VBtn>
             </div>
@@ -620,6 +621,7 @@
             </div>
             <div class="text-caption text-medium-emphasis mb-2">
               Desmarca las que el cliente no compró: se quitan de la cotización y el total se recalcula.
+              <a href="/guia#venta-parcial" target="_blank" rel="noopener">Ver guía</a>
             </div>
             <div style="max-height:210px; overflow-y:auto">
               <VCheckbox

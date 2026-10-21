@@ -40,6 +40,9 @@ Producción y bot (ideas del dueño, 2026-10-20):
 - [ ] 2026-10-20 — Bot: seguimiento de cotizaciones sin aprobar, parte 2: aviso escalonado diario/por vendedor y responder en lenguaje natural ("llamé, quedó en responder el viernes" → nota + recordatorio; "rechazó" → Rechazada con motivo; "aprobó" → inicia la aprobación); limpieza guiada de las +30 días (112 en prod)
 - [ ] 2026-10-20 — Ciclo semanal de proveedor (Winhouse viene los miércoles): recordar el martes en la mañana las obras con `pedido_proveedor` sin marcar, y armar el pedido consolidado
 
+Guía:
+- [ ] 2026-10-21 — Guía de uso: agregar capturas de pantalla, una versión para el taller/producción y la parte de conciliación bancaria; mantenerla al día cuando cambie un flujo
+
 Winperfil:
 - [ ] 2026-10-21 — Pendientes técnicos, lo que quedó: aviso por WhatsApp/bot (y en el resumen de producción) cuando se registra una venta parcial o algo lleva +2 días; mostrar el dibujo de las ventanas vendidas en la lista; sugerir el vínculo de boletas/facturas de Bsale con la obra
 - [ ] 2026-10-17 — Winperfil: control de costo/margen por obra con PERFCOSTE/ACCCOSTE/VIDCOSTE/MANOCOSTE de la cabecera de oferta
@@ -55,6 +58,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-21 → 2026-10-21 — Guía de uso para administración dentro de la app (/guia): flujo de venta, venta parcial, cobro, cambios del cliente, semáforo técnico, materiales y preguntas frecuentes
 - [x] 2026-10-21 → 2026-10-21 — Semáforo técnico 🔴🟡🟢 de proyectos Winperfil: columna en Operaciones, pestaña "Pendientes técnicos" en Winperfil (buscar y vincular la oferta técnica conservando el precio, "pauta definitiva lista") y etiqueta + lista estimada en Materiales WP para ventas parciales
 - [x] 2026-10-21 → 2026-10-21 — Venta parcial de un presupuesto Winperfil (elegir qué ventanas se vendieron al importar) y botón "Aprobar y cobrar" que abre la emisión en Facturación
 - [x] 2026-10-20 → 2026-10-20 — Cotizaciones: enviar por correo con el PDF adjunto (no el link), con el correo del contacto/cliente por defecto; requiere cargar el SMTP en Railway

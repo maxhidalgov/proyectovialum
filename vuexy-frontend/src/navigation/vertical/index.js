@@ -29,6 +29,11 @@ const allMenuItems = [
     icon: { icon: 'tabler-smart-home' },
   },
   {
+    title: 'Guía de uso',
+    to: { name: 'guia' },
+    icon: { icon: 'mdi-book-open-page-variant-outline' },
+  },
+  {
     title: 'Dashboard',
     to: { name: 'dashboardventas' },
     icon: { icon: 'mdi mdi-view-dashboard' },
