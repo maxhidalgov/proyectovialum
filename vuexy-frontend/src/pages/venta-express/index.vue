@@ -507,7 +507,8 @@
     </VDialog>
 
     <!-- ── Dialog resultado ─────────────────────────────────────────────── -->
-    <VDialog v-model="resultado.show" max-width="420">
+    <!-- persistent: ya se emitió, no se puede volver a editar la venta; se sale con "Nueva" -->
+    <VDialog v-model="resultado.show" max-width="420" persistent>
       <VCard>
         <VCardText class="text-center pa-6">
           <VIcon size="56" color="success" class="mb-2">mdi-check-circle</VIcon>
@@ -528,11 +529,14 @@
           <div class="d-flex gap-2 justify-center mt-3">
             <VBtn v-if="resultado.pdf" color="error" variant="tonal" prepend-icon="mdi-file-pdf-box" :href="resultado.pdf" target="_blank">Ver PDF</VBtn>
             <VBtn v-if="resultado.cotizacion_id" color="info" variant="tonal" prepend-icon="mdi-open-in-new" :to="{ name: 'cotizaciones', query: { id: resultado.cotizacion_id } }">Ver cotización</VBtn>
+            <VBtn v-if="resultado.doc_id" color="success" variant="tonal" prepend-icon="mdi-send" @click="docEnviar.show = true">Enviar</VBtn>
             <VBtn color="primary" @click="nuevaVenta">Nueva</VBtn>
           </div>
         </VCardText>
       </VCard>
     </VDialog>
+
+    <EnviarDocumentoDialog v-model="docEnviar.show" :doc="docEnviar.doc" />
 
     <VSnackbar v-model="snack.show" :color="snack.color" timeout="4000" location="top">{{ snack.msg }}</VSnackbar>
   </VContainer>
@@ -541,6 +545,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import MoneyField from '@/components/documentos/MoneyField.vue'
+import EnviarDocumentoDialog from '@/components/documentos/EnviarDocumentoDialog.vue'
 import api from '@/axiosInstance'
 
 const tipo = ref('boleta')
@@ -726,6 +731,8 @@ function seleccionarCliente(c) {
     identification: c.identification,
     bsale_id: c.bsale_id,
     descuento: Number(c.descuento_productos || 0),
+    email: c.email || '',
+    telefono: c.phone || '',
   }
   cliMenu.value = false
   cliSearch.value = ''
@@ -976,6 +983,18 @@ async function emitir() {
       pdf: data.documento.pdf,
       cliente: data.documento.cliente,
       vidrios: items.value.filter(it => it.vidrio).map(it => it.vidrio),
+      doc_id: data.doc_id,
+    }
+    docEnviar.value = {
+      show: false,
+      doc: {
+        id: data.doc_id,
+        tipo_documento_bsale_id: data.documento.tipo === 'Boleta' ? 1 : 5,
+        numero_documento_bsale: data.documento.numero,
+        cliente: data.documento.cliente,
+        email_sugerido: cliente.value?.email || '',
+        telefono_sugerido: cliente.value?.telefono || '',
+      },
     }
   } catch (e) {
     snackMsg(e.response?.data?.error || 'No se pudo emitir el documento', 'error')
@@ -984,13 +1003,16 @@ async function emitir() {
   }
 }
 
+const docEnviar = ref({ show: false, doc: null })
+
 function nuevaVenta() {
   items.value = []
   cliente.value = null
   pagos.value = [{ forma_pago: 'tarjeta_debito', monto: 0, voucher: '' }]
   observaciones.value = ''
   referencias.value = []
-  resultado.value.show = false
+  resultado.value = { show: false, tipo: '', numero: '', total: 0, pdf: '', cliente: '', vidrios: [] }
+  docEnviar.value = { show: false, doc: null }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

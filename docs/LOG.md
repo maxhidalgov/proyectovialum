@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-22 — Venta Express: el modal de resultado ya no deja volver a editar y permite Enviar
+- **Qué se hizo:** El diálogo "Factura/Boleta emitida" ahora es `persistent` (clic fuera no lo cierra y deja la venta editable); la única salida es **Nueva**, que limpia ítems, cliente, pagos, observaciones y referencias. Se agregó el botón **Enviar** que abre `EnviarDocumentoDialog` (correo con PDF o WhatsApp) con el correo/teléfono del cliente elegido y el `doc_id` que ya devolvía `/venta-express/emitir`.
+- **Archivos principales:** `vuexy-frontend/src/pages/venta-express/index.vue`.
+- **Pendiente / ojo con:** Falta build + deploy; no probado en navegador. El correo requiere el SMTP cargado en Railway.
+
 ## 2026-10-22 — Bot: aprobar cotizaciones por WhatsApp (Fase 1)
 - **Qué se hizo:** Por chat privado con el dueño, "cotización de winperfil de marianela becker aceptada…" (o "aprueba la de Becker") hace que el bot busque la cotización en la app y en Winperfil (últimos 120 días sin importar), la importe si hace falta, pregunte lo que falte (ventanas todas o cuáles, precio si cambió —neto o bruto—, material, EETT, pagos y documento) y muestre una vista previa con el link de la cotización; solo al responder SI (lo detecta el código, no la IA) aprueba. Reusa `importarUno` y `confirmarImportWinperfil` (venta parcial, prorrateo de precio, estado Aprobada → "En Espera de Medidas"). Pagos: nueva tabla `cotizacion_pagos` (forma de pago, monto, fecha, N° de transacción = voucher Transbank). Sin documento, cada pago crea además una nota de venta (`ingresos_manuales`) que suma al abono; con boleta/factura (se vincula por folio, tiene que estar sincronizada) los pagos quedan informativos para no duplicar el abono. Endpoints `GET /api/bot/aprobar/buscar`, `POST /api/bot/aprobar/importar`, `GET /api/bot/aprobar/cotizacion/{id}`, `POST /api/bot/aprobar[?confirmar=1]`. Solo el dueño: el bot solo acepta comandos privados de OWNER_PHONE.
 - **Archivos principales:** `BotAprobacionController`, migración `2026_10_22_100000_create_cotizacion_pagos_table`, `routes/api.php`; bot (fuera del repo): `src/aprobador.js`, `src/vialum.js`, `src/index.js`, `src/comandos.js`.
