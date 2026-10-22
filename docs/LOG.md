@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-22 — Operaciones: la nota de venta muestra forma de pago y voucher
+- **Qué se hizo:** En el modal de abonos de Operaciones, las notas de venta creadas por el bot ahora se rotulan "Nota de venta · Transferencia" o "Nota de venta · Tarjeta de crédito · voucher 123456" (antes solo "Nota de venta"). Probado en producción con el primer caso real (Marianela Becker #207): aprobación por el bot, link con imágenes y total $4.750.000, abono $250.000 en Operaciones.
+- **Archivos principales:** `OperacionesController::abonosDetalle`.
+- **Pendiente / ojo con:** Los pagos informativos (con boleta/factura) siguen sin verse en ese modal. En el PDF la línea "ANGULOS" sale con recuadro "Sin imagen" y el resumen cuenta 8 ventanas (cuenta la línea de ángulos): cosmético, pendiente de decidir.
+
 ## 2026-10-22 — Bot de aprobación: imágenes de las ventanas y aviso de precio
 - **Qué se hizo:** (1) Al importar una cotización de Winperfil por el bot, el PDF/link salía con "Sin imagen" en cada ventana porque las imágenes las genera el **navegador** (SVG → JPEG) al importar desde la app. Ahora el bot las renderiza con `sharp` y las sube (`GET/POST /api/bot/aprobar/graficos/{id}`, reusa `guardarGraficosPng`, que no pisa las existentes); se ejecuta al importar y al ver una cotización. (2) La vista previa avisa con ⚠️ si el precio nuevo cambia más de 10 % respecto a la cotización y aclara que el link muestra la cotización como está ahora (el precio y las ventanas nuevas se aplican al aprobar).
 - **Archivos principales:** `BotAprobacionController` (`graficosPendientes`, `guardarGraficos`, vista previa), `routes/api.php`; bot (fuera del repo): `src/graficos.js`, `src/vialum.js`, `src/aprobador.js`, `package.json` (sharp).

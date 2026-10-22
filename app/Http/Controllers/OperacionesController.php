@@ -422,7 +422,9 @@ class OperacionesController extends Controller
                 'id'       => $n->id,
                 'fecha'    => substr((string) $n->fecha, 0, 10),
                 'monto'    => (float) $n->monto,
-                'fuente'   => 'Nota de venta',
+                // Pagos informados por el bot: "Abono · Transferencia · voucher 123" → se ve la forma de pago y el voucher
+                'fuente'   => 'Nota de venta' . (str_starts_with((string) $n->descripcion, 'Abono · ')
+                    ? ' · ' . substr((string) $n->descripcion, strlen('Abono · ')) : ''),
                 'tipo'     => 'nota_venta',
                 'nota'     => $n->descripcion,
                 'editable' => true,
