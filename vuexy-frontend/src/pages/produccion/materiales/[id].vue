@@ -4,7 +4,7 @@
     <v-row class="mb-4" align="center">
       <v-col>
         <div class="d-flex align-center gap-3">
-          <v-btn icon="mdi-arrow-left" variant="text" :to="{ name: 'produccion' }" />
+          <v-btn icon="mdi-arrow-left" variant="text" @click="$router.back()" />
           <div>
             <h1 class="text-h5 font-weight-bold">Resumen de Materiales</h1>
             <div v-if="data" class="text-body-2 text-medium-emphasis">

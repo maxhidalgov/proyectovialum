@@ -51,6 +51,29 @@ class ProduccionController extends Controller
                 'manillon'         => $config['manillon'] ?? false,
                 'hojas_totales'    => $ventana->hojas_totales,
                 'hojas_moviles'    => $ventana->hojas_moviles,
+                'hojaMovilSeleccionada' => $ventana->hoja_movil_seleccionada,
+                'hoja1AlFrente'    => (bool) $ventana->hoja1_al_frente,
+                // Bay Window
+                'ancho_izquierda'  => $ventana->ancho_izquierda,
+                'ancho_centro'     => $ventana->ancho_centro,
+                'ancho_derecha'    => $ventana->ancho_derecha,
+                'tipoVentanaIzquierda' => $ventana->tipo_ventana_izquierda,
+                'tipoVentanaCentro'    => $ventana->tipo_ventana_centro,
+                'tipoVentanaDerecha'   => $ventana->tipo_ventana_derecha,
+                // Compuestas / constructor / tirador (guardados en config)
+                'orientacionComp'  => $config['orientacion_comp'] ?? null,
+                'itemsComp'        => $config['items_comp'] ?? [],
+                'filas'            => $config['filas'] ?? null,
+                'columnas'         => $config['columnas'] ?? null,
+                'altos_filas'      => $config['altos_filas'] ?? null,
+                'anchos_columnas'  => $config['anchos_columnas'] ?? null,
+                'secciones'        => $config['secciones'] ?? null,
+                'perimetro_constructor' => $config['perimetro_constructor'] ?? null,
+                'marco_constructor'     => $config['marco_constructor'] ?? null,
+                'divisiones_h'     => $config['divisiones_h'] ?? [],
+                'divisiones_v'     => $config['divisiones_v'] ?? [],
+                'espacios_constructor'  => $config['espacios_constructor'] ?? null,
+                'tirador_id'       => $config['tirador_id'] ?? null,
             ];
 
             try {

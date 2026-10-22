@@ -13,6 +13,16 @@
         >
           {{ generandoPDF ? 'Generando...' : 'Descargar PDF' }}
         </v-btn>
+        <v-btn
+          class="ml-2"
+          color="success"
+          variant="tonal"
+          :disabled="!cotizacion?.id"
+          prepend-icon="mdi-microsoft-excel"
+          :to="{ name: 'produccion-materiales-id', params: { id: cotizacion?.id } }"
+        >
+          Materiales y costos
+        </v-btn>
 
         <!-- Botones de cambio de estado -->
         <template v-if="cotizacion?.estado?.nombre === 'Evaluación'">

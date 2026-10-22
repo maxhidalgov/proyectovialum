@@ -135,6 +135,9 @@
           <v-btn icon @click="descargarPDF(item.id)" title="Descargar Cotización PDF" :loading="pdfCargando === item.id">
             <v-icon>mdi-file-pdf-box</v-icon>
           </v-btn>
+          <v-btn icon :to="{ name: 'produccion-materiales-id', params: { id: item.id } }" title="Materiales y costos (descargar Excel)">
+            <v-icon>mdi-microsoft-excel</v-icon>
+          </v-btn>
           <v-btn icon color="green" @click="abrirEnviar(item)"
             :title="item.enviado_at ? ('Enviada el ' + (item.enviado_at || '').slice(0,10) + ' — reenviar') : 'Enviar cotización por WhatsApp'">
             <v-badge v-if="item.enviado_at" dot color="success"><v-icon>mdi-whatsapp</v-icon></v-badge>

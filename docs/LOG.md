@@ -11,6 +11,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-22 — Cotización: botón "Materiales y costos" de la obra completa
+- **Qué se hizo:** `cotizacion-ver` tiene un botón **Materiales y costos** que abre el Resumen de Materiales de toda la cotización (ya existía en Producción, con Descargar Excel/CSV, perfiles/barras, herrajes y costos sumados de todas las ventanas). Además se corrigió `ProduccionController::resumenMateriales`: no pasaba al cálculo los parámetros guardados en `config` (compuestas 54/57, constructor 59/60, tirador 61, bay window, hoja móvil), por lo que esas ventanas daban costos distintos a los del modal.
+- **Archivos principales:** `app/Http/Controllers/ProduccionController.php`, `vuexy-frontend/src/pages/cotizacion-ver.vue`.
+- **Pendiente / ojo con:** Falta `npm run build` + copiar a `public/` para desplegar el botón. Ventanas guardadas antes de que existiera `config` o con `direccionApertura`/`pasoLibre`/`hojaActiva` (no se guardan) pueden seguir variando en puertas. No incluye productos de lista ni ítems libres de la cotización.
+
 ## 2026-10-21 — Bot WhatsApp: sumar varias facturas por folio
 - **Qué se hizo:** El bot entiende "suma las facturas de haustek 270123, 270456 y 270789" (también con puntos o el comando `suma …`). Nuevo endpoint `GET /api/bot/sumar-facturas?folios=…&q=…&lado=…`: busca cada folio en compras y ventas, filtra por proveedor/cliente (`q`, sin tildes), suma neto/IVA/total, las notas de crédito restan, y avisa folios no encontrados o que coinciden con varios documentos (no los suma). En ventas el neto es total/1,19; las boletas se ignoran.
 - **Archivos principales:** `BotController::sumarFacturas`, `routes/api.php`; bot Node (fuera del repo): `src/vialum.js`, `src/consultas.js` (`extraerSuma`), `src/comandos.js`.

@@ -59,6 +59,7 @@ Facturación:
 ## En curso
 
 ## Hechas
+- [x] 2026-10-22 → 2026-10-22 — Cotización: descargar materiales y costos de la obra completa (botón en cotizacion-ver hacia el Resumen de Materiales + corrección de config en el cálculo)
 - [x] 2026-10-21 → 2026-10-21 — Bot WhatsApp: "suma las facturas de haustek 270123, 270456 y 270789" (suma neto/IVA/total por folio, NC restan, avisa folios no encontrados o ambiguos)
 - [x] 2026-10-21 → 2026-10-21 — Boletas/Facturas: botón Enviar con el PDF oficial de Bsale como archivo, por correo (adjunto) o WhatsApp (compartir / descargar y adjuntar), con registro del envío
 - [x] 2026-10-21 → 2026-10-21 — Operaciones: el nombre del Elemento muestra un cuadro al pasar el mouse y un detalle completo del proyecto al hacer clic (cliente, contacto, qué se vendió, montos, notas)
