@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-22 — Bot: registrar pagos en cotizaciones ya aprobadas y limpiar pagos al borrar una nota de venta
+- **Qué se hizo:** El bot ahora entiende "registra un pago de Marianela Becker…" o "me transfirió el resto…" sobre una cotización YA aprobada: pregunta solo forma, monto, fecha, voucher y documento, y la vista previa se titula "Registrar pago", muestra lo ya registrado como nota de venta y el % pagado. Además, al borrar una nota de venta desde Operaciones se borra también su registro en `cotizacion_pagos` (antes quedaba huérfano).
+- **Archivos principales:** `BotAprobacionController`, `OperacionesController::destroyNotaVenta`; bot: `src/aprobador.js`.
+- **Pendiente / ojo con:** Probado en local (pago posterior de $4.500.000 sobre $250.000 ya registrados = 100 %; borrado limpia el registro). Falta reiniciar el bot y probarlo por WhatsApp.
+
 ## 2026-10-22 — Operaciones: la nota de venta muestra forma de pago y voucher
 - **Qué se hizo:** En el modal de abonos de Operaciones, las notas de venta creadas por el bot ahora se rotulan "Nota de venta · Transferencia" o "Nota de venta · Tarjeta de crédito · voucher 123456" (antes solo "Nota de venta"). Probado en producción con el primer caso real (Marianela Becker #207): aprobación por el bot, link con imágenes y total $4.750.000, abono $250.000 en Operaciones.
 - **Archivos principales:** `OperacionesController::abonosDetalle`.

@@ -586,6 +586,10 @@ class OperacionesController extends Controller
     public function destroyNotaVenta($ingresoId)
     {
         $ingreso = \App\Models\IngresoManual::findOrFail($ingresoId);
+        // Si la nota la creó el bot, se borra también su registro de forma de pago / voucher
+        if (\Illuminate\Support\Facades\Schema::hasTable('cotizacion_pagos')) {
+            DB::table('cotizacion_pagos')->where('ingreso_manual_id', $ingresoId)->delete();
+        }
         // Desvincular movimientos conciliados si los hubiera (normalmente ninguno)
         $movIds = DB::table('ingreso_movimiento')->where('ingreso_id', $ingresoId)->pluck('movimiento_id');
         $ingreso->delete();

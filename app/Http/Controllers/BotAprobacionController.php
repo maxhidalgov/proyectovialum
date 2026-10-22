@@ -341,7 +341,8 @@ class BotAprobacionController extends Controller
         $brutoFinal = $netoFinal * 1.19;
 
         $cliente = $c->cliente ? $this->nombreCliente($c->cliente) : 'Sin cliente';
-        $L = ["*Aprobar cotización #{$c->id}* — {$cliente}"];
+        $soloPagos = $yaAprobada && $pagosOk && !$totalNuevo && !$excluidas && $material === null && $eett === null;
+        $L = [($soloPagos ? "*Registrar pago en cotización #{$c->id}*" : "*Aprobar cotización #{$c->id}*") . " — {$cliente}"];
         if ($c->winperfil_numero) {
             $L[] = "Winperfil N° {$c->winperfil_numero}";
         }
@@ -375,6 +376,13 @@ class BotAprobacionController extends Controller
             $totalPagos += $p['monto'];
             $L[] = '• ' . $this->clp($p['monto']) . ' · ' . self::FORMAS[$p['forma']] . ' · ' . \Carbon\Carbon::parse($p['fecha'])->format('d/m')
                 . ($p['nro'] ? ' · voucher ' . $p['nro'] : (in_array($p['forma'], ['tarjeta_credito', 'tarjeta_debito'], true) ? ' · ⚠️ sin N° de voucher' : ''));
+        }
+        if ($pagosOk && !$doc) {
+            $yaNotas = (float) DB::table('ingresos_manuales')->where('cotizacion_id', $c->id)->sum('monto');
+            if ($yaNotas > 0) {
+                $L[] = 'Ya registrado como nota de venta: ' . $this->clp($yaNotas) . ' (esto se suma)';
+                $totalPagos += $yaNotas;
+            }
         }
         if ($pagosOk) {
             $L[] = 'Pagado: ' . $this->clp($totalPagos) . ' de ' . $this->clp($brutoFinal) . ' (' . round($totalPagos / max($brutoFinal, 1) * 100) . '%)'
