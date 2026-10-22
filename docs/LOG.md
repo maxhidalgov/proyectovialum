@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-22 — Bot de aprobación: imágenes de las ventanas y aviso de precio
+- **Qué se hizo:** (1) Al importar una cotización de Winperfil por el bot, el PDF/link salía con "Sin imagen" en cada ventana porque las imágenes las genera el **navegador** (SVG → JPEG) al importar desde la app. Ahora el bot las renderiza con `sharp` y las sube (`GET/POST /api/bot/aprobar/graficos/{id}`, reusa `guardarGraficosPng`, que no pisa las existentes); se ejecuta al importar y al ver una cotización. (2) La vista previa avisa con ⚠️ si el precio nuevo cambia más de 10 % respecto a la cotización y aclara que el link muestra la cotización como está ahora (el precio y las ventanas nuevas se aplican al aprobar).
+- **Archivos principales:** `BotAprobacionController` (`graficosPendientes`, `guardarGraficos`, vista previa), `routes/api.php`; bot (fuera del repo): `src/graficos.js`, `src/vialum.js`, `src/aprobador.js`, `package.json` (sharp).
+- **Pendiente / ojo con:** Probado en local: 6 SVG de la oferta 912 renderizan en ~50 ms con buen aspecto; endpoints probados con rollback. No probado aún por WhatsApp. La cotización #207 ya importada se arregla sola la próxima vez que el bot la vea, o abriéndola en la app. Hay que reiniciar el bot.
+
 ## 2026-10-22 — Winperfil: el total importado ahora descuenta el descuento general del presupuesto
 - **Qué se hizo:** Winperfil entrega `BASE` = "Suma total" **antes** del descuento general (cabecera `DTOTARIFA`, ej. 2,13 %); el neto real ("Base imponible" que ve el cliente) es `BASE × (1 − dto/100)`. La importación guardaba el BASE tal cual, así que las cotizaciones con descuento quedaban más caras que el presupuesto (caso Marianela Becker oferta 912: $4.078.577 en vez de $3.991.703 neto = $4.750.127 con IVA). Ahora `netoOferta()` aplica el descuento en la importación, en el total de las ofertas candidatas y en el listado de Winperfil (`BASE` pasa a ser el neto real y `BASE_SIN_DTO` conserva la suma total). Verificado importando la 912: $3.991.703 neto / $4.750.127 bruto, igual que Winperfil. En 2026 hay 8 ofertas con descuento (563, 733, 735, 738, 782, 843, 890, 912).
 - **Archivos principales:** `app/Http/Controllers/WinperfilController.php` (`upsertPresupuesto`, `ofertasCandidatas`, `getPresupuestos`, `netoOferta`).

@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  *   POST /api/bot/aprobar/importar                 → importa un presupuesto de Winperfil (como el botón Importar)
  *   GET  /api/bot/aprobar/cotizacion/{id}          → resumen de una cotización (ventanas numeradas, abonos)
  *   POST /api/bot/aprobar[?confirmar=1]            → vista previa (no escribe) o aprobación real
+ *   GET  /api/bot/aprobar/graficos/{id}            → dibujos (SVG) de las ventanas que aún no tienen imagen
+ *   POST /api/bot/aprobar/graficos/{id}            → guarda las imágenes que el bot generó desde esos SVG
  */
 class BotAprobacionController extends Controller
 {
@@ -201,6 +203,29 @@ class BotAprobacionController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/bot/aprobar/graficos/{id}
+     * Las imágenes de las ventanas las genera el NAVEGADOR cuando alguien importa desde la app; al importar
+     * por el bot nadie las genera y el PDF sale "Sin imagen". El bot las renderiza y las sube aquí.
+     */
+    public function graficosPendientes(Request $r, $id)
+    {
+        $this->verificarToken($r);
+        $det = \App\Models\CotizacionDetalle::where('cotizacion_id', (int) $id)->where('tipo_item', 'winperfil')
+            ->whereNotNull('winperfil_grafico')->whereNull('winperfil_grafico_png')->get(['id', 'winperfil_grafico']);
+
+        return response()->json(['ok' => true, 'graficos' => $det->map(fn ($d) => ['id' => $d->id, 'svg' => $d->winperfil_grafico])->all()]);
+    }
+
+    /** POST /api/bot/aprobar/graficos/{id}  { graficos: { detalleId: "data:image/jpeg;base64,..." } } */
+    public function guardarGraficos(Request $r, $id)
+    {
+        $this->verificarToken($r);
+        $resp = app(CotizacionController::class)->guardarGraficosPng((int) $id, new Request(['graficos' => (array) $r->input('graficos', [])]));
+
+        return response()->json(['ok' => true] + $resp->getData(true));
+    }
+
     /** POST /api/bot/aprobar[?confirmar=1] */
     public function aprobar(Request $r)
     {
@@ -328,6 +353,9 @@ class BotAprobacionController extends Controller
         }
         $L[] = 'Total: *' . $this->clp($netoFinal) . ' neto* (' . $this->clp($brutoFinal) . ' con IVA)'
             . ($totalNuevo || $excluidas ? ' — antes ' . $this->clp($c->total) . ' neto' : '');
+        if ($totalNuevo && !$excluidas && $c->total > 0 && abs($netoFinal - $c->total) / $c->total > 0.10) {
+            $L[] = '⚠️ El precio cambia ' . round(($netoFinal - $c->total) / $c->total * 100) . '% respecto a la cotización. Si no es lo que querías, dime el monto correcto.';
+        }
         if ($material || $c->material) {
             $L[] = 'Material: ' . ($material ?: $c->material);
         }
@@ -353,6 +381,9 @@ class BotAprobacionController extends Controller
                 . ($doc ? ' — pagos informativos: el abono lo cuenta la ' . $docTipo : '');
         }
         $L[] = 'Ver cotización: ' . $this->urlCotizacion($c);
+        if ($totalNuevo || $excluidas) {
+            $L[] = '_El link muestra la cotización como está ahora; el precio y las ventanas nuevas se aplican al aprobar._';
+        }
         $texto = implode("\n", $L);
 
         if (!$confirmar) {
