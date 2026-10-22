@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-22 — Winperfil: el total importado ahora descuenta el descuento general del presupuesto
+- **Qué se hizo:** Winperfil entrega `BASE` = "Suma total" **antes** del descuento general (cabecera `DTOTARIFA`, ej. 2,13 %); el neto real ("Base imponible" que ve el cliente) es `BASE × (1 − dto/100)`. La importación guardaba el BASE tal cual, así que las cotizaciones con descuento quedaban más caras que el presupuesto (caso Marianela Becker oferta 912: $4.078.577 en vez de $3.991.703 neto = $4.750.127 con IVA). Ahora `netoOferta()` aplica el descuento en la importación, en el total de las ofertas candidatas y en el listado de Winperfil (`BASE` pasa a ser el neto real y `BASE_SIN_DTO` conserva la suma total). Verificado importando la 912: $3.991.703 neto / $4.750.127 bruto, igual que Winperfil. En 2026 hay 8 ofertas con descuento (563, 733, 735, 738, 782, 843, 890, 912).
+- **Archivos principales:** `app/Http/Controllers/WinperfilController.php` (`upsertPresupuesto`, `ofertasCandidatas`, `getPresupuestos`, `netoOferta`).
+- **Pendiente / ojo con:** Las cotizaciones ya importadas con descuento (563, 733, 735, 843 están aceptadas) siguen con el total antiguo: un Re-sync las corrige solo si NO tienen el precio fijado (`winperfil_precio_lock`); las fijadas hay que revisarlas a mano. Revisar en producción con la consulta de totales y corregir caso a caso.
+
 ## 2026-10-22 — Venta Express: el modal de resultado ya no deja volver a editar y permite Enviar
 - **Qué se hizo:** El diálogo "Factura/Boleta emitida" ahora es `persistent` (clic fuera no lo cierra y deja la venta editable); la única salida es **Nueva**, que limpia ítems, cliente, pagos, observaciones y referencias. Se agregó el botón **Enviar** que abre `EnviarDocumentoDialog` (correo con PDF o WhatsApp) con el correo/teléfono del cliente elegido y el `doc_id` que ya devolvía `/venta-express/emitir`.
 - **Archivos principales:** `vuexy-frontend/src/pages/venta-express/index.vue`.

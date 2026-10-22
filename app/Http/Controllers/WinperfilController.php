@@ -202,6 +202,9 @@ class WinperfilController extends Controller
                 $match = ($syncRows[$num] ?? collect())->first(
                     fn($r) => $this->mismoDocumentoWinperfil($r->fecha, $r->razon_social, $fecha, $nom)
                 );
+                // BASE = neto real (después del descuento general); BASE_SIN_DTO conserva la "Suma total"
+                $p['BASE_SIN_DTO'] = (float) ($p['BASE'] ?? 0);
+                $p['BASE']         = $this->netoOferta($p);
                 $p['_synced']    = (bool) $match;
                 $p['_synced_at'] = $match->winperfil_synced_at ?? null;
                 $p['_hermanas']  = [];
@@ -1131,7 +1134,7 @@ class WinperfilController extends Controller
                 'orden'      => $i + 1,
                 'fecha'      => $fecha,
                 'lineas'     => count($o['detalle'] ?? []),
-                'total_bruto' => (int) round(((float) ($cab['BASE'] ?? 0)) * 1.19),
+                'total_bruto' => (int) round($this->netoOferta($cab) * 1.19),
                 'aceptado'   => strtoupper((string) ($cab['ACEPTADO'] ?? '')),
             ];
         }
@@ -1806,7 +1809,9 @@ class WinperfilController extends Controller
             // las cotizaciones de la app). El BASE de Winperfil YA es el neto oficial
             // (incluye el % extra por ventana de la columna "Porcentaje"). Antes se
             // guardaba base×1.19 (BRUTO) → la columna "TOTAL NETO" mostraba bruto.
-            $base = (float) ($pres['BASE'] ?? $pres['base'] ?? 0);
+            // Ojo: si el presupuesto tiene DESCUENTO general (DTOTARIFA, ej. 2,13 %), el BASE es la
+            // "Suma total" ANTES del descuento; el neto real ("Base imponible") es BASE × (1 − dto).
+            $base = $this->netoOferta($pres);
             $total = $base; // NETO
 
             // ─── Fecha ──────────────────────────────────────────────────────
@@ -1998,6 +2003,21 @@ class WinperfilController extends Controller
     private function paramsConImagen(array $params): array
     {
         return array_merge($params, ['imagen' => 'true']);
+    }
+
+    /**
+     * Neto real de una oferta de Winperfil: el BASE es la "Suma total" antes del descuento general
+     * (cabecera DTOTARIFA, en %); la "Base imponible" que ve el cliente es BASE × (1 − dto/100).
+     */
+    private function netoOferta(array $cab): float
+    {
+        $base = (float) ($cab['BASE'] ?? $cab['base'] ?? 0);
+        $dto  = (float) ($cab['DTOTARIFA'] ?? $cab['dtotarifa'] ?? 0);
+        if ($dto > 0 && $dto < 100) {
+            $base = $base * (1 - $dto / 100);
+        }
+
+        return $base;
     }
 
     /**
