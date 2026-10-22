@@ -80,6 +80,11 @@ Route::get('/bot/resumen-comercial', [\App\Http\Controllers\BotController::class
 Route::get('/bot/factura', [\App\Http\Controllers\BotController::class, 'factura']);
 //    GET /api/bot/sumar-facturas?token=XXXX&folios=1,2,3&q=haustek  → suma varias facturas por folio
 Route::get('/bot/sumar-facturas', [\App\Http\Controllers\BotController::class, 'sumarFacturas']);
+//    Aprobar cotización desde el bot (solo dueño): buscar → importar (Winperfil) → ver → vista previa/confirmar
+Route::get('/bot/aprobar/buscar', [\App\Http\Controllers\BotAprobacionController::class, 'buscar']);
+Route::post('/bot/aprobar/importar', [\App\Http\Controllers\BotAprobacionController::class, 'importar']);
+Route::get('/bot/aprobar/cotizacion/{id}', [\App\Http\Controllers\BotAprobacionController::class, 'cotizacion']);
+Route::post('/bot/aprobar', [\App\Http\Controllers\BotAprobacionController::class, 'aprobar']);
 //    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
 Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
 //    GET  /api/bot/clientes?token=XXXX&q=juan  → buscar clientes (con % de descuento)
