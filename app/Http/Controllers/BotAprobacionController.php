@@ -343,10 +343,10 @@ class BotAprobacionController extends Controller
         $cliente = $c->cliente ? $this->nombreCliente($c->cliente) : 'Sin cliente';
         $soloPagos = $yaAprobada && $pagosOk && !$totalNuevo && !$excluidas && $material === null && $eett === null;
         $L = [($soloPagos ? "*Registrar pago en cotización #{$c->id}*" : "*Aprobar cotización #{$c->id}*") . " — {$cliente}"];
-        if ($c->winperfil_numero) {
+        if ($c->winperfil_numero && !$soloPagos) {
             $L[] = "Winperfil N° {$c->winperfil_numero}";
         }
-        if ($esWinperfil) {
+        if ($esWinperfil && !$soloPagos) {
             $L[] = 'Ventanas vendidas: ' . $vendidasTxt;
             if ($excluidas) {
                 $L[] = '_Queda anotado que falta crear en Winperfil la oferta con solo lo vendido._';
@@ -357,15 +357,17 @@ class BotAprobacionController extends Controller
         if ($totalNuevo && !$excluidas && $c->total > 0 && abs($netoFinal - $c->total) / $c->total > 0.10) {
             $L[] = '⚠️ El precio cambia ' . round(($netoFinal - $c->total) / $c->total * 100) . '% respecto a la cotización. Si no es lo que querías, dime el monto correcto.';
         }
-        if ($material || $c->material) {
+        if (($material || $c->material) && !$soloPagos) {
             $L[] = 'Material: ' . ($material ?: $c->material);
         }
-        if ($eett || $c->eett) {
+        if (($eett || $c->eett) && !$soloPagos) {
             $L[] = 'EETT: ' . ($eett ?: $c->eett);
         }
-        $L[] = $yaAprobada
-            ? "Estado: ya está *{$c->estado->nombre}* (no cambia)"
-            : 'Estado: *Aprobada* (entra a Operaciones en "En Espera de Medidas")';
+        if (!$soloPagos) {
+            $L[] = $yaAprobada
+                ? "Estado: ya está *{$c->estado->nombre}* (no cambia)"
+                : 'Estado: *Aprobada* (entra a Operaciones en "En Espera de Medidas")';
+        }
         if ($doc) {
             $L[] = ucfirst($docTipo) . " N° {$doc->numero_documento_bsale} por " . $this->clp($doc->monto) . ' (se vincula a esta cotización)';
         } elseif ($docTipo === 'ninguno') {
@@ -459,7 +461,7 @@ class BotAprobacionController extends Controller
 
         return response()->json([
             'ok' => true, 'cotizacion_id' => $c->id, 'url' => $this->urlCotizacion($c),
-            'texto' => "✅ *Cotización #{$c->id} aprobada* — {$cliente}\n" . implode("\n", array_slice($L, 1)),
+            'texto' => ($soloPagos ? "✅ *Pago registrado en la cotización #{$c->id}*" : "✅ *Cotización #{$c->id} aprobada*") . " — {$cliente}\n" . implode("\n", array_slice($L, 1)),
         ]);
     }
 

@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-23 — Bot: registrar un pago ya no se presenta como "aprobar"
+- **Qué se hizo:** Cuando solo se registra un pago en una cotización ya aprobada, la vista previa pregunta "¿Registro el pago?" (antes "¿La apruebo?"), omite lo que no cambia (Winperfil, ventanas, material, EETT, estado) y el mensaje final dice "Pago registrado en la cotización #N" sin el recordatorio de pedir material. También: el detector de frases normaliza las tildes (la "ó" descompuesta no calzaba) y reconoce "abonó/pagó/transfirió/depositó".
+- **Archivos principales:** `BotAprobacionController`; bot: `src/aprobador.js`.
+- **Pendiente / ojo con:** Probado en local; falta reiniciar el bot (código del bot) y el deploy del backend.
+
 ## 2026-10-22 — Bot: registrar pagos en cotizaciones ya aprobadas y limpiar pagos al borrar una nota de venta
 - **Qué se hizo:** El bot ahora entiende "registra un pago de Marianela Becker…" o "me transfirió el resto…" sobre una cotización YA aprobada: pregunta solo forma, monto, fecha, voucher y documento, y la vista previa se titula "Registrar pago", muestra lo ya registrado como nota de venta y el % pagado. Además, al borrar una nota de venta desde Operaciones se borra también su registro en `cotizacion_pagos` (antes quedaba huérfano).
 - **Archivos principales:** `BotAprobacionController`, `OperacionesController::destroyNotaVenta`; bot: `src/aprobador.js`.
