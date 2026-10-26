@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-26 — RUT de clientes: se normaliza y valida el dígito verificador
+- **Qué se hizo:** La factura 5280 (Agrícola Laudet) salió con RUT `781.648.981-` porque el cliente se creó con `781648981` (sin guion) y Bsale dejó el DV en blanco. Nada validaba el RUT. Nuevo `App\Support\Rut` (normaliza a `12345678-9` y valida módulo 11) aplicado en `ClienteController::crearClienteBsale` (Venta Express), `ClienteController::store` y `BsaleClientController::store` (422 con mensaje si es inválido). El diálogo "Crear cliente" de Venta Express corrige el formato al salir del campo y valida antes de enviar.
+- **Archivos principales:** `app/Support/Rut.php`, `ClienteController`, `BsaleClientController`, `vuexy-frontend/src/pages/venta-express/index.vue`.
+- **Pendiente / ojo con:** Revisión en producción (solo lectura): de 1.225 clientes, 671 en formato `12345678-9`, 354 con puntos (vienen de la sync Bsale, válidos), 194 sin RUT y 6 raros, casi todos creados en octubre desde la app (ids 1415, 1745, 1929, 1930 "0", 1932, 1937). El cliente 1937 duplica al 1938 (RUT correcto, creado 7 min después). La 5280 sigue emitida con RUT mal: requiere nota de crédito y nueva factura (decisión del dueño/contador). Falta build + deploy.
+
 ## 2026-10-23 — Bot: registrar un pago ya no se presenta como "aprobar"
 - **Qué se hizo:** Cuando solo se registra un pago en una cotización ya aprobada, la vista previa pregunta "¿Registro el pago?" (antes "¿La apruebo?"), omite lo que no cambia (Winperfil, ventanas, material, EETT, estado) y el mensaje final dice "Pago registrado en la cotización #N" sin el recordatorio de pedir material. También: el detector de frases normaliza las tildes (la "ó" descompuesta no calzaba) y reconoce "abonó/pagó/transfirió/depositó".
 - **Archivos principales:** `BotAprobacionController`; bot: `src/aprobador.js`.

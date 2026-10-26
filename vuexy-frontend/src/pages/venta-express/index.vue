@@ -435,7 +435,7 @@
             <VCol cols="6"><VTextField v-model="cliDialog.lastName" label="Apellido" variant="outlined" density="compact" hide-details /></VCol>
           </VRow>
 
-          <VTextField v-model="cliDialog.code" label="RUT (ej: 12345678-9)" variant="outlined" density="compact" class="mt-2 mb-2" hide-details />
+          <VTextField v-model="cliDialog.code" label="RUT con dígito verificador (ej: 12345678-9)" variant="outlined" density="compact" class="mt-2 mb-2" :error-messages="cliDialog.codeError" hint="Se corrige solo: sin puntos y con guion" persistent-hint @blur="normalizarRutDialog" @update:model-value="cliDialog.codeError = ''" />
           <VRow dense>
             <VCol cols="6"><VTextField v-model="cliDialog.email" label="Email" variant="outlined" density="compact" hide-details /></VCol>
             <VCol cols="6"><VTextField v-model="cliDialog.phone" label="Teléfono" variant="outlined" density="compact" hide-details /></VCol>
@@ -748,15 +748,37 @@ function descuentoCliente() {
 }
 
 // Crear cliente
-const cliDialog = ref({ show: false, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' })
+const cliDialog = ref({ show: false, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', codeError: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' })
 
 function abrirCrearCliente() {
-  cliDialog.value = { show: true, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' }
+  cliDialog.value = { show: true, loading: false, tipo: 'empresa', company: '', firstName: '', lastName: '', code: '', codeError: '', email: '', phone: '', activity: '', address: '', municipality: '', city: '' }
+}
+
+// RUT chileno: formato canónico 12345678-9 (sin puntos, con guion) y dígito verificador válido (módulo 11).
+// Sin el guion Bsale toma todo como número y el documento sale con el RUT mal (ej. 781.648.981-).
+function rutNormalizado(raw) {
+  const l = String(raw || '').replace(/[^0-9kK]/g, '').toUpperCase()
+  if (!/^\d{7,8}[0-9K]$/.test(l)) return null
+  const cuerpo = l.slice(0, -1)
+  let suma = 0, mult = 2
+  for (let i = cuerpo.length - 1; i >= 0; i--) { suma += Number(cuerpo[i]) * mult; mult = mult === 7 ? 2 : mult + 1 }
+  const r = 11 - (suma % 11)
+  const dv = r === 11 ? '0' : r === 10 ? 'K' : String(r)
+  return dv === l.slice(-1) ? `${cuerpo}-${dv}` : null
+}
+function normalizarRutDialog() {
+  const d = cliDialog.value
+  if (!d.code) return
+  const n = rutNormalizado(d.code)
+  if (n) { d.code = n; d.codeError = '' } else d.codeError = 'RUT inválido: revisa el número y el dígito verificador'
 }
 
 async function guardarCliente() {
   const d = cliDialog.value
   if (!d.code) { snackMsg('Ingresa el RUT del cliente', 'warning'); return }
+  const rut = rutNormalizado(d.code)
+  if (!rut) { d.codeError = 'RUT inválido: revisa el número y el dígito verificador'; return }
+  d.code = rut
   d.loading = true
   try {
     const payload = {

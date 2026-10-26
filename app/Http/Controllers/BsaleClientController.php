@@ -36,6 +36,14 @@ class BsaleClientController extends Controller
             'phone', 'city', 'municipality', 'address', 'activity'
         ]);
 
+        if (!empty($data['code'])) {
+            $rut = \App\Support\Rut::validar($data['code']);
+            if ($rut === null) {
+                return response()->json(['error' => 'RUT inválido: revisa el número y el dígito verificador (formato 12345678-9).'], 422);
+            }
+            $data['code'] = $rut;
+        }
+
         try {
             // Crear cliente en Bsale
             $response = Http::withHeaders([

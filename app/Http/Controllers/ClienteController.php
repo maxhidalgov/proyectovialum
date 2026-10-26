@@ -33,6 +33,14 @@ class ClienteController extends Controller
      */
     public function store(Request $request)
 {
+    $identification = $request->identification;
+    if (!empty($identification)) {
+        $identification = \App\Support\Rut::validar($identification);
+        if ($identification === null) {
+            return response()->json(['error' => 'RUT inválido: revisa el número y el dígito verificador (formato 12345678-9).'], 422);
+        }
+    }
+
     $cliente = Cliente::create([
         'tipo_cliente'   => $request->tipo_cliente,
         'razon_social'   => $request->razon_social,
@@ -45,7 +53,7 @@ class ClienteController extends Controller
         'first_name'     => $request->first_name,
         'last_name'      => $request->last_name,
         'email'          => $request->email,
-        'identification' => $request->identification,
+        'identification' => $identification,
         'phone'       => $request->phone,
     ]);
 
@@ -203,6 +211,15 @@ public function crearClienteBsale(Request $request, BsaleClientService $bsale)
         'accumulatePoints'  => 'nullable|boolean',
         'dynamicAttributes' => 'nullable|array',
     ]);
+
+    // RUT: se normaliza a 12345678-9 y se valida el dígito verificador (sin esto Bsale emite documentos con RUT mal formado)
+    if (!empty($validated['code'])) {
+        $rut = \App\Support\Rut::validar($validated['code']);
+        if ($rut === null) {
+            return response()->json(['error' => 'RUT inválido: revisa el número y el dígito verificador (formato 12345678-9).'], 422);
+        }
+        $validated['code'] = $rut;
+    }
 
     try {
         $clienteBsale = $bsale->crearCliente($validated);
