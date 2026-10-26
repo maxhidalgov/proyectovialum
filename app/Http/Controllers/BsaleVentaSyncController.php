@@ -113,13 +113,23 @@ class BsaleVentaSyncController extends Controller
     {
         $bsaleId = (string) $doc['id'];
 
+        // Bsale marca state=1 cuando el documento se anula allá (ej. factura anulada sin nota de crédito)
+        $anuladoEnBsale = (int) ($doc['state'] ?? 0) === 1;
+
         // Si ya existe en DB → actualizar url_pdf_bsale si falta, luego omitir
         $existente = DB::table('documentos_facturacion')
             ->where('id_documento_bsale', $bsaleId)
-            ->select('id', 'url_pdf_bsale')
+            ->select('id', 'url_pdf_bsale', 'estado')
             ->first();
 
         if ($existente) {
+            // Anulado directamente en Bsale → reflejarlo aquí (solo en este sentido: un "anulado" local no se revierte)
+            if ($anuladoEnBsale && $existente->estado !== 'anulado') {
+                DB::table('documentos_facturacion')
+                    ->where('id', $existente->id)
+                    ->update(['estado' => 'anulado', 'updated_at' => now()]);
+                Log::info('BsaleVentaSync: documento anulado en Bsale', ['bsale_id' => $bsaleId, 'numero' => $doc['number'] ?? null]);
+            }
             if (!$existente->url_pdf_bsale && !empty($doc['urlPdf'])) {
                 DB::table('documentos_facturacion')
                     ->where('id', $existente->id)
@@ -154,7 +164,7 @@ class BsaleVentaSyncController extends Controller
             'porcentaje'                 => 100.00,
             'monto'                      => (int) abs($bruto),
             'neto'                       => (int) abs($neto),
-            'estado'                     => 'emitido',
+            'estado'                     => $anuladoEnBsale ? 'anulado' : 'emitido',
             'id_documento_bsale'         => $bsaleId,
             'numero_documento_bsale'     => (string) ($doc['number'] ?? ''),
             'url_pdf_bsale'              => $doc['urlPdf'] ?? null,

@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-26 — Sync Bsale: los documentos anulados en Bsale se anulan también en la app
+- **Qué se hizo:** La factura 5280 se anuló directo en Bsale (sin NC, porque no se había generado el documento tributario) pero en la app seguía `emitido` por $83.300 (duplicada con la 5281): `procesarDocumento` saltaba los documentos existentes sin leer su estado. Ahora lee `state` de Bsale (1 = anulado): marca `anulado` los existentes y crea como `anulado` los nuevos con state=1. Solo en ese sentido (un anulado local no se revierte). Corre dentro de `bsale:sync` (parte de `sync:diario`, 07:00), sin llamadas extra a Bsale.
+- **Archivos principales:** `BsaleVentaSyncController::procesarDocumento`.
+- **Pendiente / ojo con:** Revisado el 2026 completo contra Bsale (1.234 docs): solo 2 anulados, la 5280 y la **5273** (Maldonado, $200.000, cliente 1932 con RUT mal guardado), ambos aún `emitido` en producción; se corrigen solos en el primer sync tras el deploy (o con `bsale:sync` manual). Si un documento anulado ya estaba conciliado/cobrado, el vínculo queda apuntando a un anulado: revisar a mano.
+
 ## 2026-10-26 — RUT de clientes: se normaliza y valida el dígito verificador
 - **Qué se hizo:** La factura 5280 (Agrícola Laudet) salió con RUT `781.648.981-` porque el cliente se creó con `781648981` (sin guion) y Bsale dejó el DV en blanco. Nada validaba el RUT. Nuevo `App\Support\Rut` (normaliza a `12345678-9` y valida módulo 11) aplicado en `ClienteController::crearClienteBsale` (Venta Express), `ClienteController::store` y `BsaleClientController::store` (422 con mensaje si es inválido). El diálogo "Crear cliente" de Venta Express corrige el formato al salir del campo y valida antes de enviar.
 - **Archivos principales:** `app/Support/Rut.php`, `ClienteController`, `BsaleClientController`, `vuexy-frontend/src/pages/venta-express/index.vue`.
