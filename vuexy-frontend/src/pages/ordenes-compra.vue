@@ -58,6 +58,9 @@
             <v-btn size="x-small" color="deep-purple" variant="flat" prepend-icon="mdi-send" @click="abrirEnvio(item)">
               Enviar
             </v-btn>
+            <v-btn size="x-small" color="teal" variant="tonal" prepend-icon="mdi-clipboard-check-outline" @click="abrirValidar(item)">
+              Validar cotización
+            </v-btn>
             <v-btn size="x-small" color="red" variant="tonal" icon="mdi-file-pdf-box" @click="descargar(item, 'pdf')" />
             <v-btn size="x-small" color="green" variant="tonal" icon="mdi-file-excel" @click="descargar(item, 'excel')" />
           </div>
@@ -141,6 +144,56 @@
       </v-card>
     </v-dialog>
 
+    <!-- Validar la cotización del proveedor contra esta orden -->
+    <v-dialog v-model="validar.show" max-width="820" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center gap-2 pt-4">
+          <v-icon color="teal">mdi-clipboard-check-outline</v-icon>
+          Validar cotización del proveedor — {{ validar.orden?.numero }}
+        </v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            Sube el PDF que te envió el proveedor (hoy se lee el formato de Haustek / Winhouse). Se compara con lo que
+            pediste en esta orden: líneas que faltan o sobran, cantidades, sustituciones, descuentos y que las sumas cuadren.
+          </p>
+          <v-file-input
+            v-model="validar.archivo" label="PDF de la cotización" accept="application/pdf" density="compact"
+            variant="outlined" prepend-icon="" prepend-inner-icon="mdi-file-pdf-box" show-size hide-details class="mb-3"
+          />
+          <v-btn color="teal" :loading="validar.cargando" :disabled="!validar.archivo" prepend-icon="mdi-check-all" @click="correrValidacion">
+            Revisar
+          </v-btn>
+          <v-alert v-if="validar.error" type="error" variant="tonal" density="compact" class="mt-3">{{ validar.error }}</v-alert>
+
+          <template v-if="validar.informe">
+            <v-divider class="my-4" />
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <v-chip color="success" variant="tonal">✅ {{ validar.informe.resumen.coinciden }} de {{ validar.informe.resumen.lineas_pedido }} líneas coinciden</v-chip>
+              <v-chip :color="validar.informe.resumen.errores ? 'error' : 'grey'" variant="tonal">{{ validar.informe.resumen.errores }} errores</v-chip>
+              <v-chip :color="validar.informe.resumen.avisos ? 'warning' : 'grey'" variant="tonal">{{ validar.informe.resumen.avisos }} avisos</v-chip>
+              <v-chip variant="tonal">Neto {{ clp(validar.informe.resumen.neto) }}</v-chip>
+              <v-chip variant="tonal">Total {{ clp(validar.informe.resumen.total) }}</v-chip>
+            </div>
+            <v-alert v-if="!validar.informe.hallazgos.length" type="success" variant="tonal" density="compact">Sin observaciones.</v-alert>
+            <v-list v-else density="compact" lines="two">
+              <v-list-item v-for="(h, i) in validar.informe.hallazgos" :key="i">
+                <template #prepend>
+                  <v-icon :color="h.severidad === 'error' ? 'error' : h.severidad === 'aviso' ? 'warning' : 'info'">
+                    {{ h.severidad === 'error' ? 'mdi-close-circle' : h.severidad === 'aviso' ? 'mdi-alert' : 'mdi-information-outline' }}
+                  </v-icon>
+                </template>
+                <v-list-item-title class="text-wrap text-body-2">{{ h.texto }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="validar.show = false">Cerrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snack.show" :color="snack.color" timeout="3500" location="top">
       {{ snack.msg }}
     </v-snackbar>
@@ -195,6 +248,33 @@ async function descargar(orden, formato) {
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   } catch {
     snack.value = { show: true, color: 'error', msg: 'Error al descargar' }
+  }
+}
+
+// ── Validar la cotización del proveedor ──────────────────────────
+const validar = ref({ show: false, orden: null, archivo: null, cargando: false, error: '', informe: null })
+const clp = n => (n == null ? '—' : '$' + Number(n).toLocaleString('es-CL'))
+
+function abrirValidar(orden) {
+  validar.value = { show: true, orden, archivo: null, cargando: false, error: '', informe: null }
+}
+
+async function correrValidacion() {
+  const v = validar.value
+  const archivo = Array.isArray(v.archivo) ? v.archivo[0] : v.archivo
+  if (!archivo) return
+  v.cargando = true
+  v.error = ''
+  v.informe = null
+  try {
+    const form = new FormData()
+    form.append('archivo', archivo)
+    const { data } = await api.post(`/api/ordenes-compra/${v.orden.id}/validar-cotizacion`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+    v.informe = data
+  } catch (e) {
+    v.error = e.response?.data?.message || 'No se pudo revisar la cotización'
+  } finally {
+    v.cargando = false
   }
 }
 

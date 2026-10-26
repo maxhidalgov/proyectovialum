@@ -100,6 +100,30 @@ class OrdenCompraController extends Controller
     }
 
     /**
+     * POST /api/ordenes-compra/{id}/validar-cotizacion  (multipart: archivo = PDF de la cotización del proveedor)
+     * Compara la cotización con lo que se pidió en la orden (faltantes, cantidades, sustituciones, descuentos,
+     * aritmética, saltos de numeración). Hoy lee el formato de Haustek / Winhouse.
+     */
+    public function validarCotizacion(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['archivo' => 'required|file|mimes:pdf|max:10240']);
+        $orden = OrdenCompra::findOrFail($id);
+
+        try {
+            $cot = (new \App\Services\CotizacionProveedorParser())->parse($request->file('archivo')->getRealPath());
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'No se pudo leer el PDF de la cotización: ' . $e->getMessage()], 422);
+        }
+        if (empty($cot['lineas'])) {
+            return response()->json(['message' => 'No encontré líneas de productos en el PDF. Hoy solo se lee el formato de Haustek/Winhouse.'], 422);
+        }
+
+        $informe = (new \App\Services\ValidadorCotizacionProveedor())->validar($orden->items ?? [], $cot);
+
+        return response()->json($informe + ['orden' => $orden->numero, 'cotizacion' => $cot['encabezado']]);
+    }
+
+    /**
      * Enviar la orden al proveedor (correo con PDF adjunto o WhatsApp prellenado)
      * y dejar el registro en operaciones (marca "pedido proveedor" en la cotización).
      */
