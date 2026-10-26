@@ -121,6 +121,24 @@ class WinperfilController extends Controller
             ]);
 
             if ($res->successful()) {
+                // El servicio puede estar "arriba" pero roto: devuelve una página vacía "200 OK" (HTML) o
+                // un error propio ("Módulo no habilitado") en vez de datos. Eso no es una conexión exitosa.
+                $json = $res->json();
+                if (!is_array($json)) {
+                    return response()->json([
+                        'ok'      => false,
+                        'mensaje' => 'El servicio de Winperfil responde pero no entrega datos (página vacía "200 OK"). Revisa que Winperfil esté abierto con su licencia activa y reinicia el servicio WinperfilServer en el equipo donde corre.',
+                        'url'     => $this->baseUrl,
+                    ], 502);
+                }
+                if (!empty($json['error'])) {
+                    return response()->json([
+                        'ok'      => false,
+                        'mensaje' => 'Winperfil respondió: ' . $json['error'] . '. Revisa la licencia/módulo de integración en Winperfil.',
+                        'url'     => $this->baseUrl,
+                    ], 502);
+                }
+
                 return response()->json([
                     'ok'      => true,
                     'mensaje' => 'Conexión exitosa con Winperfil',

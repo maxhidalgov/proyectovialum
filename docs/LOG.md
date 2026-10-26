@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-26 — Winperfil: la prueba de conexión ya no da "exitosa" cuando el servicio está roto
+- **Qué se hizo:** `GET /api/winperfil/test` marcaba "Conexión exitosa" con solo recibir un HTTP 200, aunque Winperfil devolviera una página vacía ("200 OK" en HTML, su servicio caído por dentro) o un error propio ("Módulo no habilitado"). Ahora exige una respuesta JSON sin `error` y, si no, muestra un mensaje explicando qué revisar (Winperfil abierto con licencia activa, reiniciar WinperfilServer). Contexto del día: tras reiniciar el PC, el servicio de Winperfil arrancó sin red, no pudo comprobar la licencia ("Host not found … base de datos de cliente") y su API se cae con EAccessViolation en `PeticionAPI_ERP` en cada consulta; Tailscale/Funnel quedaron bien. El bot ahora arranca solo con una tarea programada (`iniciar-bot.cmd`, ventana visible, registro en `%LOCALAPPDATA%ot-vialum`).
+- **Archivos principales:** `WinperfilController::testConexion`.
+- **Pendiente / ojo con:** El fallo de la API de Winperfil sigue sin resolverse (reiniciar servicio con Winperfil cerrado/abierto; si no, soporte de Winperfil). Pendiente decidir una tarea que reinicie WinperfilServer 1 minuto después de iniciar sesión, cuando ya hay red.
+
 ## 2026-10-26 — Sync Bsale: los documentos anulados en Bsale se anulan también en la app
 - **Qué se hizo:** La factura 5280 se anuló directo en Bsale (sin NC, porque no se había generado el documento tributario) pero en la app seguía `emitido` por $83.300 (duplicada con la 5281): `procesarDocumento` saltaba los documentos existentes sin leer su estado. Ahora lee `state` de Bsale (1 = anulado): marca `anulado` los existentes y crea como `anulado` los nuevos con state=1. Solo en ese sentido (un anulado local no se revierte). Corre dentro de `bsale:sync` (parte de `sync:diario`, 07:00), sin llamadas extra a Bsale.
 - **Archivos principales:** `BsaleVentaSyncController::procesarDocumento`.
