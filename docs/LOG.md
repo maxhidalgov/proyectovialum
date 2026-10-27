@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-27 — Bot: tras aprobar una cotización, sugiere los siguientes pasos
+- **Qué se hizo:** El mensaje de aprobación termina con "Siguientes pasos" con frases listas para copiar usando el N° de la cotización: marcar el material como pedido, fijar cuándo pedirlo (recordatorio) y agendar la medición. Reemplaza el aviso fijo "falta pedir el material". Solo cambia el bot (no requiere deploy).
+- **Archivos principales:** bot: `src/aprobador.js`.
+- **Pendiente / ojo con:** Reiniciar el bot. No pregunta de forma interactiva (el dueño responde con los comandos fijos); si se quiere conversación guiada, queda como mejora.
+
 ## 2026-10-27 — Bot: agendar visitas de medición e instalación en el calendario
 - **Qué se hizo:** El bot entiende "iremos a medir donde Marianela Becker el jueves a las 10 en Pucón", "instalamos donde Marianela Becker del 12 al 14 de noviembre" (una visita por día) y "hoy se instaló donde Pedrito" / "ya se midió donde Becker" (la deja realizada, cerrando la última programada de ese tipo). Usa las visitas del calendario que ya existían (`visitas_cliente`, tipos medición/instalación/postventa), ligadas a la cotización aprobada del cliente; el lugar queda en las notas. Sin IA (comandos fijos). El resumen de las 8:00 ahora incluye visitas de hoy, de mañana y las "¿se hicieron?" que siguen programadas tras su fecha.
 - **Archivos principales:** `BotAprobacionController::{visita,visitasAgenda}`, `routes/api.php`; bot: `src/visitas.js`, `src/index.js`, `src/vialum.js`.
