@@ -44,6 +44,7 @@ class Cotizacion extends Model
         'enviado_a',
         'adjunto_winperfil',
         'pedido_proveedor',
+        'fecha_pedir_material',
         'estado_produccion',
         'fecha_entrega',
         'notas_operaciones',

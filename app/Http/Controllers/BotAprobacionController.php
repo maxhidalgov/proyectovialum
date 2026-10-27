@@ -473,6 +473,116 @@ class BotAprobacionController extends Controller
     public function materialPedido(Request $r)
     {
         $this->verificarToken($r);
+        $c = $this->resolverAprobada($r);
+        if ($c instanceof \Illuminate\Http\JsonResponse) {
+            return $c;
+        }
+
+        $cliente = $this->nombreCliente($c->cliente);
+        if ($c->pedido_proveedor) {
+            return response()->json(['ok' => true, 'ya' => true, 'cotizacion_id' => $c->id,
+                'texto' => "Ya estaba marcado como material pedido: #{$c->id} — {$cliente}."]);
+        }
+
+        $nota = 'Material pedido (' . now()->format('d-m-Y') . ', por WhatsApp)';
+        $prev = trim((string) $c->notas_operaciones);
+        $c->update([
+            'pedido_proveedor'  => true,
+            'notas_operaciones' => $prev ? ($prev . ' · ' . $nota) : $nota,
+        ]);
+
+        $extra = $c->estado_tecnico === 'definitiva' || in_array((string) $c->estado_produccion, ['Lista para Corte', 'En Fabricación', 'Fabricadas OK'], true)
+            ? '' : "\n_Ojo: pidió con medidas provisorias; falta la pauta definitiva._";
+
+        return response()->json(['ok' => true, 'ya' => false, 'cotizacion_id' => $c->id,
+            'texto' => "✅ Material marcado como *pedido*: #{$c->id} — {$cliente}.{$extra}"]);
+    }
+
+    /**
+     * POST /api/bot/material-fecha  { q, fecha: "YYYY-MM-DD" | null }
+     * Fija (o quita, con fecha null) el día límite para pedir el material de una obra; el bot recuerda en base a esto.
+     */
+    public function materialFecha(Request $r)
+    {
+        $this->verificarToken($r);
+        $fecha = $r->input('fecha');
+        if ($fecha !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $fecha)) {
+            return $this->error('Fecha inválida.');
+        }
+        $c = $this->resolverAprobada($r);
+        if ($c instanceof \Illuminate\Http\JsonResponse) {
+            return $c;
+        }
+        $c->update(['fecha_pedir_material' => $fecha]);
+        $cliente = $this->nombreCliente($c->cliente);
+        $texto = $fecha
+            ? "📌 Anotado: pedir el material de *{$cliente}* (#{$c->id}) antes del " . \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM') . '.'
+            : "Quité la fecha límite de material de {$cliente} (#{$c->id}).";
+        if ($c->pedido_proveedor && $fecha) {
+            $texto .= "\n_Ojo: esa obra ya figura con el material pedido, no habrá recordatorio._";
+        }
+
+        return response()->json(['ok' => true, 'cotizacion_id' => $c->id, 'texto' => $texto]);
+    }
+
+    /**
+     * GET /api/bot/material-pendiente?modo=manana|tarde
+     * Obras aprobadas con fecha límite de pedido de material y sin pedir. manana = vencidas + hoy + mañana;
+     * tarde = vencidas + mañana (aviso de la tarde anterior). texto vacío si no hay nada que avisar.
+     */
+    public function materialPendiente(Request $r)
+    {
+        $this->verificarToken($r);
+        $modo = $r->query('modo') === 'tarde' ? 'tarde' : 'manana';
+        $hoy = now('America/Santiago')->startOfDay();
+        $limite = $hoy->copy()->addDay()->toDateString();
+
+        $filas = DB::table('cotizaciones as c')
+            ->join('clientes as cl', 'cl.id', '=', 'c.cliente_id')
+            ->join('estados_cotizacion as e', 'e.id', '=', 'c.estado_cotizacion_id')
+            ->whereIn('e.nombre', self::ESTADOS_YA_APROBADOS)
+            ->where('c.pedido_proveedor', false)
+            ->whereNotNull('c.fecha_pedir_material')
+            ->where('c.fecha_pedir_material', '<=', $limite)
+            ->orderBy('c.fecha_pedir_material')
+            ->get(['c.id', 'c.fecha_pedir_material as f', DB::raw("TRIM(CONCAT_WS(' ', cl.razon_social, cl.first_name, cl.last_name)) as cliente")]);
+
+        $venc = [];
+        $hoyL = [];
+        $man = [];
+        foreach ($filas as $x) {
+            $d = \Carbon\Carbon::parse($x->f)->startOfDay();
+            $linea = "• {$x->cliente} (#{$x->id})";
+            if ($d->lt($hoy)) {
+                $venc[] = $linea . ' — venció el ' . $d->format('d-m') . ' (' . (int) $d->diffInDays($hoy) . ' d de atraso)';
+            } elseif ($d->eq($hoy)) {
+                $hoyL[] = $linea;
+            } else {
+                $man[] = $linea;
+            }
+        }
+        if ($modo === 'tarde') {
+            $hoyL = [];
+        }
+
+        $t = [];
+        if ($venc) {
+            $t[] = "🔴 *Material sin pedir y vencido:*\n" . implode("\n", $venc);
+        }
+        if ($hoyL) {
+            $t[] = "🟠 *Hay que pedir el material HOY:*\n" . implode("\n", $hoyL);
+        }
+        if ($man) {
+            $t[] = "🟡 *Hay que pedir el material MAÑANA:*\n" . implode("\n", $man);
+        }
+        $texto = $t ? implode("\n\n", $t) . "\n\n_Cuando lo pidas escríbeme «pedido el material de X»._" : '';
+
+        return response()->json(['ok' => true, 'modo' => $modo, 'cantidad' => count($filas), 'texto' => $texto]);
+    }
+
+    /** Cotización aprobada a la que se refiere el dueño (cliente o N°); o una respuesta de error/lista si no es unívoca. */
+    private function resolverAprobada(Request $r): Cotizacion|\Illuminate\Http\JsonResponse
+    {
         $q = trim((string) $r->input('q', ''));
         $id = (int) $r->input('cotizacion_id');
         if (!$id && preg_match('/^#?(\d{1,7})$/', $q, $m)) {
@@ -516,24 +626,7 @@ class BotAprobacionController extends Controller
             $c = Cotizacion::with(['cliente', 'estado'])->find($pool->first()->id);
         }
 
-        $cliente = $this->nombreCliente($c->cliente);
-        if ($c->pedido_proveedor) {
-            return response()->json(['ok' => true, 'ya' => true, 'cotizacion_id' => $c->id,
-                'texto' => "Ya estaba marcado como material pedido: #{$c->id} — {$cliente}."]);
-        }
-
-        $nota = 'Material pedido (' . now()->format('d-m-Y') . ', por WhatsApp)';
-        $prev = trim((string) $c->notas_operaciones);
-        $c->update([
-            'pedido_proveedor'  => true,
-            'notas_operaciones' => $prev ? ($prev . ' · ' . $nota) : $nota,
-        ]);
-
-        $extra = $c->estado_tecnico === 'definitiva' || in_array((string) $c->estado_produccion, ['Lista para Corte', 'En Fabricación', 'Fabricadas OK'], true)
-            ? '' : "\n_Ojo: pidió con medidas provisorias; falta la pauta definitiva._";
-
-        return response()->json(['ok' => true, 'ya' => false, 'cotizacion_id' => $c->id,
-            'texto' => "✅ Material marcado como *pedido*: #{$c->id} — {$cliente}.{$extra}"]);
+        return $c;
     }
 
     private function error(string $msg, int $status = 422)

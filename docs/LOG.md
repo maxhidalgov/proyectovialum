@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-27 — Bot: recordatorios de pedir material (fecha límite + resumen de la mañana)
+- **Qué se hizo:** Nueva columna `cotizaciones.fecha_pedir_material`. Se fija hablándole al bot ("el material de Marianela Becker hay que pedirlo el martes", "recuérdame pedir el material de la 207 mañana", "quita el recordatorio de material de Becker"; entiende hoy/mañana/pasado mañana, día de la semana —el próximo—, "3 de noviembre" y 3/11). Mientras la obra esté aprobada y sin "material pedido", el bot escribe al dueño: **resumen a las 8:00 (lun-sáb)** con vencidas + hoy + mañana, y **aviso a las 18:00 (dom-vie)** con vencidas + mañana. Solo manda mensaje si hay algo pendiente; se apaga solo al decir "pedido el material de X".
+- **Archivos principales:** migración `2026_10_27_100000_add_fecha_pedir_material_a_cotizaciones`, `Cotizacion` ($fillable), `BotAprobacionController::{materialFecha,materialPendiente,resolverAprobada}`, `routes/api.php`; bot: `src/recordatorio-material.js`, `src/index.js` (cron), `src/config.js` (`MATERIAL_MANANA_CRON`, `MATERIAL_TARDE_CRON`), `src/vialum.js`.
+- **Pendiente / ojo con:** Falta deploy + reiniciar el bot. La fecha no se ve aún en Operaciones (solo por bot). Si se dice "el martes" un martes, entiende el martes siguiente (para hoy se dice "hoy"). Siguen pendientes: preguntar tras aprobar si hay medidas definitivas / si se pidió el material, y el calendario de visitas (fase 3).
+
 ## 2026-10-27 — Bot: "Pedido el material de X" marca el material como pedido
 - **Qué se hizo:** Al escribirle al bot "Pedido el material de Marianela Becker" (también "ya pedí el material de la 207", "se pidió el material de Becker") marca `pedido_proveedor` en la cotización aprobada del cliente y deja la nota "Material pedido (fecha, por WhatsApp)" en Operaciones. Es un comando directo, sin IA (no gasta tokens). Si hay varias cotizaciones aprobadas del cliente las lista y se indica el N°; si ya estaba marcado, lo avisa; si aún tiene medidas provisorias, recuerda que falta la pauta definitiva.
 - **Archivos principales:** `BotAprobacionController::materialPedido`, `routes/api.php` (`POST /bot/material-pedido`); bot: `src/material.js`, `src/index.js`, `src/vialum.js`.

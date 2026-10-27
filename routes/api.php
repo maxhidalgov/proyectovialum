@@ -89,6 +89,10 @@ Route::get('/bot/aprobar/graficos/{id}', [\App\Http\Controllers\BotAprobacionCon
 Route::post('/bot/aprobar/graficos/{id}', [\App\Http\Controllers\BotAprobacionController::class, 'guardarGraficos']);
 //    POST /api/bot/material-pedido?token=XXXX  { q: "cliente" | "N° cotización" }  → marca el material como pedido al proveedor
 Route::post('/bot/material-pedido', [\App\Http\Controllers\BotAprobacionController::class, 'materialPedido']);
+//    POST /api/bot/material-fecha?token=XXXX  { q, fecha }  → día límite para pedir el material (recordatorios del bot)
+Route::post('/bot/material-fecha', [\App\Http\Controllers\BotAprobacionController::class, 'materialFecha']);
+//    GET  /api/bot/material-pendiente?token=XXXX&modo=manana|tarde  → obras con material sin pedir y fecha límite próxima/vencida
+Route::get('/bot/material-pendiente', [\App\Http\Controllers\BotAprobacionController::class, 'materialPendiente']);
 //    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
 Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
 //    GET  /api/bot/clientes?token=XXXX&q=juan  → buscar clientes (con % de descuento)
