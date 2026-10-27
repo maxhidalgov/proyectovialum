@@ -93,6 +93,10 @@ Route::post('/bot/material-pedido', [\App\Http\Controllers\BotAprobacionControll
 Route::post('/bot/material-fecha', [\App\Http\Controllers\BotAprobacionController::class, 'materialFecha']);
 //    GET  /api/bot/material-pendiente?token=XXXX&modo=manana|tarde  → obras con material sin pedir y fecha límite próxima/vencida
 Route::get('/bot/material-pendiente', [\App\Http\Controllers\BotAprobacionController::class, 'materialPendiente']);
+//    POST /api/bot/visita?token=XXXX  { q, tipo, fechas[], hora?, notas?, estado? }  → agenda/cierra visitas (medición, instalación…) en el calendario
+Route::post('/bot/visita', [\App\Http\Controllers\BotAprobacionController::class, 'visita']);
+//    GET  /api/bot/visitas-agenda?token=XXXX  → visitas de hoy/mañana y las que quedaron sin cerrar
+Route::get('/bot/visitas-agenda', [\App\Http\Controllers\BotAprobacionController::class, 'visitasAgenda']);
 //    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
 Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
 //    GET  /api/bot/clientes?token=XXXX&q=juan  → buscar clientes (con % de descuento)

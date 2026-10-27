@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-27 — Bot: agendar visitas de medición e instalación en el calendario
+- **Qué se hizo:** El bot entiende "iremos a medir donde Marianela Becker el jueves a las 10 en Pucón", "instalamos donde Marianela Becker del 12 al 14 de noviembre" (una visita por día) y "hoy se instaló donde Pedrito" / "ya se midió donde Becker" (la deja realizada, cerrando la última programada de ese tipo). Usa las visitas del calendario que ya existían (`visitas_cliente`, tipos medición/instalación/postventa), ligadas a la cotización aprobada del cliente; el lugar queda en las notas. Sin IA (comandos fijos). El resumen de las 8:00 ahora incluye visitas de hoy, de mañana y las "¿se hicieron?" que siguen programadas tras su fecha.
+- **Archivos principales:** `BotAprobacionController::{visita,visitasAgenda}`, `routes/api.php`; bot: `src/visitas.js`, `src/index.js`, `src/vialum.js`.
+- **Pendiente / ojo con:** Falta deploy + reiniciar el bot. Si falta el día o el cliente el bot lo pregunta, pero hay que repetir la frase completa. Al cerrar una instalación no cambia el estado de producción a "Instalada" (queda para decidirlo). Falta preguntar tras aprobar si hay medidas definitivas / material pedido.
+
 ## 2026-10-27 — Bot: recordatorios de pedir material (fecha límite + resumen de la mañana)
 - **Qué se hizo:** Nueva columna `cotizaciones.fecha_pedir_material`. Se fija hablándole al bot ("el material de Marianela Becker hay que pedirlo el martes", "recuérdame pedir el material de la 207 mañana", "quita el recordatorio de material de Becker"; entiende hoy/mañana/pasado mañana, día de la semana —el próximo—, "3 de noviembre" y 3/11). Mientras la obra esté aprobada y sin "material pedido", el bot escribe al dueño: **resumen a las 8:00 (lun-sáb)** con vencidas + hoy + mañana, y **aviso a las 18:00 (dom-vie)** con vencidas + mañana. Solo manda mensaje si hay algo pendiente; se apaga solo al decir "pedido el material de X".
 - **Archivos principales:** migración `2026_10_27_100000_add_fecha_pedir_material_a_cotizaciones`, `Cotizacion` ($fillable), `BotAprobacionController::{materialFecha,materialPendiente,resolverAprobada}`, `routes/api.php`; bot: `src/recordatorio-material.js`, `src/index.js` (cron), `src/config.js` (`MATERIAL_MANANA_CRON`, `MATERIAL_TARDE_CRON`), `src/vialum.js`.

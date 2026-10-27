@@ -6,6 +6,7 @@ use App\Models\Cotizacion;
 use App\Models\DocumentoFacturacion;
 use App\Models\EstadoCotizacion;
 use App\Models\IngresoManual;
+use App\Models\VisitaCliente;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -578,6 +579,116 @@ class BotAprobacionController extends Controller
         $texto = $t ? implode("\n\n", $t) . "\n\n_Cuando lo pidas escríbeme «pedido el material de X»._" : '';
 
         return response()->json(['ok' => true, 'modo' => $modo, 'cantidad' => count($filas), 'texto' => $texto]);
+    }
+
+    /**
+     * POST /api/bot/visita  { q, tipo: medicion|instalacion|postventa|otro, fechas: ["YYYY-MM-DD",…], hora?, notas?, estado?: programada|realizada }
+     * Agenda (o cierra) visitas de una obra en el calendario. Una visita por día (instalación del 12 al 14 = 3).
+     * estado=realizada: cierra la última programada de ese tipo (si no hay, deja una realizada con la fecha dada).
+     */
+    public function visita(Request $r)
+    {
+        $this->verificarToken($r);
+        $tipo = (string) $r->input('tipo');
+        if (!in_array($tipo, ['medicion', 'instalacion', 'postventa', 'otro'], true)) {
+            return $this->error('Tipo de visita inválido.');
+        }
+        $fechas = array_values(array_unique(array_filter((array) $r->input('fechas'), fn ($f) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $f))));
+        if (!$fechas || count($fechas) > 14) {
+            return $this->error('Indica la fecha (o un rango de hasta 14 días).');
+        }
+        $hora = $r->input('hora');
+        if ($hora !== null && !preg_match('/^\d{2}:\d{2}$/', (string) $hora)) {
+            return $this->error('Hora inválida.');
+        }
+        $notas = trim((string) $r->input('notas', '')) ?: null;
+        $estado = $r->input('estado') === 'realizada' ? 'realizada' : 'programada';
+
+        $c = $this->resolverAprobada($r);
+        if ($c instanceof \Illuminate\Http\JsonResponse) {
+            return $c;
+        }
+        $cliente = $this->nombreCliente($c->cliente);
+        $nombreTipo = ['medicion' => 'medición', 'instalacion' => 'instalación', 'postventa' => 'postventa', 'otro' => 'visita'][$tipo];
+        $fmt = fn ($f) => \Carbon\Carbon::parse($f)->locale('es')->isoFormat('ddd D [de] MMM');
+        $sinPunto = fn (string $s) => rtrim($s, '.');
+
+        if ($estado === 'realizada') {
+            // La que se cierra es la más reciente que ya le toca (hoy o antes); si no hay, la próxima
+            $prog = VisitaCliente::where('cotizacion_id', $c->id)->where('tipo', $tipo)->where('estado', 'programada');
+            $v = (clone $prog)->whereDate('fecha', '<=', now('America/Santiago')->toDateString())->orderByDesc('fecha')->first()
+                ?? (clone $prog)->orderBy('fecha')->first();
+            if ($v) {
+                $v->update(['estado' => 'realizada']);
+            } else {
+                $v = VisitaCliente::create(['cotizacion_id' => $c->id, 'cliente_id' => $c->cliente_id, 'tipo' => $tipo,
+                    'fecha' => $fechas[0], 'hora' => $hora, 'estado' => 'realizada', 'notas' => $notas]);
+            }
+
+            return response()->json(['ok' => true, 'cotizacion_id' => $c->id,
+                'texto' => "✅ Registré la {$nombreTipo} de *{$cliente}* (#{$c->id}) como realizada ({$sinPunto($fmt($v->fecha))})."]);
+        }
+
+        $creadas = 0;
+        foreach ($fechas as $f) {
+            $v = VisitaCliente::where('cotizacion_id', $c->id)->where('tipo', $tipo)->whereDate('fecha', $f)->where('estado', '!=', 'cancelada')->first();
+            if ($v) {
+                $v->update(array_filter(['hora' => $hora, 'notas' => $notas], fn ($x) => $x !== null));
+            } else {
+                VisitaCliente::create(['cotizacion_id' => $c->id, 'cliente_id' => $c->cliente_id, 'tipo' => $tipo,
+                    'fecha' => $f, 'hora' => $hora, 'estado' => 'programada', 'notas' => $notas]);
+                $creadas++;
+            }
+        }
+        sort($fechas);
+        $cuando = count($fechas) === 1 ? $sinPunto($fmt($fechas[0])) : 'del ' . $fmt($fechas[0]) . ' al ' . $sinPunto($fmt(end($fechas)));
+        $texto = "📍 Agendé la {$nombreTipo} de *{$cliente}* (#{$c->id}): {$cuando}" . ($hora ? " a las {$hora}" : '') . ($notas ? " — {$notas}" : '') . '.';
+        if (!$creadas) {
+            $texto .= "\n_Ya estaba agendada; actualicé hora/notas._";
+        }
+
+        return response()->json(['ok' => true, 'cotizacion_id' => $c->id, 'texto' => $texto]);
+    }
+
+    /**
+     * GET /api/bot/visitas-agenda
+     * Visitas de hoy y de mañana, y las programadas que ya pasaron sin cerrar ("¿se hizo?"). texto vacío si no hay nada.
+     */
+    public function visitasAgenda(Request $r)
+    {
+        $this->verificarToken($r);
+        $hoy = now('America/Santiago')->toDateString();
+        $man = now('America/Santiago')->addDay()->toDateString();
+        $tipos = ['medicion' => 'Medición', 'instalacion' => 'Instalación', 'postventa' => 'Postventa', 'otro' => 'Visita'];
+
+        $visitas = VisitaCliente::with(['cliente', 'cotizacion.cliente'])
+            ->where('estado', 'programada')->whereDate('fecha', '<=', $man)
+            ->orderBy('fecha')->orderBy('hora')->get();
+
+        $linea = function ($v) use ($tipos) {
+            $cl = $this->nombreCliente($v->cliente ?? $v->cotizacion?->cliente);
+
+            return '• ' . $tipos[$v->tipo] . ($cl ? " — {$cl}" : '') . ($v->cotizacion_id ? " (#{$v->cotizacion_id})" : '')
+                . ($v->hora ? ' ' . substr((string) $v->hora, 0, 5) : '') . ($v->notas ? " · {$v->notas}" : '');
+        };
+        $pas = $visitas->filter(fn ($v) => $v->fecha->toDateString() < $hoy)
+            ->map(fn ($v) => $linea($v) . ' — era el ' . $v->fecha->format('d-m'))->values();
+        $h = $visitas->filter(fn ($v) => $v->fecha->toDateString() === $hoy)->map($linea)->values();
+        $m = $visitas->filter(fn ($v) => $v->fecha->toDateString() === $man)->map($linea)->values();
+
+        $t = [];
+        if ($pas->isNotEmpty()) {
+            $t[] = "❓ *¿Se hicieron?* (siguen como programadas)\n" . $pas->implode("\n");
+        }
+        if ($h->isNotEmpty()) {
+            $t[] = "📍 *Visitas de hoy:*\n" . $h->implode("\n");
+        }
+        if ($m->isNotEmpty()) {
+            $t[] = "🗓️ *Visitas de mañana:*\n" . $m->implode("\n");
+        }
+        $texto = $t ? implode("\n\n", $t) . ($pas->isNotEmpty() ? "\n\n_Dime «se midió / se instaló donde X» para cerrarlas._" : '') : '';
+
+        return response()->json(['ok' => true, 'cantidad' => $visitas->count(), 'texto' => $texto]);
     }
 
     /** Cotización aprobada a la que se refiere el dueño (cliente o N°); o una respuesta de error/lista si no es unívoca. */
