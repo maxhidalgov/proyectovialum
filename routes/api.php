@@ -87,6 +87,8 @@ Route::get('/bot/aprobar/cotizacion/{id}', [\App\Http\Controllers\BotAprobacionC
 Route::post('/bot/aprobar', [\App\Http\Controllers\BotAprobacionController::class, 'aprobar']);
 Route::get('/bot/aprobar/graficos/{id}', [\App\Http\Controllers\BotAprobacionController::class, 'graficosPendientes']);
 Route::post('/bot/aprobar/graficos/{id}', [\App\Http\Controllers\BotAprobacionController::class, 'guardarGraficos']);
+//    POST /api/bot/material-pedido?token=XXXX  { q: "cliente" | "N° cotización" }  → marca el material como pedido al proveedor
+Route::post('/bot/material-pedido', [\App\Http\Controllers\BotAprobacionController::class, 'materialPedido']);
 //    GET /api/bot/facturas?token=XXXX&q=haustek&n=5  → últimas N facturas de un proveedor/cliente
 Route::get('/bot/facturas', [\App\Http\Controllers\BotController::class, 'facturas']);
 //    GET  /api/bot/clientes?token=XXXX&q=juan  → buscar clientes (con % de descuento)

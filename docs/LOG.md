@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-27 — Bot: "Pedido el material de X" marca el material como pedido
+- **Qué se hizo:** Al escribirle al bot "Pedido el material de Marianela Becker" (también "ya pedí el material de la 207", "se pidió el material de Becker") marca `pedido_proveedor` en la cotización aprobada del cliente y deja la nota "Material pedido (fecha, por WhatsApp)" en Operaciones. Es un comando directo, sin IA (no gasta tokens). Si hay varias cotizaciones aprobadas del cliente las lista y se indica el N°; si ya estaba marcado, lo avisa; si aún tiene medidas provisorias, recuerda que falta la pauta definitiva.
+- **Archivos principales:** `BotAprobacionController::materialPedido`, `routes/api.php` (`POST /bot/material-pedido`); bot: `src/material.js`, `src/index.js`, `src/vialum.js`.
+- **Pendiente / ojo con:** Falta deploy del backend y reiniciar el bot. Siguen pendientes los recordatorios de pedir material y el registro de visitas en el calendario (fase 2/3).
+
 ## 2026-10-26 — Validar la cotización del proveedor contra la orden de compra (Haustek)
 - **Qué se hizo:** En **Órdenes de compra** cada orden tiene el botón **Validar cotización**: se sube el PDF que envió el proveedor y la app lo revisa contra lo pedido. Lee el PDF de Haustek/Winhouse por coordenadas (el texto plano pega las columnas) y comprueba: ítems pedidos que no cotizó, cantidades menores o mayores (un múltiplo de caja —10, 100…— se da por redondeo; las barras de perfil deben coincidir exacto), lo que cotizó sin pedirlo, posibles sustituciones (misma cosa con otra medida, ej. tornillo 3,9×25 → 4,2×25), descuento por tipo de código (PI- 30 %, PL- 30 % salvo refuerzos -TC- 35 %, HI- 28 %, HL- 0 %), aritmética de cada línea, suma de líneas = neto, IVA 19 % y total, y saltos en la numeración de ítems. Los códigos de Winperfil y del proveedor se cruzan por código (quitando el prefijo `115/` y la variante `-SLK`), por la tabla nueva `proveedor_equivalencias` (con 9 equivalencias confirmadas de la cotización 193.412) o, si no, por parecido de descripción.
 - **Archivos principales:** `CotizacionProveedorParser`, `ValidadorCotizacionProveedor`, `OrdenCompraController::validarCotizacion`, migración `2026_10_26_120000_create_proveedor_equivalencias_table`, `pages/ordenes-compra.vue`, `routes/api.php`.

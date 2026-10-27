@@ -465,6 +465,77 @@ class BotAprobacionController extends Controller
         ]);
     }
 
+    /**
+     * POST /api/bot/material-pedido  { q: "marianela becker" | "207", cotizacion_id? }
+     * "Pedí el material de X": marca pedido_proveedor en la cotización aprobada del cliente y deja la nota.
+     * Sin IA: si hay una sola candidata la marca; si hay varias, las lista para que el dueño indique el N°.
+     */
+    public function materialPedido(Request $r)
+    {
+        $this->verificarToken($r);
+        $q = trim((string) $r->input('q', ''));
+        $id = (int) $r->input('cotizacion_id');
+        if (!$id && preg_match('/^#?(\d{1,7})$/', $q, $m)) {
+            $id = (int) $m[1];
+        }
+
+        if ($id) {
+            $c = Cotizacion::with(['cliente', 'estado'])->find($id);
+            if (!$c) {
+                return $this->error("No encontré la cotización #{$id}.");
+            }
+        } else {
+            $palabras = $this->palabras($q);
+            if (!$palabras) {
+                return $this->error('Indica el cliente (o el N° de cotización).');
+            }
+            $nombreSql = "LOWER(CONCAT_WS(' ', cl.razon_social, cl.first_name, cl.last_name))";
+            $query = DB::table('cotizaciones as c')
+                ->join('clientes as cl', 'cl.id', '=', 'c.cliente_id')
+                ->join('estados_cotizacion as e', 'e.id', '=', 'c.estado_cotizacion_id')
+                ->whereIn('e.nombre', self::ESTADOS_YA_APROBADOS)
+                ->where(fn ($w) => $w->whereNull('c.estado_produccion')->orWhere('c.estado_produccion', '!=', 'Instalada'));
+            foreach ($palabras as $p) {
+                $query->whereRaw("{$nombreSql} LIKE ?", ['%' . $p . '%']);
+            }
+            $cands = $query->orderByDesc('c.id')->limit(6)->get([
+                'c.id', 'c.fecha', 'c.total', 'c.pedido_proveedor', 'c.estado_produccion',
+                DB::raw("TRIM(CONCAT_WS(' ', cl.razon_social, cl.first_name, cl.last_name)) as cliente"),
+            ]);
+            if ($cands->isEmpty()) {
+                return $this->error("No encontré una cotización aprobada de «{$q}» (si aún no está aprobada, apruébala primero).");
+            }
+            // Si hay varias, solo cuentan las que aún no tienen el material pedido
+            $abiertas = $cands->where('pedido_proveedor', 0)->values();
+            $pool = $abiertas->isNotEmpty() ? $abiertas : $cands;
+            if ($pool->count() > 1) {
+                $lista = $pool->map(fn ($x) => "• #{$x->id} — {$x->cliente}, " . substr((string) $x->fecha, 0, 10) . ', neto ' . $this->clp($x->total))->implode("\n");
+
+                return $this->error("Encontré varias cotizaciones aprobadas:\n{$lista}\nDime cuál con el número (ej: «pedido el material de la #{$pool->first()->id}»).");
+            }
+            $c = Cotizacion::with(['cliente', 'estado'])->find($pool->first()->id);
+        }
+
+        $cliente = $this->nombreCliente($c->cliente);
+        if ($c->pedido_proveedor) {
+            return response()->json(['ok' => true, 'ya' => true, 'cotizacion_id' => $c->id,
+                'texto' => "Ya estaba marcado como material pedido: #{$c->id} — {$cliente}."]);
+        }
+
+        $nota = 'Material pedido (' . now()->format('d-m-Y') . ', por WhatsApp)';
+        $prev = trim((string) $c->notas_operaciones);
+        $c->update([
+            'pedido_proveedor'  => true,
+            'notas_operaciones' => $prev ? ($prev . ' · ' . $nota) : $nota,
+        ]);
+
+        $extra = $c->estado_tecnico === 'definitiva' || in_array((string) $c->estado_produccion, ['Lista para Corte', 'En Fabricación', 'Fabricadas OK'], true)
+            ? '' : "\n_Ojo: pidió con medidas provisorias; falta la pauta definitiva._";
+
+        return response()->json(['ok' => true, 'ya' => false, 'cotizacion_id' => $c->id,
+            'texto' => "✅ Material marcado como *pedido*: #{$c->id} — {$cliente}.{$extra}"]);
+    }
+
     private function error(string $msg, int $status = 422)
     {
         return response()->json(['ok' => false, 'error' => $msg], $status);
