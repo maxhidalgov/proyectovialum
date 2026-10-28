@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-28 — Bot: avisos de la mañana/tarde se recuperan si el PC estaba apagado
+- **Qué se hizo:** El 28-10 el PC se apagó de golpe (sin pantallazo azul ni reinicio de Windows; corte de energía probable) y el bot no mandó el resumen de las 8:00. Ahora el bot recuerda en `data/ultimo-aviso.json` qué día mandó cada aviso (resumen de la mañana 8:00 lun-sáb, aviso de la tarde 18:00 dom-vie). Al arrancar, si ya pasó la hora de hoy (hasta 10 horas después) y ese aviso no se revisó hoy, lo manda marcado "atrasado". Se evalúa una sola vez por día.
+- **Archivos principales:** bot: `src/index.js`.
+- **Pendiente / ojo con:** Reiniciar el bot. Medidas físicas sugeridas al dueño: BIOS "Restore on AC Power Loss = Power On" y un UPS pequeño para el PC y el router.
+
 ## 2026-10-27 — Bot: tras aprobar una cotización, sugiere los siguientes pasos
 - **Qué se hizo:** El mensaje de aprobación termina con "Siguientes pasos" con frases listas para copiar usando el N° de la cotización: marcar el material como pedido, fijar cuándo pedirlo (recordatorio) y agendar la medición. Reemplaza el aviso fijo "falta pedir el material". Solo cambia el bot (no requiere deploy).
 - **Archivos principales:** bot: `src/aprobador.js`.
