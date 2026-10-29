@@ -435,7 +435,7 @@
             <VCol cols="6"><VTextField v-model="cliDialog.lastName" label="Apellido" variant="outlined" density="compact" hide-details /></VCol>
           </VRow>
 
-          <VTextField v-model="cliDialog.code" label="RUT con dígito verificador (ej: 12345678-9)" variant="outlined" density="compact" class="mt-2 mb-2" :error-messages="cliDialog.codeError" hint="Se corrige solo: sin puntos y con guion" persistent-hint @blur="normalizarRutDialog" @update:model-value="cliDialog.codeError = ''" />
+          <VTextField v-model="cliDialog.code" :label="cliDialog.tipo === 'persona' ? 'RUT (opcional, ej: 12345678-9)' : 'RUT con dígito verificador (ej: 12345678-9)'" variant="outlined" density="compact" class="mt-2 mb-2" :error-messages="cliDialog.codeError" :hint="cliDialog.tipo === 'persona' ? 'Sin RUT queda solo en la app; para facturar hace falta el RUT' : 'Se corrige solo: sin puntos y con guion'" persistent-hint @blur="normalizarRutDialog" @update:model-value="cliDialog.codeError = ''" />
           <VRow dense>
             <VCol cols="6"><VTextField v-model="cliDialog.email" label="Email" variant="outlined" density="compact" hide-details /></VCol>
             <VCol cols="6"><VTextField v-model="cliDialog.phone" label="Teléfono" variant="outlined" density="compact" hide-details /></VCol>
@@ -775,14 +775,17 @@ function normalizarRutDialog() {
 
 async function guardarCliente() {
   const d = cliDialog.value
-  if (!d.code) { snackMsg('Ingresa el RUT del cliente', 'warning'); return }
-  const rut = rutNormalizado(d.code)
-  if (!rut) { d.codeError = 'RUT inválido: revisa el número y el dígito verificador'; return }
-  d.code = rut
+  // Una persona puede crearse sin RUT (queda solo en la app); una empresa lo requiere
+  if (!d.code && d.tipo === 'empresa') { snackMsg('Ingresa el RUT de la empresa', 'warning'); return }
+  if (d.code) {
+    const rut = rutNormalizado(d.code)
+    if (!rut) { d.codeError = 'RUT inválido: revisa el número y el dígito verificador'; return }
+    d.code = rut
+  }
   d.loading = true
   try {
     const payload = {
-      code: d.code,
+      code: d.code || undefined,
       email: d.email || undefined,
       phone: d.phone || undefined,
       activity: d.activity || undefined,
@@ -797,7 +800,7 @@ async function guardarCliente() {
     const c = data.cliente
     seleccionarCliente(c)
     cliDialog.value.show = false
-    snackMsg('Cliente creado en Bsale y en la app')
+    snackMsg(d.code ? 'Cliente creado en Bsale y en la app' : 'Cliente creado en la app (sin RUT)')
   } catch (e) {
     snackMsg(e.response?.data?.error || 'Error al crear el cliente', 'error')
   } finally {

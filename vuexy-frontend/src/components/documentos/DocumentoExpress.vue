@@ -113,7 +113,7 @@ async function guardarCliente() {
   c.loading = true
   try {
     const payload = {
-      code: c.identification,
+      code: c.identification || undefined,
       email: c.email || undefined,
       phone: c.telefono || undefined,
       activity: c.giro || undefined,
@@ -748,7 +748,7 @@ function nuevaCotizacion() {
       <VCard>
         <VCardItem>
           <VCardTitle>Nuevo cliente</VCardTitle>
-          <VCardSubtitle>Se crea en Bsale y queda seleccionado</VCardSubtitle>
+          <VCardSubtitle>{{ nuevoCli.identification ? 'Se crea en Bsale y en la app, y queda seleccionado' : 'Sin RUT se crea solo en la app y queda seleccionado' }}</VCardSubtitle>
         </VCardItem>
         <VCardText>
           <VRow>
@@ -756,7 +756,7 @@ function nuevaCotizacion() {
             <VCol cols="12" sm="4">
               <VSelect v-model="nuevoCli.tipo" :items="[{title:'Empresa',value:'empresa'},{title:'Persona',value:'persona'}]" label="Tipo" density="compact" />
             </VCol>
-            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.identification" label="RUT" density="compact" placeholder="12.345.678-9" /></VCol>
+            <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.identification" :label="nuevoCli.tipo === 'persona' ? 'RUT (opcional)' : 'RUT'" density="compact" placeholder="12.345.678-9" :hint="nuevoCli.tipo === 'persona' ? 'Solo hace falta para facturar' : ''" persistent-hint /></VCol>
             <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.giro" label="Giro" density="compact" /></VCol>
             <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.email" label="Email" type="email" density="compact" /></VCol>
             <VCol cols="12" sm="6"><VTextField v-model="nuevoCli.telefono" label="Teléfono" density="compact" /></VCol>
@@ -772,7 +772,7 @@ function nuevaCotizacion() {
         <VCardActions class="pa-4 pt-0">
           <VSpacer />
           <VBtn variant="tonal" color="secondary" @click="nuevoCli.show = false">Cancelar</VBtn>
-          <VBtn color="primary" :loading="nuevoCli.loading" :disabled="!nuevoCli.razon_social || !nuevoCli.identification" @click="guardarCliente">Guardar</VBtn>
+          <VBtn color="primary" :loading="nuevoCli.loading" :disabled="!nuevoCli.razon_social || (nuevoCli.tipo === 'empresa' && !nuevoCli.identification)" @click="guardarCliente">Guardar</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>

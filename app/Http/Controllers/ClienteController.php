@@ -221,6 +221,36 @@ public function crearClienteBsale(Request $request, BsaleClientService $bsale)
         $validated['code'] = $rut;
     }
 
+    // Persona sin RUT (cotización rápida, boleta a un particular): se guarda solo en la app. Bsale necesita el RUT
+    // para identificar al cliente; si más adelante se le factura, se completa el RUT y se sincroniza.
+    if (empty($validated['code'])) {
+        if (empty($validated['company']) && trim(($validated['firstName'] ?? '') . ($validated['lastName'] ?? '')) === '') {
+            return response()->json(['error' => 'Indica el nombre del cliente.'], 422);
+        }
+        if (!empty($validated['company'])) {
+            return response()->json(['error' => 'Una empresa requiere RUT.'], 422);
+        }
+        $cliente = Cliente::create([
+            'first_name'     => trim((string) ($validated['firstName'] ?? '')),
+            'last_name'      => trim((string) ($validated['lastName'] ?? '')),
+            'email'          => $validated['email'] ?? '',
+            'identification' => null,
+            'phone'          => $validated['phone'] ?? '',
+            'address'        => $validated['address'] ?? '',
+            'direccion'      => $validated['address'] ?? '',
+            'tipo_cliente'   => 'persona',
+            'razon_social'   => '',
+            'giro'           => $validated['activity'] ?? '',
+            'ciudad'         => $validated['city'] ?? '',
+            'comuna'         => $validated['municipality'] ?? '',
+        ]);
+
+        return response()->json([
+            'message' => '✅ Cliente creado en la app (sin RUT, no se registró en Bsale).',
+            'cliente' => $cliente,
+        ]);
+    }
+
     try {
         $clienteBsale = $bsale->crearCliente($validated);
 

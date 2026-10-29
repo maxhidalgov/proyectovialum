@@ -9,6 +9,12 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-10-29 — Cliente "persona" sin RUT en Cotización rápida y Venta Express
+- **Qué se hizo:** Al crear un cliente de tipo Persona ya no se obliga a ingresar RUT (antes el botón Guardar quedaba bloqueado y Venta Express pedía el RUT). Sin RUT la persona se guarda solo en la app (no se crea en Bsale, que lo necesita para identificar al cliente); con RUT sigue como antes (validado y creado en Bsale). La empresa sigue exigiendo RUT. Para emitir una factura sí hace falta un cliente con RUT sincronizado en Bsale (la boleta sin Bsale-id usa Consumidor Final, como ya ocurría).
+- **Archivos principales:** `ClienteController::crearClienteBsale`, `components/documentos/DocumentoExpress.vue`, `pages/venta-express/index.vue`.
+- **Pendiente / ojo con:** Si luego a ese cliente se le factura, hay que editar su ficha con el RUT y sincronizarlo con Bsale (no hay aún botón que lo haga desde la ficha). Se corrigió de paso que el teléfono/dirección del cliente creado no se guardaban en esta ruta (usaba `telefono`, que no está en `$fillable`) solo en la rama sin RUT; la rama con RUT queda igual.
+- Bot: "cotiza a X" aún no crea clientes nuevos (propuesto, a la espera de decisión).
+
 ## 2026-10-28 — Bot: avisos de la mañana/tarde se recuperan si el PC estaba apagado
 - **Qué se hizo:** El 28-10 el PC se apagó de golpe (sin pantallazo azul ni reinicio de Windows; corte de energía probable) y el bot no mandó el resumen de las 8:00. Ahora el bot recuerda en `data/ultimo-aviso.json` qué día mandó cada aviso (resumen de la mañana 8:00 lun-sáb, aviso de la tarde 18:00 dom-vie). Al arrancar, si ya pasó la hora de hoy (hasta 10 horas después) y ese aviso no se revisó hoy, lo manda marcado "atrasado". Se evalúa una sola vez por día.
 - **Archivos principales:** bot: `src/index.js`.
