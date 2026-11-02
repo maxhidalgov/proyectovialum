@@ -170,6 +170,18 @@ class BancochilePortalController extends Controller
         $duplicados = 0;
         $errores    = [];
 
+        // Hueco: si la cartola importada EMPIEZA después del último movimiento ya cargado y entre
+        // ambos hay días hábiles, quedan movimientos sin importar (se detectó el 29/09–02/10/2026).
+        $ultimoAntes = MovimientoBancario::where('cuenta', self::CUENTA['numero'])->max('fecha_contable');
+        $fechasPayload = [];
+        foreach ($movimientos as $m) {
+            $f = $this->parseFecha($m['fecha'] ?? '');
+            if ($f) $fechasPayload[] = $f;
+        }
+        $desdePayload = $fechasPayload ? min($fechasPayload) : null;
+        $hastaPayload = $fechasPayload ? max($fechasPayload) : null;
+        $hueco = $this->detectarHueco($ultimoAntes ? substr((string) $ultimoAntes, 0, 10) : null, $desdePayload);
+
         // Invertir: procesar del más antiguo al más reciente →
         // el más reciente obtiene el id de DB más alto
         $movimientos = array_reverse($movimientos);
@@ -270,6 +282,77 @@ class BancochilePortalController extends Controller
             'nuevos'     => $nuevos,
             'duplicados' => $duplicados,
             'errores'    => $errores,
+            'rango'      => ['desde' => $desdePayload, 'hasta' => $hastaPayload],
+            'hueco'      => $hueco,
+        ]);
+    }
+
+    /**
+     * Días hábiles (lun-vie) que quedan SIN cubrir entre el último movimiento cargado y el inicio
+     * de la cartola recién importada. Null si no hay hueco. Los fines de semana no cuentan.
+     */
+    private function detectarHueco(?string $ultimoCargado, ?string $inicioImportado): ?array
+    {
+        if (!$ultimoCargado || !$inicioImportado) return null;
+
+        $ultimo = Carbon::parse($ultimoCargado)->startOfDay();
+        $inicio = Carbon::parse($inicioImportado)->startOfDay();
+
+        $faltantes = [];
+        for ($d = $ultimo->copy()->addDay(); $d->lt($inicio); $d->addDay()) {
+            if ($d->isWeekday()) $faltantes[] = $d->toDateString();
+        }
+        if (!$faltantes) return null;
+
+        return [
+            'ultimo_cargado' => $ultimo->toDateString(),
+            'inicio_importado' => $inicio->toDateString(),
+            'dias_habiles' => $faltantes,
+        ];
+    }
+
+    // ── GET /api/banco/estado-cartola ────────────────────────────────────────
+    // Estado de la cartola cargada: último movimiento, días hábiles sin movimientos en los últimos
+    // 60 días (esta cuenta recibe abonos de Transbank todos los días hábiles: un día hábil sin
+    // movimientos casi seguro es un hueco; un feriado también aparece, es solo para revisar) y
+    // desde qué fecha conviene importar.
+
+    public function estadoCartola()
+    {
+        $cuenta = self::CUENTA['numero'];
+        $hoy    = Carbon::now('America/Santiago')->startOfDay();
+
+        $ultimoStr = MovimientoBancario::where('cuenta', $cuenta)->max('fecha_contable');
+        if (!$ultimoStr) {
+            return response()->json(['ultimo_movimiento' => null, 'alerta' => false]);
+        }
+        $ultimo = Carbon::parse(substr((string) $ultimoStr, 0, 10))->startOfDay();
+
+        $desde = $hoy->copy()->subDays(60);
+        $conMov = MovimientoBancario::where('cuenta', $cuenta)
+            ->whereBetween('fecha_contable', [$desde->toDateString(), $ultimo->toDateString()])
+            ->distinct()->pluck('fecha_contable')
+            ->map(fn ($f) => substr((string) $f, 0, 10))->flip();
+
+        // Primer día con datos dentro de la ventana (para no marcar antes de que existiera la carga)
+        $primero = $conMov->keys()->sort()->first();
+        $faltantes = [];
+        if ($primero) {
+            for ($d = Carbon::parse($primero)->addDay(); $d->lt($ultimo); $d->addDay()) {
+                if ($d->isWeekday() && !$conMov->has($d->toDateString())) $faltantes[] = $d->toDateString();
+            }
+        }
+
+        $diasSinCargar = (int) $ultimo->diffInDays($hoy);
+        // Importar con 2 días de colchón: lo ya cargado se reconoce y se omite, así no hay duplicados
+        $desdeSugerido = $ultimo->copy()->subDays(2)->toDateString();
+
+        return response()->json([
+            'ultimo_movimiento'     => $ultimo->toDateString(),
+            'dias_sin_cargar'       => $diasSinCargar,
+            'dias_habiles_sin_mov'  => $faltantes,
+            'desde_sugerido'        => $desdeSugerido,
+            'alerta'                => $diasSinCargar >= 3 || count($faltantes) > 0,
         ]);
     }
 

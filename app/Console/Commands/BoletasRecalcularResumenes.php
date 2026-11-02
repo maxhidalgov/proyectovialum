@@ -32,6 +32,7 @@ class BoletasRecalcularResumenes extends Command
         $query = DB::table('documentos_facturacion')
             ->whereIn('tipo_documento_bsale_id', self::TIPOS_BOLETA)
             ->whereNotNull('forma_pago')
+            ->where('estado', 'emitido') // una boleta anulada no es venta
             ->where('fecha_emision', '>=', '2026-01-01')
             ->selectRaw("DATE_FORMAT(fecha_emision, '%Y-%m') as periodo, forma_pago, COUNT(*) as total_boletas, SUM(monto) as monto_total");
 
@@ -57,13 +58,28 @@ class BoletasRecalcularResumenes extends Command
                 ->first();
 
             if ($existing) {
+                $update = [
+                    'total_boletas' => $g->total_boletas,
+                    'monto_total'   => $g->monto_total,
+                    'updated_at'    => now(),
+                ];
+
+                // Si el total cambió, las conciliaciones hechas contra el total anterior ya no valen:
+                // se recalcula la del banco y la de Transbank (confirmación manual) debe revisarse de nuevo.
+                if ((float) $existing->monto_total !== (float) $g->monto_total) {
+                    $vinculado = (float) DB::table('boleta_resumen_movimiento')
+                        ->where('boleta_resumen_id', $existing->id)->sum('monto');
+                    $update['conciliado'] = $vinculado >= (float) $g->monto_total;
+                    if (!empty($existing->conciliado_transbank)) {
+                        $update['conciliado_transbank'] = false;
+                    }
+                    $this->warn("  {$g->periodo} {$g->forma_pago}: total {$existing->monto_total} → {$g->monto_total}"
+                        . (!empty($existing->conciliado_transbank) ? ' (Transbank vuelve a "por conciliar")' : ''));
+                }
+
                 DB::table('boleta_resumenes')
                     ->where('id', $existing->id)
-                    ->update([
-                        'total_boletas' => $g->total_boletas,
-                        'monto_total'   => $g->monto_total,
-                        'updated_at'    => now(),
-                    ]);
+                    ->update($update);
                 $actualizados++;
             } else {
                 DB::table('boleta_resumenes')->insert([

@@ -99,6 +99,15 @@ class BsaleVentaSyncController extends Controller
             } while (count($items) === $limit);
         }
 
+        // Los resúmenes mensuales de boletas (boleta_resumenes) son una tabla derivada: si no se recalculan
+        // aquí, las boletas que entran por la sincronización (emitidas directo en Bsale) no aparecen en
+        // Boletas ni en Transbank hasta apretar "Recalcular" a mano (septiembre 2026 quedó con 1 de 52).
+        try {
+            Artisan::call('boletas:recalcular-resumenes');
+        } catch (\Throwable $e) {
+            Log::error('BsaleVentaSync: no se pudieron recalcular los resúmenes de boletas', ['error' => $e->getMessage()]);
+        }
+
         return response()->json([
             'success'  => true,
             'nuevos'   => $nuevos,

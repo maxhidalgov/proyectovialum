@@ -427,6 +427,75 @@
     <!-- ──────────────────────────────────────────────────── -->
     <div v-if="tab === 'docs'">
 
+      <!-- ── Instrucciones ── -->
+      <VExpansionPanels class="mb-4" variant="accordion">
+        <VExpansionPanel>
+          <VExpansionPanelTitle>
+            <VIcon color="info" class="mr-2">mdi-help-circle-outline</VIcon>
+            ¿Cómo se usa esta pestaña? (paso a paso)
+          </VExpansionPanelTitle>
+          <VExpansionPanelText class="text-body-2">
+            <p class="mb-2">
+              <strong>Para qué sirve:</strong> comprobar que cada venta con tarjeta del archivo de Transbank tiene su
+              boleta o factura, y que el mes cuadra. Cuando <strong>"Diferencia vs ventas brutas"</strong> queda en
+              verde (≈ $0) y no hay filas en "Sin documento", el mes está listo.
+            </p>
+
+            <p class="font-weight-bold mb-1">0. Antes de empezar</p>
+            <ul class="mb-3 ml-5">
+              <li>Sube los 3 archivos <strong>.dat</strong> del mes (crédito, débito y prepago) con el botón <strong>Subir .dat</strong> de arriba.</li>
+              <li>Elige el mes y el año en los selectores de arriba: todo lo de esta pestaña es del mes elegido.</li>
+              <li>Las boletas y facturas del mes deben estar en el sistema (se sincronizan solas a las 7:00).</li>
+            </ul>
+
+            <p class="font-weight-bold mb-1">1. Boletas tarjeta (se concilian por resumen mensual, no una por una)</p>
+            <ul class="mb-3 ml-5">
+              <li>Pulsa <strong>Auto-vincular boletas</strong>: empareja cada boleta con su venta de Transbank por N° de voucher o, si no hay, por monto exacto y fecha cercana cuando hay un solo candidato.</li>
+              <li>En cada fila (crédito / débito) pulsa <strong>Conciliar</strong> cuando verifiques que el monto de esa fila cuadra con lo vendido en Transbank. Se marca "Conciliada"; la ✕ la deshace.</li>
+            </ul>
+
+            <p class="font-weight-bold mb-1">2. Facturas tarjeta (una por una)</p>
+            <ul class="mb-3 ml-5">
+              <li>Pulsa <strong>Auto-vincular por Nro Boleta</strong>: empareja por N° de voucher o, si no hay, por monto exacto y fecha (±7 días) solo si hay un único candidato.</li>
+              <li>Las que queden en <strong>Vincular</strong> (naranja): púlsalo, elige la transacción de Transbank del mismo monto (la lista viene ordenada por cercanía) y confirma.</li>
+              <li><strong>Parcial</strong>: la factura se pagó con más de una tarjeta. Usa <strong>+ Tx</strong> para agregar la otra transacción hasta completar el monto.</li>
+              <li>La ✕ al final de la fila quita el vínculo si te equivocaste.</li>
+              <li>
+                <strong>Si una factura no se vincula aunque tiene voucher:</strong> lo más probable es que esa venta aún no esté cargada.
+                Las ventas con tarjeta de <strong>crédito</strong> de los últimos días del mes se abonan al mes siguiente y vienen en el
+                .dat del mes siguiente (ej.: una venta del 28/08 con crédito llega en el archivo de septiembre). Sube ese .dat y vuelve a
+                pulsar <strong>Auto-vincular</strong> aquí en el mes de la factura.
+              </li>
+            </ul>
+
+            <p class="font-weight-bold mb-1">3. Sección "Sin documento" (si aparece)</p>
+            <ul class="mb-3 ml-5">
+              <li>Son ventas de Transbank que no calzaron con ninguna boleta/factura.</li>
+              <li><strong>Vincular</strong>: si existe el documento en Bsale, asígnalo (es lo habitual si faltó el voucher).</li>
+              <li><strong>＋ (ingreso manual)</strong>: si realmente no hay documento (venta sin boleta, etc.): crea un ingreso con descripción y categoría para que el mes cuadre.</li>
+              <li>No aparecen los ajustes de Transbank ni las operaciones en $0.</li>
+            </ul>
+
+            <p class="font-weight-bold mb-1">4. Comisión de Transbank</p>
+            <ul class="mb-3 ml-5">
+              <li>Al final pulsa <strong>Saldar facturas Transbank del mes</strong>: saca de Cuentas por Pagar las facturas de comisión (ya vienen descontadas del abono). No crea un gasto nuevo ni cambia el EERR.</li>
+            </ul>
+
+            <p class="font-weight-bold mb-1">5. Revisión final</p>
+            <ul class="mb-3 ml-5">
+              <li>El número naranja en la pestaña "Documentos" es la cantidad de ventas "Sin documento" que faltan.</li>
+              <li>Si "Diferencia vs ventas brutas" no es ≈ $0, queda algo por vincular o falta una boleta/factura en el sistema.</li>
+            </ul>
+
+            <VAlert type="info" variant="tonal" density="compact">
+              <strong>Tip:</strong> casi todo se vincula solo cuando el <strong>N° de voucher</strong> de la tarjeta está anotado
+              en la boleta/factura. Al vender con tarjeta en Venta Express, anota siempre el voucher.
+              El botón <strong>Importar Chipax CSV</strong> (arriba) solo sirve para meses antiguos que ya se conciliaron en Chipax.
+            </VAlert>
+          </VExpansionPanelText>
+        </VExpansionPanel>
+      </VExpansionPanels>
+
       <div v-if="loadingDocs" class="d-flex justify-center py-10">
         <VProgressCircular indeterminate color="primary" />
       </div>
@@ -1061,6 +1130,8 @@
             No hay transacción de <strong>{{ fmt(docParaVincular.monto) }}</strong> sin vincular en este período.
             Las siguientes son las más cercanas — si FAC {{ docParaVincular.numero_documento_bsale }} fue pagada
             con tarjeta, puede que la transacción esté en otro período o que el método de pago en Bsale sea incorrecto.
+            <strong>Ojo:</strong> una venta con tarjeta de <strong>crédito</strong> de los últimos días del mes se abona al
+            mes siguiente y viene en el .dat del mes siguiente. Si aún no lo subes, súbelo y vuelve a intentar.
           </VAlert>
 
           <div v-if="loadingTxDisponibles" class="d-flex justify-center py-6">

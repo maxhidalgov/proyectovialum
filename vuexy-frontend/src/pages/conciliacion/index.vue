@@ -55,6 +55,32 @@
       </VCol>
     </VRow>
 
+    <!-- Aviso: cartola desactualizada o con huecos -->
+    <VAlert
+      v-if="estadoCartola?.alerta"
+      type="warning"
+      variant="tonal"
+      class="mb-4"
+      icon="mdi-calendar-alert"
+    >
+      <div class="d-flex align-center flex-wrap gap-2">
+        <div>
+          <strong>Cartola del banco incompleta o desactualizada.</strong>
+          Último movimiento cargado: <strong>{{ fechaDMY(estadoCartola.ultimo_movimiento) }}</strong>
+          <span v-if="estadoCartola.dias_sin_cargar > 0">(hace {{ estadoCartola.dias_sin_cargar }} día{{ estadoCartola.dias_sin_cargar > 1 ? 's' : '' }})</span>.
+          <div v-if="estadoCartola.dias_habiles_sin_mov?.length" class="text-body-2 mt-1">
+            Días hábiles sin ningún movimiento (últimos 60 días):
+            <VChip v-for="f in estadoCartola.dias_habiles_sin_mov" :key="f" size="x-small" color="warning" class="ml-1">{{ fechaDMY(f) }}</VChip>
+            <span class="text-caption text-medium-emphasis ml-1">(si alguno fue feriado, ignóralo)</span>
+          </div>
+        </div>
+        <VSpacer />
+        <VBtn size="small" color="orange-darken-2" prepend-icon="mdi-bank-transfer" @click="dialogPortal = true">
+          Importar desde el portal
+        </VBtn>
+      </div>
+    </VAlert>
+
     <!-- Snackbar progreso sync todo -->
     <VSnackbar v-model="syncTodoSnack.show" :color="syncTodoSnack.color" timeout="6000" location="bottom end">
       {{ syncTodoSnack.texto }}
@@ -875,6 +901,24 @@
         </VCardTitle>
 
         <VCardText class="pa-4">
+          <VAlert
+            v-if="estadoCartola?.ultimo_movimiento"
+            :type="estadoCartola.alerta ? 'warning' : 'info'"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            Último movimiento cargado: <strong>{{ fechaDMY(estadoCartola.ultimo_movimiento) }}</strong>.
+            En la cartola del portal del banco elige el rango
+            <strong>desde el {{ fechaDMY(estadoCartola.desde_sugerido) }}</strong> hasta hoy
+            (esos 2 días de colchón evitan huecos y no duplican nada: lo ya cargado se omite).
+            <div v-if="estadoCartola.dias_habiles_sin_mov?.length" class="text-caption mt-1">
+              Días hábiles sin movimientos hoy:
+              <VChip v-for="f in estadoCartola.dias_habiles_sin_mov" :key="f" size="x-small" color="warning" class="ml-1">{{ fechaDMY(f) }}</VChip>
+              — si alguno es feriado, ignóralo; si no, cúbrelos eligiendo un "Desde" anterior a la primera fecha.
+            </div>
+          </VAlert>
+
           <!-- Fechas siempre visibles -->
           <VRow dense class="mb-3">
             <VCol cols="6">
@@ -967,6 +1011,16 @@
               <strong>{{ portalResult.nuevos }}</strong> nuevos ·
               <strong>{{ portalResult.duplicados }}</strong> duplicados
               ({{ portalResult.total }} total)
+              <div v-if="portalResult.rango?.desde" class="text-caption mt-1">
+                Cartola importada del {{ fechaDMY(portalResult.rango.desde) }} al {{ fechaDMY(portalResult.rango.hasta) }}.
+              </div>
+              <VAlert v-if="portalResult.hueco" type="error" variant="flat" density="compact" class="mt-2">
+                <strong>¡Quedó un hueco!</strong> El último movimiento que ya tenías era del
+                {{ fechaDMY(portalResult.hueco.ultimo_cargado) }} y esta cartola empieza el
+                {{ fechaDMY(portalResult.hueco.inicio_importado) }}: faltan los días hábiles
+                {{ portalResult.hueco.dias_habiles.map(fechaDMY).join(', ') }}.
+                Vuelve a importar eligiendo en el portal <strong>desde el {{ fechaDMY(portalResult.hueco.ultimo_cargado) }}</strong>.
+              </VAlert>
               <div v-if="portalResult.message" class="text-caption mt-1">{{ portalResult.message }}</div>
               <div v-if="portalResult.errores?.length" class="text-caption mt-1 text-error">
                 {{ portalResult.errores.length }} errores — {{ portalResult.errores[0] }}
@@ -2025,6 +2079,21 @@ const loadingPortal  = ref(false)
 const portalResult   = ref(null)
 const portalTab      = ref('consola')
 const scriptCopiado  = ref(false)
+const estadoCartola = ref(null)
+
+async function cargarEstadoCartola() {
+  try {
+    const { data } = await axios.get('/api/banco/estado-cartola')
+    estadoCartola.value = data
+    // El método "Cookies" usa estas fechas; en el método "Consola" el rango se elige en el portal del banco
+    if (data?.desde_sugerido) portalForm.value.desde = data.desde_sugerido
+  } catch {
+    estadoCartola.value = null
+  }
+}
+
+watch(dialogPortal, abierto => { if (abierto) cargarEstadoCartola() })
+
 const portalForm = ref({
   desde:      new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
   hasta:      new Date().toISOString().slice(0, 10),
@@ -2248,6 +2317,7 @@ async function importarPortal() {
       hasta:   portalForm.value.hasta,
     })
     portalResult.value = data
+    cargarEstadoCartola()
     if (data.nuevos > 0) {
       filtros.value.desde = portalForm.value.desde
       filtros.value.hasta = portalForm.value.hasta
@@ -2268,6 +2338,7 @@ async function importarJson() {
       json_data: portalForm.value.jsonData,
     })
     portalResult.value = data
+    cargarEstadoCartola()
     if (data.nuevos > 0) {
       filtros.value.desde = portalForm.value.desde
       filtros.value.hasta = portalForm.value.hasta
@@ -3337,6 +3408,7 @@ onMounted(async () => {
   await cargarFlujo()
   await cargarReglas()
   cargarSaldo()
+  cargarEstadoCartola()
   cargarEmpleados()
   cargarCuentas()
   cargarSugerencias()

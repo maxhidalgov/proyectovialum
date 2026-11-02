@@ -575,6 +575,7 @@ Route::middleware('auth:api')->group(function () {
     // Banco de Chile — importadores
     Route::post('/banco/importar-portal', [BancochilePortalController::class, 'importar']);
     Route::post('/banco/importar-json',   [BancochilePortalController::class, 'importarJson']);
+    Route::get('/banco/estado-cartola',   [BancochilePortalController::class, 'estadoCartola']);
 
     // Transbank
     Route::prefix('transbank')->group(function () {
