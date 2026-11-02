@@ -584,6 +584,7 @@ Route::middleware('auth:api')->group(function () {
         Route::delete('/{id}',         [\App\Http\Controllers\TransbankController::class, 'destroy']);
         Route::get('/{id}/abonos',     [\App\Http\Controllers\TransbankController::class, 'abonos']);
         Route::get('/depositos',       [\App\Http\Controllers\TransbankController::class, 'depositos']);
+        Route::get('/movimientos-disponibles', [\App\Http\Controllers\TransbankController::class, 'movimientosDisponibles']);
         Route::get('/resumen-sii',                  [\App\Http\Controllers\TransbankController::class, 'resumenSii']);
         Route::get('/documentos',                   [\App\Http\Controllers\TransbankController::class, 'documentos']);
         Route::get('/resumen-documentos',           [\App\Http\Controllers\TransbankController::class, 'resumenDocumentos']);

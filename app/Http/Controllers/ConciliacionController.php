@@ -349,9 +349,17 @@ class ConciliacionController extends Controller
             ->selectRaw('movimiento_bancario_id, SUM(net_abono) as asignado')
             ->pluck('asignado', 'movimiento_bancario_id');
 
+        // Movimientos de un depósito Transbank repartido en varios movimientos (o el secundario de uno):
+        // cada uno queda cubierto por su monto completo
+        $enDepositoTransbank = DB::table('transbank_deposito_movimientos')
+            ->whereIn('movimiento_bancario_id', $ids)
+            ->pluck('movimiento_bancario_id')
+            ->flip();
+
         $movs->getCollection()->transform(function ($mov) use (
             $asignadosCompra, $asignadosGasto, $asignadosSueldo, $asignadosVenta,
-            $asignadosIngreso, $asignadosBolResumen, $asignadosBolPeriodo, $asignadosTransbank
+            $asignadosIngreso, $asignadosBolResumen, $asignadosBolPeriodo, $asignadosTransbank,
+            $enDepositoTransbank
         ) {
             $asignado = (float) ($asignadosCompra[$mov->id]     ?? 0)
                       + (float) ($asignadosGasto[$mov->id]      ?? 0)
@@ -361,6 +369,10 @@ class ConciliacionController extends Controller
                       + (float) ($asignadosBolResumen[$mov->id] ?? 0)
                       + (float) ($asignadosBolPeriodo[$mov->id] ?? 0)
                       + (float) ($asignadosTransbank[$mov->id]  ?? 0);
+
+            if ($enDepositoTransbank->has($mov->id)) {
+                $asignado = max($asignado, (float) $mov->monto);
+            }
 
             // Movimiento Transbank marcado como conciliado sin abono vinculado aún:
             // tratar como completamente cubierto para evitar mostrar saldo falso.

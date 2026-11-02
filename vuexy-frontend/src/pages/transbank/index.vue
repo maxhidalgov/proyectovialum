@@ -182,8 +182,8 @@
               <th class="text-right" style="min-width:120px">
                 <strong>Total depósito</strong>
               </th>
-              <th style="min-width:180px">Movimiento bancario</th>
-              <th style="min-width:90px" class="text-center">Acción</th>
+              <th style="min-width:240px">Movimiento bancario</th>
+              <th style="min-width:100px" class="text-center">Acción</th>
             </tr>
           </thead>
           <tbody>
@@ -226,15 +226,20 @@
                   <strong>{{ fmt(dep.total_neto) }}</strong>
                 </td>
                 <td>
-                  <div v-if="dep.movimiento">
-                    <p class="text-body-2 mb-0 text-truncate" style="max-width:200px">
-                      {{ dep.movimiento.descripcion }}
+                  <div v-if="dep.movimientos?.length">
+                    <div v-for="mv in dep.movimientos" :key="mv.id" class="mb-1">
+                      <p class="text-body-2 mb-0 text-truncate" style="max-width:260px" :title="mv.descripcion">
+                        {{ mv.descripcion }}
+                      </p>
+                      <p class="text-caption text-medium-emphasis mb-0">
+                        {{ formatFecha(mv.fecha_contable) }} · {{ fmt(mv.monto) }}
+                      </p>
+                    </div>
+                    <p v-if="dep.movimientos.length > 1" class="text-caption font-weight-medium mb-0">
+                      Suma {{ fmt(dep.monto_movimientos) }}
                     </p>
-                    <p class="text-caption text-medium-emphasis mb-0">
-                      {{ fmt(dep.movimiento.monto) }}
-                      <span v-if="Math.abs(dep.movimiento.monto - dep.total_neto) > 10" class="text-warning ml-1">
-                        (Δ {{ fmt(dep.movimiento.monto - dep.total_neto) }})
-                      </span>
+                    <p v-if="Math.abs(dep.diferencia) > 10" class="text-caption text-warning mb-0">
+                      Δ {{ fmt(dep.diferencia) }} respecto al depósito
                     </p>
                   </div>
                   <span v-else class="text-caption text-disabled">Sin asignar</span>
@@ -247,13 +252,20 @@
                     color="primary"
                     @click="abrirMatchManual(dep)"
                   >Asignar</VBtn>
-                  <VBtn
-                    v-else
-                    size="x-small"
-                    variant="text"
-                    color="warning"
-                    @click="desasignarDeposito(dep)"
-                  >Quitar</VBtn>
+                  <div v-else class="d-flex flex-column align-center">
+                    <VBtn
+                      size="x-small"
+                      variant="text"
+                      color="primary"
+                      @click="abrirMatchManual(dep)"
+                    >Editar</VBtn>
+                    <VBtn
+                      size="x-small"
+                      variant="text"
+                      color="warning"
+                      @click="desasignarDeposito(dep)"
+                    >Quitar</VBtn>
+                  </div>
                 </td>
               </tr>
 
@@ -820,15 +832,15 @@
     <!-- ──────────────────────────────────────────────────── -->
     <!-- Dialog Match Manual                                 -->
     <!-- ──────────────────────────────────────────────────── -->
-    <VDialog v-model="dialogMatch" max-width="680">
+    <VDialog v-model="dialogMatch" max-width="860" scrollable>
       <VCard>
         <VCardTitle class="d-flex align-center pa-4">
-          Asignar movimiento bancario
+          Asignar movimientos bancarios
           <VSpacer />
           <VBtn icon="mdi-close" variant="text" size="small" @click="dialogMatch = false" />
         </VCardTitle>
         <VDivider />
-        <VCardText class="pa-4" v-if="depositoSeleccionado">
+        <VCardText v-if="depositoSeleccionado" class="pa-4" style="max-height:58vh">
           <VAlert type="info" variant="tonal" density="compact" class="mb-4">
             <strong>Depósito {{ formatFecha(depositoSeleccionado.fecha_abono) }}</strong>
             · Total <strong>{{ fmt(depositoSeleccionado.total_neto) }}</strong>
@@ -839,8 +851,20 @@
             </div>
           </VAlert>
 
-          <p class="text-body-2 font-weight-medium mb-2">
-            Movimientos bancarios tipo crédito (±5 días):
+          <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-2">
+            <p class="text-body-2 font-weight-medium mb-0">
+              Abonos del banco (5 días antes a 3 después). Si el banco depositó en partes, marca todas.
+            </p>
+            <VSwitch
+              v-model="soloTransbank"
+              label="Solo abonos Transbank"
+              color="primary"
+              density="compact"
+              hide-details
+            />
+          </div>
+          <p class="text-caption text-medium-emphasis mb-3">
+            No se muestran los movimientos que ya están asignados a otro depósito o a otra conciliación.
           </p>
 
           <div v-if="loadingMovimientos" class="d-flex justify-center py-4">
@@ -850,45 +874,64 @@
           <VTable v-else density="compact">
             <thead>
               <tr>
-                <th>Fecha</th>
+                <th style="width:44px"></th>
+                <th style="width:100px">Fecha</th>
                 <th>Descripción</th>
-                <th class="text-right">Monto</th>
-                <th class="text-right">Diferencia</th>
-                <th></th>
+                <th class="text-right" style="width:120px">Monto</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="movimientosDisponibles.length === 0">
-                <td colspan="5" class="text-center py-4 text-disabled">
-                  No hay movimientos tipo crédito en ese rango de fechas
+              <tr v-if="movimientosVisibles.length === 0">
+                <td colspan="4" class="text-center py-4 text-disabled">
+                  No hay movimientos disponibles en ese rango de fechas
                 </td>
               </tr>
               <tr
-                v-for="mv in movimientosDisponibles"
+                v-for="mv in movimientosVisibles"
                 :key="mv.id"
-                :class="{ 'match-ideal': Math.abs(mv.monto - depositoSeleccionado.total_neto) < 500 }"
+                style="cursor:pointer"
+                :class="{ 'match-ideal': seleccionados.includes(mv.id) }"
+                @click="toggleSeleccion(mv.id)"
               >
-                <td class="text-caption">{{ formatFecha(mv.fecha_contable) }}</td>
+                <td @click.stop>
+                  <VCheckboxBtn
+                    :model-value="seleccionados.includes(mv.id)"
+                    density="compact"
+                    @update:model-value="toggleSeleccion(mv.id)"
+                  />
+                </td>
+                <td class="text-caption text-no-wrap">{{ formatFecha(mv.fecha_contable) }}</td>
                 <td class="text-body-2">{{ mv.descripcion }}</td>
-                <td class="text-right font-weight-bold">{{ fmt(mv.monto) }}</td>
-                <td
-                  class="text-right text-caption"
-                  :class="Math.abs(mv.monto - depositoSeleccionado.total_neto) < 500 ? 'text-success' : 'text-warning'"
-                >
-                  {{ (mv.monto - depositoSeleccionado.total_neto) >= 0 ? '+' : '' }}{{ fmt(mv.monto - depositoSeleccionado.total_neto) }}
-                </td>
-                <td>
-                  <VBtn
-                    size="x-small"
-                    color="primary"
-                    :loading="matchLoading === mv.id"
-                    @click="confirmarMatch(mv)"
-                  >Asignar</VBtn>
-                </td>
+                <td class="text-right font-weight-bold text-no-wrap">{{ fmt(mv.monto) }}</td>
               </tr>
             </tbody>
           </VTable>
         </VCardText>
+        <VDivider />
+        <VCardActions v-if="depositoSeleccionado" class="pa-4 flex-wrap gap-2">
+          <div class="text-body-2">
+            <template v-if="seleccionados.length">
+              {{ seleccionados.length }} seleccionado(s) · suma <strong>{{ fmt(sumaSeleccionada) }}</strong>
+              <VChip
+                size="small"
+                class="ml-2"
+                :color="Math.abs(diferenciaSeleccion) <= 100 ? 'success' : 'warning'"
+                variant="tonal"
+              >
+                {{ Math.abs(diferenciaSeleccion) <= 100 ? 'Cuadra con el depósito' : 'Diferencia ' + fmt(diferenciaSeleccion) }}
+              </VChip>
+            </template>
+            <span v-else class="text-medium-emphasis">Marca uno o más movimientos</span>
+          </div>
+          <VSpacer />
+          <VBtn variant="text" @click="dialogMatch = false">Cancelar</VBtn>
+          <VBtn
+            color="primary"
+            :disabled="!seleccionados.length"
+            :loading="guardandoMatch"
+            @click="confirmarMatch"
+          >Asignar{{ seleccionados.length > 1 ? ` (${seleccionados.length})` : '' }}</VBtn>
+        </VCardActions>
       </VCard>
     </VDialog>
 
@@ -1251,7 +1294,9 @@ const dialogMatch            = ref(false)
 const depositoSeleccionado   = ref(null)
 const movimientosDisponibles = ref([])
 const loadingMovimientos     = ref(false)
-const matchLoading           = ref(null)
+const guardandoMatch         = ref(false)
+const seleccionados          = ref([])
+const soloTransbank          = ref(true)
 
 // ── Docs tab state ─────────────────────────────────────────────────────────────
 
@@ -1301,6 +1346,29 @@ let   chipaxParsedRows = []
 
 const resumenPeriodo = computed(() =>
   resumenPeriodos.value.find(r => r.periodo === periodo.value) ?? null
+)
+
+const esTransbank = mv => /transbank/i.test(mv.descripcion || '')
+
+// Movimientos que se listan en el modal: ordenados por cercanía de fecha al depósito;
+// los ya marcados siempre se ven aunque el filtro "solo Transbank" los ocultaría
+const movimientosVisibles = computed(() => {
+  const base = depositoSeleccionado.value?.fecha_abono
+  const dist = mv => base ? Math.abs((new Date(mv.fecha_contable) - new Date(base)) / 86400000) : 0
+  return movimientosDisponibles.value
+    .filter(mv => !soloTransbank.value || esTransbank(mv) || seleccionados.value.includes(mv.id))
+    .slice()
+    .sort((a, b) => dist(a) - dist(b) || a.id - b.id)
+})
+
+const sumaSeleccionada = computed(() =>
+  movimientosDisponibles.value
+    .filter(mv => seleccionados.value.includes(mv.id))
+    .reduce((acc, mv) => acc + Number(mv.monto), 0)
+)
+
+const diferenciaSeleccion = computed(() =>
+  sumaSeleccionada.value - Number(depositoSeleccionado.value?.total_neto ?? 0)
 )
 
 const depositosConciliados = computed(() =>
@@ -1398,7 +1466,7 @@ function labelFormaPago(fp) {
 
 function formatFecha(s) {
   if (!s) return '—'
-  const parts = String(s).split('-')
+  const parts = String(s).slice(0, 10).split('-')
   if (parts.length < 3) return s
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
@@ -1568,64 +1636,79 @@ async function autoMatch() {
 
 // ── Match manual ───────────────────────────────────────────────────────────────
 
+// Sugerencia: un solo movimiento que cuadre, o la única combinación de abonos Transbank que sume el total
+function sugerirSeleccion(lista, total) {
+  const cand = lista.filter(esTransbank).slice(0, 12)
+  const unico = cand.filter(m => Math.abs(Number(m.monto) - total) <= 100)
+  if (unico.length === 1) return [unico[0].id]
+  const validas = []
+  for (let mask = 1; mask < (1 << cand.length); mask++) {
+    const ids = cand.filter((_, i) => mask & (1 << i))
+    if (ids.length < 2) continue
+    const suma = ids.reduce((acc, m) => acc + Number(m.monto), 0)
+    if (Math.abs(suma - total) <= 100) {
+      validas.push(ids.map(m => m.id))
+      if (validas.length > 1) return []
+    }
+  }
+  return validas.length === 1 ? validas[0] : []
+}
+
+function toggleSeleccion(id) {
+  const i = seleccionados.value.indexOf(id)
+  if (i >= 0) seleccionados.value.splice(i, 1)
+  else seleccionados.value.push(id)
+}
+
 async function abrirMatchManual(deposito) {
   depositoSeleccionado.value   = deposito
   movimientosDisponibles.value = []
+  seleccionados.value          = []
+  soloTransbank.value          = true
   dialogMatch.value            = true
   loadingMovimientos.value     = true
   try {
-    const { data } = await axios.get('/api/conciliacion/movimientos', {
-      params: {
-        tipo:  'C',
-        desde: offsetDias(deposito.fecha_abono, -5),
-        hasta: offsetDias(deposito.fecha_abono, +3),
-      },
+    const { data } = await axios.get('/api/transbank/movimientos-disponibles', {
+      params: { periodo: periodo.value, fecha_abono: deposito.fecha_abono },
     })
-    // El endpoint responde { movimientos: { data: [...] (paginado) }, totales }.
-    // NO filtramos por 'conciliado': en abonos Transbank el 85% queda marcado
-    // conciliado/categoria=Transbank aunque su abono aún no esté vinculado.
-    const lista = data.movimientos?.data ?? data.movimientos ?? data.data ?? data
-    const total = Number(deposito.total_neto ?? 0)
-    movimientosDisponibles.value = (Array.isArray(lista) ? lista : [])
-      .filter(m => Number(m.monto) > 0)
-      .sort((a, b) => Math.abs(Number(a.monto) - total) - Math.abs(Number(b.monto) - total))
+    movimientosDisponibles.value = Array.isArray(data) ? data : []
+    const yaAsignados = movimientosDisponibles.value.filter(m => m.asignado_aqui).map(m => m.id)
+    seleccionados.value = yaAsignados.length
+      ? yaAsignados
+      : sugerirSeleccion(movimientosDisponibles.value, Number(deposito.total_neto ?? 0))
   } catch {
     movimientosDisponibles.value = []
+    toast('No se pudieron cargar los movimientos bancarios', 'error')
   } finally {
     loadingMovimientos.value = false
   }
 }
 
-function offsetDias(fecha, dias) {
-  const d = new Date(fecha)
-  d.setDate(d.getDate() + dias)
-  return d.toISOString().slice(0, 10)
-}
-
-async function confirmarMatch(movimiento) {
-  matchLoading.value = movimiento.id
+async function confirmarMatch() {
+  if (!seleccionados.value.length) return
+  guardandoMatch.value = true
   try {
     await axios.post('/api/transbank/deposito/match', {
-      fecha_abono:            depositoSeleccionado.value.fecha_abono,
-      periodo:                periodo.value,
-      movimiento_bancario_id: movimiento.id,
+      fecha_abono:             depositoSeleccionado.value.fecha_abono,
+      periodo:                 periodo.value,
+      movimiento_bancario_ids: seleccionados.value,
     })
     dialogMatch.value = false
     await cargar()
     toast('Depósito conciliado correctamente')
-  } catch {
-    toast('Error asignando movimiento', 'error')
+  } catch (e) {
+    toast(e.response?.data?.message || 'Error asignando movimientos', 'error')
   } finally {
-    matchLoading.value = null
+    guardandoMatch.value = false
   }
 }
 
 async function desasignarDeposito(deposito) {
   try {
     await axios.post('/api/transbank/deposito/match', {
-      fecha_abono:            deposito.fecha_abono,
-      periodo:                periodo.value,
-      movimiento_bancario_id: null,
+      fecha_abono:             deposito.fecha_abono,
+      periodo:                 periodo.value,
+      movimiento_bancario_ids: [],
     })
     await cargar()
     toast('Asignación removida')

@@ -179,10 +179,38 @@ class TransbankController extends Controller
                   ->keyBy('id')
             : collect();
 
+        // Movimientos vinculados por fecha (un depósito puede llegar al banco en varios)
+        $vinculos = DB::table('transbank_deposito_movimientos as tdm')
+            ->join('movimientos_bancarios as mb', 'mb.id', '=', 'tdm.movimiento_bancario_id')
+            ->where('tdm.periodo', $periodo)
+            ->orderBy('mb.fecha_contable')->orderBy('mb.id')
+            ->get(['tdm.fecha_abono', 'mb.id', 'mb.descripcion', 'mb.monto', 'mb.fecha_contable'])
+            ->groupBy(fn ($r) => substr((string) $r->fecha_abono, 0, 10));
+
         foreach ($depositos as $dep) {
-            $dep->movimiento = $dep->movimiento_bancario_id
-                ? ($movimientos[$dep->movimiento_bancario_id] ?? null)
-                : null;
+            $lista = collect($vinculos->get(substr((string) $dep->fecha_abono, 0, 10), []))
+                ->map(fn ($r) => [
+                    'id'             => (int) $r->id,
+                    'descripcion'    => $r->descripcion,
+                    'monto'          => (float) $r->monto,
+                    'fecha_contable' => substr((string) $r->fecha_contable, 0, 10),
+                ])->values();
+
+            // Datos anteriores a la tabla de vínculos: solo la columna histórica
+            if ($lista->isEmpty() && $dep->movimiento_bancario_id && isset($movimientos[$dep->movimiento_bancario_id])) {
+                $m = $movimientos[$dep->movimiento_bancario_id];
+                $lista = collect([[
+                    'id' => (int) $m->id, 'descripcion' => $m->descripcion,
+                    'monto' => (float) $m->monto, 'fecha_contable' => substr((string) $m->fecha_contable, 0, 10),
+                ]]);
+            }
+
+            $dep->movimientos            = $lista;
+            $dep->movimiento_bancario_id = $lista->first()['id'] ?? $dep->movimiento_bancario_id;
+            $dep->monto_movimientos      = (float) $lista->sum('monto');
+            $dep->diferencia             = $lista->isEmpty() ? null : $dep->monto_movimientos - (float) $dep->total_neto;
+            // Compatibilidad: primer movimiento como antes
+            $dep->movimiento = $lista->isEmpty() ? null : (object) $lista->first();
         }
 
         return response()->json($depositos);
@@ -348,14 +376,129 @@ class TransbankController extends Controller
 
     public function destroy(int $id)
     {
+        $periodo = DB::table('transbank_archivos')->where('id', $id)->value('periodo');
+
         // Cascade borra abonos y transacciones por FK
         DB::table('transbank_archivos')->where('id', $id)->delete();
+
+        // Si el archivo borrado era el único de una fecha, sus vínculos con el banco quedan huérfanos
+        if ($periodo) {
+            $this->limpiarDepositosHuerfanos($periodo);
+        }
+
         return response()->json(['success' => true]);
     }
 
+    // ── Vínculos depósito ↔ movimientos bancarios ─────────────────────────────
+    // Un depósito (período + fecha de abono) puede llegar al banco en varios movimientos.
+    // La tabla transbank_deposito_movimientos guarda todos; transbank_abonos.movimiento_bancario_id
+    // queda apuntando al primero (compatibilidad con Conciliación, detalle y CSV de Chipax).
+
+    private function movimientoEnUso(int $movId): bool
+    {
+        return DB::table('transbank_deposito_movimientos')->where('movimiento_bancario_id', $movId)->exists()
+            || DB::table('transbank_abonos')->where('movimiento_bancario_id', $movId)->exists();
+    }
+
+    /** ¿El movimiento ya está asignado a un depósito distinto de (periodo, fecha)? */
+    private function movimientoEnOtroDeposito(int $movId, string $periodo, string $fecha): bool
+    {
+        $enPivot = DB::table('transbank_deposito_movimientos')
+            ->where('movimiento_bancario_id', $movId)
+            ->where(fn ($q) => $q->where('periodo', '<>', $periodo)->orWhere('fecha_abono', '<>', $fecha))
+            ->exists();
+        if ($enPivot) return true;
+
+        return DB::table('transbank_abonos as ta')
+            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+            ->where('ta.movimiento_bancario_id', $movId)
+            ->where(fn ($q) => $q->where('tf.periodo', '<>', $periodo)->orWhere('ta.fecha_abono', '<>', $fecha))
+            ->exists();
+    }
+
+    private function desmarcarMovimientoSiLibre(int $movId): void
+    {
+        if ($this->movimientoEnUso($movId)) return;
+        DB::table('movimientos_bancarios')
+            ->where('id', $movId)
+            ->where('categoria', 'Transbank')
+            ->update(['conciliado' => false, 'categoria' => null, 'updated_at' => now()]);
+    }
+
+    /** Reemplaza los movimientos vinculados a un depósito. $movIds vacío = quitar todos. */
+    private function vincularDeposito(string $periodo, string $fecha, array $movIds): void
+    {
+        $movIds = array_values(array_unique(array_map('intval', $movIds)));
+
+        DB::transaction(function () use ($periodo, $fecha, $movIds) {
+            $anteriores = DB::table('transbank_deposito_movimientos')
+                ->where('periodo', $periodo)->where('fecha_abono', $fecha)
+                ->pluck('movimiento_bancario_id')->map(fn ($v) => (int) $v)->all();
+            $legacy = DB::table('transbank_abonos as ta')
+                ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+                ->where('tf.periodo', $periodo)->where('ta.fecha_abono', $fecha)
+                ->whereNotNull('ta.movimiento_bancario_id')
+                ->pluck('ta.movimiento_bancario_id')->map(fn ($v) => (int) $v)->all();
+            $anteriores = array_unique(array_merge($anteriores, $legacy));
+
+            DB::table('transbank_deposito_movimientos')
+                ->where('periodo', $periodo)->where('fecha_abono', $fecha)->delete();
+
+            foreach ($movIds as $movId) {
+                DB::table('transbank_deposito_movimientos')->insert([
+                    'periodo'                => $periodo,
+                    'fecha_abono'            => $fecha,
+                    'movimiento_bancario_id' => $movId,
+                    'created_at'             => now(),
+                    'updated_at'             => now(),
+                ]);
+            }
+
+            // Columna histórica: el primer movimiento (o null si se quitó todo)
+            DB::table('transbank_abonos as ta')
+                ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+                ->where('tf.periodo', $periodo)
+                ->where('ta.fecha_abono', $fecha)
+                ->update([
+                    'ta.movimiento_bancario_id' => $movIds[0] ?? null,
+                    'ta.updated_at'             => now(),
+                ]);
+
+            if ($movIds) {
+                DB::table('movimientos_bancarios')
+                    ->whereIn('id', $movIds)
+                    ->update(['conciliado' => true, 'categoria' => 'Transbank', 'updated_at' => now()]);
+            }
+
+            foreach (array_diff($anteriores, $movIds) as $movIdViejo) {
+                $this->desmarcarMovimientoSiLibre((int) $movIdViejo);
+            }
+        });
+    }
+
+    private function limpiarDepositosHuerfanos(string $periodo): void
+    {
+        $huerfanos = DB::table('transbank_deposito_movimientos as tdm')
+            ->where('tdm.periodo', $periodo)
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('transbank_abonos as ta')
+                  ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+                  ->whereColumn('tf.periodo', 'tdm.periodo')
+                  ->whereColumn('ta.fecha_abono', 'tdm.fecha_abono');
+            })
+            ->get(['tdm.id', 'tdm.movimiento_bancario_id']);
+
+        foreach ($huerfanos as $h) {
+            DB::table('transbank_deposito_movimientos')->where('id', $h->id)->delete();
+            $this->desmarcarMovimientoSiLibre((int) $h->movimiento_bancario_id);
+        }
+    }
+
     // ── POST /api/transbank/auto-match ────────────────────────────────────────
-    // Agrupa abonos por fecha_abono (sumando crédito+débito+prepago) y busca
-    // el movimiento bancario que coincida con ese total.
+    // Agrupa abonos por fecha_abono (sumando crédito+débito+prepago) y busca el movimiento
+    // bancario que coincida con ese total. Si el banco depositó ese día en varios movimientos
+    // (abonos Transbank del mismo día), prueba combinaciones que sumen el total.
 
     public function autoMatch(Request $request)
     {
@@ -373,42 +516,53 @@ class TransbankController extends Controller
         $matched = 0;
 
         foreach ($fechasPendientes as $fecha) {
-            // Tolerancia de ±100 para cubrir diferencias de redondeo entre tipos
+            $total = (float) $fecha->total_neto;
+
+            // 1) Un solo movimiento. Tolerancia de ±100 para cubrir diferencias de redondeo entre tipos
             $movimiento = DB::table('movimientos_bancarios')
                 ->where('tipo', 'C')
                 ->where('fecha_contable', $fecha->fecha_abono)
-                ->whereBetween('monto', [$fecha->total_neto - 100, $fecha->total_neto + 100])
-                // No usar si ya está asignado a una fecha distinta
+                ->whereBetween('monto', [$total - 100, $total + 100])
+                // No usar si ya está asignado a otro depósito
                 ->whereNotExists(function ($q) use ($fecha) {
                     $q->select(DB::raw(1))
                       ->from('transbank_abonos')
                       ->whereColumn('transbank_abonos.movimiento_bancario_id', 'movimientos_bancarios.id')
                       ->where('transbank_abonos.fecha_abono', '<>', $fecha->fecha_abono);
                 })
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                      ->from('transbank_deposito_movimientos')
+                      ->whereColumn('transbank_deposito_movimientos.movimiento_bancario_id', 'movimientos_bancarios.id');
+                })
                 ->first();
 
-            if ($movimiento) {
-                // Asignar a TODOS los abonos de esa fecha (credito + debito + prepago)
-                $affected = DB::table('transbank_abonos as ta')
-                    ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
-                    ->where('tf.periodo', $periodo)
-                    ->where('ta.fecha_abono', $fecha->fecha_abono)
-                    ->whereNull('ta.movimiento_bancario_id')
-                    ->update([
-                        'ta.movimiento_bancario_id' => $movimiento->id,
-                        'ta.updated_at'             => now(),
-                    ]);
-                if ($affected > 0) {
-                    // Marcar el movimiento bancario como conciliado
-                    DB::table('movimientos_bancarios')
-                        ->where('id', $movimiento->id)
-                        ->update([
-                            'conciliado' => true,
-                            'categoria'  => 'Transbank',
-                            'updated_at' => now(),
-                        ]);
-                    $matched++;
-                }
+            $movIds = $movimiento ? [$movimiento->id] : [];
+
+            // 2) Varios movimientos del mismo día que sumen el total (solo si la combinación es única)
+            if (!$movIds) {
+                $candidatos = DB::table('movimientos_bancarios as mb')
+                    ->where('mb.tipo', 'C')
+                    ->where('mb.fecha_contable', $fecha->fecha_abono)
+                    ->where('mb.descripcion', 'like', '%Transbank%')
+                    ->whereNotExists(function ($q) {
+                        $q->select(DB::raw(1))->from('transbank_deposito_movimientos as t')
+                          ->whereColumn('t.movimiento_bancario_id', 'mb.id');
+                    })
+                    ->whereNotExists(function ($q) {
+                        $q->select(DB::raw(1))->from('transbank_abonos as t')
+                          ->whereColumn('t.movimiento_bancario_id', 'mb.id');
+                    })
+                    ->orderBy('mb.id')
+                    ->limit(12)
+                    ->get(['mb.id', 'mb.monto']);
+
+                $movIds = $this->combinacionUnicaQueSuma($candidatos, $total, 100);
+            }
+
+            if ($movIds) {
+                $this->vincularDeposito($periodo, $fecha->fecha_abono, $movIds);
+                $matched++;
             }
         }
 
@@ -419,66 +573,131 @@ class TransbankController extends Controller
         ]);
     }
 
+    /**
+     * IDs de la única combinación (2+ movimientos) cuya suma está a ±$tolerancia del total.
+     * Si hay varias combinaciones posibles es ambiguo → [] (se asigna a mano).
+     */
+    private function combinacionUnicaQueSuma($candidatos, float $total, float $tolerancia): array
+    {
+        $n = $candidatos->count();
+        if ($n < 2) return [];
+
+        $items = $candidatos->values();
+        $validas = [];
+        for ($mask = 1; $mask < (1 << $n); $mask++) {
+            if (substr_count(decbin($mask), '1') < 2) continue;
+            $suma = 0.0;
+            $ids = [];
+            for ($i = 0; $i < $n; $i++) {
+                if ($mask & (1 << $i)) {
+                    $suma += (float) $items[$i]->monto;
+                    $ids[] = (int) $items[$i]->id;
+                }
+            }
+            if (abs($suma - $total) <= $tolerancia) {
+                $validas[] = $ids;
+                if (count($validas) > 1) return [];
+            }
+        }
+        return count($validas) === 1 ? $validas[0] : [];
+    }
+
     // ── POST /api/transbank/deposito/match ────────────────────────────────────
-    // Asigna (o quita) un movimiento bancario a TODOS los abonos de una fecha+periodo
+    // Asigna (o quita) uno o varios movimientos bancarios a TODOS los abonos de una fecha+periodo.
+    // Body: movimiento_bancario_ids (array; vacío/null = quitar) o, por compatibilidad, movimiento_bancario_id.
 
     public function matchDeposito(Request $request)
     {
         $request->validate([
-            'fecha_abono'           => 'required|date',
-            'periodo'               => 'required|regex:/^\d{4}-\d{2}$/',
-            'movimiento_bancario_id' => 'nullable|exists:movimientos_bancarios,id',
+            'fecha_abono'               => 'required|date',
+            'periodo'                   => 'required|regex:/^\d{4}-\d{2}$/',
+            'movimiento_bancario_id'    => 'nullable|exists:movimientos_bancarios,id',
+            'movimiento_bancario_ids'   => 'nullable|array',
+            'movimiento_bancario_ids.*' => 'integer|exists:movimientos_bancarios,id',
         ]);
 
         $fecha   = $request->input('fecha_abono');
         $periodo = $request->input('periodo');
-        $movId   = $request->input('movimiento_bancario_id');
+        $movIds  = $request->has('movimiento_bancario_ids')
+            ? (array) $request->input('movimiento_bancario_ids')
+            : array_filter([$request->input('movimiento_bancario_id')]);
+        $movIds  = array_values(array_unique(array_map('intval', $movIds)));
 
-        // Obtener el movimiento anterior (para desmarcar si se quita el vínculo)
-        $movIdAnterior = DB::table('transbank_abonos as ta')
-            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
-            ->where('tf.periodo', $periodo)
-            ->where('ta.fecha_abono', $fecha)
-            ->whereNotNull('ta.movimiento_bancario_id')
-            ->value('ta.movimiento_bancario_id');
-
-        DB::table('transbank_abonos as ta')
-            ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
-            ->where('tf.periodo', $periodo)
-            ->where('ta.fecha_abono', $fecha)
-            ->update([
-                'ta.movimiento_bancario_id' => $movId,
-                'ta.updated_at'             => now(),
-            ]);
-
-        if ($movId) {
-            // Vincular: marcar movimiento como conciliado - Transbank
-            DB::table('movimientos_bancarios')
-                ->where('id', $movId)
-                ->update([
-                    'conciliado' => true,
-                    'categoria'  => 'Transbank',
-                    'updated_at' => now(),
-                ]);
-        }
-
-        if ($movIdAnterior && $movIdAnterior !== $movId) {
-            // Desvincular anterior: verificar que no tenga otras conciliaciones
-            $sigueUsado = DB::table('transbank_abonos')
-                ->where('movimiento_bancario_id', $movIdAnterior)
-                ->exists();
-            if (!$sigueUsado) {
-                DB::table('movimientos_bancarios')
-                    ->where('id', $movIdAnterior)
-                    ->update([
-                        'conciliado' => false,
-                        'categoria'  => null,
-                        'updated_at' => now(),
-                    ]);
+        // Un movimiento no puede cubrir dos depósitos distintos (duplicaría el monto conciliado)
+        foreach ($movIds as $movId) {
+            if ($this->movimientoEnOtroDeposito($movId, $periodo, $fecha)) {
+                return response()->json([
+                    'message' => "El movimiento #{$movId} ya está asignado a otro depósito Transbank.",
+                ], 422);
             }
         }
 
+        $this->vincularDeposito($periodo, $fecha, $movIds);
+
         return response()->json(['success' => true]);
+    }
+
+    // ── GET /api/transbank/movimientos-disponibles?periodo=&fecha_abono= ──────
+    // Movimientos bancarios (abonos) de -5/+3 días alrededor del depósito que AÚN se pueden asignar:
+    // excluye los ya asignados a otro depósito Transbank o a cualquier otra conciliación.
+
+    public function movimientosDisponibles(Request $request)
+    {
+        $request->validate([
+            'fecha_abono' => 'required|date',
+            'periodo'     => 'required|regex:/^\d{4}-\d{2}$/',
+        ]);
+
+        $fecha   = $request->input('fecha_abono');
+        $periodo = $request->input('periodo');
+        $desde   = Carbon::parse($fecha)->subDays(5)->toDateString();
+        $hasta   = Carbon::parse($fecha)->addDays(3)->toDateString();
+
+        $aqui = DB::table('transbank_deposito_movimientos')
+            ->where('periodo', $periodo)->where('fecha_abono', $fecha)
+            ->pluck('movimiento_bancario_id')->flip();
+
+        $q = DB::table('movimientos_bancarios as mb')
+            ->where('mb.tipo', 'C')
+            // Rango de fechas, más los ya vinculados a este depósito (aunque caigan fuera del rango)
+            ->where(fn ($w) => $w->whereBetween('mb.fecha_contable', [$desde, $hasta])
+                                 ->orWhereIn('mb.id', $aqui->keys()->all()))
+            // Ya conciliado por otra vía (compra, venta, etc.) → no ofrecer. Los marcados Transbank sin vínculo sí.
+            ->where(fn ($w) => $w->where('mb.conciliado', 0)->orWhere('mb.categoria', 'Transbank'))
+            // Asignado a OTRO depósito Transbank
+            ->whereNotExists(function ($s) use ($periodo, $fecha) {
+                $s->select(DB::raw(1))->from('transbank_deposito_movimientos as t')
+                  ->whereColumn('t.movimiento_bancario_id', 'mb.id')
+                  ->where(fn ($x) => $x->where('t.periodo', '<>', $periodo)->orWhere('t.fecha_abono', '<>', $fecha));
+            })
+            ->whereNotExists(function ($s) use ($periodo, $fecha) {
+                $s->select(DB::raw(1))->from('transbank_abonos as ta')
+                  ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+                  ->whereColumn('ta.movimiento_bancario_id', 'mb.id')
+                  ->where(fn ($x) => $x->where('tf.periodo', '<>', $periodo)->orWhere('ta.fecha_abono', '<>', $fecha));
+            });
+
+        // Asignado en cualquier otro módulo de conciliación
+        foreach ([
+            'compra_movimiento', 'gasto_movimiento', 'pagos_empleado', 'venta_movimiento',
+            'ingreso_movimiento', 'boleta_resumen_movimiento', 'boleta_periodo_movimiento',
+        ] as $tabla) {
+            $q->whereNotExists(function ($s) use ($tabla) {
+                $s->select(DB::raw(1))->from($tabla)->whereColumn("{$tabla}.movimiento_id", 'mb.id');
+            });
+        }
+
+        $movs = $q->orderBy('mb.fecha_contable')->orderBy('mb.id')
+            ->get(['mb.id', 'mb.fecha_contable', 'mb.descripcion', 'mb.monto'])
+            ->map(fn ($m) => [
+                'id'             => (int) $m->id,
+                'fecha_contable' => substr((string) $m->fecha_contable, 0, 10),
+                'descripcion'    => $m->descripcion,
+                'monto'          => (float) $m->monto,
+                'asignado_aqui'  => $aqui->has($m->id),
+            ]);
+
+        return response()->json($movs);
     }
 
     // ── Parser interno ────────────────────────────────────────────────────────
@@ -953,6 +1172,20 @@ class TransbankController extends Controller
             ->where('ta.movimiento_bancario_id', $id)
             ->select('ta.id', 'ta.fecha_abono', 'ta.net_abono', 'ta.total_venta_bruta', 'tf.tipo as tipo_archivo', 'tf.periodo')
             ->first();
+
+        // Movimiento secundario de un depósito repartido en varios movimientos
+        if (!$abono) {
+            $dep = DB::table('transbank_deposito_movimientos')->where('movimiento_bancario_id', $id)->first();
+            if ($dep) {
+                $abono = DB::table('transbank_abonos as ta')
+                    ->join('transbank_archivos as tf', 'tf.id', '=', 'ta.archivo_id')
+                    ->where('tf.periodo', $dep->periodo)
+                    ->where('ta.fecha_abono', $dep->fecha_abono)
+                    ->select('ta.id', 'ta.fecha_abono', 'ta.net_abono', 'ta.total_venta_bruta', 'tf.tipo as tipo_archivo', 'tf.periodo')
+                    ->orderBy('ta.id')
+                    ->first();
+            }
+        }
 
         if (!$abono) {
             return response()->json(['abono' => null, 'transacciones' => []]);
