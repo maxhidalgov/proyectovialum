@@ -9,6 +9,12 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-03 — Menú: al volver a la app abierta cargaba el módulo anterior en vez del clickeado
+- **Qué pasaba:** con la app abierta desde antes de un deploy, los chunks lazy viejos ya no existen; al hacer clic en un módulo fallaba su carga y la recuperación automática (`main.js`, agregada el 2026-08-05) recargaba la página en la URL actual, o sea el módulo donde se había quedado.
+- **Qué se hizo:** `main.js` recuerda a qué ruta se iba a navegar (`router.beforeEach`/`afterEach`) y la recarga se hace en esa ruta.
+- **Archivos principales:** `vuexy-frontend/src/main.js`.
+- **Pendiente / ojo con:** la pestaña que ya estaba abierta antes de este deploy tiene aún el código viejo: la primera vez hay que recargar (Ctrl+F5); desde ahí, los próximos deploys ya no tendrán el problema. No probado con un deploy real (requiere una pestaña abierta entre dos deploys).
+
 ## 2026-11-03 — Cuentas por Cobrar: detalle de cobro de varias facturas (Excel / PDF)
 - **Qué se hizo:** en la fila expandida de cada cliente hay casillas para elegir facturas con saldo pendiente (y "seleccionar todas"); aparece una barra con el total pendiente y los botones "Detalle Excel" y "Detalle PDF". El documento trae folio, fecha de emisión, monto total, saldo por cobrar, método de pago y la glosa de la factura (qué se facturó) y totales. Endpoints `POST /api/cuentas-por-cobrar/detalle-cobro` (JSON, usado para el Excel con xlsx en el navegador) y `/detalle-cobro/pdf` (dompdf, vista `cuentas-por-cobrar.detalle-cobro`, carta horizontal con logo).
 - **Glosa:** sale de `documento_items` (detalle del documento en Bsale). Si una factura aún no lo tiene guardado, se pide a Bsale al generar el detalle (hasta 40 por vez) y se guarda para la próxima. Si Bsale no lo entrega, usa la `nota` o "—".
