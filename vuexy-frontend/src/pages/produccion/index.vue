@@ -11,6 +11,9 @@
         </div>
       </div>
       <div class="d-flex gap-2">
+        <v-btn variant="tonal" color="primary" prepend-icon="mdi-chart-bar" size="small" @click="router.push({ name: 'produccion-m2-mensual' })">
+          m² por mes
+        </v-btn>
         <v-btn variant="tonal" prepend-icon="mdi-refresh" size="small" @click="cargar" :loading="cargando">
           Actualizar
         </v-btn>

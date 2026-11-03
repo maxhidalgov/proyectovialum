@@ -239,6 +239,121 @@ class ProduccionController extends Controller
         ]);
     }
 
+    // ── m² fabricados e instalados por mes ────────────────────────────────────
+
+    /**
+     * Un trabajo cuenta como "fabricado" en el mes en que entró por primera vez a "Fabricadas OK"
+     * (o a "Instalada" si se saltó ese estado) según cotizacion_estado_historial, y como "instalado"
+     * en el mes en que entró a "Instalada". m² = ancho × alto × cantidad de sus ventanas (mm → m).
+     */
+    public function m2Mensual(Request $request): JsonResponse
+    {
+        $nMeses = max(1, min(36, (int) $request->get('meses', 12)));
+        $inicio = Carbon::today()->startOfMonth()->subMonths($nMeses - 1);
+
+        $filas = \DB::table('cotizacion_estado_historial')
+            ->where('tipo', 'produccion')
+            ->whereIn('estado', ['Fabricadas OK', 'Instalada'])
+            ->select('cotizacion_id', 'estado', \DB::raw('MIN(fecha) as fecha'))
+            ->groupBy('cotizacion_id', 'estado')
+            ->get();
+
+        $fab = []; $inst = [];
+        foreach ($filas as $f) {
+            $d = Carbon::parse($f->fecha);
+            if ($f->estado === 'Instalada') $inst[$f->cotizacion_id] = $d;
+            if (!isset($fab[$f->cotizacion_id]) || $d->lt($fab[$f->cotizacion_id])) $fab[$f->cotizacion_id] = $d;
+        }
+
+        $ids = array_values(array_unique(array_merge(array_keys($fab), array_keys($inst))));
+        $m2 = $this->m2PorCotizacion($ids);
+        $cots = Cotizacion::with('cliente')->whereIn('id', $ids)->get()->keyBy('id');
+
+        $meses = [];
+        for ($i = 0; $i < $nMeses; $i++) {
+            $k = $inicio->copy()->addMonths($i)->format('Y-m');
+            $meses[$k] = ['mes' => $k, 'fabricado_m2' => 0.0, 'fabricado_obras' => 0, 'fabricado_ventanas' => 0,
+                          'instalado_m2' => 0.0, 'instalado_obras' => 0, 'obras' => []];
+        }
+
+        $fila = function (int $id, Carbon $d, string $cual) use ($m2, $cots) {
+            $c = $cots->get($id);
+            return [
+                'id' => $id, 'tipo' => $cual, 'fecha' => $d->toDateString(),
+                'cliente' => $c?->cliente?->razon_social ?? trim(($c?->cliente?->first_name ?? '') . ' ' . ($c?->cliente?->last_name ?? '')),
+                'm2' => round((float) ($m2[$id]['m2'] ?? 0), 2),
+                'ventanas' => (int) ($m2[$id]['ventanas'] ?? 0),
+            ];
+        };
+
+        foreach ($fab as $id => $d) {
+            $k = $d->format('Y-m');
+            if (!isset($meses[$k])) continue;
+            $r = $fila($id, $d, 'fabricado');
+            $meses[$k]['fabricado_m2'] += $r['m2'];
+            $meses[$k]['fabricado_obras']++;
+            $meses[$k]['fabricado_ventanas'] += $r['ventanas'];
+            $meses[$k]['obras'][] = $r;
+        }
+        foreach ($inst as $id => $d) {
+            $k = $d->format('Y-m');
+            if (!isset($meses[$k])) continue;
+            $r = $fila($id, $d, 'instalado');
+            $meses[$k]['instalado_m2'] += $r['m2'];
+            $meses[$k]['instalado_obras']++;
+            $meses[$k]['obras'][] = $r;
+        }
+        foreach ($meses as &$m) {
+            $m['fabricado_m2'] = round($m['fabricado_m2'], 2);
+            $m['instalado_m2'] = round($m['instalado_m2'], 2);
+            usort($m['obras'], fn($x, $y) => strcmp($x['fecha'], $y['fecha']));
+        }
+        unset($m);
+        $lista = array_values($meses);
+
+        // Promedio de los últimos 3 meses completos (sin el mes en curso): línea base para metas
+        $completos = array_slice(array_filter($lista, fn($m) => $m['mes'] < Carbon::today()->format('Y-m')), -3);
+        $prom = fn($campo) => count($completos) ? round(array_sum(array_column($completos, $campo)) / count($completos), 1) : null;
+
+        // Trabajos ya en Fabricadas OK/Instalada sin ninguna fecha en el historial: no entran en ningún mes
+        $sinFecha = Cotizacion::whereIn('estado_produccion', ['Fabricadas OK', 'Instalada'])
+            ->whereNotIn('id', $ids)->pluck('id');
+        $sinFechaM2 = array_sum(array_column($this->m2PorCotizacion($sinFecha->all()), 'm2'));
+
+        $enProceso = Cotizacion::whereIn('estado_produccion', ['Lista para Corte', 'En Fabricación'])->pluck('id');
+        $enProcesoM2 = array_sum(array_column($this->m2PorCotizacion($enProceso->all()), 'm2'));
+
+        return response()->json([
+            'meses'           => $lista,
+            'prom_fabricado'  => $prom('fabricado_m2'),
+            'prom_instalado'  => $prom('instalado_m2'),
+            'en_proceso'      => ['obras' => $enProceso->count(), 'm2' => round($enProcesoM2, 2)],
+            'sin_fecha'       => ['obras' => $sinFecha->count(), 'm2' => round($sinFechaM2, 2)],
+        ]);
+    }
+
+    /**
+     * m² (ancho × alto × cantidad, mm → m) y n° de ventanas por cotización. Las cotizaciones del cotizador propio
+     * guardan sus medidas en `ventanas`; las importadas de Winperfil en `cotizacion_detalles` (tipo_item winperfil).
+     */
+    private function m2PorCotizacion(array $ids): array
+    {
+        if (!$ids) return [];
+        $out = [];
+        $sumar = function ($rows) use (&$out) {
+            foreach ($rows as $r) {
+                $out[$r->cotizacion_id]['m2']       = ($out[$r->cotizacion_id]['m2'] ?? 0) + (float) $r->m2;
+                $out[$r->cotizacion_id]['ventanas'] = ($out[$r->cotizacion_id]['ventanas'] ?? 0) + (float) $r->ventanas;
+            }
+        };
+        $sumar(\DB::table('ventanas')->whereIn('cotizacion_id', $ids)->groupBy('cotizacion_id')
+            ->selectRaw('cotizacion_id, SUM((ancho/1000.0)*(alto/1000.0)*cantidad) as m2, SUM(cantidad) as ventanas')->get());
+        $sumar(\DB::table('cotizacion_detalles')->whereIn('cotizacion_id', $ids)->where('tipo_item', 'winperfil')
+            ->whereNotNull('ancho_mm')->whereNotNull('alto_mm')->groupBy('cotizacion_id')
+            ->selectRaw('cotizacion_id, SUM((ancho_mm/1000.0)*(alto_mm/1000.0)*cantidad) as m2, SUM(cantidad) as ventanas')->get());
+        return $out;
+    }
+
     public function guardarEtapa(Request $request, int $cotizacionId): JsonResponse
     {
         $request->validate([

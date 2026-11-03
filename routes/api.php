@@ -501,6 +501,7 @@ Route::middleware('auth:api')->group(function () {
 
     // Taller (vista de fabricación con etapas)
     Route::get('/taller', [\App\Http\Controllers\ProduccionController::class, 'taller']);
+    Route::get('/produccion/m2-mensual', [\App\Http\Controllers\ProduccionController::class, 'm2Mensual']);
     Route::post('/taller/{id}/etapas', [\App\Http\Controllers\ProduccionController::class, 'guardarEtapa']);
 
     // Logo como dataURL (evita problemas de CORS al capturar PDF en el frontend)

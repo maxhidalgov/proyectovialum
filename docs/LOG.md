@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-03 — Producción: reporte de m² fabricados e instalados por mes
+- **Qué se hizo:** `GET /api/produccion/m2-mensual` + pantalla `/produccion/m2-mensual` (botón "m² por mes" en Taller): por mes, m² y obras fabricadas (primera vez en "Fabricadas OK" o "Instalada", según `cotizacion_estado_historial`) e instaladas, detalle por obra, m² en proceso y promedio de los últimos 3 meses completos. m² = ancho×alto×cantidad, sumando `ventanas` (cotizador propio) y `cotizacion_detalles` tipo winperfil (ancho_mm/alto_mm), porque las obras de Winperfil no tienen filas en `ventanas`.
+- **Archivos principales:** `ProduccionController::m2Mensual`/`m2PorCotizacion`, `routes/api.php`, `vuexy-frontend/src/pages/produccion/m2-mensual.vue`.
+- **Pendiente / ojo con:** las fechas de producción previas son aproximadas: varias obras se marcaron el mismo día al poner el sistema al día (jun/jul fabricado = instalado; lotes con igual hora), así que los meses anteriores son referencia, no meta. Falta: metas mensuales y registro por ventana.
+
 ## 2026-11-03 — Conciliación: ordenar y paginar la tabla de facturas en movimientos crédito
 - **Qué se hizo:** en el modal "Conciliar Movimiento" (crédito/abono), pestaña Facturas Bsale, los encabezados Saldo/Total/Fecha/Folio ordenan (en el servidor, parámetros `orden` y `dir`; sin orden sigue por cercanía al monto del movimiento) y aparece el paginador (el endpoint ya paginaba de a 30 pero la pantalla no lo mostraba, solo se veían 30 facturas).
 - **Archivos principales:** `VentaMovimientoController::disponiblesPorMovimiento`, `vuexy-frontend/src/pages/conciliacion/index.vue`.
