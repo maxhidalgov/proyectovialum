@@ -1391,7 +1391,7 @@
                     placeholder="Buscar por cliente, RUT o folio..."
                     density="compact" variant="outlined" hide-details
                     prepend-inner-icon="mdi-magnify" clearable class="mb-3"
-                    @update:modelValue="debounceBuscarVenta"
+                    @update:modelValue="() => { pageVentas = 1; debounceBuscarVenta() }"
                   />
                   <div v-if="!concVentasDisponibles.length" class="text-caption text-medium-emphasis text-center py-4">
                     No hay ventas con saldo pendiente
@@ -1400,7 +1400,11 @@
                     <VTable density="compact">
                       <thead>
                         <tr>
-                          <th>Saldo</th><th>Total</th><th>Fecha</th><th>Folio</th><th>Cliente</th><th></th>
+                          <th v-for="c in [['saldo','Saldo'],['monto','Total'],['fecha','Fecha'],['folio','Folio']]" :key="c[0]"
+                              class="cursor-pointer text-no-wrap" @click="ordenarVentasPor(c[0])">
+                            {{ c[1] }}<VIcon size="14" class="ml-1" :color="ordenVentas === c[0] ? 'primary' : undefined">{{ iconoOrdenVentas(c[0]) }}</VIcon>
+                          </th>
+                          <th>Cliente</th><th></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1418,6 +1422,16 @@
                         </tr>
                       </tbody>
                     </VTable>
+                  </div>
+                  <div v-if="metaVentas && metaVentas.last_page > 1" class="d-flex align-center justify-space-between flex-wrap mt-3">
+                    <span class="text-caption text-medium-emphasis">{{ metaVentas.total }} documentos con saldo</span>
+                    <VPagination
+                      :model-value="pageVentas"
+                      :length="metaVentas.last_page"
+                      :total-visible="5"
+                      density="comfortable"
+                      @update:modelValue="cambiarPaginaVentas"
+                    />
                   </div>
                 </div>
 
@@ -2482,6 +2496,23 @@ const pageSueldos   = ref(1)
 const metaSueldos   = ref(null)
 const pageVentas    = ref(1)
 const metaVentas    = ref(null)
+const ordenVentas   = ref(null)   // null = más cercano al monto del movimiento
+const dirVentas     = ref('asc')
+
+function ordenarVentasPor(col) {
+  if (ordenVentas.value === col) dirVentas.value = dirVentas.value === 'asc' ? 'desc' : 'asc'
+  else { ordenVentas.value = col; dirVentas.value = col === 'fecha' ? 'desc' : 'asc' }
+  pageVentas.value = 1
+  cargarVentasDisponibles()
+}
+function cambiarPaginaVentas(p) {
+  pageVentas.value = p
+  cargarVentasDisponibles()
+}
+function iconoOrdenVentas(col) {
+  if (ordenVentas.value !== col) return 'mdi-unfold-more-horizontal'
+  return dirVentas.value === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down'
+}
 
 const categoriasIngreso = [
   'Ingreso por ventas', 'Servicios prestados', 'Honorarios recibidos',
@@ -2504,6 +2535,7 @@ function abrirConciliar(mov) {
   pageGastos.value  = 1; metaGastos.value  = null
   pageSueldos.value = 1; metaSueldos.value = null
   pageVentas.value  = 1; metaVentas.value  = null
+  ordenVentas.value = null; dirVentas.value = 'asc'
   concAsignadas.value          = []
   concDisponibles.value        = []
   concGastosAsignados.value    = []
@@ -2775,6 +2807,7 @@ async function cargarVentasDisponibles() {
   try {
     const params = { page: pageVentas.value }
     if (buscarVentaDisp.value) params.buscar = buscarVentaDisp.value
+    if (ordenVentas.value) { params.orden = ordenVentas.value; params.dir = dirVentas.value }
     const { data } = await axios.get(
       `/api/conciliacion/movimientos/${movConciliando.value.id}/ventas-disponibles`, { params }
     )

@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-03 — Conciliación: ordenar y paginar la tabla de facturas en movimientos crédito
+- **Qué se hizo:** en el modal "Conciliar Movimiento" (crédito/abono), pestaña Facturas Bsale, los encabezados Saldo/Total/Fecha/Folio ordenan (en el servidor, parámetros `orden` y `dir`; sin orden sigue por cercanía al monto del movimiento) y aparece el paginador (el endpoint ya paginaba de a 30 pero la pantalla no lo mostraba, solo se veían 30 facturas).
+- **Archivos principales:** `VentaMovimientoController::disponiblesPorMovimiento`, `vuexy-frontend/src/pages/conciliacion/index.vue`.
+- **Pendiente / ojo con:** la pestaña Boletas y las de débito (compras/gastos/sueldos) del mismo modal no se tocaron.
+
 ## 2026-11-02 — Boletas: los resúmenes mensuales se recalculan solos (septiembre mostraba 1 boleta de 52)
 - **Qué pasó:** `boleta_resumenes` es una tabla derivada que solo se recalculaba al emitir desde la app (Venta Express) o a mano con "Recalcular". Las boletas que entran por la sincronización diaria de Bsale (emitidas directo en Bsale) quedaban fuera. Producción: septiembre tenía 52 boletas ($4.535.200) y el resumen solo 1 ($9.500, del 01/09); julio y agosto también desfasados (ej. agosto crédito 9 / $6.130.048 en el resumen vs 12 / $7.842.048 reales; débito 22 / $670.000 vs 29 / $1.016.000; efectivo 9 vs 12; julio crédito y transferencia), varios marcados como conciliados contra el total viejo.
 - **Qué se hizo:** `BsaleVentaSyncController::sincronizar` (corre en `bsale:sync` → `sync:diario`) llama a `boletas:recalcular-resumenes` al terminar. El comando ahora excluye boletas `anulado` y, si cambia el total de un resumen, recalcula `conciliado` (banco) y devuelve `conciliado_transbank` a "por conciliar" (esa confirmación era contra el total anterior), avisando por consola qué cambió.

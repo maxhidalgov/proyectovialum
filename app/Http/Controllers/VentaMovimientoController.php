@@ -264,7 +264,21 @@ class VentaMovimientoController extends Controller
                    ->orWhere('cl_cot.razon_social',       'like', "%$buscar%")
                    ->orWhere('cl_dir.razon_social',       'like', "%$buscar%");
             }))
-            ->orderByRaw("ABS(df.monto - $cobradoExpr - ?) ASC", [$saldoMov])
+            // Orden elegido en la tabla (saldo/total/fecha/folio); por defecto, lo más cercano al monto del movimiento
+            ->when(
+                in_array($request->get('orden'), ['saldo', 'monto', 'fecha', 'folio'], true),
+                function ($q) use ($request, $cobradoExpr) {
+                    $dir = $request->get('dir') === 'desc' ? 'DESC' : 'ASC';
+                    $col = [
+                        'saldo' => "df.monto - $cobradoExpr",
+                        'monto' => 'df.monto',
+                        'fecha' => 'df.fecha_emision',
+                        'folio' => 'CAST(df.numero_documento_bsale AS UNSIGNED)',
+                    ][$request->get('orden')];
+                    $q->orderByRaw("$col $dir")->orderBy('df.id');
+                },
+                fn($q) => $q->orderByRaw("ABS(df.monto - $cobradoExpr - ?) ASC", [$saldoMov])
+            )
             ->paginate(30);
 
         return response()->json($ventas);
