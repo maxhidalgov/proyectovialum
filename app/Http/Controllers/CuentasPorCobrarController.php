@@ -87,6 +87,144 @@ class CuentasPorCobrarController extends Controller
                       AND ncv.estado = 'emitido')))";
     }
 
+    // ── Detalle para cobrar varias facturas de un cliente ─────────────────────
+
+    private const LABELS_FORMA_PAGO = [
+        'efectivo'        => 'Efectivo',
+        'tarjeta_credito' => 'Tarjeta crédito',
+        'tarjeta_debito'  => 'Tarjeta débito',
+        'transferencia'   => 'Transferencia',
+        'cheque'          => 'Cheque',
+        'otros'           => 'Otros',
+    ];
+
+    /**
+     * Arma el detalle de las facturas elegidas: folio, fecha, monto, método de pago, glosa (qué se facturó) y saldo.
+     * La glosa sale del detalle del documento en Bsale (documento_items); si todavía no está guardado se pide a Bsale
+     * y se guarda para la próxima vez.
+     */
+    private function armarDetalleCobro(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        $docs = DB::table('documentos_facturacion as df')
+            ->leftJoin('cotizaciones as c', 'c.id', '=', 'df.cotizacion_id')
+            ->leftJoin('clientes as cl_cot', 'cl_cot.id', '=', 'c.cliente_id')
+            ->leftJoin('clientes as cl_dir', 'cl_dir.id', '=', 'df.cliente_id')
+            ->leftJoin($this->efectivoCobradoSub(), 'ec.df_id', '=', 'df.id')
+            ->whereIn('df.id', $ids)
+            ->where('df.tipo_documento_bsale_id', '<>', self::TIPO_NC)
+            ->whereRaw($this->filtroDocVisible())
+            ->select(
+                'df.id', 'df.id_documento_bsale', 'df.numero_documento_bsale as folio', 'df.fecha_emision', 'df.monto',
+                'df.forma_pago', 'df.nota', 'df.tipo_documento_bsale_id',
+                DB::raw('COALESCE(cl_dir.razon_social, cl_cot.razon_social, df.bsale_cliente_nombre) as cliente'),
+                DB::raw('COALESCE(cl_dir.identification, cl_cot.identification, df.bsale_cliente_rut) as rut'),
+                DB::raw('df.monto - COALESCE(ec.monto_cobrado_efectivo, 0) as pendiente')
+            )
+            ->orderBy('df.fecha_emision')->orderBy('df.numero_documento_bsale')
+            ->get();
+
+        $this->completarGlosas($docs);
+
+        $items = DB::table('documento_items')
+            ->whereIn('documento_facturacion_id', $docs->pluck('id'))
+            ->where('nombre', '<>', '(sin detalle)')
+            ->orderBy('id')->get()->groupBy('documento_facturacion_id');
+
+        $filas = $docs->map(function ($d) use ($items) {
+            $nombres = collect($items[$d->id] ?? [])->pluck('nombre')->map(fn($n) => trim($n))->filter()->unique()->values();
+            $glosa   = $nombres->isNotEmpty() ? $nombres->implode('; ') : (trim((string) $d->nota) ?: '—');
+            return [
+                'id'          => $d->id,
+                'folio'       => $d->folio,
+                'tipo'        => (int) $d->tipo_documento_bsale_id === 5 ? 'Factura' : 'Documento',
+                'fecha'       => substr((string) $d->fecha_emision, 0, 10),
+                'monto'       => (float) $d->monto,
+                'pendiente'   => max(0, (float) $d->pendiente),
+                'metodo_pago' => self::LABELS_FORMA_PAGO[$d->forma_pago] ?? 'No informado',
+                'glosa'       => $glosa,
+            ];
+        })->values()->all();
+
+        $primero = $docs->first();
+        return [
+            'cliente'   => $primero->cliente ?? '',
+            'rut'       => $primero->rut ?? '',
+            'generado'  => now()->format('d-m-Y'),
+            'filas'     => $filas,
+            'total'     => array_sum(array_column($filas, 'monto')),
+            'pendiente' => array_sum(array_column($filas, 'pendiente')),
+        ];
+    }
+
+    /** Pide a Bsale el detalle de los documentos que aún no tienen glosa guardada (máx. 40 por llamada). */
+    private function completarGlosas($docs): void
+    {
+        $tienen = DB::table('documento_items')->whereIn('documento_facturacion_id', $docs->pluck('id'))
+            ->distinct()->pluck('documento_facturacion_id')->flip();
+        $token   = config('services.bsale.access_token', '');
+        $baseUrl = config('services.bsale.base_url', 'https://api.bsale.cl/v1/');
+        if (!$token) return;
+
+        $n = 0;
+        foreach ($docs as $d) {
+            if (isset($tienen[$d->id]) || !$d->id_documento_bsale || $n >= 40) continue;
+            $n++;
+            try {
+                $res = \Illuminate\Support\Facades\Http::timeout(15)->withHeaders(['access_token' => $token])
+                    ->get($baseUrl . "documents/{$d->id_documento_bsale}/details.json");
+                if (!$res->ok()) continue;
+
+                $rows = [];
+                foreach ($res->json()['items'] ?? [] as $it) {
+                    $nombre = trim((string) ($it['comment'] ?? '')) ?: trim((string) ($it['variant']['description'] ?? '')) ?: 'Producto';
+                    $rows[] = [
+                        'documento_facturacion_id' => $d->id, 'producto_id' => null,
+                        'nombre' => mb_substr($nombre, 0, 255), 'cantidad' => (float) ($it['quantity'] ?? 0),
+                        'precio_unitario' => (int) round((float) ($it['netUnitValue'] ?? 0)), 'descuento' => 0,
+                        'total_neto' => (int) round((float) ($it['netAmount'] ?? 0)), 'es_vidrio' => 0, 'pulido' => 0,
+                        'created_at' => now(), 'updated_at' => now(),
+                    ];
+                }
+                if ($rows) DB::table('documento_items')->insert($rows);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('detalle-cobro: no se pudo leer el detalle en Bsale', ['doc' => $d->id, 'error' => $e->getMessage()]);
+            }
+        }
+    }
+
+    // POST /api/cuentas-por-cobrar/detalle-cobro  { ids: [df.id, ...] }
+    public function detalleCobro(Request $request)
+    {
+        $request->validate(['ids' => 'required|array|min:1|max:200', 'ids.*' => 'integer']);
+        $d = $this->armarDetalleCobro($request->ids);
+        if (!$d['filas']) return response()->json(['message' => 'Ninguna de las facturas elegidas es válida'], 422);
+        return response()->json($d);
+    }
+
+    // POST /api/cuentas-por-cobrar/detalle-cobro/pdf  { ids: [...] }
+    public function detalleCobroPdf(Request $request)
+    {
+        $request->validate(['ids' => 'required|array|min:1|max:200', 'ids.*' => 'integer']);
+        $d = $this->armarDetalleCobro($request->ids);
+        if (!$d['filas']) return response()->json(['message' => 'Ninguna de las facturas elegidas es válida'], 422);
+
+        $logo = null;
+        try {
+            $data = @file_get_contents(env('LOGO_URL', 'https://pub-7467388c2656489e9222164e85545a03.r2.dev/assets/logovialum.png'),
+                false, stream_context_create(['http' => ['timeout' => 10]]));
+            if ($data !== false) $logo = 'data:image/png;base64,' . base64_encode($data);
+        } catch (\Throwable $e) {
+            // sin logo, el PDF se genera igual
+        }
+
+        $nombre = 'detalle-cobro-' . \Illuminate\Support\Str::slug($d['cliente'] ?: 'cliente') . '-' . now()->format('Ymd') . '.pdf';
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('cuentas-por-cobrar.detalle-cobro', ['d' => $d, 'logoBase64' => $logo])
+            ->setPaper('letter', 'landscape')
+            ->download($nombre);
+    }
+
     // Resumen por cliente
     public function index(Request $request)
     {

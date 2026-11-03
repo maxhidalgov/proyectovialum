@@ -226,6 +226,26 @@
               <div class="pa-4 bg-surface">
                 <p class="text-body-2 font-weight-medium mb-3">Documentos de {{ item.razon_social }}</p>
 
+                <div
+                  v-if="idsSeleccionados(item._row_key).length"
+                  class="d-flex align-center flex-wrap gap-2 mb-3 pa-2 rounded bg-primary-lighten-5"
+                  style="background: rgba(var(--v-theme-primary), .08)"
+                >
+                  <span class="text-body-2 font-weight-medium">
+                    {{ idsSeleccionados(item._row_key).length }} seleccionadas · pendiente {{ formatMonto(totalSeleccionado(item._row_key)) }}
+                  </span>
+                  <VSpacer />
+                  <VBtn size="small" color="success" variant="tonal" prepend-icon="mdi-microsoft-excel"
+                        :loading="generandoDetalle === item._row_key + 'xlsx'" @click="generarDetalle(item, 'xlsx')">
+                    Detalle Excel
+                  </VBtn>
+                  <VBtn size="small" color="error" variant="tonal" prepend-icon="mdi-file-pdf-box"
+                        :loading="generandoDetalle === item._row_key + 'pdf'" @click="generarDetalle(item, 'pdf')">
+                    Detalle PDF
+                  </VBtn>
+                  <VBtn size="small" variant="text" @click="seleccion[item._row_key] = []">Limpiar</VBtn>
+                </div>
+
                 <div v-if="loadingFacturas[item._row_key]" class="text-center py-4">
                   <VProgressCircular indeterminate size="24" />
                 </div>
@@ -233,6 +253,15 @@
                 <VTable v-else-if="facturasCliente[item._row_key]?.length" density="compact">
                   <thead>
                     <tr>
+                      <th style="width: 44px">
+                        <VCheckbox
+                          :model-value="todasSeleccionadas(item._row_key)"
+                          :indeterminate="algunaSeleccionada(item._row_key) && !todasSeleccionadas(item._row_key)"
+                          density="compact" hide-details
+                          title="Seleccionar las facturas con saldo pendiente"
+                          @update:model-value="seleccionarTodas(item._row_key, $event)"
+                        />
+                      </th>
                       <th>N° Doc</th>
                       <th>Tipo</th>
                       <th>Cotización</th>
@@ -251,6 +280,15 @@
                       :key="f.id"
                       :class="{ 'nc-row': !!f.es_nc }"
                     >
+                      <!-- Selección para generar el detalle de cobro -->
+                      <td>
+                        <VCheckbox
+                          v-if="seleccionable(f)"
+                          :model-value="(seleccion[item._row_key] ?? []).includes(f.id)"
+                          density="compact" hide-details
+                          @update:model-value="toggleSeleccion(item._row_key, f.id, $event)"
+                        />
+                      </td>
                       <!-- N° Doc -->
                       <td class="font-weight-medium">
                         <span v-if="f.es_nc" class="text-success text-caption font-weight-bold">NC</span>
@@ -1068,6 +1106,75 @@ const tablePage      = ref(1)
 const tablePageSize  = ref(25)
 const facturasCliente  = ref({})
 const loadingFacturas  = ref({})
+
+// ── Detalle de cobro: elegir varias facturas de un cliente y bajar Excel/PDF ──
+const seleccion        = ref({})   // _row_key → [ids de factura]
+const generandoDetalle = ref('')
+
+const seleccionable = f => !f.es_nc && !f.es_boleta_resumen && Number(f.pendiente) > 0.01
+const facturasSeleccionables = rowKey => (facturasCliente.value[rowKey] ?? []).filter(seleccionable)
+const idsSeleccionados = rowKey => (seleccion.value[rowKey] ?? [])
+const todasSeleccionadas = rowKey => {
+  const disp = facturasSeleccionables(rowKey)
+  return disp.length > 0 && disp.every(f => idsSeleccionados(rowKey).includes(f.id))
+}
+const algunaSeleccionada = rowKey => idsSeleccionados(rowKey).length > 0
+const totalSeleccionado = rowKey => (facturasCliente.value[rowKey] ?? [])
+  .filter(f => idsSeleccionados(rowKey).includes(f.id))
+  .reduce((a, f) => a + Number(f.pendiente || 0), 0)
+
+function toggleSeleccion(rowKey, id, on) {
+  const actual = new Set(idsSeleccionados(rowKey))
+  on ? actual.add(id) : actual.delete(id)
+  seleccion.value[rowKey] = [...actual]
+}
+function seleccionarTodas(rowKey, on) {
+  seleccion.value[rowKey] = on ? facturasSeleccionables(rowKey).map(f => f.id) : []
+}
+
+function descargarBlob(blob, nombre) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombre
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function generarDetalle(item, formato) {
+  const rowKey = item._row_key
+  const ids = idsSeleccionados(rowKey)
+  if (!ids.length) return
+  generandoDetalle.value = rowKey + formato
+  try {
+    const nombreBase = `detalle-cobro-${(item.razon_social || 'cliente').replace(/[^\w]+/g, '-').toLowerCase()}`
+    if (formato === 'pdf') {
+      const res = await axios.post('/api/cuentas-por-cobrar/detalle-cobro/pdf', { ids }, { responseType: 'blob' })
+      descargarBlob(res.data, `${nombreBase}.pdf`)
+    } else {
+      const { data } = await axios.post('/api/cuentas-por-cobrar/detalle-cobro', { ids })
+      const XLSX = await import('xlsx')
+      const filas = [
+        ['Detalle de documentos por cobrar'],
+        ['Cliente', data.cliente, 'RUT', data.rut, 'Fecha', data.generado],
+        [],
+        ['Folio', 'Fecha emisión', 'Monto total', 'Saldo por cobrar', 'Método de pago', 'Descripción (glosa)'],
+        ...data.filas.map(f => [Number(f.folio) || f.folio, f.fecha.split('-').reverse().join('-'), f.monto, f.pendiente, f.metodo_pago, f.glosa]),
+        ['Total', '', data.total, data.pendiente, '', ''],
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(filas)
+      ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 80 }]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Detalle')
+      XLSX.writeFile(wb, `${nombreBase}.xlsx`)
+    }
+  } catch (e) {
+    console.error(e)
+    syncSnack.value = { show: true, text: 'No se pudo generar el detalle', color: 'error' }
+  } finally {
+    generandoDetalle.value = ''
+  }
+}
 
 // ── Sugerencias / Rayo ⚡ ─────────────────────────────────────────────────────
 const sugerenciasPorVenta = ref({})

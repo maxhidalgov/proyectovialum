@@ -9,6 +9,12 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-03 — Cuentas por Cobrar: detalle de cobro de varias facturas (Excel / PDF)
+- **Qué se hizo:** en la fila expandida de cada cliente hay casillas para elegir facturas con saldo pendiente (y "seleccionar todas"); aparece una barra con el total pendiente y los botones "Detalle Excel" y "Detalle PDF". El documento trae folio, fecha de emisión, monto total, saldo por cobrar, método de pago y la glosa de la factura (qué se facturó) y totales. Endpoints `POST /api/cuentas-por-cobrar/detalle-cobro` (JSON, usado para el Excel con xlsx en el navegador) y `/detalle-cobro/pdf` (dompdf, vista `cuentas-por-cobrar.detalle-cobro`, carta horizontal con logo).
+- **Glosa:** sale de `documento_items` (detalle del documento en Bsale). Si una factura aún no lo tiene guardado, se pide a Bsale al generar el detalle (hasta 40 por vez) y se guarda para la próxima. Si Bsale no lo entrega, usa la `nota` o "—".
+- **Archivos principales:** `CuentasPorCobrarController` (`armarDetalleCobro`, `completarGlosas`, `detalleCobro`, `detalleCobroPdf`), `resources/views/cuentas-por-cobrar/detalle-cobro.blade.php`, `vuexy-frontend/src/pages/cuentas-por-cobrar/index.vue`, `routes/api.php`.
+- **Pendiente / ojo con:** el método de pago de la factura viene de Bsale y en muchas facturas está vacío (aparece "No informado"; en producción ~mitad de las facturas). No se hizo desde Registro de Ventas. Probado en base local (JSON y PDF); el Excel solo compila.
+
 ## 2026-11-03 — Producción: tiempos entre estados y flujo actual en "m² por mes"
 - **Qué se hizo:** `m2Mensual` ahora entrega, por mes, el promedio de días de cola de corte (Lista para Corte → En Fabricación), fabricación (En Fabricación → Fabricadas OK, más m²/día) y espera hasta instalar (Fabricadas OK → Instalada), asignados al mes en que termina el tramo y solo con obras que tienen ambas fechas; más `pendientes` (cuántas obras y m² hay hoy en cada estado, cuántos días llevan desde que entraron y la lista) y `sin_inicio` (obras sin fecha de En Fabricación). La pantalla muestra el panel "Cómo está el flujo hoy", los promedios del período y las columnas nuevas en la tabla.
 - **Archivos principales:** `ProduccionController::m2Mensual`, `vuexy-frontend/src/pages/produccion/m2-mensual.vue`.

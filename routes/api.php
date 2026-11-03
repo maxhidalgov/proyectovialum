@@ -431,6 +431,8 @@ Route::middleware('auth:api')->group(function () {
     // Cuentas por Cobrar
     Route::get('/cuentas-por-cobrar',                        [\App\Http\Controllers\CuentasPorCobrarController::class, 'index']);
     Route::get('/cuentas-por-cobrar/por-revisar',            [\App\Http\Controllers\CuentasPorCobrarController::class, 'porRevisar']);
+    Route::post('/cuentas-por-cobrar/detalle-cobro',         [\App\Http\Controllers\CuentasPorCobrarController::class, 'detalleCobro']);
+    Route::post('/cuentas-por-cobrar/detalle-cobro/pdf',     [\App\Http\Controllers\CuentasPorCobrarController::class, 'detalleCobroPdf']);
     Route::get('/cuentas-por-cobrar/{clienteId}/facturas',   [\App\Http\Controllers\CuentasPorCobrarController::class, 'facturas']);
     Route::put('/cuentas-cobrar/{id}/cobro-manual',          [\App\Http\Controllers\CuentasPorCobrarController::class, 'marcarCobradoManual']);
     Route::delete('/cuentas-cobrar/{id}/cobro-manual',       [\App\Http\Controllers\CuentasPorCobrarController::class, 'desmarcarCobradoManual']);
