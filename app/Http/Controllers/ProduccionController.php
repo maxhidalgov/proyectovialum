@@ -239,48 +239,65 @@ class ProduccionController extends Controller
         ]);
     }
 
-    // ── m² fabricados e instalados por mes ────────────────────────────────────
+    // ── m² y tiempos de producción por mes ────────────────────────────────────
 
     /**
      * Un trabajo cuenta como "fabricado" en el mes en que entró por primera vez a "Fabricadas OK"
      * (o a "Instalada" si se saltó ese estado) según cotizacion_estado_historial, y como "instalado"
      * en el mes en que entró a "Instalada". m² = ancho × alto × cantidad de sus ventanas (mm → m).
+     *
+     * Tiempos (se asignan al mes en que termina el tramo, solo si el trabajo tiene las dos fechas):
+     *   cola    = Lista para Corte → En Fabricación   (si crece, el taller va atrasado)
+     *   fabrica = En Fabricación → Fabricadas OK      (trabajo del taller)
+     *   espera  = Fabricadas OK → Instalada           (si crece, faltan instaladores o coordinación)
+     * Además `pendientes` muestra cuánto llevan hoy los trabajos en cada uno de esos estados.
      */
     public function m2Mensual(Request $request): JsonResponse
     {
         $nMeses = max(1, min(36, (int) $request->get('meses', 12)));
         $inicio = Carbon::today()->startOfMonth()->subMonths($nMeses - 1);
+        $hoy    = Carbon::now();
 
         $filas = \DB::table('cotizacion_estado_historial')
             ->where('tipo', 'produccion')
-            ->whereIn('estado', ['Fabricadas OK', 'Instalada'])
-            ->select('cotizacion_id', 'estado', \DB::raw('MIN(fecha) as fecha'))
+            ->whereIn('estado', ['Lista para Corte', 'En Fabricación', 'Fabricadas OK', 'Instalada'])
+            ->select('cotizacion_id', 'estado', \DB::raw('MIN(fecha) as primera'), \DB::raw('MAX(fecha) as ultima'))
             ->groupBy('cotizacion_id', 'estado')
             ->get();
 
-        $fab = []; $inst = [];
+        $h = []; $ult = [];
         foreach ($filas as $f) {
-            $d = Carbon::parse($f->fecha);
-            if ($f->estado === 'Instalada') $inst[$f->cotizacion_id] = $d;
-            if (!isset($fab[$f->cotizacion_id]) || $d->lt($fab[$f->cotizacion_id])) $fab[$f->cotizacion_id] = $d;
+            $h[$f->cotizacion_id][$f->estado]   = Carbon::parse($f->primera);
+            $ult[$f->cotizacion_id][$f->estado] = Carbon::parse($f->ultima);
         }
 
-        $ids = array_values(array_unique(array_merge(array_keys($fab), array_keys($inst))));
-        $m2 = $this->m2PorCotizacion($ids);
+        $fab = []; $inst = [];
+        foreach ($h as $id => $e) {
+            if (isset($e['Instalada'])) $inst[$id] = $e['Instalada'];
+            $c = array_filter([$e['Fabricadas OK'] ?? null, $e['Instalada'] ?? null]);
+            if ($c) $fab[$id] = min($c);
+        }
+
+        $pend = Cotizacion::whereIn('estado_produccion', ['Lista para Corte', 'En Fabricación', 'Fabricadas OK'])->get();
+        $ids  = array_values(array_unique(array_merge(array_keys($h), $pend->pluck('id')->all())));
+        $m2   = $this->m2PorCotizacion($ids);
         $cots = Cotizacion::with('cliente')->whereIn('id', $ids)->get()->keyBy('id');
+        $nombre = function (int $id) use ($cots) {
+            $c = $cots->get($id);
+            return $c?->cliente?->razon_social ?? trim(($c?->cliente?->first_name ?? '') . ' ' . ($c?->cliente?->last_name ?? ''));
+        };
 
         $meses = [];
         for ($i = 0; $i < $nMeses; $i++) {
             $k = $inicio->copy()->addMonths($i)->format('Y-m');
             $meses[$k] = ['mes' => $k, 'fabricado_m2' => 0.0, 'fabricado_obras' => 0, 'fabricado_ventanas' => 0,
-                          'instalado_m2' => 0.0, 'instalado_obras' => 0, 'obras' => []];
+                          'instalado_m2' => 0.0, 'instalado_obras' => 0, 'obras' => [],
+                          't' => ['cola' => [0, 0.0, 0.0], 'fabrica' => [0, 0.0, 0.0], 'espera' => [0, 0.0, 0.0]]];
         }
 
-        $fila = function (int $id, Carbon $d, string $cual) use ($m2, $cots) {
-            $c = $cots->get($id);
+        $fila = function (int $id, Carbon $d, string $cual) use ($m2, $nombre) {
             return [
-                'id' => $id, 'tipo' => $cual, 'fecha' => $d->toDateString(),
-                'cliente' => $c?->cliente?->razon_social ?? trim(($c?->cliente?->first_name ?? '') . ' ' . ($c?->cliente?->last_name ?? '')),
+                'id' => $id, 'tipo' => $cual, 'fecha' => $d->toDateString(), 'cliente' => $nombre($id),
                 'm2' => round((float) ($m2[$id]['m2'] ?? 0), 2),
                 'ventanas' => (int) ($m2[$id]['ventanas'] ?? 0),
             ];
@@ -303,10 +320,38 @@ class ProduccionController extends Controller
             $meses[$k]['instalado_obras']++;
             $meses[$k]['obras'][] = $r;
         }
+
+        // Tiempos entre estados, asignados al mes en que termina el tramo
+        $tramos = ['cola' => ['Lista para Corte', 'En Fabricación'], 'fabrica' => ['En Fabricación', 'Fabricadas OK'], 'espera' => ['Fabricadas OK', 'Instalada']];
+        $total = ['cola' => [0, 0.0], 'fabrica' => [0, 0.0], 'espera' => [0, 0.0]];
+        $sinInicio = 0;
+        foreach ($h as $id => $e) {
+            foreach ($tramos as $t => [$de, $a]) {
+                if (!isset($e[$de], $e[$a])) continue;
+                $dias = ($e[$a]->getTimestamp() - $e[$de]->getTimestamp()) / 86400;
+                if ($dias < 0) continue;
+                $k = $e[$a]->format('Y-m');
+                if (!isset($meses[$k])) continue;
+                $meses[$k]['t'][$t][0]++;
+                $meses[$k]['t'][$t][1] += $dias;
+                $meses[$k]['t'][$t][2] += (float) ($m2[$id]['m2'] ?? 0);
+                $total[$t][0]++;
+                $total[$t][1] += $dias;
+            }
+            if (isset($fab[$id]) && isset($meses[$fab[$id]->format('Y-m')]) && !isset($e['En Fabricación'])) $sinInicio++;
+        }
+
         foreach ($meses as &$m) {
             $m['fabricado_m2'] = round($m['fabricado_m2'], 2);
             $m['instalado_m2'] = round($m['instalado_m2'], 2);
             usort($m['obras'], fn($x, $y) => strcmp($x['fecha'], $y['fecha']));
+            $tiempos = [];
+            foreach ($m['t'] as $t => [$n, $dias, $metros]) {
+                $tiempos[$t] = ['n' => $n, 'dias_prom' => $n ? round($dias / $n, 1) : null,
+                                'm2_por_dia' => ($t === 'fabrica' && $dias > 0) ? round($metros / $dias, 1) : null];
+            }
+            $m['tiempos'] = $tiempos;
+            unset($m['t']);
         }
         unset($m);
         $lista = array_values($meses);
@@ -315,20 +360,46 @@ class ProduccionController extends Controller
         $completos = array_slice(array_filter($lista, fn($m) => $m['mes'] < Carbon::today()->format('Y-m')), -3);
         $prom = fn($campo) => count($completos) ? round(array_sum(array_column($completos, $campo)) / count($completos), 1) : null;
 
+        // Cuánto llevan hoy los trabajos en cada estado (desde la última vez que entraron a él)
+        $pendientes = [];
+        foreach (['Lista para Corte', 'En Fabricación', 'Fabricadas OK'] as $estado) {
+            $items = [];
+            foreach ($pend->where('estado_produccion', $estado) as $c) {
+                $desde = $ult[$c->id][$estado] ?? null;
+                $items[] = [
+                    'id' => $c->id, 'cliente' => $nombre($c->id), 'm2' => round((float) ($m2[$c->id]['m2'] ?? 0), 2),
+                    'desde' => $desde?->toDateString(),
+                    'dias' => $desde ? (int) floor(($hoy->getTimestamp() - $desde->getTimestamp()) / 86400) : null,
+                ];
+            }
+            usort($items, fn($x, $y) => ($y['dias'] ?? -1) <=> ($x['dias'] ?? -1));
+            $conDias = array_values(array_filter(array_column($items, 'dias'), fn($d) => $d !== null));
+            $pendientes[] = [
+                'estado'    => $estado,
+                'obras'     => count($items),
+                'm2'        => round(array_sum(array_column($items, 'm2')), 2),
+                'dias_prom' => $conDias ? round(array_sum($conDias) / count($conDias), 1) : null,
+                'dias_max'  => $conDias ? max($conDias) : null,
+                'items'     => $items,
+            ];
+        }
+
         // Trabajos ya en Fabricadas OK/Instalada sin ninguna fecha en el historial: no entran en ningún mes
         $sinFecha = Cotizacion::whereIn('estado_produccion', ['Fabricadas OK', 'Instalada'])
-            ->whereNotIn('id', $ids)->pluck('id');
+            ->whereNotIn('id', array_keys($fab))->pluck('id');
         $sinFechaM2 = array_sum(array_column($this->m2PorCotizacion($sinFecha->all()), 'm2'));
 
-        $enProceso = Cotizacion::whereIn('estado_produccion', ['Lista para Corte', 'En Fabricación'])->pluck('id');
-        $enProcesoM2 = array_sum(array_column($this->m2PorCotizacion($enProceso->all()), 'm2'));
+        $enProceso = collect($pendientes)->whereIn('estado', ['Lista para Corte', 'En Fabricación']);
 
         return response()->json([
             'meses'           => $lista,
             'prom_fabricado'  => $prom('fabricado_m2'),
             'prom_instalado'  => $prom('instalado_m2'),
-            'en_proceso'      => ['obras' => $enProceso->count(), 'm2' => round($enProcesoM2, 2)],
+            'prom_tiempos'    => array_map(fn($x) => ['n' => $x[0], 'dias_prom' => $x[0] ? round($x[1] / $x[0], 1) : null], $total),
+            'pendientes'      => $pendientes,
+            'en_proceso'      => ['obras' => $enProceso->sum('obras'), 'm2' => round($enProceso->sum('m2'), 2)],
             'sin_fecha'       => ['obras' => $sinFecha->count(), 'm2' => round($sinFechaM2, 2)],
+            'sin_inicio'      => $sinInicio,
         ]);
     }
 

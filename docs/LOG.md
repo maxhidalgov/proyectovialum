@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-03 — Producción: tiempos entre estados y flujo actual en "m² por mes"
+- **Qué se hizo:** `m2Mensual` ahora entrega, por mes, el promedio de días de cola de corte (Lista para Corte → En Fabricación), fabricación (En Fabricación → Fabricadas OK, más m²/día) y espera hasta instalar (Fabricadas OK → Instalada), asignados al mes en que termina el tramo y solo con obras que tienen ambas fechas; más `pendientes` (cuántas obras y m² hay hoy en cada estado, cuántos días llevan desde que entraron y la lista) y `sin_inicio` (obras sin fecha de En Fabricación). La pantalla muestra el panel "Cómo está el flujo hoy", los promedios del período y las columnas nuevas en la tabla.
+- **Archivos principales:** `ProduccionController::m2Mensual`, `vuexy-frontend/src/pages/produccion/m2-mensual.vue`.
+- **Pendiente / ojo con:** en producción casi ninguna obra tiene fecha de En Fabricación (solo 3 con inicio y fin) y hay marcados en lote, así que los tiempos serán confiables recién cuando se marquen los estados el día real. Probado en base local; las obras sin historial muestran "sin fechas".
+
 ## 2026-11-03 — Producción: reporte de m² fabricados e instalados por mes
 - **Qué se hizo:** `GET /api/produccion/m2-mensual` + pantalla `/produccion/m2-mensual` (botón "m² por mes" en Taller): por mes, m² y obras fabricadas (primera vez en "Fabricadas OK" o "Instalada", según `cotizacion_estado_historial`) e instaladas, detalle por obra, m² en proceso y promedio de los últimos 3 meses completos. m² = ancho×alto×cantidad, sumando `ventanas` (cotizador propio) y `cotizacion_detalles` tipo winperfil (ancho_mm/alto_mm), porque las obras de Winperfil no tienen filas en `ventanas`.
 - **Archivos principales:** `ProduccionController::m2Mensual`/`m2PorCotizacion`, `routes/api.php`, `vuexy-frontend/src/pages/produccion/m2-mensual.vue`.
