@@ -9,6 +9,11 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-09 — PDF de cotización: "CORRDERAAL25" en vez de "CORREDERA AL25"
+- **Qué se hizo:** el nombre mal escrito estaba en el dato (`tipos_ventana` id 55), no en el PDF. Migración idempotente que lo renombra a "Ventana Corredera AL25"; el código usa el id, no el nombre.
+- **Archivos principales:** `database/migrations/2026_11_09_100000_corregir_nombre_tipo_ventana_corredera_al25.php`.
+- **Pendiente / ojo con:** se corrige al desplegar (Railway corre la migración); afecta a todas las cotizaciones con ese tipo.
+
 ## 2026-11-03 — Menú: al volver a la app abierta cargaba el módulo anterior en vez del clickeado
 - **Qué pasaba:** con la app abierta desde antes de un deploy, los chunks lazy viejos ya no existen; al hacer clic en un módulo fallaba su carga y la recuperación automática (`main.js`, agregada el 2026-08-05) recargaba la página en la URL actual, o sea el módulo donde se había quedado.
 - **Qué se hizo:** `main.js` recuerda a qué ruta se iba a navegar (`router.beforeEach`/`afterEach`) y la recarga se hace en esa ruta.
