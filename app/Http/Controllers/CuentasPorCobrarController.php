@@ -93,6 +93,7 @@ class CuentasPorCobrarController extends Controller
         'efectivo'        => 'Efectivo',
         'tarjeta_credito' => 'Tarjeta crédito',
         'tarjeta_debito'  => 'Tarjeta débito',
+        'webpay'          => 'Webpay',
         'transferencia'   => 'Transferencia',
         'cheque'          => 'Cheque',
         'otros'           => 'Otros',

@@ -304,7 +304,7 @@ function formaPagoLabel(v) {
 
 // Diálogo Editar pago (forma de pago + voucher si es tarjeta)
 const editPago = ref({ show: false, loading: false, doc: null, forma: '', voucher: '' })
-const esTarjetaEdit = computed(() => ['tarjeta_debito', 'tarjeta_credito'].includes(editPago.value.forma))
+const esTarjetaEdit = computed(() => ['tarjeta_debito', 'tarjeta_credito', 'webpay'].includes(editPago.value.forma))
 
 function abrirEditarPago(doc) {
   editPago.value = { show: true, loading: false, doc, forma: doc.forma_pago || 'efectivo', voucher: doc.nro_comprobante_transbank || '' }

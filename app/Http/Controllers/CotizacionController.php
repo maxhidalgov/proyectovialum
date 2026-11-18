@@ -110,6 +110,12 @@ public function store(Request $request)
             $totalProductos = collect($request->productos)->sum('total');
         }
 
+        // Ítems libres (texto + precio manual): también suman al total (antes quedaba en $0 si solo había ítems libres)
+        $totalItemsLibres = 0;
+        if ($request->has('items_libres') && is_array($request->items_libres)) {
+            $totalItemsLibres = collect($request->items_libres)->sum('total');
+        }
+
         // Crear cotización con cliente validado - USAR $cliente->id que puede ser diferente al request
         $cotizacion = Cotizacion::create([
             'cliente_id' => $cliente->id, // ✅ Usar el ID del cliente sincronizado/encontrado
@@ -117,7 +123,7 @@ public function store(Request $request)
             'fecha' => $request->fecha,
             'estado_cotizacion_id' => $request->estado_cotizacion_id,
             'observaciones' => $request->observaciones,
-            'total' => $totalVentanas + $totalProductos,
+            'total' => $totalVentanas + $totalProductos + $totalItemsLibres,
         ]);
 
         // Guardar ventanas y mantener referencia

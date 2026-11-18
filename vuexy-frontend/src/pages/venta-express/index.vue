@@ -820,7 +820,7 @@ const formasPago = [
 // Default tarjeta_debito a propósito: exige voucher obligatorio, así el vendedor
 // se ve forzado a elegir la forma de pago correcta (evita dejar "efectivo" por error).
 const pagos = ref([{ forma_pago: 'tarjeta_debito', monto: 0, voucher: '' }])
-const esTarjeta = (fp) => ['tarjeta_debito', 'tarjeta_credito'].includes(fp)
+const esTarjeta = (fp) => ['tarjeta_debito', 'tarjeta_credito', 'webpay'].includes(fp)
 const totalPagos = computed(() => pagos.value.reduce((s, p) => s + (Number(p.monto) || 0), 0))
 const pagosOk = computed(() => Math.abs(totalPagos.value - totalBruto.value) < 1)
 const vouchersOk = computed(() => pagos.value.every(p => !esTarjeta(p.forma_pago) || !!p.voucher))

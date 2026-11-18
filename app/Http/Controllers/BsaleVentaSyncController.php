@@ -537,7 +537,7 @@ class BsaleVentaSyncController extends Controller
             'cheque' => 5, 'tarjeta_debito' => 6, 'transferencia' => 8, 'webpay' => 10,
         ];
 
-        $esTarjeta = in_array($data['forma_pago'], ['tarjeta_credito', 'tarjeta_debito']);
+        $esTarjeta = in_array($data['forma_pago'], ['tarjeta_credito', 'tarjeta_debito', 'webpay']);
 
         $update = [
             'forma_pago'         => $data['forma_pago'],

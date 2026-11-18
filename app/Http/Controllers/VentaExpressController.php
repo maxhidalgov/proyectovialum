@@ -250,7 +250,7 @@ class VentaExpressController extends Controller
         $formaPagoPrincipal = collect($data['pagos'])->sortByDesc('monto')->first()['forma_pago'];
 
         // Voucher Transbank (obligatorio en pagos con tarjeta) — para la conciliación Transbank
-        $cardPago = collect($data['pagos'])->first(fn ($p) => in_array($p['forma_pago'], ['tarjeta_debito', 'tarjeta_credito']));
+        $cardPago = collect($data['pagos'])->first(fn ($p) => in_array($p['forma_pago'], ['tarjeta_debito', 'tarjeta_credito', 'webpay']));
         if ($cardPago && empty($cardPago['voucher'])) {
             return response()->json(['success' => false, 'error' => 'Ingresa el N° de voucher para el pago con tarjeta.'], 422);
         }

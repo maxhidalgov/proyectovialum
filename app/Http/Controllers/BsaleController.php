@@ -84,7 +84,7 @@ class BsaleController extends Controller
                 : $metodoPago;
 
             // Voucher Transbank (obligatorio en pagos con tarjeta) — para la conciliación
-            $cardPago = collect($pagos)->first(fn ($p) => in_array($p['forma_pago'] ?? '', ['tarjeta_debito', 'tarjeta_credito']));
+            $cardPago = collect($pagos)->first(fn ($p) => in_array($p['forma_pago'] ?? '', ['tarjeta_debito', 'tarjeta_credito', 'webpay']));
             if ($cardPago && empty($cardPago['voucher'])) {
                 return response()->json(['success' => false, 'error' => 'Ingresa el N° de voucher para el pago con tarjeta.'], 400);
             }

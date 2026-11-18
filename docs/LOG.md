@@ -9,6 +9,16 @@ Entradas más recientes arriba. Formato:
 
 ---
 
+## 2026-11-18 — Cotizaciones con solo ítems libres quedaban con total $0
+- **Qué se hizo:** `CotizacionController::store()` no sumaba `items_libres` al total (update() sí). Se corrige y una migración idempotente recalcula las cotizaciones en $0 sin ventanas ni líneas Winperfil que tengan líneas (en prod: 205, 220 y 232).
+- **Archivos principales:** `app/Http/Controllers/CotizacionController.php`, `database/migrations/2026_11_18_110000_recalcular_total_cotizaciones_solo_items_libres.php`.
+- **Pendiente / ojo con:** nada; el PDF siempre calculó bien porque suma desde las líneas.
+
+## 2026-11-18 — Webpay como tarjeta con voucher
+- **Qué se hizo:** Webpay pide N° de voucher (Venta Express, emisión desde cotización, edición en Historial de Ventas) y marca `pagado_con_tarjeta` para que la factura entre a la conciliación mensual de Transbank. Registro de Ventas lo muestra como "Webpay" (antes "Sin forma"). Migración que marca como tarjeta las facturas webpay ya emitidas (la 5315).
+- **Archivos principales:** `VentaExpressController`, `BsaleController`, `BsaleVentaSyncController`, `registro-ventas/index.vue`, `historial-ventas/index.vue`, `venta-express/index.vue`, `database/migrations/2026_11_18_100000_marcar_webpay_como_pagado_con_tarjeta.php`.
+- **Pendiente / ojo con:** ingresar el voucher de la factura 5315 en Historial de Ventas; el abono en Operaciones sigue contando al conciliar con Transbank (o con cobro manual).
+
 ## 2026-11-09 — PDF de cotización: "CORRDERAAL25" en vez de "CORREDERA AL25"
 - **Qué se hizo:** el nombre mal escrito estaba en el dato (`tipos_ventana` id 55), no en el PDF. Migración idempotente que lo renombra a "Ventana Corredera AL25"; el código usa el id, no el nombre.
 - **Archivos principales:** `database/migrations/2026_11_09_100000_corregir_nombre_tipo_ventana_corredera_al25.php`.
