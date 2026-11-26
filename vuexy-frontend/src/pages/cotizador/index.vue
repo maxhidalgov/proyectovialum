@@ -1156,6 +1156,14 @@ const cargarCotizacionExistente = async () => {
     console.log('📥 Cargando cotización ID:', cotizacionId.value)
     const response = await api.get(`/api/cotizaciones/${cotizacionId.value}`)
     const cotizacionData = response.data
+
+    // Las cotizaciones de Winperfil no se editan en el cotizador común: el servidor rechaza el guardado (422)
+    // porque su total quedaría sin sus líneas de Winperfil.
+    if (cotizacionData.winperfil_numero || cotizacionData.adjunto_winperfil) {
+      alert('Esta cotización viene de Winperfil y no se puede editar desde el cotizador. Usa «Ajustar precio» en el detalle o sincroniza desde Winperfil.')
+      router.replace({ path: '/cotizacion-ver', query: { id: cotizacionId.value } })
+      return
+    }
     
     console.log('✅ Cotización cargada:', cotizacionData)
     console.log('📦 DETALLES COMPLETOS:', cotizacionData.detalles)

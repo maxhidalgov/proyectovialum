@@ -128,7 +128,8 @@
           <v-btn
             icon
             @click="editarCotizacion(item)"
-            :disabled="item.estado?.nombre === 'Aprobada'"
+            :disabled="item.estado?.nombre === 'Aprobada' || esWinperfilSincronizada(item)"
+            :title="esWinperfilSincronizada(item) ? 'Cotización sincronizada con Winperfil: no se edita desde aquí (usa «Ajustar precio» en el detalle o sincroniza desde Winperfil)' : 'Editar'"
           >
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
@@ -146,7 +147,12 @@
           <v-btn icon color="orange" @click="descargarOT(item.id)" title="Descargar Orden de Trabajo">
             <v-icon>mdi-file-document-outline</v-icon>
           </v-btn>
-          <v-btn icon @click="duplicarCotizacion(item)">
+          <v-btn
+            icon
+            @click="duplicarCotizacion(item)"
+            :disabled="esWinperfil(item)"
+            :title="esWinperfil(item) ? 'Las cotizaciones de Winperfil no se pueden duplicar por ahora' : 'Duplicar'"
+          >
             <v-icon>mdi-content-copy</v-icon>
           </v-btn>
           <v-btn
@@ -312,6 +318,11 @@
     router.push(`/cotizacion-ver?id=${item.id}`)
   }
   
+  // Winperfil sincronizada por API (sin PDF adjunto): el cotizador común no puede guardarla (el servidor lo bloquea con 422)
+  const esWinperfilSincronizada = (item) => !!item.winperfil_numero && !item.adjunto_winperfil
+  // Cualquier cotización de Winperfil (API o PDF): no se duplica por ahora
+  const esWinperfil = (item) => !!item.winperfil_numero || !!item.adjunto_winperfil
+
   const editarCotizacion = (item) => {
     if (item.adjunto_winperfil) {
       router.push(`/cotizaciones/importar-pvc?edit=${item.id}`)
@@ -329,7 +340,7 @@
     router.push(`/cotizador?id=${res.data.id}`)
   } catch (error) {
     console.error(error)
-    alert('Error al duplicar la cotización')
+    alert(error.response?.data?.message || 'Error al duplicar la cotización')
   }
 }
 

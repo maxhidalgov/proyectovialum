@@ -34,7 +34,23 @@ abstract class PreciosVentanaTestCase extends TestCase
             $t->id(); $t->unsignedBigInteger('cliente_id')->nullable(); $t->unsignedBigInteger('vendedor_id')->nullable();
             $t->date('fecha')->nullable(); $t->unsignedBigInteger('estado_cotizacion_id')->nullable(); $t->text('observaciones')->nullable();
             $t->decimal('total', 14, 2)->default(0); $t->string('public_token')->nullable(); $t->unsignedBigInteger('origen_id')->nullable();
-            $t->string('estado_produccion')->nullable(); $t->timestamps();
+            $t->string('estado_produccion')->nullable();
+            // Winperfil / Bsale / facturación (para comprobar bloqueos y que duplicar NO los copia)
+            $t->integer('winperfil_numero')->nullable(); $t->string('winperfil_serie')->nullable(); $t->string('winperfil_presupuesto')->nullable();
+            $t->integer('winperfil_oferta')->nullable(); $t->boolean('winperfil_precio_lock')->default(false); $t->string('adjunto_winperfil')->nullable();
+            $t->string('numero_documento_bsale')->nullable(); $t->string('id_documento_bsale')->nullable(); $t->string('url_pdf_bsale')->nullable();
+            $t->string('token_bsale')->nullable(); $t->string('estado_facturacion')->nullable(); $t->boolean('facturacion_cerrada')->default(false);
+            $t->timestamps();
+        });
+        Schema::create('cotizacion_estado_historial', function ($t) {
+            $t->id(); $t->unsignedBigInteger('cotizacion_id'); $t->string('tipo')->nullable(); $t->string('estado')->nullable(); $t->string('estado_anterior')->nullable(); $t->dateTime('fecha')->nullable(); $t->timestamps();
+        });
+        Schema::create('cotizacion_detalles', function ($t) {
+            $t->id(); $t->unsignedBigInteger('cotizacion_id'); $t->unsignedBigInteger('producto_id')->nullable(); $t->string('tipo_item')->default('ventana');
+            $t->unsignedBigInteger('producto_lista_id')->nullable(); $t->unsignedBigInteger('lista_precio_id')->nullable(); $t->text('descripcion')->nullable();
+            $t->decimal('cantidad', 10, 2)->default(1); $t->decimal('precio_unitario', 12, 2)->default(0); $t->decimal('total', 12, 2)->default(0);
+            $t->boolean('esVidrio')->default(false); $t->decimal('ancho_mm', 10, 2)->nullable(); $t->decimal('alto_mm', 10, 2)->nullable(); $t->decimal('m2', 10, 4)->nullable();
+            $t->boolean('pulido')->default(false); $t->text('winperfil_grafico')->nullable(); $t->text('winperfil_grafico_png')->nullable(); $t->timestamps();
         });
         Schema::create('ventanas', function ($t) {
             $t->id(); $t->unsignedBigInteger('cotizacion_id'); $t->unsignedBigInteger('tipo_ventana_id')->nullable();

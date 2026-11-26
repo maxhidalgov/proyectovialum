@@ -295,8 +295,10 @@ public function store(Request $request)
 
     // Calcular total de la cotización (ventanas + productos)
     $totalVentanas = $cotizacion->ventanas->sum('precio_total');
-    $totalProductos = $cotizacion->detalles->where('tipo_item', 'producto')->sum('total');
-    $cotizacion->total_general = $totalVentanas + $totalProductos;
+    // Σ de TODOS los detalles (productos + ítems libres + líneas Winperfil): antes solo se sumaban los productos y el total
+    // del detalle quedaba sin los ítems libres (descuadre de la cotización con total guardado).
+    $totalDetalles = $cotizacion->detalles->sum('total');
+    $cotizacion->total_general = $totalVentanas + $totalDetalles;
     
     return response()->json($cotizacion);
     }
@@ -315,6 +317,21 @@ public function store(Request $request)
     public function update(Request $request, $id)
     {
         $cotizacion = Cotizacion::with(['ventanas', 'detalles'])->findOrFail($id);
+
+        // Las cotizaciones de Winperfil (sincronizadas por API o importadas desde PDF) tienen su total y sus líneas
+        // `winperfil` administrados por Winperfil / "Ajustar precio" / "Actualizar desde PDF". Este guardado del cotizador
+        // común recalcula el total SIN esas líneas, así que lo dejaría descuadrado: se bloquea en el servidor.
+        if ($this->esCotizacionWinperfil($cotizacion)) {
+            return response()->json([
+                'message' => 'Esta cotización viene de Winperfil y no se puede guardar desde el cotizador (su total quedaría sin sus líneas de Winperfil). '
+                           . 'Para cambiar el precio usa «Ajustar precio»; para cambiar el contenido, sincroniza o actualiza desde Winperfil.',
+            ], 422);
+        }
+
+        // Sin la lista de ventanas el guardado borraría todas las ventanas o fallaría a mitad de camino.
+        if (!$request->has('ventanas') || !is_array($request->ventanas)) {
+            return response()->json(['message' => 'Falta la lista de ventanas (puede ir vacía).'], 422);
+        }
 
         DB::transaction(function () use ($request, $cotizacion) {
             $cotizacion->update([
@@ -455,6 +472,8 @@ public function store(Request $request)
                             ->first();
                         
                         if ($detalle) {
+                            // Un producto EXISTENTE conserva sus campos de vidrio (esVidrio, medidas, m², pulido): el cotizador no los
+                            // carga al editar y los reenvía como false/null, así que sobrescribirlos los borraría.
                             $detalle->update([
                                 'producto_lista_id' => $productoData['producto_lista_id'],
                                 'lista_precio_id' => $productoData['lista_precio_id'],
@@ -465,8 +484,8 @@ public function store(Request $request)
                             ]);
                         }
                     } else {
-                        // Crear nuevo producto
-                        $cotizacion->detalles()->create([
+                        // Crear nuevo producto (con los campos de vidrio, igual que store(): antes se perdían)
+                        $cotizacion->detalles()->create(array_merge([
                             'tipo_item' => 'producto',
                             'producto_lista_id' => $productoData['producto_lista_id'],
                             'lista_precio_id' => $productoData['lista_precio_id'],
@@ -474,7 +493,7 @@ public function store(Request $request)
                             'cantidad' => $productoData['cantidad'],
                             'precio_unitario' => $productoData['precio_unitario'],
                             'total' => $productoData['total'],
-                        ]);
+                        ], $this->camposVidrioProducto($productoData)));
                     }
                 }
             }
@@ -552,15 +571,40 @@ public function store(Request $request)
                     }
                 }
             }
+
+            // El total se calcula SIEMPRE a partir de lo que queda guardado (ventanas.precio = total de línea + todos los
+            // detalles), no de lo que venga en la petición: antes, si la petición no traía productos o ítems libres (o una
+            // ventana no existía), el total los dejaba fuera aunque siguieran guardados (caso real: cotización 93 en producción).
+            $cotizacion->update(['total' => $this->totalDesdeLineas($cotizacion)]);
         });
 
-        // precio ya viene como total (precio_unitario × cantidad) desde el frontend
-        $totalVentanas    = collect($request->ventanas)->sum(fn($v) => $v['precio'] ?? 0);
-        $totalProductos   = $request->has('productos')    ? collect($request->productos)->sum('total')    : 0;
-        $totalItemsLibres = $request->has('items_libres') ? collect($request->items_libres)->sum('total') : 0;
-        $cotizacion->update(['total' => $totalVentanas + $totalProductos + $totalItemsLibres]);
-
         return response()->json(['message' => 'Cotización actualizada correctamente']);
+    }
+
+    /** ¿Es una cotización de Winperfil? (número sincronizado, PDF de Winperfil adjunto o líneas `winperfil`). */
+    private function esCotizacionWinperfil(Cotizacion $c): bool
+    {
+        return !empty($c->winperfil_numero)
+            || !empty($c->adjunto_winperfil)
+            || $c->detalles()->where('tipo_item', 'winperfil')->exists();
+    }
+
+    /** Total NETO de una cotización a partir de lo guardado: Σ ventanas.precio (total de línea) + Σ detalles.total. */
+    private function totalDesdeLineas(Cotizacion $c): float
+    {
+        return (float) $c->ventanas()->sum('precio') + (float) $c->detalles()->sum('total');
+    }
+
+    /** Campos de vidrio (esVidrio, medidas, m², pulido) de un producto NUEVO, igual que store(). */
+    private function camposVidrioProducto(array $p): array
+    {
+        return [
+            'esVidrio' => $p['esVidrio'] ?? false,
+            'ancho_mm' => $p['ancho_mm'] ?? null,
+            'alto_mm'  => $p['alto_mm'] ?? null,
+            'm2'       => $p['m2'] ?? null,
+            'pulido'   => $p['pulido'] ?? false,
+        ];
     }
 
     /**
@@ -1381,7 +1425,7 @@ public function store(Request $request)
 
     public function duplicar($id)
     {
-        $original = Cotizacion::with('ventanas', 'estado')->findOrFail($id);
+        $original = Cotizacion::with('ventanas', 'detalles', 'estado')->findOrFail($id);
 
         // Validar que solo se pueda duplicar si está en estado "Evaluación"
         if ($original->estado->nombre !== 'Evaluación') {
@@ -1390,29 +1434,53 @@ public function store(Request $request)
             ], 403);
         }
 
+        // Por ahora no se duplican cotizaciones de Winperfil: su total y sus líneas dependen del presupuesto de Winperfil
+        // y una copia haría pasar el mismo número/líneas por un presupuesto distinto.
+        if ($this->esCotizacionWinperfil($original)) {
+            return response()->json([
+                'message' => 'Las cotizaciones de Winperfil no se pueden duplicar por ahora. Importa o sincroniza el presupuesto desde Winperfil para crear otra.',
+            ], 422);
+        }
+
         $nuevoEstadoId = EstadoCotizacion::where('nombre', 'Evaluación')->firstOrFail()->id;
 
-        $nueva = Cotizacion::create([
-            'cliente_id' => $original->cliente_id,
-            'vendedor_id' => $original->vendedor_id,
-            'fecha' => now()->toDateString(),
-            'estado_cotizacion_id' => $nuevoEstadoId,
-            'observaciones' => $original->observaciones,
-            'total' => $original->total,
-            'origen_id' => $original->id,
-        ]);
+        // Todo o nada: si falla la copia de cualquier línea no queda una cotización a medias.
+        $nueva = DB::transaction(function () use ($original, $nuevoEstadoId) {
+            // Solo se copian datos comerciales. NO se copian números ni vínculos del original
+            // (winperfil_*, documentos/ids de Bsale, estado de facturación/producción, token público, adjuntos, envíos…).
+            $nueva = Cotizacion::create([
+                'cliente_id' => $original->cliente_id,
+                'vendedor_id' => $original->vendedor_id,
+                'fecha' => now()->toDateString(),
+                'estado_cotizacion_id' => $nuevoEstadoId,
+                'observaciones' => $original->observaciones,
+                'total' => 0, // se recalcula abajo a partir de las líneas copiadas
+                'origen_id' => $original->id, // solo marca de procedencia; ningún flujo lo trata como el original
+            ]);
 
-        foreach ($original->ventanas as $ventana) {
-            // Copia COMPLETA de la línea (hojas, config con tipo/proveedor de vidrio, medidas bay window, imagen…).
-            // Antes solo se copiaban 8 campos y se perdía config: la copia no se podía recalcular ni producir.
-            // precio/costo son totales de línea; los unitarios se derivan solos al guardar (Ventana::saving).
-            $copia = $ventana->replicate(['cotizacion_id']);
-            $copia->cotizacion_id = $nueva->id;
-            $copia->cantidad = $ventana->cantidad ?? 1;
-            $copia->costo = $ventana->costo ?? 0;
-            $copia->precio = $ventana->precio ?? 0;
-            $copia->save();
-        }
+            foreach ($original->ventanas as $ventana) {
+                // Copia COMPLETA de la línea (hojas, config con tipo/proveedor de vidrio, medidas bay window, imagen…).
+                // precio/costo son totales de línea; los unitarios se derivan solos al guardar (Ventana::saving).
+                $copia = $ventana->replicate(['cotizacion_id']);
+                $copia->cotizacion_id = $nueva->id;
+                $copia->cantidad = $ventana->cantidad ?? 1;
+                $copia->costo = $ventana->costo ?? 0;
+                $copia->precio = $ventana->precio ?? 0;
+                $copia->save();
+            }
+
+            // Todos los detalles (productos, ítems libres…): antes la copia los perdía pero conservaba el total.
+            foreach ($original->detalles as $detalle) {
+                $copia = $detalle->replicate(['cotizacion_id']);
+                $copia->cotizacion_id = $nueva->id;
+                $copia->save();
+            }
+
+            // El total de la copia sale de sus propias líneas, así siempre cuadra.
+            $nueva->update(['total' => $this->totalDesdeLineas($nueva)]);
+
+            return $nueva;
+        });
 
         return response()->json(['id' => $nueva->id, 'message' => 'Cotización duplicada']);
     }
