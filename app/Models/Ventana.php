@@ -49,6 +49,43 @@ class Ventana extends Model
         'tipo_ventana_derecha'    => 'array',
     ];
 
+    /*
+     * CONVENCIÓN DE PRECIOS (definida 2026-11-26):
+     *   precio / costo                  = TOTAL de la línea (ya incluye la cantidad)
+     *   precio_unitario / costo_unitario = total / cantidad (valor por unidad)
+     * Los unitarios son un dato DERIVADO: se recalculan en cada guardado en que cambian precio,
+     * costo, cantidad o los propios unitarios, así ningún escritor (cotizador, agente, duplicar…)
+     * puede dejarlos inconsistentes. Un guardado que no toca estos campos (p. ej. solo la imagen)
+     * no los modifica.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Ventana $v) {
+            if (!$v->exists || $v->isDirty(['precio', 'costo', 'cantidad', 'precio_unitario', 'costo_unitario'])) {
+                $v->precio_unitario = self::unitario($v->precio, $v->cantidad);
+                $v->costo_unitario  = self::unitario($v->costo, $v->cantidad);
+            }
+        });
+    }
+
+    /** Valor por unidad de un total de línea (entero en pesos). Cantidad nula o 0 cuenta como 1. */
+    public static function unitario($total, $cantidad): int
+    {
+        $cant = max((int) ($cantidad ?? 1), 1);
+        return (int) round(((float) $total) / $cant);
+    }
+
+    // Lectura de filas antiguas (anteriores a esta regla) con unitario nulo o 0: se deriva sin tocar la BD.
+    public function getPrecioUnitarioAttribute($value)
+    {
+        return ($value !== null && (float) $value > 0) ? $value : self::unitario($this->attributes['precio'] ?? 0, $this->attributes['cantidad'] ?? 1);
+    }
+
+    public function getCostoUnitarioAttribute($value)
+    {
+        return ($value !== null && (float) $value > 0) ? $value : self::unitario($this->attributes['costo'] ?? 0, $this->attributes['cantidad'] ?? 1);
+    }
+
     // ✅ Relación con TipoVentana
     public function tipoVentana()
     {

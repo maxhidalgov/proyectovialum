@@ -1403,16 +1403,15 @@ public function store(Request $request)
         ]);
 
         foreach ($original->ventanas as $ventana) {
-            $nueva->ventanas()->create([
-                'tipo_ventana_id' => $ventana->tipo_ventana_id,
-                'ancho' => $ventana->ancho,
-                'alto' => $ventana->alto,
-                'cantidad' => $ventana->cantidad ?? 1,
-                'color_id' => $ventana->color_id,
-                'producto_vidrio_proveedor_id' => $ventana->producto_vidrio_proveedor_id,
-                'costo' => $ventana->costo ?? 0,
-                'precio' => $ventana->precio ?? 0,
-            ]);
+            // Copia COMPLETA de la línea (hojas, config con tipo/proveedor de vidrio, medidas bay window, imagen…).
+            // Antes solo se copiaban 8 campos y se perdía config: la copia no se podía recalcular ni producir.
+            // precio/costo son totales de línea; los unitarios se derivan solos al guardar (Ventana::saving).
+            $copia = $ventana->replicate(['cotizacion_id']);
+            $copia->cotizacion_id = $nueva->id;
+            $copia->cantidad = $ventana->cantidad ?? 1;
+            $copia->costo = $ventana->costo ?? 0;
+            $copia->precio = $ventana->precio ?? 0;
+            $copia->save();
         }
 
         return response()->json(['id' => $nueva->id, 'message' => 'Cotización duplicada']);
@@ -1580,7 +1579,8 @@ public function getAprobadas()
             
             // ✅ Procesar ventanas y mapear tipo_ventana para compatibilidad
             $cotizacion->ventanas = $cotizacion->ventanas->map(function($ventana) {
-                $ventana->precio_unitario = $ventana->precio;
+                // precio es el TOTAL de la línea; el unitario es precio / cantidad (antes se copiaba el total tal cual)
+                $ventana->precio_unitario = \App\Models\Ventana::unitario($ventana->precio, $ventana->cantidad);
                 
                 // ✅ Mapear tipoVentana a tipo_ventana para compatibilidad con el frontend
                 if ($ventana->tipoVentana) {

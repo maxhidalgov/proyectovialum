@@ -133,7 +133,7 @@
                 <!-- Precio unitario -->
                 <template #item.precio_unitario="{ item }">
                   <div class="font-weight-medium">
-                    {{ clp(item.precio_unitario || item.precio) }}
+                    {{ clp(item.precio_unitario || (Number(item.precio || 0) / Math.max(Number(item.cantidad) || 1, 1))) }}
                   </div>
                 </template>
 
@@ -275,10 +275,9 @@ const calcularMetrosCuadrados = (ancho, alto) => {
   return ((ancho * alto) / 1000000).toFixed(2)
 }
 
+// ventana.precio es el TOTAL de la línea (ya incluye la cantidad): no se multiplica de nuevo.
 const calcularTotalVentana = (ventana) => {
-  const precio = ventana.precio_unitario || ventana.precio || 0
-  const cantidad = ventana.cantidad || 1
-  return precio * cantidad
+  return Number(ventana.precio || 0)
 }
 
 const calcularSubtotal = () => {
