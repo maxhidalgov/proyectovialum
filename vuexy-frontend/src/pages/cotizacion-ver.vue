@@ -47,7 +47,7 @@
       <v-card-text>
         <v-row>
           <v-col cols="12" sm="6">
-            <strong>Cliente:</strong> {{ cotizacion?.cliente?.nombre }}
+            <strong>Cliente:</strong> {{ clienteNombre }}
           </v-col>
           <v-col cols="12" sm="6">
             <strong>Vendedor:</strong> {{ cotizacion?.vendedor?.name }}
@@ -103,10 +103,8 @@
       </v-data-table>
       <v-row justify="end" class="px-6 pb-4">
         <v-col cols="12" sm="4" class="text-right">
-          <v-alert type="success" variant="tonal" border="start" border-color="green">
-            <strong>Total general:</strong>
-            {{ clp(cotizacion?.total_general) }}
-          </v-alert>
+          <strong>Subtotal ventanas:</strong>
+          {{ clp(subtotalVentanas) }}
         </v-col>
       </v-row>
     </v-card>
@@ -128,6 +126,59 @@
           {{ clp(item.total) }}
         </template>
       </v-data-table>
+    </v-card>
+
+    <!-- Ítems libres (texto + precio manual) -->
+    <v-card v-if="itemsLibresDetalle.length > 0" class="mt-4">
+      <v-card-title>Ítems libres</v-card-title>
+      <v-data-table
+        :headers="headersProductos"
+        :items="itemsLibresDetalle"
+        :items-per-page="5"
+        class="elevation-1"
+      >
+        <template #item.precio_unitario="{ item }">
+          {{ clp(item.precio_unitario) }}
+        </template>
+
+        <template #item.total="{ item }">
+          {{ clp(item.total) }}
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <!-- Resumen del total: de dónde sale el total general -->
+    <v-card class="mt-4">
+      <v-card-title>Resumen del total (neto)</v-card-title>
+      <v-card-text>
+        <v-table density="compact">
+          <tbody>
+            <tr v-if="(cotizacion?.ventanas || []).length > 0 || winperfilDetalles.length === 0">
+              <td>Ventanas</td>
+              <td class="text-right">{{ clp(subtotalVentanas) }}</td>
+            </tr>
+            <tr v-if="productosDetalle.length > 0">
+              <td>Productos</td>
+              <td class="text-right">{{ clp(subtotalProductos) }}</td>
+            </tr>
+            <tr v-if="itemsLibresDetalle.length > 0">
+              <td>Ítems libres</td>
+              <td class="text-right">{{ clp(subtotalItemsLibres) }}</td>
+            </tr>
+            <tr v-if="winperfilDetalles.length > 0">
+              <td>Ventanas Winperfil</td>
+              <td class="text-right">{{ clp(netoWinperfil) }}</td>
+            </tr>
+          </tbody>
+        </v-table>
+        <v-alert type="success" variant="tonal" border="start" border-color="green" class="mt-3">
+          <strong>Total general:</strong>
+          {{ clp(cotizacion?.total_general) }}
+          <div class="text-caption">
+            {{ winperfilDetalles.length > 0 ? 'Suma de las ventanas de Winperfil y de los demás ítems de la cotización' : 'Suma de ventanas, productos e ítems libres' }}. Valores netos (sin IVA).
+          </div>
+        </v-alert>
+      </v-card-text>
     </v-card>
 
     <!-- ── Ventanas WINPERFIL ─────────────────────────────────────── -->
@@ -351,6 +402,25 @@ const headersProductos = [
 const productosDetalle = computed(() => {
   if (!cotizacion.value?.detalles) return []
   return cotizacion.value.detalles.filter(d => d.tipo_item === 'producto')
+})
+
+// Computed para los ítems libres (tipo_item = 'item_libre'): antes no se mostraban aunque sí estaban en el total
+const itemsLibresDetalle = computed(() => {
+  if (!cotizacion.value?.detalles) return []
+  return cotizacion.value.detalles.filter(d => d.tipo_item === 'item_libre')
+})
+
+// Subtotales (netos) para el resumen: ventanas.precio_total ya es el total de la línea (incluye la cantidad)
+const sumar = (arr, campo) => arr.reduce((s, x) => s + Number(x[campo] || 0), 0)
+const subtotalVentanas = computed(() => sumar(cotizacion.value?.ventanas || [], 'precio_total'))
+const subtotalProductos = computed(() => sumar(productosDetalle.value, 'total'))
+const subtotalItemsLibres = computed(() => sumar(itemsLibresDetalle.value, 'total'))
+
+// Nombre del cliente: la API entrega razon_social o first_name/last_name (no existe `nombre`)
+const clienteNombre = computed(() => {
+  const c = cotizacion.value?.cliente
+  if (!c) return '—'
+  return c.razon_social || `${c.first_name || ''} ${c.last_name || ''}`.trim() || '—'
 })
 
 // Computed para items Winperfil
