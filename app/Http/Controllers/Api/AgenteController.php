@@ -242,86 +242,160 @@ class AgenteController extends Controller
         return $vidrios;
     }
 
+    /**
+     * Calcula UNA línea de ventana con el servicio real. Convención: costo y precio son TOTALES de la
+     * línea (incluyen la cantidad); los unitarios son total / cantidad.
+     * Lanza \RuntimeException si el cálculo falla o el costo resulta 0 (nunca devuelve precio 0).
+     */
+    private function calcularLinea(array $in): array
+    {
+        $cantidad = max((int) ($in['cantidad'] ?? 1), 1);
+
+        $base = [
+            'tipo'            => $in['tipo_ventana_id'],
+            'ancho'           => $in['ancho'],
+            'alto'            => $in['alto'],
+            'color'           => $in['color_id'],
+            'cantidad'        => $cantidad,
+            'productoVidrio'  => $in['producto_vidrio_id'],
+            'proveedorVidrio' => $in['proveedor_vidrio_id'],
+            'tipoVidrio'      => $in['tipo_vidrio'],
+            'manillon'        => $in['manillon'] ?? false,
+            'hojas_totales'   => $in['hojas_totales'] ?? 2,
+            'hojas_moviles'   => $in['hojas_moviles'] ?? 1,
+        ];
+
+        $res = $this->calculoService->calcularMateriales($base);
+
+        // calcularMateriales devuelve {materiales, costo_total, costo_unitario}; costo_total YA incluye la cantidad.
+        $costoTotal = (int) round((float) ($res['costo_total'] ?? 0));
+        if ($costoTotal <= 0) {
+            throw new \RuntimeException('El costo calculado es 0: la combinación no tiene costos completos en el catálogo.');
+        }
+
+        $margen = $this->margenPara((int) $in['tipo_ventana_id']);
+        if ($margen < 0 || $margen >= 1) {
+            throw new \RuntimeException("Margen inválido ({$margen}) para el tipo de ventana.");
+        }
+
+        $precioTotal = (int) ceil($costoTotal / (1 - $margen));
+
+        return [
+            'costo_total'     => $costoTotal,
+            'precio_total'    => $precioTotal,
+            'costo_unitario'  => Ventana::unitario($costoTotal, $cantidad),
+            'precio_unitario' => Ventana::unitario($precioTotal, $cantidad),
+            'margen_aplicado' => $margen,
+        ];
+    }
+
+    private function margenPara(int $tipoVentanaId): float
+    {
+        $margen = 0.50;
+        $tipoVentana = TipoVentana::with('material')->find($tipoVentanaId);
+        if ($tipoVentana?->material) {
+            $tipoMaterial = TipoMaterial::where('nombre', 'like', '%' . $tipoVentana->material->nombre . '%')->first()
+                ?? TipoMaterial::first();
+            $margen = (float) ($tipoMaterial->margen ?? 0.50);
+        }
+        return $margen;
+    }
+
     private function toolCalcularPrecio(array $input): array
     {
         try {
-            $base = [
-                'tipo'            => $input['tipo_ventana_id'],
-                'ancho'           => $input['ancho'],
-                'alto'            => $input['alto'],
-                'color'           => $input['color_id'],
-                'cantidad'        => $input['cantidad'] ?? 1,
-                'productoVidrio'  => $input['producto_vidrio_id'],
-                'proveedorVidrio' => $input['proveedor_vidrio_id'],
-                'tipoVidrio'      => $input['tipo_vidrio'],
-                'manillon'        => $input['manillon'] ?? false,
-                'hojas_totales'   => $input['hojas_totales'] ?? 2,
-                'hojas_moviles'   => $input['hojas_moviles'] ?? 1,
-            ];
-
-            $materiales = $this->calculoService->calcularMateriales($base);
-            $costoTotal = array_sum(array_column($materiales, 'costo_total'));
-
-            $margen = 0.50;
-            $tipoVentana = TipoVentana::with('material')->find($input['tipo_ventana_id']);
-            if ($tipoVentana?->material) {
-                $tipoMaterial = TipoMaterial::where('nombre', 'like', '%' . $tipoVentana->material->nombre . '%')->first()
-                    ?? TipoMaterial::first();
-                $margen = (float) ($tipoMaterial->margen ?? 0.50);
-            }
-
-            if ($costoTotal > 0) {
-                $precio = (int) ceil($costoTotal / (1 - $margen));
-                return [
-                    'costo_unitario'  => $costoTotal,
-                    'precio_unitario' => $precio,
-                    'precio_total'    => $precio * ($input['cantidad'] ?? 1),
-                    'margen_aplicado' => $margen,
-                ];
-            }
-
+            return $this->calcularLinea($input);
+        } catch (\Throwable $e) {
             // Diagnóstico: probar con otro color para aislar si el problema es el color o el vidrio
-            $otroColor = \App\Models\Color::where('id', '!=', $input['color_id'])->first();
+            $otroColor = \App\Models\Color::where('id', '!=', $input['color_id'] ?? 0)->first();
             $costoOtroColor = 0;
             if ($otroColor) {
-                $mat2 = $this->calculoService->calcularMateriales(array_merge($base, ['color' => $otroColor->id]));
-                $costoOtroColor = array_sum(array_column($mat2, 'costo_total'));
+                try {
+                    $mat2 = $this->calculoService->calcularMateriales([
+                        'tipo' => $input['tipo_ventana_id'], 'ancho' => $input['ancho'], 'alto' => $input['alto'], 'color' => $otroColor->id,
+                        'cantidad' => max((int) ($input['cantidad'] ?? 1), 1), 'productoVidrio' => $input['producto_vidrio_id'],
+                        'proveedorVidrio' => $input['proveedor_vidrio_id'], 'tipoVidrio' => $input['tipo_vidrio'],
+                        'manillon' => $input['manillon'] ?? false, 'hojas_totales' => $input['hojas_totales'] ?? 2, 'hojas_moviles' => $input['hojas_moviles'] ?? 1,
+                    ]);
+                    $costoOtroColor = (float) ($mat2['costo_total'] ?? 0);
+                } catch (\Throwable $e2) {
+                    $costoOtroColor = 0;
+                }
             }
 
-            if ($costoOtroColor > 0) {
-                return [
-                    'costo_unitario'  => 0,
-                    'precio_unitario' => 0,
-                    'precio_total'    => 0,
-                    'diagnostico'     => "El color seleccionado (color_id={$input['color_id']}) no tiene perfiles configurados para este tipo de ventana. El vidrio y el tipo de ventana SÍ son válidos — solo hay que cambiar el color del marco.",
-                ];
-            }
+            $diagnostico = $costoOtroColor > 0
+                ? "El color seleccionado (color_id={$input['color_id']}) no tiene perfiles configurados para este tipo de ventana. El vidrio y el tipo de ventana SÍ son válidos — solo hay que cambiar el color del marco."
+                : 'No se pudo calcular precio para esta combinación. Verifica que el tipo de ventana, el producto de vidrio y el proveedor sean correctos.';
 
-            return [
-                'costo_unitario'  => 0,
-                'precio_unitario' => 0,
-                'precio_total'    => 0,
-                'diagnostico'     => "No se pudo calcular precio para esta combinación. Verifica que el tipo de ventana, el producto de vidrio y el proveedor sean correctos.",
-            ];
-
-        } catch (\Exception $e) {
-            return ['error' => $e->getMessage()];
+            // Sin precio: nunca se devuelve un 0 que pueda confundirse con un precio válido.
+            return ['error' => $e->getMessage(), 'diagnostico' => $diagnostico, 'costo_unitario' => 0, 'precio_unitario' => 0, 'precio_total' => 0];
         }
     }
 
+    /**
+     * Crea la cotización. IMPORTANTE: ignora cualquier precio/costo que mande el modelo: PHP recalcula cada
+     * línea con el servicio real. Si UNA línea falla o da costo 0, no se crea nada (todo o nada).
+     */
     private function toolCrearCotizacion(array $input, $user): array
     {
+        $cliente = Cliente::find($input['cliente_id'] ?? null);
+        if (!$cliente) {
+            return ['success' => false, 'error' => 'El cliente no existe: búscalo o créalo antes de cotizar.'];
+        }
+        if (empty($input['ventanas']) || !is_array($input['ventanas'])) {
+            return ['success' => false, 'error' => 'La cotización no tiene ventanas.'];
+        }
+
+        // 1) Recalcular TODAS las líneas antes de escribir nada.
+        $lineas  = [];
+        $errores = [];
+        foreach (array_values($input['ventanas']) as $i => $v) {
+            $n = $i + 1;
+            try {
+                foreach (['tipo_ventana_id', 'ancho', 'alto', 'color_id', 'producto_vidrio_proveedor_id', 'tipo_vidrio', 'cantidad'] as $campo) {
+                    if (!isset($v[$campo])) {
+                        throw new \RuntimeException("Falta el campo {$campo}.");
+                    }
+                }
+                $pcp = ProductoColorProveedor::find($v['producto_vidrio_proveedor_id']);
+                if (!$pcp) {
+                    throw new \RuntimeException('El vidrio indicado (pcp_id) no existe en el catálogo.');
+                }
+                $calc = $this->calcularLinea([
+                    'tipo_ventana_id'     => $v['tipo_ventana_id'],
+                    'ancho'               => $v['ancho'],
+                    'alto'                => $v['alto'],
+                    'color_id'            => $v['color_id'],
+                    'cantidad'            => $v['cantidad'],
+                    'producto_vidrio_id'  => $pcp->producto_id,
+                    'proveedor_vidrio_id' => $pcp->proveedor_id,
+                    'tipo_vidrio'         => $v['tipo_vidrio'],
+                    'manillon'            => $v['manillon'] ?? false,
+                    'hojas_totales'       => $v['hojas_totales'] ?? 2,
+                    'hojas_moviles'       => $v['hojas_moviles'] ?? 1,
+                ]);
+                $lineas[] = ['entrada' => $v, 'calc' => $calc, 'pcp' => $pcp];
+            } catch (\Throwable $e) {
+                $errores[] = ['linea' => $n, 'motivo' => $e->getMessage()];
+            }
+        }
+
+        if ($errores) {
+            return [
+                'success'          => false,
+                'error'            => 'No se creó la cotización: no se pudo calcular el precio de ' . count($errores) . ' línea(s). Corrige o cambia esas líneas.',
+                'lineas_con_error' => $errores,
+            ];
+        }
+
+        // 2) Escribir (todo o nada).
         DB::beginTransaction();
         try {
             $estado = EstadoCotizacion::where('nombre', 'Evaluación')->first();
-
-            $total = array_sum(array_map(
-                fn($v) => ($v['precio'] ?? 0) * ($v['cantidad'] ?? 1),
-                $input['ventanas']
-            ));
+            $total  = array_sum(array_map(fn($l) => $l['calc']['precio_total'], $lineas)); // precio = total de línea
 
             $cotizacion = Cotizacion::create([
-                'cliente_id'           => $input['cliente_id'],
+                'cliente_id'           => $cliente->id,
                 'vendedor_id'          => $user->id,
                 'fecha'                => now()->toDateString(),
                 'estado_cotizacion_id' => $estado?->id,
@@ -329,29 +403,39 @@ class AgenteController extends Controller
                 'total'                => $total,
             ]);
 
-            foreach ($input['ventanas'] as $v) {
-                Ventana::create([
+            $resumen = [];
+            foreach ($lineas as $l) {
+                $v = $l['entrada'];
+                $ventana = Ventana::create([
                     'cotizacion_id'                => $cotizacion->id,
                     'tipo_ventana_id'              => $v['tipo_ventana_id'],
                     'ancho'                        => $v['ancho'],
                     'alto'                         => $v['alto'],
                     'color_id'                     => $v['color_id'],
                     'producto_vidrio_proveedor_id' => $v['producto_vidrio_proveedor_id'],
-                    'precio'                       => $v['precio'],
-                    'costo'                        => $v['costo'],
-                    'cantidad'                     => $v['cantidad'],
+                    'precio'                       => $l['calc']['precio_total'],
+                    'costo'                        => $l['calc']['costo_total'],
+                    'cantidad'                     => (int) $v['cantidad'],
                     'hojas_totales'                => $v['hojas_totales'] ?? null,
                     'hojas_moviles'                => $v['hojas_moviles'] ?? null,
                     'config'                       => [
-                        'tipo_vidrio' => $v['tipo_vidrio'],
-                        'manillon'    => $v['manillon'] ?? false,
+                        'tipo_vidrio'      => $v['tipo_vidrio'],
+                        'manillon'         => $v['manillon'] ?? false,
+                        'proveedor_vidrio' => $l['pcp']->proveedor_id,
+                        'origen'           => 'agente', // marca de origen (las cotizaciones antiguas del agente no la tienen)
                     ],
                 ]);
+                $resumen[] = [
+                    'ventana_id'      => $ventana->id,
+                    'cantidad'        => $ventana->cantidad,
+                    'precio_unitario' => $l['calc']['precio_unitario'],
+                    'precio_total'    => $l['calc']['precio_total'],
+                ];
             }
 
             DB::commit();
-            return ['success' => true, 'cotizacion_id' => $cotizacion->id, 'total' => $total];
-        } catch (\Exception $e) {
+            return ['success' => true, 'cotizacion_id' => $cotizacion->id, 'total' => $total, 'lineas' => $resumen];
+        } catch (\Throwable $e) {
             DB::rollBack();
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -368,10 +452,10 @@ FLUJO OBLIGATORIO:
 2. Para cada ventana llama SIEMPRE primero a listar_tipos_ventana, listar_colores y listar_vidrios para obtener los IDs exactos disponibles.
 3. Si el usuario da medidas en cm, conviértelas multiplicando × 10.
 4. Calcula el precio con calcular_precio_ventana.
-5. Si el precio sale 0 o hay error: informa qué combinación falló y muestra las opciones disponibles (vidrios y colores que sí existen) para que el usuario elija.
-6. Presenta resumen con ventanas, medidas, precios unitarios y total.
+5. Si calcular_precio_ventana devuelve error/diagnostico o precio 0: informa qué combinación falló y muestra las opciones disponibles (vidrios y colores que sí existen) para que el usuario elija.
+6. Presenta resumen con ventanas, medidas, cantidad, precio_unitario y precio_total de cada línea (los entrega calcular_precio_ventana) y el total.
 7. Pide confirmación explícita antes de crear.
-8. Solo tras confirmación, llama a crear_cotizacion.
+8. Solo tras confirmación, llama a crear_cotizacion. NO envíes precios ni costos: el sistema los recalcula al crear. Si responde success=false, informa qué líneas fallaron (lineas_con_error) y NO inventes ni estimes precios.
 
 CONCEPTOS CLAVE — MUY IMPORTANTE:
 - El COLOR es del marco de aluminio o PVC (ej: Blanco, Grafito, Roble, Negro). NO es del vidrio.
@@ -441,7 +525,7 @@ PROMPT;
             ],
             [
                 'name'         => 'calcular_precio_ventana',
-                'description'  => 'Calcula el costo y precio de venta de una ventana.',
+                'description'  => 'Calcula costo y precio de venta de una línea de ventana. Devuelve costo_total/precio_total (de TODA la línea, ya multiplicados por la cantidad) y costo_unitario/precio_unitario (por unidad). Si no se puede calcular devuelve error y diagnostico, sin precio.',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -463,7 +547,7 @@ PROMPT;
             ],
             [
                 'name'         => 'crear_cotizacion',
-                'description'  => 'Crea la cotización final. Llamar SOLO tras confirmación explícita del usuario.',
+                'description'  => 'Crea la cotización final. Llamar SOLO tras confirmación explícita del usuario. NO recibe precios ni costos: el sistema recalcula cada línea y, si alguna falla o da 0, no crea nada.',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -484,12 +568,10 @@ PROMPT;
                                     'hojas_totales'                => ['type' => 'integer'],
                                     'hojas_moviles'                => ['type' => 'integer'],
                                     'cantidad'                     => ['type' => 'integer'],
-                                    'precio'                       => ['type' => 'number'],
-                                    'costo'                        => ['type' => 'number'],
                                 ],
                                 'required' => ['tipo_ventana_id', 'ancho', 'alto', 'color_id',
                                                'producto_vidrio_proveedor_id', 'tipo_vidrio',
-                                               'cantidad', 'precio', 'costo'],
+                                               'cantidad'],
                             ],
                         ],
                     ],

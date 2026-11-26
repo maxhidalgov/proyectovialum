@@ -384,19 +384,23 @@ class BsaleController extends Controller
 
         // Procesar ventanas
         foreach ($cotizacion->ventanas as $ventana) {
-            $precioUnitario = $ventana->precio ?? 0;
-            $cantidad = (int)($ventana->cantidad ?? 1);
-            $netoUnitario = (float)$precioUnitario; // precio ya es neto
+            // ventanas.precio es el TOTAL NETO de la línea (ya incluye la cantidad). Antes se enviaba ese total
+            // como valor unitario y Bsale lo multiplicaba por la cantidad otra vez; el total solo cuadraba porque
+            // más abajo se reescala al total de la cotización, pero con varias líneas de distinta cantidad cada
+            // línea salía con un valor distorsionado.
+            $cantidad     = max((int)($ventana->cantidad ?? 1), 1);
+            $totalLinea   = (float)($ventana->precio ?? 0);
+            $netoUnitario = $totalLinea / $cantidad;
 
             $detalles[] = [
-                'netUnitValue' => round((float)$netoUnitario, 4),
+                'netUnitValue' => round($netoUnitario, 4),
                 'quantity'     => $cantidad,
                 'taxId'        => '[1]',
                 'comment'      => $this->generarDescripcionVentana($ventana),
                 'discount'     => $descuentoLinea,
             ];
 
-            $totalNeto += $netoUnitario * $cantidad;
+            $totalNeto += $totalLinea;
         }
 
         // Procesar productos/detalles
@@ -430,7 +434,10 @@ class BsaleController extends Controller
                     : 0;
                 $grupos[$clave]['muestras']++;
             } else {
-                $clave = $nombreProducto;
+                // La clave incluye el precio unitario: antes dos líneas con la misma descripción y distinto precio
+                // se fusionaban usando el precio de la primera × la cantidad de ambas (p. ej. dos "Ventana corredera"
+                // de Winperfil con medidas/precios distintos).
+                $clave = $nombreProducto . '|' . round((float)$detalle->precio_unitario, 4);
                 if (!isset($grupos[$clave])) {
                     $grupos[$clave] = [
                         'descripcion'       => $nombreProducto,

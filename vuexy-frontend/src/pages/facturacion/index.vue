@@ -223,7 +223,7 @@
                           </td>
                           <td>{{ v.cantidad }}</td>
                           <td class="text-right">{{ clp(v.precio_unitario) }}</td>
-                          <td class="text-right font-weight-medium">{{ clp(v.precio_unitario * v.cantidad) }}</td>
+                          <td class="text-right font-weight-medium">{{ clp(v.precio) }}</td>
                         </tr>
                         <tr v-for="d in item.detalles" :key="`d-${d.id}`">
                           <td>
